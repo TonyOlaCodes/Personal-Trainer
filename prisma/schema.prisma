@@ -1,0 +1,300 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  FREE
+  PREMIUM
+  COACH
+  SUPER_ADMIN
+}
+
+enum Goal {
+  GAIN_MUSCLE
+  LOSE_WEIGHT
+  RECOMPOSITION
+  STRENGTH
+}
+
+enum ExperienceLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum TrainingLocation {
+  GYM
+  HOME
+}
+
+enum PlanType {
+  COACH_ASSIGNED
+  USER_CREATED
+  PREBUILT
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  VIDEO
+}
+
+enum LogStatus {
+  IN_PROGRESS
+  COMPLETED
+}
+
+model User {
+  id                String   @id @default(cuid())
+  clerkId           String   @unique
+  email             String   @unique
+  name              String?
+  avatarUrl         String?
+  role              Role     @default(FREE)
+  onboardingDone    Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Onboarding Step 1
+  goal              Goal?
+  trainingDaysPerWeek Int?
+  experienceLevel   ExperienceLevel?
+  trainingLocation  TrainingLocation?
+  equipment         String[]
+  hasInjuries       Boolean?
+  injuryDetails     String?
+
+  // Onboarding Step 2 (optional)
+  age               Int?
+  heightCm          Float?
+  weightKg          Float?
+  targetWeightKg    Float?
+  sessionLengthMin  Int?
+  likedExercises    String[]
+  dislikedExercises String[]
+  weakMuscles       String[]
+  benchPressKg      Float?
+  squatKg           Float?
+  deadliftKg        Float?
+  ohpKg             Float?
+  cardioPreference  String?
+  dietAwareness     Boolean?
+  preferredSplit    String?
+
+  // Relations
+  coachId           String?
+  coach             User?    @relation("CoachClients", fields: [coachId], references: [id])
+  clients           User[]   @relation("CoachClients")
+
+  plans             UserPlan[]
+  workoutLogs       WorkoutLog[]
+  checkIns          CheckIn[]
+  sentMessages      Message[]   @relation("SentMessages")
+  accessCodesUsed   AccessCode[] @relation("UsedCodes")
+  generatedCodes    AccessCode[] @relation("GeneratedCodes")
+  createdPlans      Plan[]       @relation("CreatedPlans")
+
+  @@map("users")
+}
+
+model Plan {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  type        PlanType @default(USER_CREATED)
+  creatorId   String?
+  isPublic    Boolean  @default(false)
+  shareCode   String?  @unique
+  imageUrl    String?
+  tags        String[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  weeks       Week[]
+  userPlans   UserPlan[]
+  accessCodes AccessCode[]
+
+  creator     User?    @relation("CreatedPlans", fields: [creatorId], references: [id])
+
+  @@map("plans")
+}
+
+model UserPlan {
+  id        String   @id @default(cuid())
+  userId    String
+  planId    String
+  isActive  Boolean  @default(false)
+  startedAt DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan Plan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, planId])
+  @@map("user_plans")
+}
+
+model Week {
+  id        String   @id @default(cuid())
+  planId    String
+  weekNumber Int
+  name      String?
+  createdAt DateTime @default(now())
+
+  plan      Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  workouts  Workout[]
+
+  @@unique([planId, weekNumber])
+  @@map("weeks")
+}
+
+model Workout {
+  id        String   @id @default(cuid())
+  weekId    String
+  dayNumber Int
+  dayOfWeek Int?
+  name      String   // e.g. "Push Day", "Legs"
+  notes     String?
+  createdAt DateTime @default(now())
+
+  week      Week       @relation(fields: [weekId], references: [id], onDelete: Cascade)
+  exercises Exercise[]
+  logs      WorkoutLog[]
+
+  @@unique([weekId, dayNumber])
+  @@map("workouts")
+}
+
+model Exercise {
+  id             String  @id @default(cuid())
+  workoutId      String
+  name           String
+  sets           Int
+  reps           String  // e.g. "8-12" or "10"
+  weightTargetKg Float?
+  restSeconds    Int?
+  notes          String?
+  order          Int     @default(0)
+  videoUrl       String?
+  muscleGroup    String?
+
+  workout    Workout      @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  logSets    LogSet[]
+
+  @@map("exercises")
+}
+
+model WorkoutLog {
+  id         String   @id @default(cuid())
+  userId     String
+  workoutId  String
+  loggedAt   DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  duration   Int?     // minutes
+  notes      String?
+  feeling    Int?     // 1-5 scale
+  status     LogStatus @default(COMPLETED)
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workout    Workout    @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  sets       LogSet[]
+
+  @@map("workout_logs")
+}
+
+model LogSet {
+  id           String  @id @default(cuid())
+  workoutLogId String
+  exerciseId   String
+  setNumber    Int
+  reps         Int?
+  weightKg     Float?
+  rpe          Int?    // Rate of Perceived Exertion 1-10
+  isWarmup     Boolean @default(false)
+  isCompleted  Boolean @default(true)
+  isPR         Boolean @default(false)
+
+  workoutLog WorkoutLog @relation(fields: [workoutLogId], references: [id], onDelete: Cascade)
+  exercise   Exercise   @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+
+  @@map("log_sets")
+}
+
+enum CheckInStatus {
+  PENDING
+  REVIEWED
+}
+
+model CheckIn {
+  id            String   @id @default(cuid())
+  userId        String
+  weekNumber    Int
+  bodyweightKg  Float?
+  feedback      String
+  notes         String?
+  frontImageUrl String?
+  sideImageUrl  String?
+  videoUrl      String?
+  status        CheckInStatus @default(PENDING)
+  coachResponse String?
+  respondedAt   DateTime?
+  
+  // Ratings (1-5)
+  sleepRating   Int?
+  dietRating    Int?
+  stressRating  Int?
+  injuryRating  Int?
+  
+  createdAt     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("check_ins")
+}
+
+model Message {
+  id           String      @id @default(cuid())
+  senderId     String
+  receiverId   String?     // null = general chat
+  content      String?
+  type         MessageType @default(TEXT)
+  mediaUrl     String?
+  isRead       Boolean     @default(false)
+  isGeneral    Boolean     @default(false)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  sender   User  @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([isGeneral])
+  @@map("messages")
+}
+
+model AccessCode {
+  id          String    @id @default(cuid())
+  code        String    @unique
+  planId      String?
+  generatedBy String
+  usedById    String?
+  usedAt      DateTime?
+  expiresAt   DateTime?
+  upgradesTo  Role      @default(PREMIUM)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+
+  plan        Plan?  @relation(fields: [planId], references: [id])
+  generator   User   @relation("GeneratedCodes", fields: [generatedBy], references: [id])
+  usedBy      User?  @relation("UsedCodes", fields: [usedById], references: [id])
+
+  @@map("access_codes")
+}
