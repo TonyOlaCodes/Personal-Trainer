@@ -247,9 +247,19 @@ export function WorkoutLogClient({ workout, tutorialUrls = {} }: Props) {
                     sets: flattenedSets,
                 }),
             });
-            if (res.ok) router.push("/dashboard");
+            
+            if (res.ok) {
+                setShowFinishModal(false);
+                router.push("/dashboard");
+                router.refresh();
+            } else {
+                const errData = await res.json();
+                console.error("Save failed:", errData);
+                alert(`Failed to save: ${errData.error?.message || JSON.stringify(errData.error) || "Unknown error"}`);
+            }
         } catch (err) {
             console.error(err);
+            alert("Connection error while saving session.");
         } finally {
             setSaving(false);
         }
