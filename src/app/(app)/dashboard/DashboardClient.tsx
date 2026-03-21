@@ -51,9 +51,6 @@ export function DashboardClient({ user, activePlan, todayWorkout, todayCompleted
     const [codeMsg, setCodeMsg] = useState("");
 
     const uncompleteLog = async (logId: string, workoutId: string) => {
-        const confirmEdit = window.confirm("Do you want to reopen this session for editing? It will move to In Progress.");
-        if (!confirmEdit) return;
-
         try {
             const res = await fetch(`/api/logs/${logId}`, {
                 method: "PATCH",
