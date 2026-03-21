@@ -25,19 +25,20 @@ interface NavItem {
     icon: React.ElementType;
     roles?: string[];
     badge?: string;
+    view?: "client" | "coach" | "admin" | "all";
 }
 
 const navItems: NavItem[] = [
-    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/plans", label: "Plans", icon: Dumbbell },
-    { href: "/calendar", label: "Calendar", icon: Calendar },
-    { href: "/progress", label: "Progress", icon: BarChart3 },
-    { href: "/checkins", label: "Check-ins", icon: ClipboardList },
-    { href: "/chat", label: "Chat", icon: MessageSquare },
-    { href: "/admin", label: "Admin", icon: ShieldCheck, roles: ["SUPER_ADMIN"] },
-    { href: "/admin/exercises", label: "Exercises", icon: Video, roles: ["SUPER_ADMIN"] },
-    { href: "/coach", label: "Coach Panel", icon: Users, roles: ["COACH", "SUPER_ADMIN"] },
-    { href: "/donate", label: "Support Mission", icon: Heart },
+    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, view: "client" },
+    { href: "/plans", label: "Plans", icon: Dumbbell, view: "client" },
+    { href: "/calendar", label: "Calendar", icon: Calendar, view: "client" },
+    { href: "/progress", label: "Progress", icon: BarChart3, view: "client" },
+    { href: "/checkins", label: "Check-ins", icon: ClipboardList, view: "client" },
+    { href: "/chat", label: "Chat", icon: MessageSquare, view: "all" },
+    { href: "/admin", label: "Admin", icon: ShieldCheck, roles: ["SUPER_ADMIN"], view: "admin" },
+    { href: "/admin/exercises", label: "Exercises", icon: Video, roles: ["SUPER_ADMIN"], view: "admin" },
+    { href: "/coach", label: "Coach Panel", icon: Users, roles: ["COACH", "SUPER_ADMIN"], view: "coach" },
+    { href: "/donate", label: "Support", icon: Heart, view: "client" },
 ];
 
 interface SidebarProps {
@@ -46,10 +47,18 @@ interface SidebarProps {
 
 export function Sidebar({ userRole = "FREE" }: SidebarProps) {
     const pathname = usePathname();
+    const isCoachView = pathname.startsWith("/coach");
+    const isAdminView = pathname.startsWith("/admin");
 
     const filteredItems = navItems.filter((item) => {
-        if (!item.roles) return true;
-        return item.roles.includes(userRole);
+        // Role check
+        if (item.roles && !item.roles.includes(userRole)) return false;
+
+        // View mode check
+        if (isAdminView) return item.view === "admin" || item.view === "all";
+        if (isCoachView) return item.view === "coach" || item.view === "all";
+        
+        return item.view === "all" || item.view === "client";
     });
 
     return (

@@ -16,24 +16,28 @@ import { useRole } from "@/lib/RoleContext";
 export function MobileTabBar() {
     const pathname = usePathname();
     const userRole = useRole();
+    const isCoachView = pathname.startsWith("/coach");
+    const isAdminView = pathname.startsWith("/admin");
 
     const mobileNavItems = [
-        { href: "/dashboard", label: "Home", icon: LayoutDashboard },
-        { href: "/plans", label: "Plans", icon: Dumbbell },
-        { href: "/checkins", label: "Check-ins", icon: Calendar },
-        { href: "/progress", label: "Progress", icon: BarChart3 },
-        { href: "/chat", label: "Chat", icon: MessageSquare },
+        { href: "/dashboard", label: "Home", icon: LayoutDashboard, view: "client" },
+        { href: "/coach", label: "Coach", icon: Users, view: "coach" },
+        { href: "/plans", label: "Plans", icon: Dumbbell, view: "client" },
+        { href: "/checkins", label: "Check-ins", icon: Calendar, view: "client" },
+        { href: "/progress", label: "Progress", icon: BarChart3, view: "client" },
+        { href: "/chat", label: "Chat", icon: MessageSquare, view: "all" },
     ];
 
-    // Add Coach Panel to mobile if user is a coach
-    if (userRole === "COACH" || userRole === "SUPER_ADMIN") {
-        mobileNavItems.splice(1, 0, { href: "/coach", label: "Coach", icon: Users });
-    }
+    const filteredItems = mobileNavItems.filter((item) => {
+        if (isAdminView) return item.view === "admin" || item.view === "all";
+        if (isCoachView) return item.view === "coach" || item.view === "all";
+        return item.view === "client" || item.view === "all";
+    });
 
     return (
         <nav className="lg:hidden fixed bottom-0 inset-x-0 z-50 glass glass-border border-t border-surface-border safe-area-pb">
             <div className="flex items-center justify-around px-2 py-2">
-                {mobileNavItems.map((item) => {
+                {filteredItems.map((item) => {
                     const active = pathname.startsWith(item.href);
                     return (
                         <Link
