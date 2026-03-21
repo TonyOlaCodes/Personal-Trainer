@@ -25,20 +25,19 @@ interface NavItem {
     icon: React.ElementType;
     roles?: string[];
     badge?: string;
-    view?: "client" | "coach" | "admin" | "all";
 }
 
 const navItems: NavItem[] = [
-    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, view: "client" },
-    { href: "/plans", label: "Plans", icon: Dumbbell, view: "client" },
-    { href: "/calendar", label: "Calendar", icon: Calendar, view: "client" },
-    { href: "/progress", label: "Progress", icon: BarChart3, view: "client" },
-    { href: "/checkins", label: "Check-ins", icon: ClipboardList, view: "client" },
-    { href: "/chat", label: "Chat", icon: MessageSquare, view: "all" },
-    { href: "/admin", label: "Admin", icon: ShieldCheck, roles: ["SUPER_ADMIN"], view: "admin" },
-    { href: "/admin/exercises", label: "Exercises", icon: Video, roles: ["SUPER_ADMIN"], view: "admin" },
-    { href: "/coach", label: "Coach Panel", icon: Users, roles: ["COACH", "SUPER_ADMIN"], view: "coach" },
-    { href: "/donate", label: "Support", icon: Heart, view: "client" },
+    { href: "/admin", label: "Admin", icon: ShieldCheck, roles: ["SUPER_ADMIN"] },
+    { href: "/admin/exercises", label: "Exercises", icon: Video, roles: ["SUPER_ADMIN"] },
+    { href: "/coach", label: "Coach Panel", icon: Users, roles: ["COACH", "SUPER_ADMIN"] },
+    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/plans", label: "Plans", icon: Dumbbell },
+    { href: "/calendar", label: "Calendar", icon: Calendar },
+    { href: "/progress", label: "Progress", icon: BarChart3 },
+    { href: "/checkins", label: "Check-ins", icon: ClipboardList },
+    { href: "/chat", label: "Chat", icon: MessageSquare },
+    { href: "/donate", label: "Support Mission", icon: Heart },
 ];
 
 interface SidebarProps {
@@ -47,18 +46,10 @@ interface SidebarProps {
 
 export function Sidebar({ userRole = "FREE" }: SidebarProps) {
     const pathname = usePathname();
-    const isCoachView = pathname.startsWith("/coach");
-    const isAdminView = pathname.startsWith("/admin");
 
     const filteredItems = navItems.filter((item) => {
-        // Role check
-        if (item.roles && !item.roles.includes(userRole)) return false;
-
-        // View mode check
-        if (isAdminView) return item.view === "admin" || item.view === "all";
-        if (isCoachView) return item.view === "coach" || item.view === "all";
-        
-        return item.view === "all" || item.view === "client";
+        if (!item.roles) return true;
+        return item.roles.includes(userRole);
     });
 
     return (
@@ -74,29 +65,6 @@ export function Sidebar({ userRole = "FREE" }: SidebarProps) {
                     </span>
                 </Link>
             </div>
-
-            {/* View Switcher for Coaches */}
-            {(userRole === "COACH" || userRole === "SUPER_ADMIN") && (
-                <div className="px-3 pt-4 pb-2">
-                    {pathname.startsWith("/coach") ? (
-                        <Link
-                            href="/dashboard"
-                            className="flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-xl bg-surface-card hover:bg-surface-hover border border-surface-border transition-all group"
-                        >
-                            <LayoutDashboard className="w-4 h-4 text-fg-muted group-hover:text-brand" />
-                            <span className="text-xs font-semibold text-fg-muted group-hover:text-fg">Client Dashboard</span>
-                        </Link>
-                    ) : (
-                        <Link
-                            href="/coach"
-                            className="flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-xl bg-brand-500/10 hover:bg-brand-500/20 border border-brand-500/20 transition-all group"
-                        >
-                            <Users className="w-4 h-4 text-brand" />
-                            <span className="text-xs font-semibold text-brand">Coach Panel</span>
-                        </Link>
-                    )}
-                </div>
-            )}
 
             {/* Navigation */}
             <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto no-scrollbar">
