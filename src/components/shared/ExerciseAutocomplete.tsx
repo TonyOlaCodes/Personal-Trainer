@@ -103,6 +103,7 @@ export function ExerciseAutocomplete({ value, onChange, placeholder, className }
     const [open, setOpen] = useState(false);
     const [suggestions, setSuggestions] = useState<string[]>([]);
     const containerRef = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         const q = value.trim();
@@ -120,7 +121,13 @@ export function ExerciseAutocomplete({ value, onChange, placeholder, className }
             .slice(0, 3);
 
         setSuggestions(matches);
-        setOpen(matches.length > 0);
+        
+        // Only auto-open if the value is being typed (not just loaded)
+        // and if it's NOT an exact match yet (or we want to show alternatives)
+        // But the key is to ONLY open if we have focus.
+        if (document.activeElement === inputRef.current && matches.length > 0) {
+            setOpen(true);
+        }
     }, [value]);
 
     // Close on outside click
@@ -142,6 +149,7 @@ export function ExerciseAutocomplete({ value, onChange, placeholder, className }
     return (
         <div ref={containerRef} className="relative">
             <input
+                ref={inputRef}
                 type="text"
                 placeholder={placeholder ?? "e.g. Incline Bench Press"}
                 className={className}
