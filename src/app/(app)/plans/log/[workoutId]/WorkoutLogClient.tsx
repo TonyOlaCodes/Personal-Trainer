@@ -121,7 +121,7 @@ export function WorkoutLogClient({ workout, tutorialUrls = {} }: Props) {
                 weightKg: s.weightKg ? parseFloat(s.weightKg) : undefined,
                 isWarmup: s.isWarmup,
                 isCompleted: s.isCompleted,
-                videoUrl: s.videoUrl,
+                videoUrl: s.videoUrl || undefined,
             }))
         );
 
@@ -230,7 +230,7 @@ export function WorkoutLogClient({ workout, tutorialUrls = {} }: Props) {
                 weightKg: s.weightKg ? parseFloat(s.weightKg) : undefined,
                 isWarmup: s.isWarmup,
                 isCompleted: s.isCompleted,
-                videoUrl: s.videoUrl,
+                videoUrl: s.videoUrl || undefined,
             }))
         );
 
