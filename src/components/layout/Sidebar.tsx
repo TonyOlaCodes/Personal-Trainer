@@ -66,6 +66,29 @@ export function Sidebar({ userRole = "FREE" }: SidebarProps) {
                 </Link>
             </div>
 
+            {/* View Switcher for Coaches */}
+            {(userRole === "COACH" || userRole === "SUPER_ADMIN") && (
+                <div className="px-3 pt-4 pb-2">
+                    {pathname.startsWith("/coach") ? (
+                        <Link
+                            href="/dashboard"
+                            className="flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-xl bg-surface-card hover:bg-surface-hover border border-surface-border transition-all group"
+                        >
+                            <LayoutDashboard className="w-4 h-4 text-fg-muted group-hover:text-brand" />
+                            <span className="text-xs font-semibold text-fg-muted group-hover:text-fg">Client Dashboard</span>
+                        </Link>
+                    ) : (
+                        <Link
+                            href="/coach"
+                            className="flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-xl bg-brand-500/10 hover:bg-brand-500/20 border border-brand-500/20 transition-all group"
+                        >
+                            <Users className="w-4 h-4 text-brand" />
+                            <span className="text-xs font-semibold text-brand">Coach Panel</span>
+                        </Link>
+                    )}
+                </div>
+            )}
+
             {/* Navigation */}
             <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto no-scrollbar">
                 {filteredItems.map((item) => {
