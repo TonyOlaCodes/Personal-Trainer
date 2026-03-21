@@ -9,11 +9,11 @@ export async function POST(req: Request) {
     const user = await prisma.user.findUnique({ where: { clerkId: userId } });
     if (!user || user.role !== "SUPER_ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    const { name, muscleGroup } = await req.json();
+    const { name, muscleGroup, videoUrl } = await req.json();
 
     try {
         const exercise = await prisma.globalExercise.create({
-            data: { name, muscleGroup }
+            data: { name, muscleGroup, videoUrl }
         });
         return NextResponse.json(exercise, { status: 201 });
     } catch (error) {

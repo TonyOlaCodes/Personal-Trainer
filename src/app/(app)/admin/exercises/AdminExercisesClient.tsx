@@ -9,6 +9,7 @@ interface GlobalExercise {
     name: string;
     videoUrl: string | null;
     muscleGroup: string | null;
+    isSuggestion?: boolean;
 }
 
 export function AdminExercisesClient({ initialExercises }: { initialExercises: GlobalExercise[] }) {
@@ -43,8 +44,9 @@ export function AdminExercisesClient({ initialExercises }: { initialExercises: G
         }
     };
 
-    const handleVideoUpload = async (id: string, file: File | undefined) => {
+    const handleVideoUpload = async (exercise: GlobalExercise, file: File | undefined) => {
         if (!file) return;
+        const id = exercise.id;
         setUploadingId(id);
         try {
             const fd = new FormData();
@@ -53,16 +55,31 @@ export function AdminExercisesClient({ initialExercises }: { initialExercises: G
             if (!uploadRes.ok) throw new Error("Upload to cloud failed");
             const { url } = await uploadRes.json();
 
-            // Patch exercise
-            const patchRes = await fetch("/api/admin/exercises", {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ id, videoUrl: url })
-            });
-            if (patchRes.ok) {
-                setExercises(prev => prev.map(e => e.id === id ? { ...e, videoUrl: url } : e));
+            if (exercise.isSuggestion) {
+                // If it's a suggestion, we need to CREATE it first (POST)
+                const res = await fetch("/api/admin/exercises", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ name: exercise.name, muscleGroup: exercise.muscleGroup, videoUrl: url })
+                });
+                if (res.ok) {
+                    const created = await res.json();
+                    setExercises(prev => prev.map(e => e.id === id ? created : e));
+                } else {
+                    alert("Failed to create global exercise from suggestion.");
+                }
             } else {
-                alert("Failed to save video URL.");
+                // Regular UPDATE (PATCH)
+                const patchRes = await fetch("/api/admin/exercises", {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ id, videoUrl: url })
+                });
+                if (patchRes.ok) {
+                    setExercises(prev => prev.map(e => e.id === id ? { ...e, videoUrl: url } : e));
+                } else {
+                    alert("Failed to save video URL.");
+                }
             }
         } catch(e) {
             console.error(e);
@@ -123,7 +140,14 @@ export function AdminExercisesClient({ initialExercises }: { initialExercises: G
                                 {ex.videoUrl ? <Play className="w-4 h-4" /> : <Video className="w-4 h-4" />}
                             </div>
                             <div>
-                                <h3 className="font-bold text-fg">{ex.name}</h3>
+                                <div className="flex items-center gap-2">
+                                    <h3 className="font-bold text-fg">{ex.name}</h3>
+                                    {ex.isSuggestion && (
+                                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20 uppercase tracking-wider">
+                                            Not in Dict
+                                        </span>
+                                    )}
+                                </div>
                                 <p className="text-xs text-fg-subtle">Muscle Group: {ex.muscleGroup}</p>
                             </div>
                         </div>
@@ -137,7 +161,7 @@ export function AdminExercisesClient({ initialExercises }: { initialExercises: G
                                     type="file" 
                                     className="hidden" 
                                     accept="video/*" 
-                                    onChange={(e) => handleVideoUpload(ex.id, e.target.files?.[0])}
+                                    onChange={(e) => handleVideoUpload(ex, e.target.files?.[0])}
                                 />
                             </label>
                         </div>
