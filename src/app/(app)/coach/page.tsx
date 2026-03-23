@@ -51,7 +51,9 @@ export default async function CoachDashboardPage() {
                         clientName: ci.user.name || "Client",
                         week: ci.weekNumber,
                         date: ci.createdAt.toISOString(),
-                        status: ci.coachResponse ? "Responded" : "Pending"
+                        status: ci.coachResponse ? "Responded" : "Pending",
+                        lastUpdatedByClientAt: ci.lastUpdatedByClientAt?.toISOString() || null,
+                        coachLastSeenAt: ci.coachLastSeenAt?.toISOString() || null
                     }))}
                 />
             </div>

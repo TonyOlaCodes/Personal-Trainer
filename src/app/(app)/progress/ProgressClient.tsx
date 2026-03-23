@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { 
     LineChart, Line, AreaChart, Area, BarChart, Bar, 
     XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
@@ -10,7 +10,8 @@ import {
     TrendingUp, Clock, Flame, Calendar, 
     ChevronRight, Info, Award, Loader2,
     Dumbbell, Target, Activity, Lock, ArrowRight,
-    Search, ChevronDown, ListFilter
+    Search, ChevronDown, ListFilter, TrendingDown,
+    Scale, Zap, Trophy, BarChart2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PremiumLockScreen } from "@/components/shared/PremiumLockScreen";
@@ -27,6 +28,9 @@ export function ProgressClient({ userRole }: Props) {
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [selectedExercise, setSelectedExercise] = useState<string>("");
+    const [curveSearchQuery, setCurveSearchQuery] = useState("");
+    const [librarySearchQuery, setLibrarySearchQuery] = useState("");
+    const [bwDays, setBwDays] = useState<7 | 30 | 90>(30);
 
     useEffect(() => {
         if (!isPremium) {
@@ -45,6 +49,27 @@ export function ProgressClient({ userRole }: Props) {
             .catch(() => setLoading(false));
     }, [isPremium]);
 
+    // Regex fuzzy filter
+    const getRegex = (q: string) => {
+        try {
+            return new RegExp(q.trim().split('').map(c => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*'), 'i');
+        } catch(e) {
+            return new RegExp(q, 'i');
+        }
+    };
+
+    const libraryFiltered = useMemo(() => {
+        if (!data) return [];
+        const names = Object.keys(data.exerciseHistory);
+        return names.filter(ex => librarySearchQuery ? getRegex(librarySearchQuery).test(ex) : true);
+    }, [data, librarySearchQuery]);
+
+    const curveFiltered = useMemo(() => {
+        if (!data) return [];
+        const names = Object.keys(data.exerciseHistory);
+        return names.filter(ex => curveSearchQuery ? getRegex(curveSearchQuery).test(ex) : true);
+    }, [data, curveSearchQuery]);
+
     if (!isPremium) {
         return (
             <div className="p-4 sm:p-10">
@@ -60,7 +85,7 @@ export function ProgressClient({ userRole }: Props) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[500px] gap-4">
                 <Loader2 className="w-10 h-10 text-brand-400 animate-spin" />
-                <p className="text-fg-muted animate-pulse font-medium">Crunching workout numbers...</p>
+                <p className="text-fg-muted animate-pulse font-medium">Analyzing your evolution...</p>
             </div>
         );
     }
@@ -76,75 +101,253 @@ export function ProgressClient({ userRole }: Props) {
         );
     }
 
-    const muscleData = Object.entries(data.muscleVolume).map(([name, value]) => ({ name, value }));
-    const exerciseData = data.exerciseHistory[selectedExercise] || [];
-    const exerciseNames = Object.keys(data.exerciseHistory);
+    const bodyweightData = data.bodyweight.history.slice(-bwDays);
 
     return (
-        <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8 animate-fade-in mb-24 lg:mb-12">
-            {/* Executive Summary */}
+        <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-10 animate-fade-in mb-24 lg:mb-12">
+            
+            {/* 1. Overview Section */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
-                {[
-                    { label: "Completed", val: data.totalWorkouts, icon: Activity, color: "text-brand-400", bg: "bg-brand-400/10" },
-                    { label: "Best Lifts (PRs)", val: data.totalPRs, icon: Award, color: "text-success", bg: "bg-success/10" },
-                    { label: "Avg Depth", val: "52m", icon: Clock, color: "text-warning", bg: "bg-warning/10" },
-                    { label: "Consistency", val: "High", icon: Target, color: "text-brand-300", bg: "bg-brand-300/10" },
-                ].map((s) => (
-                    <div key={s.label} className="card p-5 group hover:border-brand-500/30 transition-all border border-surface-border bg-surface-card">
-                        <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center mb-4 transition-transform group-hover:scale-110", s.bg)}>
-                            <s.icon className={cn("w-5 h-5", s.color)} />
-                        </div>
-                        <p className="text-2xl font-black text-fg tracking-tight">{s.val}</p>
-                        <p className="text-[10px] font-bold text-fg-subtle uppercase tracking-widest">{s.label}</p>
+                <div className="card p-5 border-l-4 border-l-brand-500">
+                    <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1">Bodyweight</p>
+                    <div className="flex items-baseline gap-2">
+                        <span className="text-2xl font-black text-fg">{data.bodyweight.current || "--"}</span>
+                        <span className="text-xs font-bold text-fg-muted">kg</span>
                     </div>
-                ))}
+                    <div className="flex items-center gap-1.5 mt-2">
+                        {data.bodyweight.changeWeek >= 0 ? 
+                            <TrendingUp className="w-3.5 h-3.5 text-success" /> : 
+                            <TrendingDown className="w-3.5 h-3.5 text-danger" />
+                        }
+                        <span className={cn("text-[10px] font-bold", data.bodyweight.changeWeek >= 0 ? "text-success" : "text-danger")}>
+                            {data.bodyweight.changeWeek > 0 ? "+" : ""}{data.bodyweight.changeWeek.toFixed(1)}kg this week
+                        </span>
+                    </div>
+                </div>
+
+                <div className="card p-5">
+                    <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1">Net Progress</p>
+                    <div className="flex items-baseline gap-1">
+                        <span className={cn("text-2xl font-black", data.bodyweight.totalChange < 0 ? "text-success" : "text-fg")}>
+                            {data.bodyweight.totalChange > 0 ? "+" : ""}{data.bodyweight.totalChange.toFixed(1)}
+                        </span>
+                        <span className="text-xs font-bold text-fg-muted">kg total</span>
+                    </div>
+                    <p className="text-[10px] text-fg-subtle font-bold mt-2 uppercase tracking-tight">Since onboarding</p>
+                </div>
+
+                <div className="card p-5">
+                    <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1">Consistency</p>
+                    <div className="flex items-baseline gap-2">
+                        <span className="text-2xl font-black text-fg">{data.consistency.thisWeek}</span>
+                        <span className="text-sm font-bold text-fg-subtle">/ {data.consistency.target}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-2">
+                        <Activity className="w-3.5 h-3.5 text-brand-400" />
+                        <span className="text-[10px] font-bold text-fg-muted uppercase">{data.consistency.lastWeek} workouts last week</span>
+                    </div>
+                </div>
+
+                <div className="card p-5">
+                    <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1">Grand Total</p>
+                    <div className="flex items-baseline gap-2">
+                        <span className="text-2xl font-black text-fg">{data.totalWorkouts}</span>
+                        <Trophy className="w-4 h-4 text-warning" />
+                    </div>
+                    <p className="text-[10px] text-fg-subtle font-bold mt-2 uppercase tracking-tight">Workouts logged</p>
+                </div>
             </div>
 
+            {/* 2. Bodyweight Graph */}
+            <div className="card p-6 bg-surface-card overflow-hidden">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+                    <div className="flex items-center gap-3">
+                        <Scale className="w-5 h-5 text-brand-400" />
+                        <h3 className="text-sm font-black text-fg uppercase tracking-widest">Bodyweight Trend</h3>
+                    </div>
+                    <div className="flex bg-surface-muted p-1 rounded-xl">
+                        {[7, 30, 90].map((d) => (
+                            <button
+                                key={d}
+                                onClick={() => setBwDays(d as any)}
+                                className={cn(
+                                    "px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
+                                    bwDays === d ? "bg-surface-card text-brand-400 shadow-sm" : "text-fg-subtle hover:text-fg"
+                                )}
+                            >
+                                {d}D
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                <div className="h-[280px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={bodyweightData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                            <defs>
+                                <linearGradient id="bwGrad" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.1}/>
+                                    <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0}/>
+                                </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
+                            <XAxis dataKey="date" stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} />
+                            <YAxis stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} domain={['dataMin - 2', 'dataMax + 2']} />
+                            <Tooltip 
+                                contentStyle={{ backgroundColor: "#020617", borderRadius: "16px", border: "1px solid #1E293B" }}
+                                itemStyle={{ color: "#A78BFA", fontWeight: 800 }}
+                            />
+                            <Area type="monotone" dataKey="weight" stroke="#8B5CF6" strokeWidth={3} fill="url(#bwGrad)" dot={{ r: 4, fill: "#8B5CF6" }} />
+                        </AreaChart>
+                    </ResponsiveContainer>
+                </div>
+            </div>
+
+            {/* 3. Strength Progress (Big 3) */}
+            <div className="space-y-6">
+                <div className="flex items-center gap-3">
+                    <Zap className="w-5 h-5 text-warning" />
+                    <h3 className="text-sm font-black text-fg uppercase tracking-widest">Strength Evolution (Est. 1RM)</h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {["Bench Press", "Squat", "Deadlift"].map((lift) => {
+                        const stats = data.big3[lift];
+                        const history = data.exerciseHistory[Object.keys(data.exerciseHistory).find(k => k.toLowerCase().includes(lift.toLowerCase())) || ""];
+                        const progressData = history?.map((h: any) => ({ val: Math.round(h.weight * (1 + h.reps / 30)) })) || [];
+
+                        return (
+                            <div key={lift} className="card p-6 bg-surface-card hover:border-brand-500/30 transition-all border border-surface-border">
+                                <div className="flex justify-between items-start mb-6">
+                                    <div>
+                                        <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest">{lift}</p>
+                                        <h4 className="text-3xl font-black text-fg tracking-tighter mt-1">
+                                            {stats?.oneRM || "--"}
+                                            <span className="text-sm text-fg-muted ml-1">kg</span>
+                                        </h4>
+                                    </div>
+                                    {stats?.change > 0 && (
+                                        <div className="bg-success/10 text-success text-[10px] font-black px-2 py-1 rounded-lg flex items-center gap-1">
+                                            <TrendingUp className="w-3 h-3" />
+                                            +{stats.change}kg
+                                        </div>
+                                    )}
+                                </div>
+                                
+                                <div className="h-16 w-full mb-4">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <LineChart data={progressData}>
+                                            <Line type="monotone" dataKey="val" stroke="#8B5CF6" strokeWidth={2} dot={false} strokeDasharray="3 3" />
+                                        </LineChart>
+                                    </ResponsiveContainer>
+                                </div>
+
+                                <div className="flex items-center justify-between text-[10px] font-bold text-fg-muted uppercase tracking-tight">
+                                    <span>Last Set: {stats?.weight}kg × {stats?.reps}</span>
+                                    <span>{stats?.date}</span>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+
+            {/* 4. PR Tracker & 6. Volume Tracking */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* PR Tracker */}
+                <div className="card p-6 bg-surface-card">
+                    <div className="flex items-center gap-3 mb-8">
+                        <Trophy className="w-5 h-5 text-brand-400" />
+                        <h3 className="text-sm font-black text-fg uppercase tracking-widest">Recent Milestones</h3>
+                    </div>
+                    <div className="space-y-4">
+                        {Object.entries(data.big3).filter(([_, s]: any) => s.oneRM > 0).map(([lift, s]: any) => (
+                            <div key={lift} className="flex items-center justify-between p-4 bg-surface-elevated rounded-2xl border border-surface-border/50">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-10 h-10 rounded-xl bg-brand-500/10 flex items-center justify-center text-brand-400">
+                                        <Award className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                        <p className="text-xs font-black text-fg">{lift}</p>
+                                        <p className="text-[10px] text-fg-muted font-bold uppercase tracking-tight">New PR: {s.weight}kg</p>
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-sm font-black text-success">+{s.change}kg</p>
+                                    <p className="text-[9px] text-fg-subtle font-bold uppercase tracking-tighter">Growth</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Volume Trend */}
+                <div className="card p-6 bg-surface-card">
+                    <div className="flex items-center gap-3 mb-8">
+                        <BarChart2 className="w-5 h-5 text-success" />
+                        <h3 className="text-sm font-black text-fg uppercase tracking-widest">Weekly Work Volume</h3>
+                    </div>
+                    <div className="h-[240px] w-full text-center">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={data.weeklyVolume}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
+                                <XAxis dataKey="week" stroke="#6B7280" fontSize={9} tickLine={false} axisLine={false} />
+                                <YAxis hide />
+                                <Tooltip 
+                                    contentStyle={{ backgroundColor: "#020617", borderRadius: "12px", border: "1px solid #1E293B" }}
+                                    cursor={{ fill: '#8B5CF610' }}
+                                />
+                                <Bar dataKey="volume" fill="#10B981" radius={[6, 6, 0, 0]} barSize={24} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                        <p className="text-[9px] text-fg-subtle font-black uppercase tracking-widest mt-4 italic">Total kg per week across all sets</p>
+                    </div>
+                </div>
+            </div>
+
+            {/* 7. Exercise-specific Progress (Detailed Section) */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                {/* Visual Analysis Pane */}
-                <div className="lg:col-span-8 space-y-8">
-                    {/* The Big Graph */}
-                    <div className="card overflow-hidden bg-surface-card">
+                {/* Chart Pane */}
+                <div className="lg:col-span-8">
+                    <div className="card bg-surface-card">
                         <div className="p-6 border-b border-surface-border flex flex-col sm:flex-row sm:items-center justify-between gap-6">
                             <div className="space-y-1">
-                                <h3 className="text-lg font-black text-fg tracking-tighter">Performance Curve</h3>
-                                <p className="text-xs text-fg-muted font-medium">Tracking top sets over your training history</p>
+                                <h3 className="text-lg font-black text-fg tracking-tighter">Exercise Performance Curve</h3>
+                                <p className="text-xs text-fg-muted font-medium">Deep dive into individual movement history</p>
                             </div>
                             
-                            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
-                                {exerciseNames.slice(0, 3).map(ex => (
-                                    <button
-                                        key={ex}
-                                        onClick={() => setSelectedExercise(ex)}
-                                        className={cn(
-                                            "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all border",
-                                            selectedExercise === ex 
-                                                ? "bg-brand-500 border-brand-500 text-white shadow-glow-brand-sm" 
-                                                : "bg-surface-elevated border-surface-border text-fg-subtle hover:text-fg"
-                                        )}
-                                    >
-                                        {ex}
-                                    </button>
-                                ))}
-                                <div className="relative shrink-0">
-                                    <ListFilter className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-fg-subtle pointer-events-none" />
-                                    <select 
-                                        className="pl-8 pr-4 py-2 bg-surface-elevated border border-surface-border rounded-xl text-[10px] font-black uppercase tracking-widest outline-none appearance-none hover:border-brand-500/40 transition-all min-w-[120px]"
-                                        value={selectedExercise}
-                                        onChange={(e) => setSelectedExercise(e.target.value)}
-                                    >
-                                        {exerciseNames.map(ex => <option key={ex} value={ex}>{ex}</option>)}
-                                    </select>
-                                </div>
+                            <div className="relative shrink-0 w-full sm:w-64">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-fg-subtle" />
+                                <input 
+                                    type="text"
+                                    placeholder="Search library..."
+                                    className="pl-8 pr-12 py-2 w-full bg-surface-elevated border border-surface-border rounded-xl text-[10px] font-black uppercase tracking-widest outline-none focus:border-brand-500/60 transition-all"
+                                    value={curveSearchQuery}
+                                    onChange={(e) => setCurveSearchQuery(e.target.value)}
+                                />
+                                {curveSearchQuery && (
+                                    <div className="absolute top-full left-0 right-0 mt-2 z-50 bg-surface-elevated border border-surface-border rounded-xl shadow-2xl max-h-[200px] overflow-y-auto no-scrollbar animate-slide-up">
+                                        {curveFiltered.map(ex => (
+                                            <button
+                                                key={ex}
+                                                onClick={() => { setSelectedExercise(ex); setCurveSearchQuery(""); }}
+                                                className={cn(
+                                                    "w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest hover:bg-brand-500/10 hover:text-brand-400 transition-colors border-b last:border-0 border-surface-border/50",
+                                                    selectedExercise === ex ? "text-brand-400 bg-brand-500/5" : "text-fg-subtle"
+                                                )}
+                                            >
+                                                {ex}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         </div>
                         
                         <div className="p-8">
                             <div className="h-[320px] w-full">
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <AreaChart data={exerciseData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                    <AreaChart data={data.exerciseHistory[selectedExercise] || []} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                         <defs>
-                                            <linearGradient id="curveGrad" x1="0" y1="0" x2="0" y2="1">
+                                            <linearGradient id="mainCurveGrad" x1="0" y1="0" x2="0" y2="1">
                                                 <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.2}/>
                                                 <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0}/>
                                             </linearGradient>
@@ -153,141 +356,85 @@ export function ProgressClient({ userRole }: Props) {
                                         <XAxis dataKey="date" stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} />
                                         <YAxis stroke="#6B7280" fontSize={10} tickLine={false} axisLine={false} domain={['auto', 'auto']} />
                                         <Tooltip 
-                                            contentStyle={{ backgroundColor: "#020617", borderRadius: "16px", border: "1px solid #1E293B", color: "#F8FAFC", boxShadow: "0 10px 15px -3px rgba(0,0,0,0.5)" }}
-                                            cursor={{ stroke: '#8B5CF6', strokeWidth: 1 }}
+                                            content={({ active, payload, label }) => {
+                                                if (active && payload && payload.length) {
+                                                    const d = payload[0].payload;
+                                                    return (
+                                                        <div className="bg-surface-elevated/90 backdrop-blur-md border border-brand-500/20 p-4 rounded-2xl shadow-2xl">
+                                                            <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle mb-2">{label}</p>
+                                                            <div className="space-y-1.5">
+                                                                <div className="flex items-center justify-between gap-6 font-black uppercase tracking-tighter">
+                                                                    <span className="text-xs text-fg">Best Set</span>
+                                                                    <span className="text-xs text-brand-400">{d.weight}kg × {d.reps}</span>
+                                                                </div>
+                                                                <div className="flex items-center justify-between gap-6 font-black uppercase tracking-tighter border-t border-surface-border/50 pt-1.5 mt-1.5">
+                                                                    <span className="text-xs text-fg-muted">Vol</span>
+                                                                    <span className="text-xs text-success">{Math.round(d.volume)}kg</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                }
+                                                return null;
+                                            }}
                                         />
                                         <Area 
                                             type="monotone" 
                                             dataKey="weight" 
                                             stroke="#8B5CF6" 
                                             strokeWidth={4} 
-                                            fill="url(#curveGrad)" 
-                                            dot={{ r: 5, fill: "#8B5CF6", stroke: "#0F172A", strokeWidth: 2 }} 
-                                            activeDot={{ r: 8, fill: "#A78BFA", strokeWidth: 0 }}
-                                            animationDuration={1000}
+                                            fill="url(#mainCurveGrad)" 
+                                            dot={{ r: 4, fill: "#8B5CF6", stroke: "#0F172A", strokeWidth: 2 }} 
+                                            activeDot={{ r: 6, fill: "#A78BFA", strokeWidth: 0 }}
+                                            animationDuration={1500}
                                         />
                                     </AreaChart>
                                 </ResponsiveContainer>
                             </div>
                         </div>
                     </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
-                        {/* Monthly Output */}
-                        <div className="card p-6 bg-surface-card">
-                            <div className="flex items-center gap-3 mb-6">
-                                <Activity className="w-5 h-5 text-brand-400" />
-                                <h3 className="text-sm font-black text-fg uppercase tracking-widest">Training Output</h3>
-                            </div>
-                            <div className="h-[220px] w-full">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <LineChart data={data.workoutFrequencies}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
-                                        <XAxis dataKey="month" stroke="#6B7280" fontSize={9} hide />
-                                        <YAxis stroke="#6B7280" fontSize={9} axisLine={false} tickLine={false} />
-                                        <Tooltip contentStyle={{ backgroundColor: "#020617", borderRadius: "12px", border: "1px solid #1E293B" }} />
-                                        <Line type="stepAfter" dataKey="count" stroke="#10B981" strokeWidth={3} dot={true} />
-                                    </LineChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </div>
-                        {/* Session Breakdown */}
-                        <div className="card p-6 bg-surface-card">
-                            <div className="flex items-center gap-3 mb-6">
-                                <Clock className="w-5 h-5 text-warning" />
-                                <h3 className="text-sm font-black text-fg uppercase tracking-widest">Session Intensity</h3>
-                            </div>
-                            <div className="h-[220px] w-full">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={data.sessionDurations.slice(-8)}>
-                                        <XAxis dataKey="date" hide />
-                                        <YAxis stroke="#6B7280" fontSize={9} axisLine={false} tickLine={false} />
-                                        <Tooltip contentStyle={{ backgroundColor: "#020617", borderRadius: "12px", border: "1px solid #1E293B" }} />
-                                        <Bar dataKey="duration" fill="#F59E0B" radius={[6, 6, 0, 0]} barSize={20} />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </div>
-                    </div>
                 </div>
 
-                {/* Tactical Pane */}
-                <div className="lg:col-span-4 space-y-8">
-                    {/* Muscle Architecture */}
-                    <div className="card p-6 bg-surface-card">
-                        <h3 className="text-sm font-black text-fg uppercase tracking-widest mb-8">Volume Distribution</h3>
-                        <div className="h-[260px] w-full relative">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <PieChart>
-                                    <Pie
-                                        data={muscleData}
-                                        cx="50%"
-                                        cy="50%"
-                                        innerRadius={75}
-                                        outerRadius={95}
-                                        paddingAngle={8}
-                                        dataKey="value"
-                                        stroke="none"
-                                    >
-                                        {muscleData.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                        ))}
-                                    </Pie>
-                                    <Tooltip />
-                                </PieChart>
-                            </ResponsiveContainer>
-                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
-                                <p className="text-[10px] font-bold text-fg-subtle uppercase">Targeted</p>
-                                <p className="text-xl font-black text-brand-400 tracking-tighter">
-                                    {(muscleData as any[]).sort((a,b) => b.value - a.value)[0]?.name || "N/A"}
-                                </p>
+                {/* Library Pane */}
+                <div className="lg:col-span-4">
+                    <div className="card bg-surface-card flex flex-col h-full max-h-[500px]">
+                        <div className="p-5 border-b border-surface-border">
+                            <h3 className="text-sm font-black text-fg uppercase tracking-widest">Library Search</h3>
+                            <div className="relative mt-4">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-fg-subtle" />
+                                <input 
+                                    type="text"
+                                    className="input-sm pl-8 w-full"
+                                    placeholder="Type exercise..."
+                                    value={librarySearchQuery}
+                                    onChange={(e) => setLibrarySearchQuery(e.target.value)}
+                                />
                             </div>
                         </div>
-                        <div className="flex flex-wrap gap-3 mt-8 justify-center">
-                            {muscleData.map((m, i) => (
-                                <div key={m.name} className="flex items-center gap-2 px-3 py-1.5 bg-surface-elevated rounded-full border border-surface-border">
-                                    <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                                    <span className="text-[9px] text-fg-muted font-black uppercase tracking-wider">{m.name}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* All Exercise Stats - Clickable to Graph */}
-                    <div className="card bg-surface-card h-fit overflow-hidden">
-                        <div className="p-5 border-b border-surface-border bg-gradient-to-r from-brand-950/10 to-transparent">
-                            <h3 className="text-sm font-black text-fg uppercase tracking-widest">Exercise Library</h3>
-                        </div>
-                        <div className="p-2 space-y-1 max-h-[500px] overflow-y-auto no-scrollbar">
-                            {exerciseNames.map(ex => {
+                        <div className="flex-1 overflow-y-auto no-scrollbar p-2 space-y-1">
+                            {libraryFiltered.map(ex => {
                                 const hist = data.exerciseHistory[ex];
                                 const latest = hist[hist.length - 1];
                                 const isActive = selectedExercise === ex;
-                                
                                 return (
                                     <button 
-                                        key={ex} 
+                                        key={ex}
                                         onClick={() => setSelectedExercise(ex)}
                                         className={cn(
-                                            "w-full flex items-center justify-between p-4 rounded-2xl transition-all duration-200 group text-left",
-                                            isActive 
-                                                ? "bg-brand-500/10 border border-brand-500/30" 
-                                                : "hover:bg-surface-elevated border border-transparent"
+                                            "w-full flex items-center justify-between p-3 rounded-xl transition-all",
+                                            isActive ? "bg-brand-500/10 border border-brand-500/30" : "hover:bg-surface-elevated"
                                         )}
                                     >
-                                        <div className="flex items-center gap-4">
-                                            <div className={cn(
-                                                "w-10 h-10 rounded-xl flex items-center justify-center transition-colors shadow-sm",
-                                                isActive ? "bg-brand-500 text-white" : "bg-surface-elevated text-fg-subtle group-hover:text-brand-400 group-hover:bg-brand-400/10"
-                                            )}>
-                                                <Dumbbell className="w-5 h-5" />
+                                        <div className="flex items-center gap-3">
+                                            <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", isActive ? "bg-brand-500 text-white" : "bg-surface-muted text-fg-subtle")}>
+                                                <BarChart2 className="w-4 h-4" />
                                             </div>
-                                            <div>
-                                                <p className={cn("text-xs font-black transition-colors", isActive ? "text-brand-400" : "text-fg")}>{ex}</p>
-                                                <p className="text-[10px] text-fg-muted font-bold uppercase tracking-tight">Best: {latest.weight}kg</p>
+                                            <div className="text-left">
+                                                <p className={cn("text-xs font-black", isActive ? "text-brand-400" : "text-fg")}>{ex}</p>
+                                                <p className="text-[10px] text-fg-muted font-bold uppercase tracking-tighter">Best: {latest?.weight}kg</p>
                                             </div>
                                         </div>
-                                        <ChevronRight className={cn("w-4 h-4 transition-all", isActive ? "text-brand-400 translate-x-0" : "text-fg-subtle translate-x-[-10px] opacity-0 group-hover:opacity-100 group-hover:translate-x-0")} />
+                                        <ChevronRight className={cn("w-4 h-4", isActive ? "text-brand-400" : "text-fg-subtle opacity-0")} />
                                     </button>
                                 );
                             })}

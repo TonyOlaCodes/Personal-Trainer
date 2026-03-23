@@ -37,7 +37,7 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
         prisma.plan.findMany({
             where: {
                 OR: [
-                    { type: "SYSTEM" as any },
+                    { type: "PREBUILT" },
                     { creatorId: actor.id },
                 ],
             },
@@ -57,16 +57,27 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
                         role: target.role,
                         avatarUrl: target.avatarUrl,
                         activePlan: activePlan ? { id: activePlan.id, name: activePlan.name } : null,
-                        experience: (target as any).experience,
-                        goal: (target as any).goal,
+                        experience: target.experienceLevel,
+                        goal: target.goal,
+                        trainingLocation: target.trainingLocation,
+                        trainingDaysPerWeek: target.trainingDaysPerWeek,
                     }}
                     availablePlans={availablePlans}
-                    logs={target.workoutLogs.map((l) => ({
-                        id: l.id,
-                        workoutName: l.workout.name,
-                        date: l.loggedAt.toISOString(),
-                        setCount: l.sets.length,
-                    }))}
+                    logs={(() => {
+                        const seenNames = new Set();
+                        return target.workoutLogs
+                            .filter(l => {
+                                if (seenNames.has(l.workout.name)) return false;
+                                seenNames.add(l.workout.name);
+                                return true;
+                            })
+                            .map((l) => ({
+                                id: l.id,
+                                workoutName: l.workout.name,
+                                date: l.loggedAt.toISOString(),
+                                setCount: l.sets.length,
+                            }));
+                    })()}
                     checkIns={target.checkIns.map((ci) => ({
                         id: ci.id,
                         week: ci.weekNumber,

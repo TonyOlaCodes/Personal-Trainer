@@ -43,7 +43,8 @@ export async function GET(req: Request) {
     return NextResponse.json(codes.map(c => ({
         ...c,
         planName: c.plan?.name ?? null,
-        usedBy: c.usedBy?.name ?? null,
+        usedByName: c.usedBy?.name ?? null,
+        usedByEmail: c.usedBy?.email ?? null,
         usedById: c.usedBy?.id ?? null,
         upgradesTo: c.upgradesTo,
     })));
@@ -55,12 +56,18 @@ export async function DELETE(req: Request) {
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const user = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!user || user.role !== "SUPER_ADMIN") {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    if (!user) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const { id } = await req.json();
     if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
+
+    const code = await prisma.accessCode.findUnique({ where: { id } });
+    if (!code) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    // Only allow Super Admins or the coach who generated it to delete
+    if (user.role !== "SUPER_ADMIN" && code.generatedBy !== user.id) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     await prisma.accessCode.delete({ where: { id } });
     return NextResponse.json({ success: true });

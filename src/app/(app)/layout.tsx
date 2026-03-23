@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { cookies } from "next/headers";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { MobileTabBar } from "@/components/layout/MobileTabBar";
 import { RoleProvider } from "@/lib/RoleContext";
@@ -13,7 +14,6 @@ export default async function AppLayout({
     const { userId } = await auth();
     if (!userId) redirect("/sign-in");
 
-    // Gracefully fetch user — app still renders even without a real DB
     let user: { role: string; onboardingDone: boolean; id: string } | null = null;
     try {
         user = await prisma.user.findUnique({
@@ -21,14 +21,23 @@ export default async function AppLayout({
             select: { role: true, onboardingDone: true, id: true },
         });
     } catch (e) {
-        // DB not yet connected — treat as new user
         console.warn("[AppLayout] DB unreachable, treating as new user:", e);
     }
 
+    const cookieStore = await cookies();
+    const isClientMode = cookieStore.get("viewMode")?.value === "CLIENT";
+
+    const realRole = (user?.role as "FREE" | "PREMIUM" | "COACH" | "SUPER_ADMIN") ?? "FREE";
+    let effectiveRole = realRole;
+
+    if (["COACH", "SUPER_ADMIN"].includes(realRole) && isClientMode) {
+        effectiveRole = "PREMIUM";
+    }
+
     return (
-        <RoleProvider role={user?.role ?? "FREE"}>
+        <RoleProvider role={effectiveRole}>
             <div className="min-h-screen bg-surface">
-                <Sidebar userRole={(user?.role as "FREE" | "PREMIUM" | "COACH" | "SUPER_ADMIN") ?? "FREE"} />
+                <Sidebar userRole={effectiveRole} realRole={realRole} isClientMode={isClientMode} />
 
                 <div className="lg:pl-[var(--sidebar-width)]">
                     <main className="min-h-screen pb-20 lg:pb-0">
@@ -36,7 +45,7 @@ export default async function AppLayout({
                     </main>
                 </div>
 
-                <MobileTabBar />
+                <MobileTabBar userRole={effectiveRole} realRole={realRole} isClientMode={isClientMode} />
             </div>
         </RoleProvider>
     );

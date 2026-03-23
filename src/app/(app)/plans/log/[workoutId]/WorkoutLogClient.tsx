@@ -28,6 +28,7 @@ interface SetLog {
     setNumber: number;
     reps: number;
     weightKg: string;
+    rpe: string;
     isCompleted: boolean;
     isWarmup: boolean;
     videoUrl?: string;
@@ -42,7 +43,7 @@ interface Props {
 export function WorkoutLogClient({ workout, tutorialUrls = {} }: Props) {
     const router = useRouter();
     const [logs, setLogs] = useState<Record<string, SetLog[]>>({});
-    const [startTime] = useState(Date.now());
+    const [startTime, setStartTime] = useState(Date.now());
     const [elapsed, setElapsed] = useState(0);
     const [saving, setSaving] = useState(false);
     const [loading, setLoading] = useState(true);
@@ -63,12 +64,19 @@ export function WorkoutLogClient({ workout, tutorialUrls = {} }: Props) {
                     const restored: Record<string, SetLog[]> = {};
                     workout.exercises.forEach(ex => restored[ex.id] = []);
                     
+                    if (active.duration) {
+                        setStartTime(Date.now() - (active.duration * 60000));
+                    } else if (active.loggedAt) {
+                        setStartTime(new Date(active.loggedAt).getTime());
+                    }
+
                     active.sets.forEach((s: any) => {
                         if (restored[s.exerciseId]) {
                             restored[s.exerciseId].push({
                                 setNumber: s.setNumber,
                                 reps: s.reps ?? 10,
                                 weightKg: s.weightKg?.toString() ?? "",
+                                rpe: s.rpe?.toString() ?? "",
                                 isCompleted: s.isCompleted,
                                 isWarmup: s.isWarmup,
                                 videoUrl: s.videoUrl,
@@ -83,11 +91,15 @@ export function WorkoutLogClient({ workout, tutorialUrls = {} }: Props) {
                             setNumber: i + 1,
                             reps: parseInt(ex.reps) || 10,
                             weightKg: ex.weightTargetKg?.toString() || "",
+                            rpe: "",
                             isCompleted: false,
                             isWarmup: false,
                         }));
                     });
                     setLogs(initialLogs);
+                    // Crucial: Save immediately to lock in the start time (loggedAt) in the DB
+                    // This prevents the timer from resetting if the user navigates away and back
+                    saveProgress(initialLogs);
                 }
             } catch (e) {
                 console.error("Failed to load active log:", e);
@@ -119,6 +131,7 @@ export function WorkoutLogClient({ workout, tutorialUrls = {} }: Props) {
                 setNumber: s.setNumber,
                 reps: s.reps,
                 weightKg: s.weightKg ? parseFloat(s.weightKg) : undefined,
+                rpe: s.rpe ? parseInt(s.rpe) : undefined,
                 isWarmup: s.isWarmup,
                 isCompleted: s.isCompleted,
                 videoUrl: s.videoUrl || undefined,
@@ -142,11 +155,19 @@ export function WorkoutLogClient({ workout, tutorialUrls = {} }: Props) {
 
     const updateSet = (exId: string, setIdx: number, updates: Partial<SetLog>) => {
         setLogs((prev) => {
+            const currentSet = prev[exId][setIdx];
+            
+            // Auto-check logic: if weight is entered and it's not currently completed, check it
+            let finalUpdates = { ...updates };
+            if (updates.weightKg && updates.weightKg.trim() !== "" && !currentSet.isCompleted && updates.isCompleted === undefined) {
+                finalUpdates.isCompleted = true;
+            }
+
             const next = {
                 ...prev,
-                [exId]: prev[exId].map((set, i) => i === setIdx ? { ...set, ...updates } : set),
+                [exId]: prev[exId].map((set, i) => i === setIdx ? { ...set, ...finalUpdates } : set),
             };
-            if (Object.keys(updates).some(k => ["isCompleted", "weightKg", "reps", "videoUrl"].includes(k))) {
+            if (Object.keys(finalUpdates).some(k => ["isCompleted", "weightKg", "reps", "rpe", "videoUrl"].includes(k))) {
                 saveProgress(next);
             }
             return next;
@@ -187,6 +208,7 @@ export function WorkoutLogClient({ workout, tutorialUrls = {} }: Props) {
                         setNumber: sets.length + 1,
                         reps: lastSet?.reps || 10,
                         weightKg: lastSet?.weightKg || "",
+                        rpe: lastSet?.rpe || "",
                         isCompleted: false,
                         isWarmup: false,
                     },
@@ -228,6 +250,7 @@ export function WorkoutLogClient({ workout, tutorialUrls = {} }: Props) {
                 setNumber: s.setNumber,
                 reps: s.reps || undefined,
                 weightKg: s.weightKg ? parseFloat(s.weightKg) : undefined,
+                rpe: s.rpe ? parseInt(s.rpe) : undefined,
                 isWarmup: s.isWarmup,
                 isCompleted: s.isCompleted,
                 videoUrl: s.videoUrl || undefined,
@@ -322,8 +345,9 @@ export function WorkoutLogClient({ workout, tutorialUrls = {} }: Props) {
                             <div className="space-y-2">
                                 <div className="grid grid-cols-12 gap-2 text-[10px] font-bold text-fg-subtle uppercase px-2 mb-1">
                                     <div className="col-span-1 text-center">{isCardio(ex.name) ? "Rd" : "Set"}</div>
-                                    <div className="col-span-4 text-center">{isCardio(ex.name) ? "Lvl/Spd" : "Weight"}</div>
-                                    <div className="col-span-4 text-center">{isCardio(ex.name) ? "Mins" : "Reps"}</div>
+                                    <div className="col-span-3 text-center">{isCardio(ex.name) ? "Lvl/Spd" : "Weight"}</div>
+                                    <div className="col-span-3 text-center">{isCardio(ex.name) ? "Mins" : "Reps"}</div>
+                                    <div className="col-span-2 text-center">RPE</div>
                                     <div className="col-span-3 text-center">Check</div>
                                 </div>
 
@@ -349,7 +373,7 @@ export function WorkoutLogClient({ workout, tutorialUrls = {} }: Props) {
                                             </button>
                                         </div>
 
-                                        <div className="col-span-4">
+                                        <div className="col-span-3">
                                             <div className="relative">
                                                 <input
                                                     type="number"
@@ -363,12 +387,22 @@ export function WorkoutLogClient({ workout, tutorialUrls = {} }: Props) {
                                             </div>
                                         </div>
 
-                                        <div className="col-span-4">
+                                        <div className="col-span-3">
                                             <input
                                                 type="number"
                                                 className="input-sm w-full bg-surface-elevated border-none focus:ring-1 focus:ring-brand-500 text-center text-sm font-semibold rounded-lg h-9"
                                                 value={set.reps}
                                                 onChange={(e) => updateSet(ex.id, sIdx, { reps: parseInt(e.target.value) || 0 })}
+                                            />
+                                        </div>
+
+                                        <div className="col-span-2">
+                                            <input
+                                                type="number"
+                                                className="input-sm w-full bg-surface-elevated border-none focus:ring-1 focus:ring-brand-500 text-center text-sm font-semibold rounded-lg h-9"
+                                                value={set.rpe}
+                                                placeholder="1-10"
+                                                onChange={(e) => updateSet(ex.id, sIdx, { rpe: e.target.value })}
                                             />
                                         </div>
 

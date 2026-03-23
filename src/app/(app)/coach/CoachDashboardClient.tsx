@@ -2,7 +2,7 @@
 
 import {
     Users, Activity, Calendar, MessageSquare,
-    ChevronRight, ArrowUpRight, TrendingUp, HelpCircle
+    ChevronRight, ArrowUpRight, TrendingUp, HelpCircle, CheckCircle2
 } from "lucide-react";
 import Link from "next/link";
 import { cn, formatDate, getInitials } from "@/lib/utils";
@@ -62,7 +62,7 @@ export function CoachDashboardClient({ clients, recentCheckIns }: Props) {
                 <div className="lg:col-span-2 space-y-4">
                     <div className="flex items-center justify-between px-2">
                         <h3 className="heading-3">My Stable</h3>
-                        <Link href="/admin?tab=codes" className="btn-ghost btn-sm text-xs border-dashed">
+                        <Link href="/coach/invites" className="btn-ghost btn-sm text-xs border-dashed">
                             Invite Client +
                         </Link>
                     </div>
@@ -114,25 +114,37 @@ export function CoachDashboardClient({ clients, recentCheckIns }: Props) {
                         {recentCheckIns.map((ci) => (
                             <Link
                                 key={ci.id}
-                                href="/checkins"
+                                href={`/coach/checkins/${ci.id}`}
                                 className={cn(
                                     "block card p-4 border transition-all",
-                                    ci.status === "Pending" ? "border-brand-600/30 bg-brand-950/20" : "hover:border-surface-subtle"
+                                    ci.status === "Pending" ? "border-brand-600/30 bg-brand-500/5 shadow-glow-brand-sm" : "hover:bg-surface-muted/30"
                                 )}
                             >
-                                <div className="flex items-start justify-between">
-                                    <div>
-                                        <p className="text-xs font-bold text-brand-400 uppercase tracking-widest mb-1">Week {ci.week}</p>
-                                        <p className="font-bold text-fg">{ci.clientName}</p>
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className="text-[10px] font-black text-brand-400 uppercase tracking-widest">Protocol Week {ci.week}</span>
+                                            {ci.status === "Pending" ? (
+                                                <span className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-pulse shadow-glow-brand" />
+                                            ) : (
+                                                <CheckCircle2 className="w-3 h-3 text-success/60" />
+                                            )}
+                                        </div>
+                                        <p className="font-black text-fg truncate text-sm">{ci.clientName}</p>
                                     </div>
-                                    {ci.status === "Pending" && (
-                                        <span className="w-2 h-2 rounded-full bg-brand-500 animate-pulse shadow-glow-brand" />
-                                    )}
+                                    <div className="text-right">
+                                        {ci.status === "Pending" ? (
+                                            <span className="badge-brand text-[8px] px-1.5 py-0.5 rounded-md font-black uppercase tracking-widest">Review</span>
+                                        ) : (
+                                            <span className="badge text-success bg-success/10 border-success/20 text-[8px] px-1.5 py-0.5 rounded-md font-black uppercase tracking-widest">Done</span>
+                                        )}
+                                    </div>
                                 </div>
-                                <div className="mt-3 flex items-center justify-between text-[10px] text-fg-muted font-medium">
-                                    <span>{formatDate(ci.date)}</span>
-                                    <div className="flex items-center gap-1 group">
-                                        Review <ChevronRight className="w-3 h-3 transition-transform group-hover:translate-x-1" />
+                                <div className="mt-3 pt-3 border-t border-surface-border/50 flex items-center justify-between text-[10px] text-fg-muted font-black uppercase tracking-widest">
+                                    <span className="text-fg-subtle italic">{formatDate(ci.date)}</span>
+                                    <div className="flex items-center gap-1 group text-brand-400">
+                                        {ci.status === "Pending" ? "Perform Review" : "View Submission"} 
+                                        <ChevronRight className="w-3 h-3 transition-transform group-hover:translate-x-1" />
                                     </div>
                                 </div>
                             </Link>

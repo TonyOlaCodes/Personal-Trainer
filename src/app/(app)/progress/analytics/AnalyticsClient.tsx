@@ -71,7 +71,7 @@ export function AnalyticsClient() {
                                 <p className="text-xs text-fg-muted">Tracking your strength and volume trends</p>
                             </div>
                             <select 
-                                className="input-sm bg-surface-muted border-none max-w-[200px]"
+                                className="input input-sm bg-surface-muted border-none max-w-[200px]"
                                 value={selectedExercise}
                                 onChange={(e) => setSelectedExercise(e.target.value)}
                             >

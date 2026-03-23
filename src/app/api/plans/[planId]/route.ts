@@ -30,13 +30,27 @@ export async function GET(
 
     if (!plan) return NextResponse.json({ error: "Plan not found" }, { status: 404 });
 
-    // Check if the user is authorized to see/edit it (creator or assigned)
-    const userPlan = await prisma.userPlan.findFirst({
-        where: { userId: user.id, planId: plan.id },
-    });
+    // Auth check: Creator, Admin, or the Coach of whoever is assigned this plan
+    const isOwner = plan.creatorId === user.id;
+    const isAdmin = user.role === "SUPER_ADMIN";
+    
+    if (!isOwner && !isAdmin) {
+        // Check if any user assigned this plan is a client of the requester
+        const isCoachOfAssignee = await prisma.userPlan.findFirst({
+            where: { 
+                planId: plan.id,
+                user: { coachId: user.id }
+            }
+        });
 
-    if (!userPlan && plan.creatorId !== user.id) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        // Also check if the requester is the person assigned the plan
+        const isAssignee = await prisma.userPlan.findFirst({
+            where: { planId: plan.id, userId: user.id }
+        });
+
+        if (!isCoachOfAssignee && !isAssignee) {
+            return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        }
     }
 
     return NextResponse.json(plan);
@@ -56,13 +70,27 @@ export async function PATCH(
     const body = await req.json();
     const { name, description, weeks } = body;
 
-    // Verify ownership
     const existing = await prisma.plan.findUnique({
         where: { id: planId },
         select: { creatorId: true }
     });
-    if (!existing || existing.creatorId !== user.id) {
-        return NextResponse.json({ error: "Unauthorized to edit" }, { status: 403 });
+
+    if (!existing) return NextResponse.json({ error: "Plan not found" }, { status: 404 });
+
+    const isOwner = existing.creatorId === user.id;
+    const isAdmin = user.role === "SUPER_ADMIN";
+    
+    if (!isOwner && !isAdmin) {
+        // Allow coach to edit if they are the coach of the person with this plan
+        const isCoachOfAssignee = await prisma.userPlan.findFirst({
+            where: { 
+                planId: planId,
+                user: { coachId: user.id }
+            }
+        });
+        if (!isCoachOfAssignee) {
+            return NextResponse.json({ error: "Unauthorized to edit" }, { status: 403 });
+        }
     }
 
     try {

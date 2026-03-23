@@ -15,15 +15,16 @@ import {
     ShieldCheck,
     Users,
     Video,
-    Heart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { RoleSwitcher } from "@/components/shared/RoleSwitcher";
 
 interface NavItem {
     href: string;
     label: string;
     icon: React.ElementType;
     roles?: string[];
+    hideRoles?: string[];
     badge?: string;
 }
 
@@ -31,32 +32,35 @@ const navItems: NavItem[] = [
     { href: "/admin", label: "Admin", icon: ShieldCheck, roles: ["SUPER_ADMIN"] },
     { href: "/admin/exercises", label: "Exercises", icon: Video, roles: ["SUPER_ADMIN"] },
     { href: "/coach", label: "Coach Panel", icon: Users, roles: ["COACH", "SUPER_ADMIN"] },
-    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, hideRoles: ["COACH", "SUPER_ADMIN"] },
     { href: "/plans", label: "Plans", icon: Dumbbell },
     { href: "/calendar", label: "Calendar", icon: Calendar },
-    { href: "/progress", label: "Progress", icon: BarChart3 },
+    { href: "/progress", label: "Progress", icon: BarChart3, hideRoles: ["COACH", "SUPER_ADMIN"] },
     { href: "/checkins", label: "Check-ins", icon: ClipboardList },
     { href: "/chat", label: "Chat", icon: MessageSquare },
-    { href: "/donate", label: "Support Mission", icon: Heart },
 ];
 
 interface SidebarProps {
     userRole?: string;
+    realRole?: string;
+    isClientMode?: boolean;
 }
 
-export function Sidebar({ userRole = "FREE" }: SidebarProps) {
+export function Sidebar({ userRole = "FREE", realRole = "FREE", isClientMode = false }: SidebarProps) {
     const pathname = usePathname();
 
+    const filteredRole = isClientMode ? "PREMIUM" : userRole;
     const filteredItems = navItems.filter((item) => {
+        if (item.hideRoles && item.hideRoles.includes(filteredRole)) return false;
         if (!item.roles) return true;
-        return item.roles.includes(userRole);
+        return item.roles.includes(filteredRole);
     });
 
     return (
         <aside className="hidden lg:flex flex-col fixed left-0 top-0 h-full w-[var(--sidebar-width)] bg-surface-card border-r border-surface-border z-40">
             {/* Logo */}
             <div className="h-16 flex items-center px-5 border-b border-surface-border">
-                <Link href="/" className="flex items-center gap-2.5">
+                <Link href={userRole === "COACH" || userRole === "SUPER_ADMIN" ? "/coach" : "/dashboard"} className="flex items-center gap-2.5">
                     <div className="w-8 h-8 rounded-xl bg-gradient-brand flex items-center justify-center shadow-glow-sm">
                         <Zap className="w-4 h-4 text-white" />
                     </div>
@@ -73,6 +77,7 @@ export function Sidebar({ userRole = "FREE" }: SidebarProps) {
                     return (
                         <Link
                             key={item.href}
+                            id={`nav-${item.label.toLowerCase().replace(" ", "")}`}
                             href={item.href}
                             className={cn(active ? "sidebar-link-active" : "sidebar-link")}
                         >
@@ -88,6 +93,11 @@ export function Sidebar({ userRole = "FREE" }: SidebarProps) {
 
             {/* Settings + User */}
             <div className="px-3 py-4 border-t border-surface-border space-y-1">
+                {(realRole === "COACH" || realRole === "SUPER_ADMIN") && (
+                    <div className="mb-2">
+                        <RoleSwitcher realRole={realRole as any} isClientMode={isClientMode} />
+                    </div>
+                )}
                 <Link
                     href="/settings"
                     className={cn(pathname === "/settings" ? "sidebar-link-active" : "sidebar-link")}

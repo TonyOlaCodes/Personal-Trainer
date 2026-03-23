@@ -8,7 +8,10 @@ export async function GET(req: Request) {
     const { userId } = await auth();
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const user = await prisma.user.findUnique({ where: { clerkId: userId } });
+    const user = await prisma.user.update({ 
+        where: { clerkId: userId },
+        data: { updatedAt: new Date() }
+    });
     if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
     const url = new URL(req.url);
@@ -21,13 +24,20 @@ export async function GET(req: Request) {
     if (isGeneral) {
         where = { isGeneral: true };
     } else if (withUserId) {
-        where = {
-            isGeneral: false,
-            OR: [
-                { senderId: user.id, receiverId: withUserId },
-                { senderId: withUserId, receiverId: user.id },
-            ],
-        };
+        if (withUserId.startsWith("team_")) {
+            where = {
+                isGeneral: false,
+                receiverId: withUserId,
+            };
+        } else {
+            where = {
+                isGeneral: false,
+                OR: [
+                    { senderId: user.id, receiverId: withUserId },
+                    { senderId: withUserId, receiverId: user.id },
+                ],
+            };
+        }
     }
 
     const messages = await prisma.message.findMany({

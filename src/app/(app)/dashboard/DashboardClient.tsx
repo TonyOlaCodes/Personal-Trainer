@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Walkthrough } from "@/components/shared/Walkthrough";
 import { Dumbbell, ChevronRight, Clock, Flame, Plus, Activity, TrendingUp, Calendar, Ticket, Check, Edit3 } from "lucide-react";
 import { formatRelative, cn } from "@/lib/utils";
 import { isCardio } from "@/components/shared/ExerciseAutocomplete";
@@ -49,6 +50,16 @@ export function DashboardClient({ user, activePlan, todayWorkout, todayCompleted
     const [code, setCode] = useState("");
     const [codeStatus, setCodeStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
     const [codeMsg, setCodeMsg] = useState("");
+    const [showTour, setShowTour] = useState(false);
+
+    useEffect(() => {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get("tour") === "true") {
+            setShowTour(true);
+            // Clean up URL
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+    }, []);
 
     const uncompleteLog = async (logId: string, workoutId: string) => {
         try {
@@ -83,15 +94,65 @@ export function DashboardClient({ user, activePlan, todayWorkout, todayCompleted
         if (res.ok) {
             setCodeStatus("success");
             setCodeMsg("Access Granted!");
-            setTimeout(() => window.location.reload(), 1000);
+            // Refresh with tour flag
+            setTimeout(() => {
+                window.location.href = "/dashboard?tour=true";
+            }, 1000);
         } else {
             setCodeStatus("error");
             setCodeMsg(data.error ?? "Invalid code");
         }
     };
 
+    const tourSteps = [
+        {
+            targetId: "nav-dashboard",
+            title: "Command Center",
+            description: "Your daily overview. See your current plan, stats, and today's mission at a glance.",
+            position: "right" as const
+        },
+        {
+            targetId: "nav-plans",
+            title: "Military Protocol",
+            description: "Access your training programs. View every exercise, set, and rep assigned by your coach.",
+            position: "right" as const
+        },
+        {
+            targetId: "nav-calendar",
+            title: "Operations Log",
+            description: "A bird's eye view of your schedule. See what's coming up and what you've already crushed.",
+            position: "right" as const
+        },
+        {
+            targetId: "nav-progress",
+            title: "Performance Intel",
+            description: "Analyze your gains. Track body metrics and strength plateaus over time.",
+            position: "right" as const
+        },
+        {
+            targetId: "nav-check-ins",
+            title: "Strategic Check-ins",
+            description: "Submit your weekly check-ins and progress photos to your coach for feedback.",
+            position: "right" as const
+        },
+        {
+            targetId: "nav-chat",
+            title: "Direct Comms",
+            description: "Instant access to your coach. Ask questions or get form checks any time.",
+            position: "right" as const
+        },
+        {
+            targetId: "today-workout",
+            title: "Execute Today",
+            description: "Ready to work? Start your scheduled session right here from the dashboard.",
+            position: "bottom" as const
+        }
+    ];
+
     return (
         <div className="space-y-6 animate-fade-in pb-10">
+            {showTour && <Walkthrough steps={tourSteps} onComplete={() => setShowTour(false)} />}
+            
             {/* Greeting */}
             <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
                 <div>
@@ -112,7 +173,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, todayCompleted
                 </div>
 
                 {user.role === "FREE" && (
-                    <div className="card p-4 bg-brand-500/5 border-brand-500/20 max-w-sm w-full animate-fade-in">
+                    <div id="unlock-card" className="card p-4 bg-brand-500/5 border-brand-500/20 max-w-sm w-full animate-fade-in">
                         <div className="flex items-center gap-2 mb-3">
                             <Ticket className="w-3.5 h-3.5 text-brand-400" />
                             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-brand-400">Unlock Full Access</p>
@@ -120,7 +181,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, todayCompleted
                         <div className="flex gap-2">
                             <input
                                 placeholder="ACCESS CODE"
-                                className="input-sm flex-1 text-center font-mono font-bold uppercase tracking-widest text-xs h-9"
+                                className="input-sm flex-1 text-center font-mono font-bold uppercase tracking-widest text-xs h-9 bg-white text-black placeholder:text-gray-400"
                                 value={code}
                                 onChange={(e) => setCode(e.target.value.toUpperCase())}
                                 maxLength={8}
@@ -167,7 +228,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, todayCompleted
 
             {/* Weekly Metrics */}
             {weeklyMetrics && (
-                <div className="grid grid-cols-2 gap-4">
+                <div id="weekly-metrics" className="grid grid-cols-2 gap-4">
                     <div className="card p-4 flex items-center justify-between bg-gradient-to-br from-surface-card to-brand-950/10">
                         <div>
                             <p className="text-[9px] font-black tracking-widest uppercase text-brand-400/80 mb-0.5">This Week</p>
@@ -190,7 +251,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, todayCompleted
             )}
 
             {/* Today's Workout */}
-            <div>
+            <div id="today-workout">
                 <div className="flex items-center justify-between mb-3">
                     <h3 className="heading-3">Today&apos;s Workout</h3>
                     {(todayWorkout && !todayCompleted) && (
@@ -291,7 +352,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, todayCompleted
             </div>
 
             {/* Recent Activity */}
-            <div>
+            <div id="recent-sessions">
                 <div className="flex items-center justify-between mb-3">
                     <h3 className="heading-3">Recent Sessions</h3>
                     <Link href="/progress" className="btn-ghost btn-sm text-brand-400">

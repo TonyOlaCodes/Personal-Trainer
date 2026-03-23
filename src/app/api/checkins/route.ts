@@ -126,14 +126,12 @@ export async function PATCH(req: Request) {
     if (isCoach) {
         data = {
             coachResponse,
-            status: status as any,
+            status: (status as any) || "REVIEWED",
             respondedAt: new Date(),
+            coachLastSeenAt: new Date(),
         };
     } else {
-        // User edit - only if PENDING
-        if (existing.status !== "PENDING") {
-            return NextResponse.json({ error: "Reviewed check-ins cannot be edited" }, { status: 400 });
-        }
+        // User edit
         data = {
             feedback,
             notes,
@@ -147,6 +145,7 @@ export async function PATCH(req: Request) {
             intensityRating,
             frontImageUrl,
             sideImageUrl,
+            lastUpdatedByClientAt: new Date(),
         };
     }
     

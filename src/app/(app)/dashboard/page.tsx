@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { getDayName, formatDate } from "@/lib/utils";
+import { cookies } from "next/headers";
 import { DashboardClient } from "./DashboardClient";
 
 export const metadata = { title: "Dashboard" };
@@ -24,7 +25,6 @@ export default async function DashboardPage() {
                             include: {
                                 weeks: {
                                     orderBy: { weekNumber: "asc" },
-                                    take: 1,
                                     include: {
                                         workouts: {
                                             orderBy: { dayNumber: "asc" },
@@ -54,6 +54,13 @@ export default async function DashboardPage() {
 
     if (!user.onboardingDone) redirect("/onboarding");
 
+    const cookieStore = await cookies();
+    const viewMode = cookieStore.get("viewMode")?.value || "COACH";
+
+    if ((user.role === "COACH" || user.role === "SUPER_ADMIN") && viewMode === "COACH") {
+        redirect("/coach");
+    }
+
     // Fetch active session separately to be safe or use the user object
     const activeSession = await prisma.workoutLog.findFirst({
         where: { userId: user.id, status: "IN_PROGRESS" },
@@ -61,9 +68,23 @@ export default async function DashboardPage() {
         orderBy: { updatedAt: "desc" }
     });
 
-    const activePlan = user.plans[0]?.plan ?? null;
+    const activeUserPlan = user.plans[0] ?? null;
+    const activePlan = activeUserPlan?.plan ?? null;
     const weeks = activePlan?.weeks ?? [];
-    const currentWeek = weeks[0] ?? null;
+    
+    let currentWeekIndex = 0;
+    if (activeUserPlan) {
+        const startedAt = new Date(activeUserPlan.startedAt);
+        const now = new Date();
+        const diffTime = Math.abs(now.getTime() - startedAt.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        currentWeekIndex = Math.floor(diffDays / 7);
+        // Fallback to the last available week if the client progresses past the defined weeks
+        if (currentWeekIndex >= weeks.length) {
+            currentWeekIndex = weeks.length - 1;
+        }
+    }
+    const currentWeek = weeks[currentWeekIndex] ?? weeks[0] ?? null;
     const todayDayOfWeek = new Date().getDay();
 
     let todayWorkout = null;

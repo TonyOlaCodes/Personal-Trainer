@@ -26,11 +26,27 @@ interface Props {
     currentUserId: string;
     currentUserRole: string;
     conversations: Conversation[];
+    teamId?: string | null;
+    teamMembers?: { id: string; name: string | null; role: string; avatarUrl: string | null; updatedAt: string }[];
 }
 
-export function ChatClient({ currentUserId, currentUserRole, conversations }: Props) {
-    const [tab, setTab] = useState<"direct" | "general">("general");
+export function ChatClient({ currentUserId, currentUserRole, conversations, teamId, teamMembers }: Props) {
+    const [tab, setTab] = useState<"direct" | "general" | "team">("general");
     const [selectedConv, setSelectedConv] = useState<Conversation | null>(conversations[0] ?? null);
+
+    // Persistence for chat tab
+    useEffect(() => {
+        const saved = localStorage.getItem("lastChatTab") as any;
+        if (saved && ["direct", "general", "team"].includes(saved)) {
+            if (saved === "team" && !teamId) setTab("general");
+            else setTab(saved);
+        }
+    }, [teamId]);
+
+    const handleTabChange = (newTab: "direct" | "general" | "team") => {
+        setTab(newTab);
+        localStorage.setItem("lastChatTab", newTab);
+    };
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState("");
     const [stagedMedia, setStagedMedia] = useState<{ url: string; type: "IMAGE" | "VIDEO" } | null>(null);
@@ -55,7 +71,9 @@ export function ChatClient({ currentUserId, currentUserRole, conversations }: Pr
             let url = "";
             if (tab === "general") {
                 url = "/api/messages?general=true";
-            } else if (selectedConv) {
+            } else if (tab === "team" && teamId) {
+                url = `/api/messages?with=${teamId}`;
+            } else if (tab === "direct" && selectedConv) {
                 url = `/api/messages?with=${selectedConv.userId}`;
             } else return;
 
@@ -64,7 +82,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations }: Pr
         } finally {
             isFetchingRef.current = false;
         }
-    }, [tab, selectedConv]);
+    }, [tab, selectedConv, teamId]);
 
     useEffect(() => {
         fetchMessages();
@@ -115,7 +133,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations }: Pr
             body: JSON.stringify({
                 content: input.trim() || undefined,
                 isGeneral: tab === "general",
-                receiverId: tab === "direct" && selectedConv ? selectedConv.userId : undefined,
+                receiverId: tab === "team" ? teamId : (tab === "direct" && selectedConv ? selectedConv.userId : undefined),
                 type: stagedMedia ? stagedMedia.type : "TEXT",
                 mediaUrl: stagedMedia?.url
             }),
@@ -191,14 +209,23 @@ export function ChatClient({ currentUserId, currentUserRole, conversations }: Pr
                 <div className="p-3 border-b border-surface-border">
                     <div className="flex gap-1 bg-surface-muted p-1 rounded-xl">
                         <button
-                            onClick={() => setTab("direct")}
+                            onClick={() => handleTabChange("direct")}
                             className={cn("flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium transition-all",
                                 tab === "direct" ? "bg-surface-card text-fg shadow-card" : "text-fg-muted")}
                         >
                             <MessageSquare className="w-3 h-3" /> Direct
                         </button>
+                        {teamId && (
+                            <button
+                                onClick={() => handleTabChange("team")}
+                                className={cn("flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium transition-all",
+                                    tab === "team" ? "bg-surface-card text-fg shadow-card" : "text-fg-muted")}
+                            >
+                                <Star className="w-3 h-3" /> Team
+                            </button>
+                        )}
                         <button
-                            onClick={() => setTab("general")}
+                            onClick={() => handleTabChange("general")}
                             className={cn("flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium transition-all",
                                 tab === "general" ? "bg-surface-card text-fg shadow-card" : "text-fg-muted")}
                         >
@@ -240,6 +267,34 @@ export function ChatClient({ currentUserId, currentUserRole, conversations }: Pr
                         )}
                     </div>
                 )}
+                {tab === "team" && (
+                    <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                        <h4 className="text-[10px] font-black uppercase tracking-widest text-fg-subtle px-3 mt-2 mb-2">Team Roster</h4>
+                        {teamMembers?.map((m) => {
+                            // Consider online if active in the last 15 minutes (since we update it periodically vs WebSockets)
+                            const isOnline = m.updatedAt && (Date.now() - new Date(m.updatedAt).getTime() < 15 * 60 * 1000);
+                            
+                            return (
+                                <div key={m.id} className="w-full text-left flex items-center gap-3 p-2 rounded-xl hover:bg-surface-muted transition-all">
+                                    <div className="relative">
+                                        <div className="w-8 h-8 rounded-full bg-gradient-brand flex items-center justify-center text-xs font-bold text-white flex-shrink-0 overflow-hidden">
+                                            {m.avatarUrl ? <img src={m.avatarUrl} alt={m.name ?? "User"} className="w-full h-full object-cover" /> : getInitials(m.name)}
+                                        </div>
+                                        <div 
+                                            className={cn("absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-surface-card", isOnline ? "bg-success" : "bg-fg-muted")} 
+                                        />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <div className="flex items-center justify-between gap-1">
+                                            <p className="text-sm font-bold text-fg truncate">{m.name ?? "Athlete"}</p>
+                                        </div>
+                                        <p className="text-[10px] uppercase font-black tracking-widest text-fg-subtle">{roleLabels[m.role] ?? m.role}</p>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
                 {tab === "general" && (
                     <div className="flex-1 flex items-center justify-center p-4 text-center">
                         <div>
@@ -254,7 +309,15 @@ export function ChatClient({ currentUserId, currentUserRole, conversations }: Pr
             <div className="flex-1 flex flex-col min-w-0">
                 {/* Header */}
                 <div className="h-14 flex items-center px-5 border-b border-surface-border gap-3">
-                    {tab === "general" ? (
+                    {tab === "team" ? (
+                        <>
+                            <Star className="w-5 h-5 text-brand-400" />
+                            <div>
+                                <p className="font-semibold text-sm">Team Chat</p>
+                                <p className="text-xs text-fg-muted">Coach & Athletes</p>
+                            </div>
+                        </>
+                    ) : tab === "general" ? (
                         <>
                             <Globe className="w-5 h-5 text-brand-400" />
                             <div>

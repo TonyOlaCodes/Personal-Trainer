@@ -68,5 +68,8 @@ export async function POST(req: Request) {
         data: { userId: user.id, planId: clonedPlan.id }
     });
 
-    return NextResponse.json({ author: originalPlan.creator?.name || "Anonymous Athlete" }, { status: 200 });
+    return NextResponse.json({ 
+        author: originalPlan.creator?.name || "Anonymous Athlete",
+        id: clonedPlan.id
+    }, { status: 200 });
 }

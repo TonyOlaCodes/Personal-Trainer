@@ -20,6 +20,10 @@ export default async function ProgressPage() {
     
     if (!user) redirect("/sign-in");
 
+    if (user.role === "COACH" || user.role === "SUPER_ADMIN") {
+        redirect("/coach");
+    }
+
     return (
         <div className="bg-surface-base min-h-screen">
             <TopBar 

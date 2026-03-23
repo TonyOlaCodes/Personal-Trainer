@@ -15,6 +15,8 @@ import Link from "next/link";
 interface CheckIn {
     id: string;
     createdAt: string;
+    lastUpdatedByClientAt?: string | null;
+    coachLastSeenAt?: string | null;
     weekNumber: number;
     bodyweightKg?: number | null;
     feedback: string;

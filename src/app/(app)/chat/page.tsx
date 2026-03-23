@@ -40,11 +40,35 @@ export default async function ChatPage() {
         }));
     }
 
+    let teamId: string | null = null;
+    if (user.role === "COACH" || user.role === "SUPER_ADMIN") {
+        teamId = `team_${user.id}`;
+    } else if (user.coachId) {
+        teamId = `team_${user.coachId}`;
+    }
+
+    let teamMembers: any[] = [];
+    if (teamId) {
+        const coachIdFromTeam = teamId.split('_')[1];
+        teamMembers = await prisma.user.findMany({
+            where: {
+                OR: [
+                    { id: coachIdFromTeam },
+                    { coachId: coachIdFromTeam }
+                ]
+            },
+            select: { id: true, name: true, role: true, avatarUrl: true, updatedAt: true },
+            orderBy: { role: 'asc' } // 'COACH' appears before 'PREMIUM'
+        });
+    }
+
     return (
         <ChatClient
             currentUserId={user.id}
             currentUserRole={user.role}
             conversations={conversations}
+            teamId={teamId}
+            teamMembers={JSON.parse(JSON.stringify(teamMembers))}
         />
     );
 }
