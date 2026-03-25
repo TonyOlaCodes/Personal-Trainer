@@ -337,15 +337,20 @@ export function DashboardClient({ user, activePlan, todayWorkout, todayCompleted
                     <div className="card p-10 text-center space-y-4 bg-surface-muted/30 border-dashed">
                         <Dumbbell className="w-12 h-12 text-brand-400 mx-auto opacity-40" />
                         <div>
-                            <p className="font-black text-lg text-fg uppercase tracking-tight">Plan Unassigned</p>
+                            <p className="font-black text-lg text-fg uppercase tracking-tight">
+                                {activePlan ? "Rest Day" : "No Active Plan"}
+                            </p>
                             <p className="text-sm text-fg-muted max-w-xs mx-auto mt-2">
-                                {activePlan 
-                                    ? "Today is a scheduled rest optimization day. Recover well." 
-                                    : "You need an active training plan to begin tracking metrics."}
+                                {activePlan
+                                    ? "Nothing scheduled today — good time to recover or stretch."
+                                    : "You don't have an active plan yet. Pick one to start tracking your sessions."}
                             </p>
                         </div>
-                        <Link href="/plans" className="btn-primary shadow-glow-brand-sm mx-auto px-8 h-11 text-[10px] font-black uppercase tracking-widest">
-                            {activePlan ? "View Exercises" : "Choose a Plan"}
+                        <Link
+                            href="/plans"
+                            className="btn-primary shadow-glow-brand-sm mx-auto px-8 h-11 text-[10px] font-black uppercase tracking-widest"
+                        >
+                            {activePlan ? "View Full Plan" : "Start a Plan →"}
                         </Link>
                     </div>
                 )}

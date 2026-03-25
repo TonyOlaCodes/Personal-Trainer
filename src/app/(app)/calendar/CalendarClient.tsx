@@ -243,7 +243,10 @@ export function CalendarClient({ activePlan, loggedDates }: Props) {
                                     </div>
 
                                     {(selectedDate.toDateString() === today.toDateString()) && (
-                                        <Link href="/plans/log" className="btn-primary w-full h-11 text-[10px] font-bold uppercase tracking-widest shadow-glow-brand group">
+                                        <Link
+                                            href={`/plans/log/${selectedPlanned.id}`}
+                                            className="btn-primary w-full h-11 text-[10px] font-bold uppercase tracking-widest shadow-glow-brand group"
+                                        >
                                             <PlayCircle className="w-4 h-4 mr-2 group-hover:scale-110 transition-transform" />
                                             Execute Plan
                                         </Link>
