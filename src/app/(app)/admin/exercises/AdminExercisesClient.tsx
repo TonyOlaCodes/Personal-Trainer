@@ -110,6 +110,10 @@ export function AdminExercisesClient({ initialExercises }: { initialExercises: G
                             className="input flex-1"
                             value={newName}
                             onChange={(e) => setNewName(e.target.value)}
+                            autoFocus
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter") handleAdd();
+                            }}
                         />
                         <button onClick={handleAdd} disabled={saving || !newName} className="btn-primary">
                             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Add to Dictionary

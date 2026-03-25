@@ -6,7 +6,7 @@ import { ProgressClient } from "./ProgressClient";
 
 export const metadata = { 
     title: "Progress & Analytics | Performance Tracker",
-    description: "Visualise your strength progression, volume splits, and training consistency."
+    description: "Track bodyweight, strength PRs, workout consistency, and training volume with premium analytics."
 };
 
 export default async function ProgressPage() {
@@ -27,8 +27,8 @@ export default async function ProgressPage() {
     return (
         <div className="bg-surface-base min-h-screen">
             <TopBar 
-                title="Training Progress" 
-                subtitle="Data-driven insights to help you break plateaus" 
+                title="Progress" 
+                subtitle="Am I improving?" 
             />
             <main className="animate-fade-in">
                 <ProgressClient userRole={user.role} />

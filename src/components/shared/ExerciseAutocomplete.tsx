@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { cn } from "@/lib/utils";
 
 const EXERCISES = [
     // Chest
@@ -49,6 +50,7 @@ interface Props {
     onChange: (val: string) => void;
     placeholder?: string;
     className?: string;
+    autoFocus?: boolean;
 }
 
 function getDistance(a: string, b: string): number {
@@ -99,17 +101,25 @@ function scoreMatch(query: string, target: string): number {
     return 999; // no match
 }
 
-export function ExerciseAutocomplete({ value, onChange, placeholder, className }: Props) {
+export function ExerciseAutocomplete({ value, onChange, placeholder, className, autoFocus }: Props) {
     const [open, setOpen] = useState(false);
     const [suggestions, setSuggestions] = useState<string[]>([]);
+    const [activeIndex, setActiveIndex] = useState(-1);
     const containerRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (autoFocus && inputRef.current) {
+            inputRef.current.focus();
+        }
+    }, [autoFocus]);
 
     useEffect(() => {
         const q = value.trim();
         if (q.length < 1) {
             setSuggestions([]);
             setOpen(false);
+            setActiveIndex(-1);
             return;
         }
 
@@ -144,6 +154,47 @@ export function ExerciseAutocomplete({ value, onChange, placeholder, className }
     const pick = (ex: string) => {
         onChange(ex);
         setOpen(false);
+        setActiveIndex(-1);
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (!open || suggestions.length === 0) {
+            if (e.key === "Enter" && value.trim()) {
+                setOpen(false);
+            }
+            return;
+        }
+
+        switch (e.key) {
+            case "ArrowDown":
+                e.preventDefault();
+                setActiveIndex(prev => (prev + 1) % suggestions.length);
+                break;
+            case "ArrowUp":
+                e.preventDefault();
+                setActiveIndex(prev => (prev - 1 + suggestions.length) % suggestions.length);
+                break;
+            case "Tab":
+                e.preventDefault();
+                setActiveIndex(prev => (prev + 1) % suggestions.length);
+                break;
+            case "Enter":
+                if (activeIndex >= 0) {
+                    e.preventDefault();
+                    pick(suggestions[activeIndex]);
+                } else if (suggestions.length > 0) {
+                    // Optional: pick first suggestion on Enter even if not highlighted
+                    // e.preventDefault();
+                    // pick(suggestions[0]);
+                    setOpen(false);
+                } else {
+                    setOpen(false);
+                }
+                break;
+            case "Escape":
+                setOpen(false);
+                break;
+        }
     };
 
     return (
@@ -158,23 +209,35 @@ export function ExerciseAutocomplete({ value, onChange, placeholder, className }
                 onFocus={() => {
                     if (suggestions.length > 0) setOpen(true);
                 }}
+                onKeyDown={handleKeyDown}
                 autoComplete="off"
             />
             {open && suggestions.length > 0 && (
-                <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-surface-elevated border border-surface-border rounded-xl shadow-card overflow-hidden">
+                <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-surface-elevated border border-surface-border rounded-xl shadow-lg overflow-hidden animate-slide-up">
                     {suggestions.map((ex, i) => (
                         <button
                             key={ex}
                             type="button"
-                            onMouseDown={() => pick(ex)}
-                            className="w-full text-left px-4 py-2.5 text-sm text-fg hover:bg-brand-400/10 hover:text-brand-300 transition-colors flex items-center gap-2 border-b border-surface-border/50 last:border-0"
+                            onClick={() => pick(ex)}
+                            onMouseEnter={() => setActiveIndex(i)}
+                            className={cn(
+                                "w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center gap-2 border-b border-surface-border/50 last:border-0",
+                                activeIndex === i 
+                                    ? "bg-brand-500/20 text-brand-300" 
+                                    : "text-fg hover:bg-brand-500/10 hover:text-brand-300"
+                            )}
                         >
-                            <span className="w-4 h-4 rounded-md bg-brand-400/10 text-brand-400 text-[9px] font-black flex items-center justify-center shrink-0">{i + 1}</span>
+                            <span className={cn(
+                                "w-4 h-4 rounded-md text-[9px] font-black flex items-center justify-center shrink-0 transition-colors",
+                                activeIndex === i ? "bg-brand-400 text-white" : "bg-brand-400/10 text-brand-400"
+                            )}>
+                                {i + 1}
+                            </span>
                             {ex}
                         </button>
                     ))}
-                    <div className="px-4 py-1.5 text-[10px] text-fg-subtle border-t border-surface-border/30 bg-surface-muted/30">
-                        Or keep typing to use your own name
+                    <div className="px-4 py-1.5 text-[10px] text-fg-subtle border-t border-surface-border/30 bg-surface-muted/30 flex justify-between font-bold uppercase tracking-wider">
+                        <span>↑↓ to navigate • Ent to pick</span>
                     </div>
                 </div>
             )}

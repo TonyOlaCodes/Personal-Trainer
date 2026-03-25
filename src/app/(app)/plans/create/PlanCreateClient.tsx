@@ -53,6 +53,8 @@ export function PlanCreateClient() {
     const [saving, setSaving] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [lastAddedExerciseIdx, setLastAddedExerciseIdx] = useState<number | null>(null);
+    const [draggedWorkoutIdx, setDraggedWorkoutIdx] = useState<number | null>(null);
 
     const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -176,8 +178,50 @@ export function PlanCreateClient() {
 
     const updateCurrentWorkouts = (newWorkouts: LocalWorkout[]) => {
         const nextWeeks = [...weeks];
-        nextWeeks[activeWeekIdx].workouts = newWorkouts;
+        // Ensure they stay in order by day number or Day of Week if that's what the user wants
+        const sorted = [...newWorkouts].map((w, i) => ({ ...w, dayNumber: i + 1 }));
+        nextWeeks[activeWeekIdx].workouts = sorted;
         setWeeks(nextWeeks);
+    };
+
+    const handleWorkoutSort = (wIdx: number, newDayOfWeek: number) => {
+        const next = [...workouts];
+        const target = next[wIdx];
+        target.dayOfWeek = newDayOfWeek;
+        
+        // Sort by day of week if multiple are assigned
+        const dayOrder = [1, 2, 3, 4, 5, 6, 0]; // Mon-Sun
+        const sorted = next.sort((a,b) => {
+            const aDay = a.dayOfWeek ?? 999;
+            const bDay = b.dayOfWeek ?? 999;
+            if (aDay === bDay) return 0;
+            return dayOrder.indexOf(aDay) - dayOrder.indexOf(bDay);
+        }).map((w, i) => ({ ...w, dayNumber: i + 1 }));
+
+        // Find the new index of the workout we just changed to keep focus
+        const nextActiveIdx = sorted.findIndex(w => 
+            w.name === target.name && 
+            w.dayOfWeek === target.dayOfWeek && 
+            JSON.stringify(w.exercises) === JSON.stringify(target.exercises)
+        );
+        updateCurrentWorkouts(sorted);
+        if (nextActiveIdx !== -1) setActiveWorkoutIdx(nextActiveIdx);
+    };
+
+    const handleDragStart = (idx: number) => setDraggedWorkoutIdx(idx);
+    const handleDragOver = (e: React.DragEvent) => e.preventDefault();
+    const handleDrop = (targetIdx: number) => {
+        if (draggedWorkoutIdx === null || draggedWorkoutIdx === targetIdx) return;
+        
+        const next = [...workouts];
+        const [moved] = next.splice(draggedWorkoutIdx, 1);
+        next.splice(targetIdx, 0, moved);
+        
+        // Update day numbers
+        const final = next.map((w, i) => ({ ...w, dayNumber: i + 1 }));
+        updateCurrentWorkouts(final);
+        setActiveWorkoutIdx(targetIdx);
+        setDraggedWorkoutIdx(null);
     };
 
     const addWorkout = () => {
@@ -231,10 +275,12 @@ export function PlanCreateClient() {
 
     const addExercise = (wIdx: number) => {
         const newWorkouts = [...workouts];
+        const newIdx = newWorkouts[wIdx].exercises.length;
         newWorkouts[wIdx].exercises.push({
-            name: "", sets: 3, reps: "10", order: newWorkouts[wIdx].exercises.length
+            name: "", sets: 3, reps: "10", order: newIdx
         });
         updateCurrentWorkouts(newWorkouts);
+        setLastAddedExerciseIdx(newIdx);
     };
 
     const updateExercise = (wIdx: number, eIdx: number, updates: Partial<LocalExercise>) => {
@@ -442,31 +488,45 @@ export function PlanCreateClient() {
 
                         <div className="space-y-2">
                             {workouts.map((w, i) => (
-                                <button
+                                <div
                                     key={i}
-                                    onClick={() => setActiveWorkoutIdx(i)}
+                                    draggable
+                                    onDragStart={() => handleDragStart(i)}
+                                    onDragOver={handleDragOver}
+                                    onDrop={() => handleDrop(i)}
                                     className={cn(
-                                        "w-full text-left flex items-center justify-between p-3 rounded-xl transition-all duration-200 border",
-                                        activeWorkoutIdx === i 
-                                            ? "bg-brand-950/40 border-brand-700/60 shadow-glow-sm" 
-                                            : "bg-surface-card border-surface-border hover:bg-surface-muted"
+                                        "relative group rounded-xl transition-all duration-300",
+                                        draggedWorkoutIdx === i && "opacity-40 scale-95"
                                     )}
                                 >
-                                    <div className="flex items-center gap-3">
-                                        <div className={cn("w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold",
-                                            activeWorkoutIdx === i ? "bg-brand-400 text-white" : "bg-surface-elevated text-fg-subtle"
-                                        )}>
-                                            {w.dayNumber}
+                                    <button
+                                        onClick={() => setActiveWorkoutIdx(i)}
+                                        className={cn(
+                                            "w-full text-left flex items-center justify-between p-3 rounded-xl transition-all duration-200 border",
+                                            activeWorkoutIdx === i 
+                                                ? "bg-brand-950/40 border-brand-700/60 shadow-glow-sm" 
+                                                : "bg-surface-card border-surface-border hover:bg-surface-muted"
+                                        )}
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className="text-fg-subtle/30 cursor-grab active:cursor-grabbing hover:text-brand-400 group-hover:opacity-100 opacity-0 transition-opacity">
+                                                <GripVertical className="w-4 h-4" />
+                                            </div>
+                                            <div className={cn("w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold",
+                                                activeWorkoutIdx === i ? "bg-brand-400 text-white" : "bg-surface-elevated text-fg-subtle"
+                                            )}>
+                                                {w.dayNumber}
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <p className="text-xs font-bold text-fg truncate">{w.name}</p>
+                                                <p className="text-[10px] text-fg-muted font-medium">
+                                                    {w.dayOfWeek !== null && w.dayOfWeek !== undefined ? DAYS[w.dayOfWeek] : "No Day"} • {w.exercises.length} Exercises
+                                                </p>
+                                            </div>
                                         </div>
-                                        <div className="min-w-0 flex-1">
-                                            <p className="text-xs font-bold text-fg truncate">{w.name}</p>
-                                            <p className="text-[10px] text-fg-muted font-medium">
-                                                {w.dayOfWeek !== null && w.dayOfWeek !== undefined ? DAYS[w.dayOfWeek] : "No Day"} • {w.exercises.length} Exercises
-                                            </p>
-                                        </div>
-                                    </div>
-                                    {activeWorkoutIdx === i && <ChevronRight className="w-4 h-4 text-brand-400" />}
-                                </button>
+                                        {activeWorkoutIdx === i && <ChevronRight className="w-4 h-4 text-brand-400" />}
+                                    </button>
+                                </div>
                             ))}
                             {(!isViewOnly && workouts.length < 7) && (
                                 <button
@@ -620,9 +680,7 @@ export function PlanCreateClient() {
                                                                 key={d}
                                                                 onClick={() => {
                                                                     if (isUsed) return alert(`${DAYS[d]} is already assigned in this week.`);
-                                                                    const next = [...workouts];
-                                                                    next[activeWorkoutIdx].dayOfWeek = d;
-                                                                    updateCurrentWorkouts(next);
+                                                                    handleWorkoutSort(activeWorkoutIdx, d);
                                                                 }}
                                                                 className={cn(
                                                                     "w-8 h-5 rounded text-[9px] font-black transition-all border shrink-0",
@@ -693,6 +751,7 @@ export function PlanCreateClient() {
                                                                     value={ex.name}
                                                                     onChange={(val) => updateExercise(activeWorkoutIdx, eIdx, { name: val, reps: isCardio(val) ? "20" : "10" })}
                                                                     className="w-full bg-surface-muted border border-surface-border rounded-xl px-4 py-2 text-sm text-fg"
+                                                                    autoFocus={lastAddedExerciseIdx === eIdx}
                                                                 />
                                                             )}
                                                         </div>
@@ -701,10 +760,15 @@ export function PlanCreateClient() {
                                                                 {isCardio(ex.name) ? "Rounds" : "Sets"}
                                                             </label>
                                                             <input
-                                                                type="number"
+                                                                type="text"
                                                                 className="w-full bg-surface-muted border border-surface-border rounded-xl px-4 py-2 text-sm text-fg text-center"
                                                                 value={ex.sets}
-                                                                onChange={(e) => updateExercise(activeWorkoutIdx, eIdx, { sets: parseInt(e.target.value) || 0 })}
+                                                                onChange={(e) => {
+                                                                    const val = e.target.value;
+                                                                    if (/^\d*$/.test(val)) {
+                                                                        updateExercise(activeWorkoutIdx, eIdx, { sets: parseInt(val) || 0 });
+                                                                    }
+                                                                }}
                                                                 readOnly={isViewOnly}
                                                             />
                                                         </div>

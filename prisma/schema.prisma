@@ -52,6 +52,12 @@ enum LogStatus {
   COMPLETED
 }
 
+enum MessageStatus {
+  SENT
+  DELIVERED
+  SEEN
+}
+
 model User {
   id                String   @id @default(cuid())
   clerkId           String   @unique
@@ -101,6 +107,7 @@ model User {
   accessCodesUsed   AccessCode[] @relation("UsedCodes")
   generatedCodes    AccessCode[] @relation("GeneratedCodes")
   createdPlans      Plan[]       @relation("CreatedPlans")
+  reactions         Reaction[]
 
   @@map("users")
 }
@@ -122,7 +129,7 @@ model Plan {
   userPlans   UserPlan[]
   accessCodes AccessCode[]
 
-  creator     User?    @relation("CreatedPlans", fields: [creatorId], references: [id])
+  creator User? @relation("CreatedPlans", fields: [creatorId], references: [id])
 
   @@map("plans")
 }
@@ -143,14 +150,14 @@ model UserPlan {
 }
 
 model Week {
-  id        String   @id @default(cuid())
-  planId    String
+  id         String   @id @default(cuid())
+  planId     String
   weekNumber Int
-  name      String?
-  createdAt DateTime @default(now())
+  name       String?
+  createdAt  DateTime @default(now())
 
-  plan      Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
-  workouts  Workout[]
+  plan     Plan      @relation(fields: [planId], references: [id], onDelete: Cascade)
+  workouts Workout[]
 
   @@unique([planId, weekNumber])
   @@map("weeks")
@@ -161,11 +168,11 @@ model Workout {
   weekId    String
   dayNumber Int
   dayOfWeek Int?
-  name      String   // e.g. "Push Day", "Legs"
+  name      String // e.g. "Push Day", "Legs"
   notes     String?
   createdAt DateTime @default(now())
 
-  week      Week       @relation(fields: [weekId], references: [id], onDelete: Cascade)
+  week      Week         @relation(fields: [weekId], references: [id], onDelete: Cascade)
   exercises Exercise[]
   logs      WorkoutLog[]
 
@@ -178,7 +185,7 @@ model Exercise {
   workoutId      String
   name           String
   sets           Int
-  reps           String  // e.g. "8-12" or "10"
+  reps           String // e.g. "8-12" or "10"
   weightTargetKg Float?
   restSeconds    Int?
   notes          String?
@@ -186,26 +193,26 @@ model Exercise {
   videoUrl       String?
   muscleGroup    String?
 
-  workout    Workout      @relation(fields: [workoutId], references: [id], onDelete: Cascade)
-  logSets    LogSet[]
+  workout Workout  @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  logSets LogSet[]
 
   @@map("exercises")
 }
 
 model WorkoutLog {
-  id         String   @id @default(cuid())
-  userId     String
-  workoutId  String
-  loggedAt   DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  duration   Int?     // minutes
-  notes      String?
-  feeling    Int?     // 1-5 scale
-  status     LogStatus @default(COMPLETED)
+  id        String    @id @default(cuid())
+  userId    String
+  workoutId String
+  loggedAt  DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  duration  Int? // minutes
+  notes     String?
+  feeling   Int? // 1-5 scale
+  status    LogStatus @default(COMPLETED)
 
-  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  workout    Workout    @relation(fields: [workoutId], references: [id], onDelete: Cascade)
-  sets       LogSet[]
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workout Workout  @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  sets    LogSet[]
 
   @@map("workout_logs")
 }
@@ -217,7 +224,7 @@ model LogSet {
   setNumber    Int
   reps         Int?
   weightKg     Float?
-  rpe          Int?    // Rate of Perceived Exertion 1-10
+  rpe          Int? // Rate of Perceived Exertion 1-10
   isWarmup     Boolean @default(false)
   isCompleted  Boolean @default(true)
   isPR         Boolean @default(false)
@@ -235,7 +242,7 @@ enum CheckInStatus {
 }
 
 model CheckIn {
-  id            String   @id @default(cuid())
+  id            String        @id @default(cuid())
   userId        String
   weekNumber    Int
   bodyweightKg  Float?
@@ -247,16 +254,18 @@ model CheckIn {
   status        CheckInStatus @default(PENDING)
   coachResponse String?
   respondedAt   DateTime?
-  
+
   // Ratings (1-5)
-  sleepRating   Int?
-  dietRating    Int?
-  stressRating  Int?
-  injuryRating  Int?
-  energyRating  Int?
+  sleepRating     Int?
+  dietRating      Int?
+  stressRating    Int?
+  injuryRating    Int?
+  energyRating    Int?
   intensityRating Int?
-  
-  createdAt     DateTime @default(now())
+
+  createdAt             DateTime  @default(now())
+  lastUpdatedByClientAt DateTime?
+  coachLastSeenAt       DateTime?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -274,23 +283,45 @@ model GlobalExercise {
 }
 
 model Message {
-  id           String      @id @default(cuid())
+  id           String        @id @default(cuid())
   senderId     String
-  receiverId   String?     // null = general chat
+  receiverId   String?       // null = general chat
   content      String?
-  type         MessageType @default(TEXT)
+  type         MessageType   @default(TEXT)
   mediaUrl     String?
-  isRead       Boolean     @default(false)
-  isGeneral    Boolean     @default(false)
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  isRead       Boolean       @default(false)
+  isGeneral    Boolean       @default(false)
+  status       MessageStatus @default(SENT)
+  isPinned     Boolean       @default(false)
+  replyToId    String?
+  mentions     String[]      // array of user IDs mentioned
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
-  sender   User  @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  sender    User       @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  replyTo   Message?   @relation("Replies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies   Message[]  @relation("Replies")
+  reactions Reaction[]
 
   @@index([senderId])
   @@index([receiverId])
   @@index([isGeneral])
+  @@index([replyToId])
   @@map("messages")
+}
+
+model Reaction {
+  id        String   @id @default(cuid())
+  messageId String
+  userId    String
+  emoji     String   // e.g. "👍", "🔥", "💪"
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+  @@map("reactions")
 }
 
 model AccessCode {
@@ -305,9 +336,9 @@ model AccessCode {
   isActive    Boolean   @default(true)
   createdAt   DateTime  @default(now())
 
-  plan        Plan?  @relation(fields: [planId], references: [id])
-  generator   User   @relation("GeneratedCodes", fields: [generatedBy], references: [id])
-  usedBy      User?  @relation("UsedCodes", fields: [usedById], references: [id])
+  plan      Plan? @relation(fields: [planId], references: [id])
+  generator User  @relation("GeneratedCodes", fields: [generatedBy], references: [id])
+  usedBy    User? @relation("UsedCodes", fields: [usedById], references: [id])
 
   @@map("access_codes")
 }
