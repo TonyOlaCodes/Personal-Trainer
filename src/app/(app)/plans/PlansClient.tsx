@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import {
     Plus, Dumbbell, Calendar, ChevronRight, Star,
-    MoreVertical, Trash2, Play, Ticket, Share2, Check,
+    MoreVertical, Trash2, Play, Ticket, Share2, Check, PauseCircle,
 } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import { PremiumLockScreen } from "@/components/shared/PremiumLockScreen";
@@ -44,7 +44,7 @@ export function PlansClient({ plans, userRole }: Props) {
 
     const activePlan = plans.find((p) => p.isActive);
 
-    const setActive = async (planId: string) => {
+    const setActive = async (planId: string | null) => {
         await fetch("/api/plans/activate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -112,10 +112,20 @@ export function PlansClient({ plans, userRole }: Props) {
                             <p className="font-semibold text-fg">{activePlan.name}</p>
                         </div>
                     </div>
-                    <Link href={`/plans/create?id=${activePlan.id}`} className="btn-secondary btn-sm">
-                        Edit
-                        <ChevronRight className="w-4 h-4" />
-                    </Link>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setActive(null)}
+                            className="btn-ghost btn-sm text-fg-muted hover:text-danger"
+                            title="Remove active plan"
+                        >
+                            <PauseCircle className="w-3.5 h-3.5" />
+                            Remove
+                        </button>
+                        <Link href={`/plans/create?id=${activePlan.id}`} className="btn-secondary btn-sm">
+                            Edit
+                            <ChevronRight className="w-4 h-4" />
+                        </Link>
+                    </div>
                 </div>
             )}
 
@@ -207,7 +217,16 @@ export function PlansClient({ plans, userRole }: Props) {
                                         )}
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        {!plan.isActive && (
+                                        {plan.isActive ? (
+                                            <button
+                                                onClick={() => setActive(null)}
+                                                className="btn-ghost btn-sm text-fg-muted hover:text-danger"
+                                                title="Deactivate plan"
+                                            >
+                                                <PauseCircle className="w-3.5 h-3.5" />
+                                                Deactivate
+                                            </button>
+                                        ) : (
                                             <button
                                                 onClick={() => setActive(plan.id)}
                                                 className="btn-ghost btn-sm text-brand-400 hover:text-brand-300"

@@ -109,9 +109,17 @@ export async function POST(req: Request) {
         },
     });
 
-    // Assign plan to user (not active by default)
+    // Assign plan to user — auto-activate if this is their first/only plan or they have no active plan
+    const hasActivePlan = await prisma.userPlan.findFirst({
+        where: { userId: user.id, isActive: true }
+    });
+
     await prisma.userPlan.create({
-        data: { userId: user.id, planId: plan.id },
+        data: {
+            userId: user.id,
+            planId: plan.id,
+            isActive: !hasActivePlan,  // auto-activate if no current active plan
+        },
     });
 
     return NextResponse.json(plan, { status: 201 });

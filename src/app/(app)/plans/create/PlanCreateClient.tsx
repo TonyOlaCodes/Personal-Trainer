@@ -791,7 +791,7 @@ export function PlanCreateClient() {
                                                             </label>
                                                             <input
                                                                 type="number"
-                                                                placeholder="Bodyweight"
+                                                                placeholder="0"
                                                                 className="w-full bg-surface-muted border border-surface-border rounded-xl px-4 py-2 text-sm text-fg text-center"
                                                                 value={ex.weightTargetKg || ""}
                                                                 onChange={(e) => updateExercise(activeWorkoutIdx, eIdx, { weightTargetKg: parseFloat(e.target.value) || undefined })}
