@@ -19,7 +19,12 @@ export default async function CalendarPage() {
                     plan: {
                         include: {
                             weeks: {
-                                include: { workouts: { include: { exercises: { orderBy: { order: "asc" } } }, orderBy: { dayNumber: "asc" } } },
+                                include: { 
+                                    workouts: { 
+                                        include: { exercises: { orderBy: { order: "asc" } } }, 
+                                        orderBy: { dayNumber: "asc" } 
+                                    } 
+                                },
                                 orderBy: { weekNumber: "asc" },
                             },
                         },
@@ -29,24 +34,31 @@ export default async function CalendarPage() {
             },
             workoutLogs: {
                 include: { 
-                    workout: { select: { name: true } },
-                    sets: { include: { exercise: { select: { name: true } } } }
+                    workout: { 
+                        select: { name: true, id: true } 
+                    },
+                    sets: { 
+                        include: { 
+                            exercise: { select: { name: true } } 
+                        } 
+                    }
                 },
                 orderBy: { loggedAt: "desc" },
-                take: 90,
+                take: 120, // Increased for better monthly snapshots
             },
         },
     });
 
     if (!user) redirect("/sign-in");
 
-    const activePlan = user.plans[0]?.plan ?? null;
+    const userPlan = user.plans[0] ?? null;
+    const activePlan = userPlan?.plan ?? null;
     const logs = user.workoutLogs;
 
     return (
         <>
             <TopBar title="Calendar" subtitle="Your training schedule" />
-            <div className="p-4 sm:p-6 lg:p-10 max-w-6xl mx-auto">
+            <div className="p-4 sm:p-6 lg:p-10 max-w-7xl mx-auto pb-20">
                 <CalendarClient
                     activePlan={activePlan ? {
                         name: activePlan.name,
@@ -65,10 +77,20 @@ export default async function CalendarPage() {
                             })),
                         })),
                     } : null}
+                    planStartedAt={userPlan?.startedAt ? userPlan.startedAt.toISOString() : null}
                     loggedDates={logs.map((l) => ({
+                        id: l.id,
                         date: l.loggedAt.toISOString(),
                         workoutName: l.workout.name,
-                        exercises: Array.from(new Set((l as any).sets.map((s: any) => s.exercise.name))) as string[]
+                        workoutId: (l as any).workoutId || l.workout?.id,
+                        duration: (l as any).duration || null,
+                        sets: l.sets.map(s => ({
+                            exerciseName: s.exercise.name,
+                            setNumber: s.setNumber,
+                            reps: s.reps,
+                            weightKg: s.weightKg,
+                            rpe: (s as any).rpe
+                        }))
                     }))}
                 />
             </div>
