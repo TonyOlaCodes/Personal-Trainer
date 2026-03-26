@@ -85,18 +85,23 @@ export default async function DashboardPage() {
         }
     }
     const currentWeek = weeks[currentWeekIndex] ?? weeks[0] ?? null;
-    const todayDayOfWeek = new Date().getDay();
+    // JS getDay(): 0=Sun, 1=Mon...6=Sat
+    // Plan dayOfWeek: 0=Mon, 1=Tue...6=Sun  (set by the plan designer using 0-indexed Mon-start)
+    // Convert JS getDay to Mon-based index:
+    const jsDow = new Date().getDay();
+    const todayDow0Mon = jsDow === 0 ? 6 : jsDow - 1; // 0=Mon ... 6=Sun
 
-    let todayWorkout = null;
+    let todayWorkout: any = null;
     if (currentWeek) {
-        // 1. Try to find a workout specifically assigned to this day of the week
-        todayWorkout = currentWeek.workouts.find((w: any) => w.dayOfWeek === todayDayOfWeek);
-        
-        // 2. Fallback to dayNumber if no dayOfWeek matches (backward compatibility)
-        if (!todayWorkout) {
-            const adjustedIndex = todayDayOfWeek === 0 ? 6 : todayDayOfWeek - 1;
-            todayWorkout = currentWeek.workouts[adjustedIndex] ?? currentWeek.workouts[0] ?? null;
-        }
+        // 1. Exact dayOfWeek match (Mon-based)
+        todayWorkout = currentWeek.workouts.find((w: any) => w.dayOfWeek === todayDow0Mon)
+                    // 2. Raw JS getDay match (backwards compat for old data)
+                    ?? currentWeek.workouts.find((w: any) => w.dayOfWeek === jsDow)
+                    // 3. Positional fallback by index
+                    ?? currentWeek.workouts[todayDow0Mon]
+                    // 4. Last resort: first workout in the week
+                    ?? currentWeek.workouts[0]
+                    ?? null;
     }
 
     const isTodayWorkoutCompleted = todayWorkout && user.workoutLogs.some(

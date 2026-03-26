@@ -5,26 +5,24 @@ import { WorkoutLogClient } from "./WorkoutLogClient";
 
 export const metadata = { title: "Logging session" };
 
-export default async function WorkoutLogPage({ params }: { params: { workoutId: string } }) {
+export default async function WorkoutLogPage({ params }: { params: Promise<{ workoutId: string }> }) {
     const { userId } = await auth();
     if (!userId) redirect("/sign-in");
 
+    const { workoutId } = await params;
+
     const workout = await prisma.workout.findUnique({
-        where: { id: params.workoutId },
+        where: { id: workoutId },
         include: { exercises: { orderBy: { order: "asc" } } },
     });
 
     if (!workout) notFound();
 
-    // Tutorials map
     const globalEx = await prisma.globalExercise.findMany({ where: { videoUrl: { not: null } } });
     const tutorialUrls = globalEx.reduce((acc: any, ex: any) => {
         acc[ex.name] = ex.videoUrl;
         return acc;
     }, {} as Record<string, string>);
-
-    // Basic check for plan ownership
-    // (In production, ensure the user belongs to the plan containing this workout)
 
     return (
         <div className="bg-surface min-h-screen">
