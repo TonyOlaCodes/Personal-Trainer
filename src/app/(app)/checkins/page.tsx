@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { CheckInsClient } from "./CheckInsClient";
+import { startOfWeek, endOfWeek } from "date-fns";
 
 export const metadata = { title: "Check-ins" };
 
@@ -10,16 +11,30 @@ export default async function CheckInsPage() {
     const { userId } = await auth();
     if (!userId) redirect("/sign-in");
 
-    const user = await prisma.user.findUnique({ where: { clerkId: userId } });
+    const user = await prisma.user.findUnique({
+        where: { clerkId: userId },
+        select: {
+            id: true, role: true, trainingDaysPerWeek: true,
+            workoutLogs: {
+                where: {
+                    status: "COMPLETED",
+                    loggedAt: {
+                        gte: startOfWeek(new Date(), { weekStartsOn: 1 }),
+                        lte: endOfWeek(new Date(), { weekStartsOn: 1 }),
+                    }
+                },
+                select: { id: true }
+            }
+        }
+    });
     if (!user) redirect("/sign-in");
 
     const isCoach = ["COACH", "SUPER_ADMIN"].includes(user.role);
 
-    // Coaches see all client check-ins; users see their own
     const checkIns = isCoach
         ? await prisma.checkIn.findMany({
             where: { user: { coachId: user.id } },
-            include: { user: { select: { name: true, email: true, avatarUrl: true } } },
+            include: { user: { select: { name: true, email: true } } },
             orderBy: { createdAt: "desc" },
         })
         : await prisma.checkIn.findMany({
@@ -27,10 +42,16 @@ export default async function CheckInsPage() {
             orderBy: { createdAt: "desc" },
         });
 
+    const workoutsThisWeek = user.workoutLogs?.length ?? 0;
+    const workoutsTarget = user.trainingDaysPerWeek ?? 4;
+
     return (
         <>
-            <TopBar title={isCoach ? "Clinical Review" : "My Progress"} subtitle={isCoach ? "Professional client management" : "Track your weekly athletic performance"} />
-            <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto">
+            <TopBar
+                title={isCoach ? "Check-ins" : "Weekly Check-in"}
+                subtitle={isCoach ? "Client submissions" : "Log your weekly progress"}
+            />
+            <div className="p-4 sm:p-6 max-w-2xl mx-auto pb-20">
                 <CheckInsClient
                     checkIns={checkIns.map((c: any) => ({
                         id: c.id,
@@ -39,19 +60,21 @@ export default async function CheckInsPage() {
                         bodyweightKg: c.bodyweightKg,
                         feedback: c.feedback,
                         notes: c.notes,
-                        videoUrl: c.videoUrl,
                         status: c.status,
                         coachResponse: c.coachResponse,
                         respondedAt: c.respondedAt?.toISOString() || null,
-                        userName: c.user?.name ?? null,
                         sleepRating: c.sleepRating,
-                        dietRating: c.dietRating,
                         stressRating: c.stressRating,
-                        injuryRating: c.injuryRating,
-                        user: c.user ? { id: c.userId, name: c.user.name, email: c.user.email } : undefined,
+                        energyRating: c.energyRating,
+                        intensityRating: c.intensityRating,
+                        frontImageUrl: c.frontImageUrl,
+                        sideImageUrl: c.sideImageUrl,
+                        user: c.user ? { name: c.user.name, email: c.user.email } : undefined,
                     }))}
                     isCoach={isCoach}
                     userRole={user.role}
+                    workoutsThisWeek={workoutsThisWeek}
+                    workoutsTarget={workoutsTarget}
                 />
             </div>
         </>

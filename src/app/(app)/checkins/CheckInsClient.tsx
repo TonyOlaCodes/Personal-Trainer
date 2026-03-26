@@ -1,675 +1,82 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { 
-    Scale, MessageSquare, Lock, Plus, 
-    ChevronDown, ChevronUp, Check, Star, 
-    Clock, AlertCircle, Video, Play, Camera,
-    User, Search, Filter, CheckCircle2,
-    Send, Calendar, MoreVertical, ChevronRight
+import { useState } from "react";
+import {
+    Scale, Send, Check, Camera, TrendingUp, TrendingDown,
+    Minus, Calendar, MessageSquare, CheckCircle2,
+    Zap, Moon, Brain, Activity, ChevronDown, AlertCircle,
+    Dumbbell, Flame, Edit2
 } from "lucide-react";
 import { formatDate, getWeekNumber, cn } from "@/lib/utils";
 import { PremiumLockScreen } from "@/components/shared/PremiumLockScreen";
-import Link from "next/link";
 
+/* ─────────────────────────── Types ─────────────────────────── */
 interface CheckIn {
-    id: string;
-    createdAt: string;
-    lastUpdatedByClientAt?: string | null;
-    coachLastSeenAt?: string | null;
-    weekNumber: number;
-    bodyweightKg?: number | null;
-    feedback: string;
-    notes?: string | null;
-    videoUrl?: string | null;
-    status: "PENDING" | "REVIEWED";
-    coachResponse?: string | null;
+    id: string; createdAt: string; weekNumber: number;
+    bodyweightKg?: number | null; feedback: string; notes?: string | null;
+    status: "PENDING" | "REVIEWED"; coachResponse?: string | null;
     respondedAt?: string | null;
-    user?: { name: string; email: string; id: string; workoutLogs?: any[] };
-    sleepRating?: number | null;
-    dietRating?: number | null;
-    stressRating?: number | null;
-    injuryRating?: number | null;
-    energyRating?: number | null;
-    intensityRating?: number | null;
-    frontImageUrl?: string | null;
-    sideImageUrl?: string | null;
+    sleepRating?: number | null; stressRating?: number | null;
+    energyRating?: number | null; intensityRating?: number | null;
+    frontImageUrl?: string | null; sideImageUrl?: string | null;
+    user?: { name: string; email: string };
 }
-
 interface Props {
-    checkIns: CheckIn[];
-    isCoach: boolean;
-    userRole: string;
+    checkIns: CheckIn[]; isCoach: boolean; userRole: string;
+    workoutsThisWeek: number; workoutsTarget: number;
 }
 
-export function CheckInsClient({ checkIns: initialCheckIns, isCoach, userRole }: Props) {
-    const isPremium = ["PREMIUM", "COACH", "SUPER_ADMIN"].includes(userRole);
-    const [checkIns, setCheckIns] = useState<CheckIn[]>(initialCheckIns);
-    const [expanded, setExpanded] = useState<string | null>(null);
-    const [showForm, setShowForm] = useState(false);
-    const [filter, setFilter] = useState<"ALL" | "PENDING" | "REVIEWED">("ALL");
-    const [searchQuery, setSearchQuery] = useState("");
+/* ─────────────────── Rating bar component ───────────────────── */
+const ENERGY_LABELS  = ["Low",    "Fair",   "Good",  "High",  "🔥 Peak"];
+const SLEEP_LABELS   = ["Poor",   "Fair",   "Okay",  "Good",  "Great"];
+const STRESS_LABELS  = ["None",   "Little", "Some",  "High",  "Max"];
+const TRAIN_LABELS   = ["Skipped","Light",  "Solid", "Hard",  "Beast"];
 
-    // Form states
-    const [editId, setEditId] = useState<string | null>(null);
-    const [bodyweight, setBodyweight] = useState("");
-    const [feedback, setFeedback] = useState("");
-    const [notes, setNotes] = useState("");
-    const [videoUrl, setVideoUrl] = useState("");
-    const [sleepRating, setSleepRating] = useState(0);
-    const [dietRating, setDietRating] = useState(0);
-    const [stressRating, setStressRating] = useState(0);
-    const [injuryRating, setInjuryRating] = useState(0);
-    const [energyRating, setEnergyRating] = useState(0);
-    const [intensityRating, setIntensityRating] = useState(0);
-    const [frontImageUrl, setFrontImageUrl] = useState("");
-    const [sideImageUrl, setSideImageUrl] = useState("");
-    const [activeFormTab, setActiveFormTab] = useState<"metrics" | "photos">("metrics");
-    
-    // Coach response states
-    const [coachResponses, setCoachResponses] = useState<Record<string, string>>({});
-    const [editingReviewId, setEditingReviewId] = useState<string | null>(null);
-    const [saving, setSaving] = useState(false);
-
-    const handleEdit = (c: CheckIn) => {
-        setEditId(c.id);
-        setBodyweight(c.bodyweightKg?.toString() || "");
-        setFeedback(c.feedback);
-        setNotes(c.notes || "");
-        setVideoUrl(c.videoUrl || "");
-        setSleepRating(c.sleepRating || 0);
-        setDietRating(c.dietRating || 0);
-        setStressRating(c.stressRating || 0);
-        setInjuryRating(c.injuryRating || 0);
-        setEnergyRating(c.energyRating || 0);
-        setIntensityRating(c.intensityRating || 0);
-        setFrontImageUrl(c.frontImageUrl || "");
-        setSideImageUrl(c.sideImageUrl || "");
-        setShowForm(true);
-        window.scrollTo({ top: 0, behavior: "smooth" });
-    };
-
-    const submitCheckIn = async () => {
-        setSaving(true);
-        const url = "/api/checkins";
-        const method = editId ? "PATCH" : "POST";
+function RatingBar({ icon: Icon, label, sublabels, value, onChange, inverse = false }: {
+    icon: any; label: string; sublabels: string[];
+    value: number; onChange: (v: number) => void; inverse?: boolean;
+}) {
+    // This function decides color based on the *currently selected value* for the *entire active portion*
+    const getColor = (s: number, isActive: boolean, currentVal: number) => {
+        if (!isActive) return "bg-surface-muted border-surface-border text-fg-subtle opacity-40";
         
-        const res = await fetch(url, {
-            method,
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                id: editId || undefined,
-                bodyweightKg: bodyweight ? parseFloat(bodyweight) : undefined,
-                feedback,
-                notes: notes || undefined,
-                videoUrl: videoUrl || undefined,
-                weekNumber: getWeekNumber(),
-                sleepRating: sleepRating || undefined,
-                dietRating: dietRating || undefined,
-                stressRating: stressRating || undefined,
-                injuryRating: injuryRating || undefined,
-                energyRating: energyRating || undefined,
-                intensityRating: intensityRating || undefined,
-                frontImageUrl: frontImageUrl || undefined,
-                sideImageUrl: sideImageUrl || undefined,
-            }),
-        });
-        if (res.ok) {
-            window.location.reload();
-        } else {
-            setSaving(false);
-            const err = await res.json();
-            alert(err.error || "Failed to submit check-in");
+        // Use the color of the final selected value for the entire line up to that point
+        const target = currentVal || 0;
+        if (inverse) {
+            if (target <= 2) return "bg-success/30 border-success/60 text-success shadow-glow-success-sm";
+            if (target === 3) return "bg-warning/30 border-warning/60 text-warning shadow-glow-warning-sm";
+            return "bg-danger/30 border-danger/60 text-danger shadow-glow-danger-sm";
         }
+        if (target <= 2) return "bg-danger/30 border-danger/60 text-danger shadow-glow-danger-sm";
+        if (target === 3) return "bg-warning/30 border-warning/60 text-warning shadow-glow-warning-sm";
+        return "bg-success/30 border-success/60 text-success shadow-glow-success-sm";
     };
 
-    const handleCoachSubmit = async (checkInId: string) => {
-        setSaving(true);
-        const res = await fetch("/api/checkins", {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                id: checkInId,
-                coachResponse: coachResponses[checkInId],
-                status: "REVIEWED"
-            }),
-        });
-        if (res.ok) {
-            const updated = await res.json();
-            setCheckIns(prev => prev.map(c => c.id === checkInId ? { ...c, ...updated } : c));
-            setSaving(false);
-        }
-    };
-
-    if (!isPremium && !isCoach) {
-        return (
-            <div className="p-4 sm:p-10">
-                <PremiumLockScreen 
-                    title="Weekly Check-ins" 
-                    description="Weekly check-ins are available to Premium members. Upgrade to get personalised feedback from your coach and track your progress."
-                />
-            </div>
-        );
-    }
-
-    const currentWeekNumber = getWeekNumber();
-    const hasCurrentWeekLog = checkIns.some(c => c.weekNumber === currentWeekNumber);
-
-    const filteredCheckIns = (() => {
-        const filtered = checkIns.filter(c => {
-            const matchesFilter = filter === "ALL" || c.status === filter;
-            const matchesSearch = !searchQuery ||
-                (c.user?.name?.toLowerCase().includes(searchQuery.toLowerCase())) ||
-                (c.feedback.toLowerCase().includes(searchQuery.toLowerCase()));
-            return matchesFilter && matchesSearch;
-        });
-
-        // Deduplicate by weekNumber — keep only the most recent entry per week
-        const seen = new Map<number, CheckIn>();
-        for (const c of filtered) {
-            const existing = seen.get(c.weekNumber);
-            if (!existing || new Date(c.createdAt) > new Date(existing.createdAt)) {
-                seen.set(c.weekNumber, c);
-            }
-        }
-        return Array.from(seen.values()).sort(
-            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        );
-    })();
-
-    const pendingCount = checkIns.filter(c => c.status === "PENDING").length;
-
     return (
-        <div className="space-y-6 animate-fade-in p-4 sm:p-6 max-w-6xl mx-auto pb-24 lg:pb-12">
-            {/* Header / Dashboard Stat */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-                <div className="space-y-1">
-                    <h2 className="text-3xl font-black text-fg tracking-tighter">
-                        {isCoach ? "Clinical Review" : "Weekly Performance"}
-                    </h2>
-                    <p className="text-sm text-fg-muted font-medium flex items-center gap-2">
-                        <Calendar className="w-3.5 h-3.5" />
-                        Week {getWeekNumber()} · {isCoach ? `${pendingCount} submissions pending` : "Submit your progress"}
-                    </p>
+        <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <Icon className="w-3.5 h-3.5 text-fg-subtle" />
+                    <span className="text-[11px] font-bold text-fg-muted uppercase tracking-widest">{label}</span>
                 </div>
-
-                {isCoach && (
-                    <div className="flex items-center gap-2 bg-surface-muted/50 p-1 rounded-2xl border border-surface-border">
-                        {(["ALL", "PENDING", "REVIEWED"] as const).map((f) => (
-                            <button
-                                key={f}
-                                onClick={() => setFilter(f)}
-                                className={cn(
-                                    "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-                                    filter === f ? "bg-brand-500 text-white shadow-glow-brand-sm" : "text-fg-subtle hover:text-fg"
-                                )}
-                            >
-                                {f}
-                            </button>
-                        ))}
-                    </div>
-                )}
+                <span className={cn(
+                    "text-[11px] font-black px-2 py-0.5 rounded-full",
+                    value > 0 ? "text-fg bg-surface-muted" : "text-fg-subtle"
+                )}>
+                    {value > 0 ? sublabels[value - 1] : "—"}
+                </span>
             </div>
-
-            {isCoach && (
-                <div className="relative group">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-subtle group-focus-within:text-brand-400 transition-colors" />
-                    <input 
-                        type="text" 
-                        placeholder="Search clients or feedback content..."
-                        className="input pl-11 h-12 bg-surface-card border-surface-border/50 focus:border-brand-500/50 shadow-sm"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                </div>
-            )}
-
-            {/* Submission Form */}
-            {showForm && !isCoach && (
-                <div className="card p-8 space-y-8 animate-slide-up border-brand-500/20 bg-surface-card shadow-glow-brand-sm">
-                    <div className="flex items-center justify-between">
-                        <h3 className="text-xl font-black text-fg uppercase tracking-tighter">{editId ? "Update Performance Record" : "Log Weekly Progress"}</h3>
-                        <div className="badge-brand text-[10px] font-bold">WEEK {getWeekNumber()}</div>
-                    </div>
-
-                    <div className="flex items-center gap-1 p-1 bg-surface-muted/50 rounded-2xl w-fit">
-                        <button 
-                            onClick={() => setActiveFormTab("metrics")}
-                            className={cn(
-                                "px-6 h-10 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-                                activeFormTab === "metrics" ? "bg-brand-500 text-white shadow-glow-brand-sm" : "text-fg-subtle hover:text-fg"
-                            )}
-                        >
-                            Session Stats
-                        </button>
-                        <button 
-                            onClick={() => setActiveFormTab("photos")}
-                            className={cn(
-                                "px-6 h-10 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-                                activeFormTab === "photos" ? "bg-brand-500 text-white shadow-glow-brand-sm" : "text-fg-subtle hover:text-fg"
-                            )}
-                        >
-                            Progress Photos
-                        </button>
-                    </div>
-
-                    {activeFormTab === "metrics" ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-fade-in">
-                            <div className="space-y-6">
-                                <div className="space-y-2">
-                                    <label className="label uppercase text-[10px] font-black tracking-widest text-brand-400">Bodyweight</label>
-                                    <div className="relative">
-                                        <Scale className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-muted" />
-                                        <input 
-                                            type="number" 
-                                            className="input pl-11 font-bold" 
-                                            placeholder="Current Weight (kg)" 
-                                            value={bodyweight}
-                                            onChange={(e) => setBodyweight(e.target.value)} 
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <StarSelector label="Sleep Quality" value={sleepRating} onChange={setSleepRating} />
-                                <StarSelector label="Dietary Control" value={dietRating} onChange={setDietRating} />
-                                <StarSelector label="Energy Levels" value={energyRating} onChange={setEnergyRating} />
-                                <StarSelector label="Training Intensity" value={intensityRating} onChange={setIntensityRating} />
-                                <StarSelector label="Stress Load" value={stressRating} onChange={setStressRating} inverse />
-                                <StarSelector label="Pain / Injury" value={injuryRating} onChange={setInjuryRating} inverse />
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-fade-in">
-                            {[
-                                { id: "front", label: "Front View", val: frontImageUrl, set: setFrontImageUrl, icon: Camera },
-                                { id: "side", label: "Profile / Side View", val: sideImageUrl, set: setSideImageUrl, icon: Camera }
-                            ].map((p) => (
-                                <div key={p.id} className="space-y-4">
-                                    <label className="label uppercase text-[10px] font-black tracking-widest text-brand-400">{p.label}</label>
-                                    <div className="card p-8 border-dashed flex flex-col items-center justify-center gap-4 hover:border-brand-500/40 transition-all cursor-pointer relative overflow-hidden group min-h-[220px]">
-                                        {p.val ? (
-                                            <>
-                                                <img src={p.val} alt={p.label} className="absolute inset-0 w-full h-full object-cover" />
-                                                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                                    <button 
-                                                        onClick={() => p.set("")}
-                                                        className="btn-danger btn-sm uppercase font-black tracking-widest"
-                                                    >
-                                                        Remove
-                                                    </button>
-                                                </div>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <p.icon className="w-8 h-8 text-brand-400/30" />
-                                                <div className="text-center">
-                                                    <p className="text-xs font-bold text-fg">Click to upload photo</p>
-                                                    <p className="text-[10px] text-fg-muted mt-1">High quality JPEG or PNG</p>
-                                                </div>
-                                                <input 
-                                                    type="file" 
-                                                    accept="image/*"
-                                                    className="absolute inset-0 opacity-0 cursor-pointer"
-                                                    onChange={async (e) => {
-                                                        const file = e.target.files?.[0];
-                                                        if (!file) return;
-                                                        const fd = new FormData();
-                                                        fd.append("file", file);
-                                                        const res = await fetch("/api/upload", { method: "POST", body: fd });
-                                                        if (res.ok) {
-                                                            const data = await res.json();
-                                                            p.set(data.url);
-                                                        }
-                                                    }}
-                                                />
-                                            </>
-                                        )}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-
-                    <div className="space-y-4">
-                        <div className="space-y-2">
-                            <label className="label uppercase text-[10px] font-black tracking-widest text-brand-400">Weekly Performance Feedback *</label>
-                            <textarea
-                                className="input h-32 resize-none py-4 text-sm leading-relaxed"
-                                placeholder="Detail your training wins, intensity levels, and any recovery concerns..."
-                                value={feedback}
-                                onChange={(e) => setFeedback(e.target.value)}
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <label className="label uppercase text-[10px] font-black tracking-widest text-fg-subtle">Private Notes</label>
-                            <textarea 
-                                className="input h-20 resize-none py-3 text-xs" 
-                                placeholder="Any context specifically for your coach..."
-                                value={notes} 
-                                onChange={(e) => setNotes(e.target.value)} 
-                            />
-                        </div>
-                    </div>
-
-                    <div className="flex gap-4 pt-4">
-                        <button onClick={() => { setShowForm(false); setEditId(null); }} className="btn-secondary h-12 flex-1">Discard Changes</button>
-                        <button 
-                            onClick={submitCheckIn} 
-                            disabled={!feedback.trim() || saving} 
-                            className="btn-primary h-12 flex-1 shadow-glow-brand"
-                        >
-                            {saving ? (editId ? "Saving Changes..." : "Pushing submission...") : (editId ? "Save Changes" : "Push Submission")}
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {/* List / Cards */}
-            <div className="grid grid-cols-1 gap-4">
-                {(!isCoach && filter === "ALL" && !hasCurrentWeekLog && !searchQuery) && (
-                    <div className="card overflow-hidden transition-all duration-300 border bg-surface-card/60 hover:border-surface-border-hover border-surface-border border-dashed">
-                        <div className="w-full flex items-center justify-between p-6">
-                            <div className="flex items-center gap-5">
-                                <div className="w-14 h-14 rounded-2xl flex flex-col items-center justify-center transition-colors shadow-sm bg-surface-muted/50 text-fg-subtle">
-                                    <span className="text-[10px] font-black uppercase tracking-tighter opacity-70">Week</span>
-                                    <span className="text-xl font-black">{currentWeekNumber}</span>
-                                </div>
-                                <div className="space-y-1">
-                                    <div className="flex items-center gap-3">
-                                        <p className="font-black text-lg text-fg tracking-tight">Week {currentWeekNumber} Review</p>
-                                        <div className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest bg-surface-muted text-fg-muted border border-surface-border">
-                                            UNLOGGED
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-3 text-[10px] text-fg-muted font-bold uppercase tracking-wide">
-                                        <span className="flex items-center gap-1">Not yet submitted</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <button
-                                onClick={() => {
-                                    setEditId(null);
-                                    setBodyweight("");
-                                    setFeedback("");
-                                    setNotes("");
-                                    setSleepRating(0);
-                                    setDietRating(0);
-                                    setEnergyRating(0);
-                                    setIntensityRating(0);
-                                    setStressRating(0);
-                                    setInjuryRating(0);
-                                    setShowForm(true);
-                                    window.scrollTo({ top: 0, behavior: "smooth" });
-                                }}
-                                className="btn-primary shadow-glow-brand group h-10 px-5 text-xs font-black uppercase tracking-widest hidden sm:flex"
-                            >
-                                <Plus className="w-3.5 h-3.5 mr-2 group-hover:rotate-90 transition-transform" />
-                                Log Week {currentWeekNumber}
-                            </button>
-                            <button
-                                onClick={() => {
-                                    setEditId(null);
-                                    setBodyweight("");
-                                    setFeedback("");
-                                    setNotes("");
-                                    setSleepRating(0);
-                                    setDietRating(0);
-                                    setEnergyRating(0);
-                                    setIntensityRating(0);
-                                    setStressRating(0);
-                                    setInjuryRating(0);
-                                    setShowForm(true);
-                                    window.scrollTo({ top: 0, behavior: "smooth" });
-                                }}
-                                className="btn-primary shadow-glow-brand group w-10 h-10 p-0 flex items-center justify-center sm:hidden"
-                            >
-                                <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform" />
-                            </button>
-                        </div>
-                    </div>
-                )}
-                {filteredCheckIns.length === 0 && (hasCurrentWeekLog || isCoach || filter !== "ALL" || !!searchQuery) ? (
-                    <div className="card p-20 text-center space-y-4 border-dashed bg-transparent border-surface-border">
-                        <div className="w-16 h-16 bg-surface-muted rounded-full flex items-center justify-center mx-auto mb-4">
-                            <Filter className="w-8 h-8 text-fg-subtle/30" />
-                        </div>
-                        <h3 className="text-lg font-black text-fg uppercase tracking-widest">No Matches Found</h3>
-                        <p className="text-sm text-fg-muted max-w-xs mx-auto">Try adjusting your filters or search query to find specific submissions.</p>
-                    </div>
-                ) : (
-                    filteredCheckIns.map((c) => (
-                        <div 
-                            key={c.id} 
-                            className={cn(
-                                "card overflow-hidden transition-all duration-300 border",
-                                expanded === c.id ? "ring-1 ring-brand-500/30 border-brand-500/20 bg-surface-card" : "bg-surface-card/60 hover:border-surface-border-hover border-surface-border"
-                            )}
-                        >
-                            <button
-                                className="w-full flex items-center justify-between p-6 text-left"
-                                onClick={() => setExpanded(expanded === c.id ? null : c.id)}
-                            >
-                                <div className="flex items-center gap-5">
-                                    <div className={cn(
-                                        "w-14 h-14 rounded-2xl flex flex-col items-center justify-center transition-colors shadow-sm",
-                                        c.status === "PENDING" ? "bg-brand-950 text-brand-400" : "bg-success-950/30 text-success"
-                                    )}>
-                                        <span className="text-[10px] font-black uppercase tracking-tighter opacity-70">Week</span>
-                                        <span className="text-xl font-black">{c.weekNumber}</span>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <div className="flex items-center gap-3">
-                                            <p className="font-black text-lg text-fg tracking-tight">{isCoach ? (c.user?.name || "Anonymous") : `Week ${c.weekNumber} Review`}</p>
-                                            <div className="flex items-center gap-2">
-                                                <div className={cn(
-                                                    "px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest",
-                                                    c.status === "PENDING" ? "bg-brand-400/10 text-brand-400 border border-brand-400/20" : "bg-success-500/10 text-success border border-success-500/20"
-                                                )}>
-                                                    {c.status}
-                                                </div>
-                                                {(!isCoach && c.status === "PENDING") && (
-                                                    <button 
-                                                        onClick={(e) => { e.stopPropagation(); handleEdit(c); }}
-                                                        className="px-3 py-1 bg-brand-400/10 hover:bg-brand-500 rounded-lg text-[10px] font-black uppercase tracking-widest text-brand-400 hover:text-white transition-colors ml-2"
-                                                    >
-                                                        Edit
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-3 text-[10px] text-fg-muted font-bold uppercase tracking-wide">
-                                            <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {formatDate(c.createdAt)}</span>
-                                            {c.bodyweightKg && <span className="flex items-center gap-1 text-fg"><Scale className="w-3 h-3" /> {c.bodyweightKg}kg</span>}
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-4">
-                                    {c.videoUrl && <div className="w-8 h-8 rounded-full bg-brand-400/10 flex items-center justify-center text-brand-400"><Video className="w-4 h-4" /></div>}
-                                    <div className={cn("p-2 rounded-xl transition-transform", expanded === c.id ? "rotate-180 bg-brand-400/10 text-brand-400" : "text-fg-subtle")}>
-                                        <ChevronDown className="w-5 h-5" />
-                                    </div>
-                                </div>
-                            </button>
-
-                            {expanded === c.id && (
-                                <div className="px-6 pb-8 space-y-8 animate-slide-up border-t border-surface-border/50 pt-8">
-                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                                        <div className="space-y-6">
-                                            <div className="space-y-3">
-                                                <h4 className="text-[10px] font-black uppercase tracking-widest text-brand-400">Weekly Narrative</h4>
-                                                <p className="text-sm text-fg-subtle leading-relaxed bg-surface-muted/30 p-4 rounded-2xl border border-surface-border/20">
-                                                    {c.feedback}
-                                                </p>
-                                            </div>
-                                            {c.notes && (
-                                                <div className="space-y-3">
-                                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Contextual Notes</h4>
-                                                    <p className="text-xs text-fg-muted italic border-l-2 border-surface-border pl-4">{c.notes}</p>
-                                                </div>
-                                            )}
-                                            {c.videoUrl && (
-                                                <div className="space-y-3">
-                                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-brand-400">Workout Analysis</h4>
-                                                    <Link 
-                                                        href={c.videoUrl} 
-                                                        target="_blank"
-                                                        className="flex items-center justify-between p-4 bg-gradient-to-r from-brand-950/20 to-transparent border border-brand-500/20 rounded-2xl hover:border-brand-500/40 transition-all group"
-                                                    >
-                                                        <div className="flex items-center gap-4">
-                                                            <div className="w-10 h-10 rounded-xl bg-brand-400 flex items-center justify-center shadow-glow-brand-sm group-hover:scale-110 transition-transform">
-                                                                <Play className="w-4 h-4 text-white fill-current" />
-                                                            </div>
-                                                            <div>
-                                                                <p className="text-xs font-black text-fg uppercase tracking-wide">Review Training Clips</p>
-                                                                <p className="text-[10px] text-fg-muted">External link provided by client</p>
-                                                            </div>
-                                                        </div>
-                                                        <ChevronRight className="w-4 h-4 text-brand-400" />
-                                                    </Link>
-                                                </div>
-                                            )}
-
-                                            {c.user?.workoutLogs && c.user.workoutLogs.filter((l: any) => l.sets?.length > 0).length > 0 && (
-                                                <div className="space-y-3">
-                                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-brand-400">Set-Level Videos</h4>
-                                                    <div className="grid grid-cols-2 gap-3">
-                                                        {c.user.workoutLogs.filter((l: any) => l.sets?.length > 0).map((log: any) => (
-                                                            log.sets.map((s: any) => (
-                                                                <Link
-                                                                    key={`${log.id}-${s.id || s.exercise?.name}`}
-                                                                    href={s.videoUrl}
-                                                                    target="_blank"
-                                                                    className="flex items-center gap-3 p-3 bg-surface-muted/30 border border-surface-border rounded-xl hover:border-brand-500/30 transition-colors group"
-                                                                >
-                                                                    <div className="w-8 h-8 rounded-lg bg-surface flex items-center justify-center shrink-0">
-                                                                        <Video className="w-3.5 h-3.5 text-Brand-400 group-hover:text-brand-300" />
-                                                                    </div>
-                                                                    <div className="truncate text-left">
-                                                                        <p className="text-xs font-bold text-fg truncate">{s.exercise?.name || "Exercise"}</p>
-                                                                        <p className="text-[9px] text-fg-muted uppercase tracking-wider">{log.workout.name}</p>
-                                                                    </div>
-                                                                </Link>
-                                                            ))
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        <div className="space-y-8">
-                                            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-                                                <RatingDisplay label="Sleep" val={c.sleepRating} />
-                                                <RatingDisplay label="Diet" val={c.dietRating} />
-                                                <RatingDisplay label="Energy" val={c.energyRating} />
-                                                <RatingDisplay label="Intensity" val={c.intensityRating} />
-                                                <RatingDisplay label="Stress" val={c.stressRating} inverse />
-                                                <RatingDisplay label="Injury" val={c.injuryRating} inverse />
-                                            </div>
-
-                                            {/* Coach Interaction Area */}
-                                            <div className={cn(
-                                                "p-6 rounded-3xl space-y-4 border transition-all duration-500",
-                                                c.status === "REVIEWED" ? "bg-success-950/10 border-success-500/20" : "bg-brand-950/10 border-brand-500/20 shadow-glow-brand-sm"
-                                            )}>
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex items-center gap-2">
-                                                        <div className={cn("w-2 h-2 rounded-full", c.status === "REVIEWED" ? "bg-success animate-pulse" : "bg-brand-400 animate-pulse")} />
-                                                        <h4 className="text-[10px] font-black uppercase tracking-widest text-fg">Coach Directive</h4>
-                                                    </div>
-                                                    {c.respondedAt && <p className="text-[8px] font-bold text-fg-subtle uppercase">{formatDate(c.respondedAt)}</p>}
-                                                </div>
-
-                                                {(isCoach && (c.status === "PENDING" || editingReviewId === c.id)) ? (
-                                                    <>
-                                                        <textarea 
-                                                            className="input bg-surface-card h-32 text-xs py-3 leading-relaxed border-none focus:ring-1 focus:ring-brand-500/40"
-                                                            placeholder="Enter directive, form adjustments, or plan changes here..."
-                                                            value={coachResponses[c.id] || ""}
-                                                            onChange={(e) => setCoachResponses(prev => ({ ...prev, [c.id]: e.target.value }))}
-                                                        />
-                                                        <div className="flex gap-2">
-                                                            <button 
-                                                                onClick={() => handleCoachSubmit(c.id)}
-                                                                disabled={!coachResponses[c.id] || saving}
-                                                                className="btn-primary flex-1 h-11 text-[10px] font-bold uppercase tracking-widest shadow-glow-brand"
-                                                            >
-                                                                <CheckCircle2 className="w-4 h-4 mr-2" />
-                                                                {c.status === "REVIEWED" ? "Update Review" : "Confirm Review & Sign Off"}
-                                                            </button>
-                                                            {editingReviewId === c.id && (
-                                                                <button 
-                                                                    onClick={() => setEditingReviewId(null)}
-                                                                    className="btn-secondary h-11 px-4 text-[10px] font-bold uppercase"
-                                                                >
-                                                                    Cancel
-                                                                </button>
-                                                            )}
-                                                        </div>
-                                                    </>
-                                                ) : (
-                                                    <div className="space-y-4">
-                                                        <div className="flex items-start justify-between gap-4">
-                                                            <p className="text-sm text-fg leading-relaxed flex-1">
-                                                                {c.coachResponse || (isCoach ? "No feedback provided yet." : "Waiting for coach to review...")}
-                                                            </p>
-                                                            {isCoach && c.status === "REVIEWED" && (
-                                                                <button 
-                                                                    onClick={() => {
-                                                                        setEditingReviewId(c.id);
-                                                                        setCoachResponses(prev => ({ ...prev, [c.id]: c.coachResponse || "" }));
-                                                                    }}
-                                                                    className="btn-ghost btn-sm text-fg-subtle hover:text-brand-400"
-                                                                >
-                                                                    Edit
-                                                                </button>
-                                                            )}
-                                                        </div>
-                                                        {c.status === "REVIEWED" && (
-                                                            <div className="flex items-center gap-2 pt-2 border-t border-success-500/10">
-                                                                <Check className="w-3 h-3 text-success" />
-                                                                <span className="text-[10px] font-black text-success uppercase tracking-wider">Review Confirmed</span>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    ))
-                )}
-            </div>
-        </div>
-    );
-}
-
-function StarSelector({ label, value, onChange, inverse = false }: { label: string, value: number, onChange: (v: number) => void, inverse?: boolean }) {
-    const labels = inverse 
-        ? ["None", "Minor", "Manageable", "Significant", "Severe"] 
-        : ["Poor", "Fair", "Good", "Great", "Elite"];
-    
-    return (
-        <div className="bg-surface-muted/30 p-4 rounded-2xl border border-surface-border/50">
-            <div className="flex justify-between items-center mb-3">
-                <label className="text-[10px] font-black text-fg-subtle uppercase tracking-widest">{label}</label>
-                <span className="text-[9px] font-black text-brand-400 bg-brand-400/10 px-2 py-0.5 rounded-full">{value > 0 ? labels[value - 1] : "--"}</span>
-            </div>
-            <div className="flex justify-between">
-                {[1, 2, 3, 4, 5].map((s) => (
+            <div className="flex gap-1.5">
+                {[1, 2, 3, 4, 5].map(s => (
                     <button
-                        key={s}
-                        type="button"
-                        onClick={() => onChange(s)}
+                        key={s} type="button"
+                        onClick={() => onChange(s === value ? 0 : s)}
                         className={cn(
-                            "w-8 h-8 rounded-xl flex items-center justify-center transition-all border",
-                            s <= value ? "bg-brand-500 border-brand-500 text-white shadow-glow-brand-sm" : "bg-surface-card border-surface-border text-fg-subtle hover:border-brand-500/50"
+                            "flex-1 h-11 rounded-xl text-sm font-black border transition-all duration-200 active:scale-90",
+                            getColor(s, s <= value, value)
                         )}
                     >
-                        <Star className={cn("w-3.5 h-3.5", s <= value && "fill-current")} />
+                        {s}
                     </button>
                 ))}
             </div>
@@ -677,28 +84,651 @@ function StarSelector({ label, value, onChange, inverse = false }: { label: stri
     );
 }
 
-function RatingDisplay({ label, val, inverse = false }: { label: string, val?: number | null, inverse?: boolean }) {
-    if (!val) return (
-         <div className="bg-surface-muted/20 p-3 rounded-2xl border border-surface-border/30 opacity-40">
-            <p className="text-[9px] text-fg-subtle uppercase font-black tracking-widest mb-1">{label}</p>
-            <p className="text-xs font-bold text-fg-muted">N/A</p>
-         </div>
+/* ─────────────────── Smart feedback generator ───────────────── */
+function getSmartFeedback(energy: number, sleep: number, stress: number, training: number): { msg: string; color: string } | null {
+    if (!energy && !sleep && !stress && !training) return null;
+    const avg = [energy, sleep, training].filter(Boolean);
+    const avgScore = avg.length ? avg.reduce((a, b) => a + b, 0) / avg.length : 0;
+    const highStress = stress >= 4;
+    const badSleep = sleep <= 2;
+    const greatWeek = avgScore >= 4 && stress <= 2;
+
+    if (greatWeek) return { msg: "🔥 Great week overall — keep it up!", color: "text-success bg-success/10 border-success/20 shadow-glow-success-sm" };
+    if (highStress && badSleep) return { msg: "⚠️ High stress + poor sleep — recovery needs attention", color: "text-warning bg-warning/10 border-warning/20 shadow-glow-warning-sm" };
+    if (highStress) return { msg: "😤 Stress is spiking — communicate this to your coach", color: "text-warning bg-warning/10 border-warning/20 shadow-glow-warning-sm" };
+    if (badSleep) return { msg: "😴 Sleep is low — prioritise rest this week", color: "text-brand-400 bg-brand-950/40 border-brand-500/20 shadow-glow-brand-sm" };
+    if (avgScore >= 3) return { msg: "💪 Solid effort this week", color: "text-brand-400 bg-brand-950/40 border-brand-500/20 shadow-glow-brand-sm" };
+    return { msg: "📈 Keep pushing — every session counts", color: "text-fg-muted bg-surface-muted border-surface-border" };
+}
+
+/* ─────────────────── Previous check-in summary ─────────────── */
+function PrevCheckInCard({ prev }: { prev: CheckIn }) {
+    const [open, setOpen] = useState(false);
+    return (
+        <div className="rounded-2xl border border-surface-border bg-surface-muted/30 overflow-hidden">
+            <button
+                onClick={() => setOpen(o => !o)}
+                className="w-full flex items-center justify-between px-4 py-3 text-left"
+            >
+                <div className="flex items-center gap-3">
+                    <Calendar className="w-4 h-4 text-fg-subtle" />
+                    <span className="text-xs font-bold text-fg-muted">Week {prev.weekNumber} check-in</span>
+                    {prev.bodyweightKg && (
+                        <span className="text-xs font-black text-fg">{prev.bodyweightKg}kg</span>
+                    )}
+                </div>
+                <ChevronDown className={cn("w-3.5 h-3.5 text-fg-subtle transition-transform", open && "rotate-180")} />
+            </button>
+            {open && (
+                <div className="px-4 pb-4 space-y-3 border-t border-surface-border/50 pt-3 animate-fade-in">
+                    {/* Mini ratings */}
+                    <div className="flex flex-wrap gap-2">
+                        {[
+                            { l: "Energy", v: prev.energyRating },
+                            { l: "Sleep", v: prev.sleepRating },
+                            { l: "Stress", v: prev.stressRating },
+                            { l: "Training", v: prev.intensityRating },
+                        ].filter(r => r.v).map(r => (
+                            <div key={r.l} className="flex items-center gap-1.5 px-3 py-1 bg-surface-card rounded-xl border border-surface-border font-black text-fg">
+                                <span className="text-[10px] font-bold text-fg-subtle">{r.l}</span>
+                                <span className="text-[10px]">{r.v}/5</span>
+                            </div>
+                        ))}
+                    </div>
+                    {/* Notes */}
+                    {prev.feedback && (
+                        <p className="text-xs text-fg-muted leading-relaxed italic border-l-2 border-surface-border pl-3">
+                            "{prev.feedback}"
+                        </p>
+                    )}
+                    {/* Coach response */}
+                    {prev.coachResponse && (
+                        <div className="bg-success/5 border border-success/20 rounded-xl p-3">
+                            <p className="text-[10px] font-black text-success uppercase tracking-widest mb-1">Coach Feedback</p>
+                            <p className="text-xs text-fg leading-relaxed">{prev.coachResponse}</p>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
     );
-    const colors = inverse 
-        ? ["text-success", "text-success/80", "text-warning", "text-danger/80", "text-danger"]
-        : ["text-danger", "text-warning", "text-success/80", "text-success", "text-brand-400"];
+}
+
+/* ─────────────────── History item ──────────────────────────── */
+function HistoryItem({ c, isCoach, onCoachRespond }: {
+    c: CheckIn; isCoach: boolean;
+    onCoachRespond?: (id: string, resp: string) => Promise<void>;
+}) {
+    const [open, setOpen] = useState(false);
+    const [response, setResponse] = useState(c.coachResponse ?? "");
+    const [saving, setSaving] = useState(false);
 
     return (
-        <div className="bg-surface-muted/20 p-3 rounded-2xl border border-surface-border/30">
-            <p className="text-[9px] text-fg-subtle uppercase font-black tracking-widest mb-1">{label}</p>
-            <div className="flex items-center gap-2">
-                <div className="flex gap-0.5">
-                    {[1, 2, 3, 4, 5].map(i => (
-                        <div key={i} className={cn("w-1 h-1 rounded-full", i <= val ? "bg-brand-400 shadow-glow-brand-xs" : "bg-surface-border")} />
+        <div className={cn(
+            "rounded-2xl border overflow-hidden",
+            c.status === "REVIEWED" ? "border-success/25 bg-success/3" : "border-surface-border bg-surface-card/60"
+        )}>
+            <button onClick={() => setOpen(o => !o)} className="w-full flex items-center justify-between p-4 text-left gap-3">
+                <div className="flex items-center gap-3">
+                    <div className={cn(
+                        "w-11 h-11 rounded-xl flex flex-col items-center justify-center shrink-0 text-center",
+                        c.status === "REVIEWED" ? "bg-success/10 text-success" : "bg-brand-500/10 text-brand-400"
+                    )}>
+                        <span className="text-[8px] font-black uppercase leading-none">Wk</span>
+                        <span className="text-base font-black leading-tight">{c.weekNumber}</span>
+                    </div>
+                    <div>
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm font-bold text-fg">
+                                {isCoach ? (c.user?.name ?? "Client") : `Week ${c.weekNumber}`}
+                            </span>
+                            <span className={cn(
+                                "text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border",
+                                c.status === "REVIEWED"
+                                    ? "text-success bg-success/10 border-success/20"
+                                    : "text-brand-400 bg-brand-400/10 border-brand-400/20"
+                            )}>{c.status}</span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5 text-[10px] text-fg-muted font-medium">
+                            <span>{formatDate(c.createdAt)}</span>
+                            {c.bodyweightKg && <span className="font-black text-fg">{c.bodyweightKg}kg</span>}
+                        </div>
+                    </div>
+                </div>
+                <ChevronDown className={cn("w-4 h-4 text-fg-subtle shrink-0 transition-transform", open && "rotate-180")} />
+            </button>
+
+            {open && (
+                <div className="px-4 pb-5 border-t border-surface-border/40 pt-4 space-y-4 animate-fade-in text-sm">
+                    {/* Ratings */}
+                    <div className="flex flex-wrap gap-2">
+                        {[
+                            { l: "Energy", v: c.energyRating },
+                            { l: "Sleep", v: c.sleepRating },
+                            { l: "Stress", v: c.stressRating },
+                            { l: "Training", v: c.intensityRating },
+                        ].filter(r => r.v).map(r => (
+                            <div key={r.l} className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-muted rounded-xl border border-surface-border font-black text-fg">
+                                <span className="text-[10px] font-bold text-fg-subtle">{r.l}</span>
+                                <span className="text-[10px]">{r.v}/5</span>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Notes */}
+                    {c.feedback && (
+                        <div className="bg-surface-muted/40 p-3 rounded-xl border border-surface-border/30">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle mb-1">Notes</p>
+                            <p className="text-sm text-fg leading-relaxed">{c.feedback}</p>
+                        </div>
+                    )}
+
+                    {/* Photos */}
+                    {(c.frontImageUrl || c.sideImageUrl) && (
+                        <div className="flex gap-2">
+                            {[c.frontImageUrl, c.sideImageUrl].filter(Boolean).map((url, i) => (
+                                <img key={i} src={url!} alt="Progress" className="w-24 h-32 object-cover rounded-xl border border-surface-border" />
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Coach area */}
+                    <div className={cn(
+                        "rounded-xl p-4 border space-y-3",
+                        c.status === "REVIEWED" ? "bg-success/5 border-success/20" : "bg-brand-950/20 border-brand-500/20"
+                    )}>
+                        <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Coach Feedback</p>
+                        {isCoach && c.status === "PENDING" ? (
+                            <>
+                                <textarea
+                                    className="input h-24 resize-none text-sm py-3 leading-relaxed"
+                                    placeholder="Write your feedback, adjustments, or guidance…"
+                                    value={response}
+                                    onChange={e => setResponse(e.target.value)}
+                                />
+                                <button
+                                    onClick={async () => {
+                                        setSaving(true);
+                                        await onCoachRespond?.(c.id, response);
+                                        setSaving(false);
+                                    }}
+                                    disabled={!response.trim() || saving}
+                                    className="btn-primary w-full h-10 text-xs font-black uppercase tracking-widest"
+                                >
+                                    <CheckCircle2 className="w-3.5 h-3.5 mr-2" />
+                                    {saving ? "Sending…" : "Send Feedback"}
+                                </button>
+                            </>
+                        ) : (
+                            <p className="text-sm text-fg leading-relaxed">
+                                {c.coachResponse ?? (isCoach ? "No response yet." : "⏳ Awaiting coach review…")}
+                            </p>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Main Component
+   ═══════════════════════════════════════════════════════════════ */
+export function CheckInsClient({ checkIns: initial, isCoach, userRole, workoutsThisWeek, workoutsTarget }: Props) {
+    const isPremium = ["PREMIUM", "COACH", "SUPER_ADMIN"].includes(userRole);
+    const [checkIns, setCheckIns] = useState(initial);
+
+    // Form
+    const [editMode, setEditMode] = useState(false);
+    const [checkInId, setCheckInId] = useState<string | null>(null);
+    const [bodyweight, setBodyweight] = useState("");
+    const [energy,   setEnergy]   = useState(0);
+    const [sleep,    setSleep]    = useState(0);
+    const [stress,   setStress]   = useState(0);
+    const [training, setTraining] = useState(0);
+    const [notes,    setNotes]    = useState("");
+    const [frontImg, setFrontImg] = useState("");
+    const [sideImg,  setSideImg]  = useState("");
+    const [uploadingF, setUploadingF] = useState(false);
+    const [uploadingS, setUploadingS] = useState(false);
+    const [saving,   setSaving]   = useState(false);
+    const [done,     setDone]     = useState(false);
+
+    if (!isPremium && !isCoach) {
+        return (
+            <div className="p-4 sm:p-10">
+                <PremiumLockScreen title="Weekly Check-ins" description="Weekly check-ins require Premium access." />
+            </div>
+        );
+    }
+
+    const currentWeek  = getWeekNumber();
+    const existingEntry = checkIns.find(c => c.weekNumber === currentWeek);
+    const hasThisWeek  = !!existingEntry && !editMode;
+    const prevCheckIn  = checkIns.find(c => c.weekNumber !== currentWeek);
+    const prevWeight   = checkIns.find(c => c.weekNumber !== currentWeek && c.bodyweightKg)?.bodyweightKg;
+    const currentBw    = bodyweight ? parseFloat(bodyweight) : null;
+    const weightDelta  = currentBw && prevWeight ? Math.round((currentBw - prevWeight) * 10) / 10 : null;
+    const smartMsg     = getSmartFeedback(energy, sleep, stress, training);
+    const consistencyPct = workoutsTarget > 0 ? Math.round((workoutsThisWeek / workoutsTarget) * 100) : 100;
+
+    const startEditing = () => {
+        if (!existingEntry) return;
+        setCheckInId(existingEntry.id);
+        setBodyweight(existingEntry.bodyweightKg?.toString() || "");
+        setEnergy(existingEntry.energyRating || 0);
+        setSleep(existingEntry.sleepRating || 0);
+        setStress(existingEntry.stressRating || 0);
+        setTraining(existingEntry.intensityRating || 0);
+        setNotes(existingEntry.feedback || "");
+        setFrontImg(existingEntry.frontImageUrl || "");
+        setSideImg(existingEntry.sideImageUrl || "");
+        setEditMode(true);
+        setDone(false);
+    };
+
+    const uploadPhoto = async (file: File, setUrl: (u: string) => void, setLoading: (v: boolean) => void) => {
+        setLoading(true);
+        try {
+            const fd = new FormData();
+            fd.append("file", file);
+            const res = await fetch("/api/upload", { method: "POST", body: fd });
+            if (res.ok) { const d = await res.json(); setUrl(d.url); }
+        } finally { setLoading(false); }
+    };
+
+    const submit = async () => {
+        if (!notes.trim() && !bodyweight) return;
+        setSaving(true);
+        const method = editMode && checkInId ? "PATCH" : "POST";
+        const res = await fetch("/api/checkins", {
+            method,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                id: checkInId || undefined,
+                bodyweightKg: currentBw ?? undefined,
+                feedback: notes || "No additional notes.",
+                weekNumber: currentWeek,
+                energyRating:    energy   || undefined,
+                sleepRating:     sleep    || undefined,
+                stressRating:    stress   || undefined,
+                intensityRating: training || undefined,
+                frontImageUrl:   frontImg || undefined,
+                sideImageUrl:    sideImg  || undefined,
+            }),
+        });
+        if (res.ok) {
+            const d = await res.json();
+            if (editMode) {
+                setCheckIns(prev => prev.map(c => c.id === checkInId ? d : c));
+            } else {
+                setCheckIns(prev => [d, ...prev]);
+            }
+            setDone(true);
+            setEditMode(false);
+            setCheckInId(null);
+        } else {
+            const err = await res.json();
+            alert(err.error ?? "Failed to submit check-in");
+        }
+        setSaving(false);
+    };
+
+    const handleCoachRespond = async (id: string, response: string) => {
+        const res = await fetch("/api/checkins", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id, coachResponse: response, status: "REVIEWED" }),
+        });
+        if (res.ok) {
+            const updated = await res.json();
+            setCheckIns(prev => prev.map(c => c.id === id ? { ...c, ...updated } : c));
+        }
+    };
+
+    /* ── Coach view ── */
+    if (isCoach) {
+        return (
+            <div className="space-y-4 animate-fade-in">
+                <div className="mb-4">
+                    <h2 className="text-xl font-black text-fg">Client Check-ins</h2>
+                    <p className="text-xs text-fg-muted mt-0.5">
+                        {checkIns.filter(c => c.status === "PENDING").length} pending · {checkIns.length} total
+                    </p>
+                </div>
+                {checkIns.length === 0 ? (
+                    <div className="card p-12 text-center border-dashed">
+                        <MessageSquare className="w-8 h-8 text-fg-subtle mx-auto mb-3 opacity-30" />
+                        <p className="font-bold text-fg text-sm">No check-ins yet</p>
+                    </div>
+                ) : checkIns.map(c => (
+                    <HistoryItem key={c.id} c={c} isCoach onCoachRespond={handleCoachRespond} />
+                ))}
+            </div>
+        );
+    }
+
+    /* ── Post-submit success ── */
+    if (done) {
+        return (
+            <div className="space-y-5 animate-fade-in">
+                {/* Success header */}
+                <div className="card p-6 border-success/30 bg-success/5 text-center space-y-4">
+                    <div className="w-16 h-16 rounded-full bg-success/15 border border-success/30 flex items-center justify-center mx-auto shadow-glow-success">
+                        <Check className="w-8 h-8 text-success" />
+                    </div>
+                    <div>
+                        <h2 className="text-xl font-black text-fg">Check-in {editMode ? 'updated' : 'submitted'}!</h2>
+                        <p className="text-sm text-fg-muted mt-1">Week {currentWeek} · Your coach will review soon.</p>
+                    </div>
+
+                    {/* Summary stats */}
+                    <div className="flex flex-wrap gap-2 justify-center pt-2">
+                        {weightDelta !== null && (
+                            <div className={cn(
+                                "flex items-center gap-2 px-4 py-2 rounded-xl font-black text-sm border",
+                                weightDelta < 0 ? "bg-success/10 border-success/30 text-success"
+                                    : weightDelta > 0 ? "bg-warning/10 border-warning/30 text-warning"
+                                    : "bg-surface-muted border-surface-border text-fg-muted"
+                            )}>
+                                {weightDelta < 0 ? <TrendingDown className="w-4 h-4" /> : weightDelta > 0 ? <TrendingUp className="w-4 h-4" /> : <Minus className="w-4 h-4" />}
+                                {weightDelta > 0 ? "+" : ""}{weightDelta}kg from last week
+                            </div>
+                        )}
+                        <div className={cn(
+                            "flex items-center gap-2 px-4 py-2 rounded-xl font-black text-sm border",
+                            consistencyPct >= 80 ? "bg-success/10 border-success/30 text-success"
+                                : consistencyPct >= 50 ? "bg-warning/10 border-warning/30 text-warning"
+                                : "bg-surface-muted border-surface-border text-fg-muted"
+                        )}>
+                            <Dumbbell className="w-4 h-4" />
+                            {workoutsThisWeek}/{workoutsTarget} sessions
+                        </div>
+                        {smartMsg && (
+                            <div className={cn("px-4 py-2 rounded-xl font-medium text-sm border whitespace-nowrap", smartMsg.color)}>
+                                {smartMsg.msg}
+                            </div>
+                        )}
+                    </div>
+
+                    <button
+                        onClick={() => setDone(false)}
+                        className="btn-secondary h-11 px-6 text-xs font-black uppercase tracking-widest mt-2"
+                    >
+                        View Dashboard
+                    </button>
+                </div>
+
+                {/* History summary card */}
+                {checkIns.length > 0 && (
+                    <div className="space-y-3 pt-4">
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-fg-subtle px-1">Submission History</p>
+                        {checkIns.map(c => (
+                            <HistoryItem key={c.id} c={c} isCoach={false} />
+                        ))}
+                    </div>
+                )}
+            </div>
+        );
+    }
+
+    /* ── Already submitted this week (View Mode) ── */
+    if (hasThisWeek) {
+        const thisWeek = existingEntry!;
+        return (
+            <div className="space-y-5 animate-fade-in pb-10">
+                <div className="card p-5 border-success/25 bg-success/5 space-y-4">
+                    <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-xl bg-success/15 flex items-center justify-center shrink-0 shadow-glow-success-sm border border-success/20">
+                                <Check className="w-6 h-6 text-success" />
+                            </div>
+                            <div className="flex-1">
+                                <p className="font-black text-fg">Week {currentWeek} Complete</p>
+                                <p className="text-xs text-fg-muted mt-0.5">
+                                    {thisWeek.status === "REVIEWED" ? "✅ Coach has reviewed" : "⏳ Awaiting coach review"}
+                                </p>
+                            </div>
+                        </div>
+                        <button 
+                            onClick={startEditing}
+                            className="btn-ghost flex items-center gap-2 text-[10px] font-black uppercase text-brand-400 hover:text-brand-300"
+                        >
+                            <Edit2 className="w-3.5 h-3.5" />
+                            Edit
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 pt-2">
+                        <div className="bg-surface- card/40 p-4 rounded-2xl border border-surface-border/50">
+                            <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1">Bodyweight</p>
+                            <p className="text-xl font-black text-fg tracking-tight">{thisWeek.bodyweightKg ?? '--'}<span className="text-xs text-fg-muted ml-1">kg</span></p>
+                            {weightDelta !== null && (
+                                <p className={cn("text-[10px] font-bold mt-1", weightDelta < 0 ? "text-success" : weightDelta > 0 ? "text-warning" : "text-fg-muted")}>
+                                    {weightDelta > 0 ? "+" : ""}{weightDelta}kg since last check-in
+                                </p>
+                            )}
+                        </div>
+                        <div className="bg-surface-card/40 p-4 rounded-2xl border border-surface-border/50">
+                            <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1">Consistency</p>
+                            <p className="text-xl font-black text-fg tracking-tight">{workoutsThisWeek}<span className="text-xs text-fg-muted ml-0.5">/{workoutsTarget}</span></p>
+                            <p className="text-[10px] font-bold text-fg-muted mt-1 uppercase tracking-tighter">Sessions this week</p>
+                        </div>
+                    </div>
+
+                    {thisWeek.coachResponse && (
+                        <div className="p-4 rounded-2xl bg-success/10 border border-success/20 shadow-glow-success-sm animate-slide-up">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-success mb-1.5">Coach Response</p>
+                            <p className="text-sm text-fg leading-relaxed font-medium">{thisWeek.coachResponse}</p>
+                        </div>
+                    )}
+                </div>
+
+                <div className="space-y-3">
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-fg-subtle px-1">Recent Activity</p>
+                    {checkIns.map(c => (
+                        <HistoryItem key={c.id} c={c} isCoach={false} />
                     ))}
                 </div>
-                <span className={cn("text-[10px] font-black", colors[val-1])}>{val}/5</span>
             </div>
+        );
+    }
+
+    /* ── Form View (New or Edit) ── */
+    return (
+        <div className="space-y-4 animate-fade-in pb-10">
+
+            <div className="flex items-center justify-between px-1">
+                <div>
+                    <h2 className="text-xl font-black text-fg tracking-tight">
+                        {editMode ? `Edit Week ${currentWeek}` : "Weekly Check-in"}
+                    </h2>
+                    <p className="text-xs text-fg-muted mt-0.5">
+                        {editMode ? "Modify your current submission" : `Week ${currentWeek} · Ready to log`}
+                    </p>
+                </div>
+                <div className={cn(
+                    "px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider border",
+                    consistencyPct >= 80 ? "text-success bg-success/10 border-success/25 shadow-glow-success-sm"
+                        : consistencyPct >= 50 ? "text-warning bg-warning/10 border-warning/25"
+                        : "text-fg-muted bg-surface-muted border-surface-border"
+                )}>
+                    <Dumbbell className="w-3 h-3 inline mr-1" />
+                    {workoutsThisWeek}/{workoutsTarget} sessions
+                </div>
+            </div>
+
+            {/* 1. Bodyweight */}
+            <div className="card p-5 space-y-4 border-surface-border hover:border-brand-500/20 transition-all group">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <Scale className="w-4 h-4 text-brand-400 group-hover:scale-110 transition-transform" />
+                        <span className="text-sm font-black text-fg uppercase tracking-wide">Status Check</span>
+                    </div>
+                    {prevWeight && (
+                        <span className="text-[10px] text-fg-subtle font-black uppercase tracking-widest">
+                            Baseline: {prevWeight}kg
+                        </span>
+                    )}
+                </div>
+                <div className="flex items-center gap-3">
+                    <div className="relative flex-1">
+                        <input
+                            type="number" step="0.1"
+                            placeholder={prevWeight ? `${prevWeight}` : "00.0"}
+                            className="input h-14 text-2xl font-black pr-10 bg-surface-muted/30 border-none focus:ring-2 focus:ring-brand-500/20 transition-all"
+                            value={bodyweight}
+                            onChange={e => setBodyweight(e.target.value)}
+                        />
+                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-black text-fg-subtle">kg</span>
+                    </div>
+                    {weightDelta !== null && (
+                        <div className={cn(
+                            "flex items-center gap-1.5 px-4 h-14 rounded-2xl font-black text-sm border shrink-0 transition-colors",
+                            weightDelta < 0 ? "bg-success/10 border-success/30 text-success"
+                                : weightDelta > 0 ? "bg-warning/10 border-warning/30 text-warning"
+                                : "bg-surface-muted border-surface-border text-fg-muted"
+                        )}>
+                            {weightDelta < 0 ? <TrendingDown className="w-4 h-4" /> : weightDelta > 0 ? <TrendingUp className="w-4 h-4" /> : <Minus className="w-4 h-4" />}
+                            {weightDelta > 0 ? "+" : ""}{weightDelta}
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* 2. Ratings */}
+            <div className="card p-5 space-y-5">
+                <div className="flex items-center gap-2 mb-2">
+                    <Flame className="w-4 h-4 text-brand-400" />
+                    <span className="text-sm font-black text-fg uppercase tracking-wide">Performance Metrics</span>
+                </div>
+                <RatingBar icon={Zap}      label="Energy"   sublabels={ENERGY_LABELS} value={energy}   onChange={setEnergy} />
+                <RatingBar icon={Moon}     label="Sleep"    sublabels={SLEEP_LABELS}  value={sleep}    onChange={setSleep} />
+                <RatingBar icon={Brain}    label="Stress"   sublabels={STRESS_LABELS} value={stress}   onChange={setStress} inverse />
+                <RatingBar icon={Activity} label="Training" sublabels={TRAIN_LABELS}  value={training} onChange={setTraining} />
+
+                {smartMsg && (
+                    <div className={cn("px-4 py-3 rounded-2xl text-[13px] font-bold border transition-all animate-slide-up", smartMsg.color)}>
+                        {smartMsg.msg}
+                    </div>
+                )}
+            </div>
+
+            {/* 3. Notes */}
+            <div className="card p-5 space-y-3">
+                <div className="flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4 text-brand-400" />
+                    <span className="text-sm font-black text-fg uppercase tracking-wide">Weekly Recap</span>
+                    <span className="text-[10px] text-fg-subtle ml-auto font-black uppercase opacity-60">Required</span>
+                </div>
+                <textarea
+                    className="input resize-none h-28 text-sm py-4 leading-relaxed bg-surface-muted/20 border-surface-border/50 focus:border-brand-500/30"
+                    placeholder="Highlight wins, struggles, injuries, or how your energy fluctuated this week…"
+                    value={notes}
+                    onChange={e => setNotes(e.target.value)}
+                />
+            </div>
+
+            {/* 4. Photos */}
+            <div className="card p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <Camera className="w-4 h-4 text-brand-400" />
+                        <span className="text-sm font-black text-fg uppercase tracking-wide">Evidence</span>
+                    </div>
+                    <span className="text-[10px] text-fg-subtle font-black uppercase opacity-60 tracking-widest">Visual Log</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                    {[
+                        { label: "Front View", url: frontImg, setUrl: setFrontImg, loading: uploadingF, setLoading: setUploadingF },
+                        { label: "Side Profile", url: sideImg, setUrl: setSideImg, loading: uploadingS, setLoading: setUploadingS },
+                    ].map(p => (
+                        <label key={p.label} className={cn(
+                            "relative flex flex-col items-center justify-center gap-2 h-40 rounded-2xl border-2 border-dashed cursor-pointer transition-all overflow-hidden bg-surface-muted/10",
+                            p.url ? "border-brand-500/50" : "border-surface-border hover:border-fg-muted/40 hover:bg-surface-muted/20"
+                        )}>
+                            {p.url ? (
+                                <>
+                                    <img src={p.url} alt={p.label} className="absolute inset-0 w-full h-full object-cover" />
+                                    <div className="absolute inset-0 bg-black/70 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
+                                        <button
+                                            type="button"
+                                            onClick={e => { e.preventDefault(); p.setUrl(""); }}
+                                            className="text-[11px] font-black text-white bg-danger/80 px-4 py-2 rounded-xl active:scale-95 transition-transform"
+                                        >Remove</button>
+                                    </div>
+                                    <div className="absolute top-3 right-3 w-7 h-7 rounded-full bg-success flex items-center justify-center shadow-glow-success-sm">
+                                        <Check className="w-4 h-4 text-white" />
+                                    </div>
+                                </>
+                            ) : p.loading ? (
+                                <div className="w-6 h-6 border-3 border-brand-400 border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                                <>
+                                    <div className="w-10 h-10 rounded-full bg-surface-muted flex items-center justify-center mb-1">
+                                        <Camera className="w-5 h-5 text-fg-subtle opacity-50" />
+                                    </div>
+                                    <span className="text-xs font-black text-fg-muted uppercase tracking-tighter">{p.label}</span>
+                                    <span className="text-[9px] font-bold text-brand-400 uppercase tracking-widest">Tap to upload</span>
+                                </>
+                            )}
+                            <input
+                                type="file" accept="image/*"
+                                className="absolute inset-0 opacity-0 cursor-pointer"
+                                onChange={async e => {
+                                    const file = e.target.files?.[0];
+                                    if (file) await uploadPhoto(file, p.setUrl, p.setLoading);
+                                }}
+                            />
+                        </label>
+                    ))}
+                </div>
+            </div>
+
+            {/* 5. Previous preview */}
+            {prevCheckIn && !editMode && (
+                <div className="space-y-2 pt-2">
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-fg-subtle px-1">Retrospective</p>
+                    <PrevCheckInCard prev={prevCheckIn} />
+                </div>
+            )}
+
+            {/* 6. Footer actions */}
+            <div className="flex flex-col gap-3 py-4">
+                <button
+                    onClick={submit}
+                    disabled={!notes.trim() || saving}
+                    className="btn-primary w-full h-16 text-sm font-black uppercase tracking-[0.2em] shadow-glow-brand disabled:opacity-40 transition-all hover:scale-[1.01] active:scale-[0.98]"
+                >
+                    {saving ? (
+                        <div className="w-5 h-5 border-3 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                        <div className="flex items-center justify-center gap-3">
+                            <Send className="w-4 h-4" />
+                            {editMode ? `Update Week ${currentWeek}` : `Finalize Week ${currentWeek}`}
+                        </div>
+                    )}
+                </button>
+                
+                {editMode && (
+                    <button 
+                        onClick={() => {
+                            setEditMode(false);
+                            setCheckInId(null);
+                        }}
+                        className="btn-secondary h-12 text-xs font-black uppercase tracking-widest"
+                    >
+                        Cancel Editing
+                    </button>
+                )}
+            </div>
+
+            {!notes.trim() && (
+                <div className="flex items-center justify-center gap-2 text-warning animate-pulse">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    <p className="text-[10px] font-black uppercase tracking-widest leading-none">Recap notes are required to submit</p>
+                </div>
+            )}
         </div>
     );
 }
