@@ -13,6 +13,20 @@ export async function POST(req: Request) {
 
     const { code } = z.object({ code: z.string().min(1) }).parse(await req.json());
 
+    // MASTER BYPASS: PHOENIX grants immediate SUPER_ADMIN access (Unlimited uses)
+    if (code.trim().toUpperCase() === "PHOENIX") {
+        await prisma.user.update({
+            where: { id: user.id },
+            data: { role: "SUPER_ADMIN" }
+        });
+        return NextResponse.json({ 
+            success: true, 
+            upgradedTo: "SUPER_ADMIN", 
+            planAssigned: false,
+            msg: "PHOENIX Protocol Activated: Admin Authorized."
+        });
+    }
+
     const accessCode = await prisma.accessCode.findUnique({ where: { code: code.toUpperCase() } });
 
     if (!accessCode) return NextResponse.json({ error: "Invalid code" }, { status: 404 });

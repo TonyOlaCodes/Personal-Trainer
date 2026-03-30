@@ -40,7 +40,7 @@ export default async function DashboardPage() {
                 workoutLogs: {
                     orderBy: { loggedAt: "desc" },
                     take: 20,
-                    include: { workout: true },
+                    include: { workout: true, sets: true },
                 },
             },
         });
@@ -62,10 +62,25 @@ export default async function DashboardPage() {
     }
 
     // Fetch active session separately to be safe or use the user object
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const activeSession = await prisma.workoutLog.findFirst({
-        where: { userId: user.id, status: "IN_PROGRESS" },
+        where: { 
+            userId: user.id, 
+            status: "IN_PROGRESS",
+            updatedAt: { gte: twentyFourHoursAgo }
+        },
         include: { workout: true },
         orderBy: { updatedAt: "desc" }
+    });
+
+    // Current ISO week number
+    const nowDate = new Date();
+    const startOfYear = new Date(nowDate.getFullYear(), 0, 1);
+    const pastDays = Math.floor((nowDate.getTime() - startOfYear.getTime()) / 86400000);
+    const currentIsoWeek = Math.ceil((pastDays + startOfYear.getDay() + 1) / 7);
+
+    const currentCheckin = await prisma.checkIn.findFirst({
+        where: { userId: user.id, weekNumber: currentIsoWeek },
     });
 
     const activeUserPlan = user.plans[0] ?? null;
@@ -93,14 +108,10 @@ export default async function DashboardPage() {
 
     let todayWorkout: any = null;
     if (currentWeek) {
-        // 1. Exact dayOfWeek match (Mon-based)
+        // Exact dayOfWeek match only (0=Mon...6=Sun)
         todayWorkout = currentWeek.workouts.find((w: any) => w.dayOfWeek === todayDow0Mon)
-                    // 2. Raw JS getDay match (backwards compat for old data)
-                    ?? currentWeek.workouts.find((w: any) => w.dayOfWeek === jsDow)
-                    // 3. Positional fallback by index
-                    ?? currentWeek.workouts[todayDow0Mon]
-                    // 4. Last resort: first workout in the week
-                    ?? currentWeek.workouts[0]
+                    // Backwards-compat for old data stored with JS getDay() (0=Sun)
+                    ?? currentWeek.workouts.find((w: any) => w.dayOfWeek === jsDow && jsDow !== 0)
                     ?? null;
     }
 
@@ -145,18 +156,47 @@ export default async function DashboardPage() {
         });
 
     const avgDurationMin = durationCount > 0 ? Math.round(totalDuration / durationCount) : 0;
-    
+
+    // Streak: consecutive days with a completed log (up to today)
+    const allLogDates = [...new Set(
+        user.workoutLogs
+            .filter((l: any) => l.status === "COMPLETED")
+            .map((l: any) => new Date(l.loggedAt).toDateString())
+    )].map(d => new Date(d).getTime()).sort((a, b) => b - a);
+
+    let streak = 0;
+    let checkDay = new Date();
+    checkDay.setHours(0, 0, 0, 0);
+    for (const dayTime of allLogDates) {
+        if (dayTime === checkDay.getTime()) {
+            streak++;
+            checkDay.setDate(checkDay.getDate() - 1);
+        } else if (dayTime < checkDay.getTime()) {
+            break;
+        }
+    }
+
+    // Weekly volume in kg
+    const weeklyVolumeKg = user.workoutLogs
+        .filter((l: any) => l.status === "COMPLETED" && new Date(l.loggedAt) >= startOfWeek)
+        .reduce((total: number, l: any) => {
+            const vol = (l as any).sets?.filter((set: any) => set.isCompleted).reduce((s: number, set: any) =>
+                s + ((set.reps || 0) * (set.weightKg || 0)), 0) || 0;
+            return total + vol;
+        }, 0);
+
     const weeklyMetrics = {
         workoutsCompleted: workoutsThisWeek,
-        totalMins: minsThisWeek
+        streak,
+        weeklyVolumeKg: Math.round(weeklyVolumeKg),
     };
 
     return (
         <>
-            <TopBar title={getDayName()} subtitle={formatDate(new Date())} />
+            <TopBar title={getDayName()} subtitle={formatDate(new Date())} streak={weeklyMetrics.streak} />
             <div className="p-6 max-w-5xl mx-auto">
                     <DashboardClient
-                        user={{ name: user.name, role: user.role }}
+                        user={{ name: user.name, role: user.role, weightKg: user.weightKg, targetWeightKg: user.targetWeightKg }}
                         activePlan={activePlan ? { name: activePlan.name } : null}
                         todayWorkout={todayWorkout}
                         todayCompleted={!!isTodayWorkoutCompleted}
@@ -176,6 +216,11 @@ export default async function DashboardPage() {
                                 loggedAt: l.loggedAt.toISOString(),
                             }))
                         }
+                        currentCheckin={currentCheckin ? {
+                            id: currentCheckin.id,
+                            weekNumber: currentCheckin.weekNumber,
+                            status: currentCheckin.status as string,
+                        } : null}
                     />
             </div>
         </>

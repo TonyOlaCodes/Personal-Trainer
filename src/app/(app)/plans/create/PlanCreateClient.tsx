@@ -22,7 +22,7 @@ interface LocalExercise {
 interface LocalWorkout {
     name: string;
     dayNumber: number;
-    dayOfWeek?: number | null; // 0=Sun, 1=Mon, ..., 6=Sat
+    dayOfWeek?: number | null; // 0=Mon, 1=Tue, ..., 6=Sun
     exercises: LocalExercise[];
 }
 
@@ -56,7 +56,7 @@ export function PlanCreateClient() {
     const [lastAddedExerciseIdx, setLastAddedExerciseIdx] = useState<number | null>(null);
     const [draggedWorkoutIdx, setDraggedWorkoutIdx] = useState<number | null>(null);
 
-    const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
     // Load data (Template or Edit)
     useEffect(() => {
@@ -90,7 +90,7 @@ export function PlanCreateClient() {
                         if (mappedWeeks.length > 0) {
                             setWeeks(mappedWeeks);
                         } else {
-                            setWeeks([{ weekNumber: 1, workouts: [{ name: "Day 1", dayNumber: 1, dayOfWeek: 1, exercises: [] }] }]);
+                            setWeeks([{ weekNumber: 1, workouts: [{ name: "Day 1", dayNumber: 1, dayOfWeek: 0, exercises: [] }] }]);
                         }
                     } else {
                         setError(data.error || "Failed to load plan details.");
@@ -110,14 +110,14 @@ export function PlanCreateClient() {
                     workouts: t.workouts.map(w => ({
                         name: w.name,
                         dayNumber: w.dayNumber,
-                        dayOfWeek: w.dayNumber % 7 || 7, // Default Mon-Sun cyclic
+                        dayOfWeek: (w.dayNumber - 1) % 7, // 1=0(Mon), 2=1(Tue)...
                         exercises: w.exercises.map((e, idx) => ({ ...e, order: idx }))
                     }))
                 }]);
             } else {
                 setWeeks([{
                     weekNumber: 1,
-                    workouts: [{ name: "Full Body A", dayNumber: 1, dayOfWeek: 1, exercises: [] }]
+                    workouts: [{ name: "Full Body A", dayNumber: 1, dayOfWeek: 0, exercises: [] }]
                 }]);
             }
         };
@@ -190,12 +190,10 @@ export function PlanCreateClient() {
         target.dayOfWeek = newDayOfWeek;
         
         // Sort by day of week if multiple are assigned
-        const dayOrder = [1, 2, 3, 4, 5, 6, 0]; // Mon-Sun
         const sorted = next.sort((a,b) => {
             const aDay = a.dayOfWeek ?? 999;
             const bDay = b.dayOfWeek ?? 999;
-            if (aDay === bDay) return 0;
-            return dayOrder.indexOf(aDay) - dayOrder.indexOf(bDay);
+            return aDay - bDay;
         }).map((w, i) => ({ ...w, dayNumber: i + 1 }));
 
         // Find the new index of the workout we just changed to keep focus
@@ -232,12 +230,11 @@ export function PlanCreateClient() {
         const nextIdx = workouts.length;
         
         // Find next available day of week
-        let nextDow = (nextIdx + 1) % 7 || 7;
+        let nextDow = nextIdx % 7;
         const usedDows = workouts.map(w => w.dayOfWeek);
-        for (let i = 1; i <= 7; i++) {
-            const check = i === 7 ? 0 : i; // Map 7 to 0 (Sunday)
-            if (!usedDows.includes(check)) {
-                nextDow = check;
+        for (let i = 0; i < 7; i++) {
+            if (!usedDows.includes(i)) {
+                nextDow = i;
                 break;
             }
         }
@@ -259,15 +256,25 @@ export function PlanCreateClient() {
 
     const duplicateWorkout = (idx: number) => {
         if (workouts.length >= 7) {
-            alert("A plan can have a maximum of 7 training days.");
+            alert("All 7 days are already in use. Remove a day before copying.");
             return;
         }
         const toDup = workouts[idx];
+        const usedDows = workouts.map(w => w.dayOfWeek);
+        let nextFreeDow: number | null = null;
+        for (let i = 0; i < 7; i++) {
+            if (!usedDows.includes(i)) { nextFreeDow = i; break; }
+        }
+        if (nextFreeDow === null) {
+            alert("All 7 days are already assigned. Remove a day before copying.");
+            return;
+        }
         const next = [...workouts];
         next.splice(idx + 1, 0, {
             ...JSON.parse(JSON.stringify(toDup)),
             name: `${toDup.name} (Copy)`,
-            dayNumber: idx + 2
+            dayNumber: idx + 2,
+            dayOfWeek: nextFreeDow,
         });
         updateCurrentWorkouts(next.map((w, i) => ({ ...w, dayNumber: i + 1 })));
         setActiveWorkoutIdx(idx + 1);
@@ -673,7 +680,7 @@ export function PlanCreateClient() {
                                             <div className="flex items-center justify-between mb-0.5">
                                                 <label className="text-[10px] font-black text-brand-400 uppercase tracking-widest block">Day {workouts[activeWorkoutIdx].dayNumber}</label>
                                                 <div className="flex gap-1 overflow-x-auto no-scrollbar">
-                                                    {[1, 2, 3, 4, 5, 6, 0].map(d => {
+                                                    {[0, 1, 2, 3, 4, 5, 6].map(d => {
                                                         const isUsed = workouts.some((w, idx) => idx !== activeWorkoutIdx && w.dayOfWeek === d);
                                                         return (
                                                             <button
@@ -749,7 +756,10 @@ export function PlanCreateClient() {
                                                             ) : (
                                                                 <ExerciseAutocomplete
                                                                     value={ex.name}
-                                                                    onChange={(val) => updateExercise(activeWorkoutIdx, eIdx, { name: val, reps: isCardio(val) ? "20" : "10" })}
+                                                                    onChange={(val) => {
+                                                                        const nameChanged = val !== ex.name;
+                                                                        updateExercise(activeWorkoutIdx, eIdx, nameChanged ? { name: val, reps: isCardio(val) ? "20" : ex.reps } : { name: val });
+                                                                    }}
                                                                     className="w-full bg-surface-muted border border-surface-border rounded-xl px-4 py-2 text-sm text-fg"
                                                                     autoFocus={lastAddedExerciseIdx === eIdx}
                                                                 />

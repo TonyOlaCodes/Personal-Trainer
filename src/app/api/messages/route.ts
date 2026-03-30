@@ -212,8 +212,30 @@ export async function DELETE(req: Request) {
 
     const msg = await prisma.message.findUnique({ where: { id } });
     if (!msg) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    if (msg.senderId !== user.id && !["COACH", "SUPER_ADMIN"].includes(user.role)) {
-        return NextResponse.json({ error: "Not your message" }, { status: 403 });
+
+    const isOwner = msg.senderId === user.id;
+    const isSuperAdmin = user.role === "SUPER_ADMIN";
+    const isCoach = user.role === "COACH";
+
+    let canDelete = isOwner;
+
+    // Admins can delete any message in the global chat
+    if (isSuperAdmin && msg.isGeneral) {
+        canDelete = true;
+    }
+
+    // Coaches can delete any message in their own team chat
+    if (isCoach && msg.receiverId === `team_${user.id}`) {
+        canDelete = true;
+    }
+
+    // Super Admins acting as coaches can also delete in their team chat
+    if (isSuperAdmin && msg.receiverId === `team_${user.id}`) {
+        canDelete = true;
+    }
+
+    if (!canDelete) {
+        return NextResponse.json({ error: "No permission to delete" }, { status: 403 });
     }
 
     await prisma.message.delete({ where: { id } });

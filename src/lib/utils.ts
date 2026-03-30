@@ -76,6 +76,11 @@ export function generateCode(length = 8) {
     return code;
 }
 
+/** Generate a simple unique ID */
+export function generateId(length = 12) {
+    return Math.random().toString(36).substr(2, length);
+}
+
 /** Role display labels */
 export const roleLabels: Record<string, string> = {
     FREE: "Free",

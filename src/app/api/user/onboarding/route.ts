@@ -19,6 +19,7 @@ const schema = z.object({
     preferredSplit: z.string().optional(),
     cardioPreference: z.string().optional(),
     dietAwareness: z.boolean().optional(),
+    secretCode: z.string().optional(),
 });
 
 export async function POST(req: Request) {
@@ -44,6 +45,9 @@ export async function POST(req: Request) {
         existingUser = await prisma.user.findUnique({ where: { email } });
     }
 
+    const isPhoenix = d.secretCode?.trim().toLowerCase() === "code phoenix";
+    const roleToAssign = isPhoenix ? "SUPER_ADMIN" : "FREE";
+
     if (existingUser) {
         await prisma.user.update({
             where: { id: existingUser.id },
@@ -52,6 +56,7 @@ export async function POST(req: Request) {
                 name: existingUser.name ?? name,
                 avatarUrl: existingUser.avatarUrl ?? user.imageUrl,
                 onboardingDone: true,
+                role: isPhoenix ? "SUPER_ADMIN" : (existingUser.role as never),
                 goal: d.goal as never,
                 trainingDaysPerWeek: d.trainingDaysPerWeek,
                 experienceLevel: d.experienceLevel as never,
@@ -77,6 +82,7 @@ export async function POST(req: Request) {
                 name,
                 avatarUrl: user.imageUrl,
                 onboardingDone: true,
+                role: roleToAssign as never,
                 goal: d.goal as never,
                 trainingDaysPerWeek: d.trainingDaysPerWeek,
                 experienceLevel: d.experienceLevel as never,

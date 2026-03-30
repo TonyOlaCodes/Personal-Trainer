@@ -5,11 +5,18 @@ import { WorkoutLogClient } from "./WorkoutLogClient";
 
 export const metadata = { title: "Logging session" };
 
-export default async function WorkoutLogPage({ params }: { params: Promise<{ workoutId: string }> }) {
+export default async function WorkoutLogPage({
+    params,
+    searchParams,
+}: {
+    params: Promise<{ workoutId: string }>;
+    searchParams: Promise<{ date?: string }>;
+}) {
     const { userId } = await auth();
     if (!userId) redirect("/sign-in");
 
     const { workoutId } = await params;
+    const { date } = await searchParams;
 
     const workout = await prisma.workout.findUnique({
         where: { id: workoutId },
@@ -40,6 +47,7 @@ export default async function WorkoutLogPage({ params }: { params: Promise<{ wor
                     })),
                 }}
                 tutorialUrls={tutorialUrls}
+                logDate={date}
             />
         </div>
     );

@@ -17,13 +17,14 @@ interface WalkthroughProps {
 }
 
 export function Walkthrough({ steps, onComplete }: WalkthroughProps) {
+    const [isMobile, setIsMobile] = useState(false);
     const [currentIdx, setCurrentIdx] = useState(-1);
     const [coords, setCoords] = useState({ top: 0, left: 0, width: 0, height: 0 });
-
     const currentStep = currentIdx === -1 ? null : steps[currentIdx];
 
     const updateCoords = () => {
         if (currentIdx === -1) return;
+        setIsMobile(window.innerWidth < 768);
         const target = document.getElementById(steps[currentIdx].targetId);
         if (target) {
             const rect = target.getBoundingClientRect();
@@ -39,8 +40,11 @@ export function Walkthrough({ steps, onComplete }: WalkthroughProps) {
 
     useLayoutEffect(() => {
         updateCoords();
-        window.addEventListener("resize", updateCoords);
-        return () => window.removeEventListener("resize", updateCoords);
+        const handleResize = () => {
+            updateCoords();
+        };
+        window.addEventListener("resize", handleResize);
+        return () => window.removeEventListener("resize", handleResize);
     }, [currentIdx]);
 
     if (currentIdx === -1) {
@@ -51,9 +55,9 @@ export function Walkthrough({ steps, onComplete }: WalkthroughProps) {
                         <Zap className="w-10 h-10 text-white animate-pulse" />
                     </div>
                     <div>
-                        <h2 className="text-3xl font-black text-fg tracking-tighter uppercase italic">Welcome Aboard!</h2>
+                        <h2 className="text-3xl font-black text-fg tracking-tighter uppercase italic">Welcome!</h2>
                         <p className="text-sm text-fg-muted mt-3 leading-relaxed">
-                            Your access has been granted. Let&apos;s take a 30-second tour of your new high-performance dashboard.
+                            Your account is now ready. Let&apos;s take a quick tour of your new dashboard.
                         </p>
                     </div>
                     <div className="flex flex-col gap-3 pt-2">
@@ -61,13 +65,13 @@ export function Walkthrough({ steps, onComplete }: WalkthroughProps) {
                             onClick={() => setCurrentIdx(0)}
                             className="btn-primary h-14 rounded-2xl font-black uppercase tracking-widest text-xs shadow-glow-brand"
                         >
-                            Start the Tour
+                            Take Personal Tour
                         </button>
                         <button 
                             onClick={onComplete}
                             className="text-[10px] font-black uppercase tracking-[0.2em] text-fg-subtle hover:text-fg transition-colors"
                         >
-                            Skip & Explore
+                            Explore Myself
                         </button>
                     </div>
                 </div>
@@ -75,58 +79,70 @@ export function Walkthrough({ steps, onComplete }: WalkthroughProps) {
         );
     }
 
+    const pos = isMobile ? "bottom" : steps[currentIdx].position;
+    const isSidebarTarget = steps[currentIdx].targetId.startsWith("nav-");
+
     return (
         <div className="fixed inset-0 z-[100] pointer-events-none overflow-hidden">
             {/* Spotlight Overlay */}
             <div 
                 className="absolute inset-0 bg-black/70 transition-all duration-500"
                 style={{
-                    clipPath: `polygon(
-                        0% 0%, 0% 100%, 
-                        ${coords.left}px 100%, 
-                        ${coords.left}px ${coords.top}px, 
-                        ${coords.left + coords.width}px ${coords.top}px, 
-                        ${coords.left + coords.width}px ${coords.top + coords.height}px, 
-                        ${coords.left}px ${coords.top + coords.height}px, 
-                        ${coords.left}px 100%, 
-                        100% 100%, 100% 0%
-                    )`
+                    clipPath: isMobile && isSidebarTarget 
+                        ? "none" // Don't show spotlight if target is in hidden sidebar area or tab bar
+                        : `polygon(
+                            0% 0%, 0% 100%, 
+                            ${coords.left}px 100%, 
+                            ${coords.left}px ${coords.top}px, 
+                            ${coords.left + coords.width}px ${coords.top}px, 
+                            ${coords.left + coords.width}px ${coords.top + coords.height}px, 
+                            ${coords.left}px ${coords.top + coords.height}px, 
+                            ${coords.left}px 100%, 
+                            100% 100%, 100% 0%
+                        )`
                 }}
             />
 
             {/* Step Card */}
             <div 
-                className="absolute pointer-events-auto w-72 bg-surface-elevated rounded-3xl p-6 border border-brand-500/30 shadow-modal animate-slide-up transition-all duration-500 ease-spring"
+                className="absolute pointer-events-auto w-[calc(100%-2rem)] max-w-[320px] sm:w-72 bg-surface-elevated rounded-3xl p-6 border border-brand-500/30 shadow-modal animate-slide-up transition-all duration-500 ease-spring"
                 style={{
-                    top: steps[currentIdx].position === "bottom" 
-                        ? coords.top + coords.height + 20 
-                        : steps[currentIdx].position === "right" || steps[currentIdx].position === "left"
-                            ? coords.top + coords.height / 2
-                            : coords.top - 20,
-                    left: steps[currentIdx].position === "right"
-                        ? coords.left + coords.width + 20
-                        : steps[currentIdx].position === "left"
-                            ? coords.left - 20
-                            : coords.left + coords.width / 2,
-                    transform: steps[currentIdx].position === "bottom" 
-                        ? "translateX(-50%)" 
-                        : steps[currentIdx].position === "right"
-                            ? "translateY(-50%)"
-                            : steps[currentIdx].position === "left"
-                                ? "translate(-100%, -50%)"
-                                : "translate(-50%, -100%)"
+                    top: isMobile 
+                        ? (isSidebarTarget ? "auto" : coords.top + coords.height + 20)
+                        : pos === "bottom" 
+                            ? coords.top + coords.height + 20 
+                            : pos === "right" || pos === "left"
+                                ? coords.top + coords.height / 2
+                                : coords.top - 20,
+                    bottom: isMobile && isSidebarTarget ? 100 : "auto",
+                    left: isMobile
+                        ? "50%"
+                        : pos === "right"
+                            ? coords.left + coords.width + 20
+                            : pos === "left"
+                                ? coords.left - 20
+                                : coords.left + coords.width / 2,
+                    transform: isMobile
+                        ? "translateX(-50%)"
+                        : pos === "bottom" 
+                            ? "translateX(-50%)" 
+                            : pos === "right"
+                                ? "translateY(-50%)"
+                                : pos === "left"
+                                    ? "translate(-100%, -50%)"
+                                    : "translate(-50%, -100%)"
                 }}
             >
-                <div className="space-y-3">
+                <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                        <span className="badge-brand text-[9px] px-2">Step {currentIdx + 1} of {steps.length}</span>
+                        <span className="badge-brand text-[9px] px-2">Progress: {currentIdx + 1} of {steps.length}</span>
                         <button onClick={onComplete} className="text-fg-subtle hover:text-fg transition-colors">
                             <X className="w-4 h-4" />
                         </button>
                     </div>
                     <div>
-                        <h4 className="font-black text-fg uppercase tracking-tight text-lg">{steps[currentIdx].title}</h4>
-                        <p className="text-xs text-fg-muted mt-1.5 leading-relaxed">{steps[currentIdx].description}</p>
+                        <h4 className="font-black text-fg uppercase tracking-tight text-lg leading-tight">{steps[currentIdx].title}</h4>
+                        <p className="text-xs text-fg-muted mt-2 leading-relaxed">{steps[currentIdx].description}</p>
                     </div>
                     <div className="flex items-center justify-between pt-2">
                         <button 
@@ -143,24 +159,26 @@ export function Walkthrough({ steps, onComplete }: WalkthroughProps) {
                                     onComplete();
                                 }
                             }}
-                            className="btn-primary btn-sm rounded-xl px-5 h-9"
+                            className="btn-primary rounded-xl px-6 h-10 text-xs font-bold"
                         >
-                            {currentIdx === steps.length - 1 ? "Finish" : "Next"}
-                            <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                            {currentIdx === steps.length - 1 ? "Finish" : "Next Step"}
+                            <ChevronRight className="w-3.5 h-3.5 ml-1.5" />
                         </button>
                     </div>
                 </div>
 
-                {/* Arrow */}
-                <div 
-                    className={cn(
-                        "absolute w-4 h-4 bg-surface-elevated border-brand-500/30 border-l border-t rotate-45",
-                        steps[currentIdx].position === "bottom" && "-top-2 left-1/2 -ml-2",
-                        steps[currentIdx].position === "top" && "-bottom-2 left-1/2 -ml-2 rotate-[225deg]",
-                        steps[currentIdx].position === "right" && "-left-2 top-1/2 -mt-2 -rotate-45",
-                        steps[currentIdx].position === "left" && "-right-2 top-1/2 -mt-2 rotate-[135deg]"
-                    )}
-                />
+                {/* Arrow - Hide on mobile centering */}
+                {!isMobile && (
+                    <div 
+                        className={cn(
+                            "absolute w-4 h-4 bg-surface-elevated border-brand-500/30 border-l border-t rotate-45",
+                            pos === "bottom" && "-top-2 left-1/2 -ml-2",
+                            pos === "top" && "-bottom-2 left-1/2 -ml-2 rotate-[225deg]",
+                            pos === "right" && "-left-2 top-1/2 -mt-2 -rotate-45",
+                            pos === "left" && "-right-2 top-1/2 -mt-2 rotate-[135deg]"
+                        )}
+                    />
+                )}
             </div>
         </div>
     );

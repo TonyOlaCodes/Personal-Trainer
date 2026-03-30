@@ -13,8 +13,21 @@ export default async function CheckInsPage() {
 
     const user = await prisma.user.findUnique({
         where: { clerkId: userId },
-        select: {
-            id: true, role: true, trainingDaysPerWeek: true,
+        include: {
+            plans: {
+                where: { isActive: true },
+                include: {
+                    plan: {
+                        include: {
+                            weeks: {
+                                orderBy: { weekNumber: "asc" },
+                                include: { workouts: true },
+                            },
+                        },
+                    },
+                },
+                take: 1,
+            },
             workoutLogs: {
                 where: {
                     status: "COMPLETED",
@@ -28,6 +41,24 @@ export default async function CheckInsPage() {
         }
     });
     if (!user) redirect("/sign-in");
+
+    // Calculate workouts target from active plan if available
+    let workoutsTarget = user.trainingDaysPerWeek ?? 4;
+    const activeUserPlan = user.plans[0];
+    if (activeUserPlan) {
+        const weeks = activeUserPlan.plan.weeks;
+        const startedAt = new Date(activeUserPlan.startedAt);
+        const now = new Date();
+        const diffTime = Math.abs(now.getTime() - startedAt.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        let currentWeekIndex = Math.floor(diffDays / 7);
+        if (currentWeekIndex >= weeks.length) currentWeekIndex = weeks.length - 1;
+        
+        const currentWeekPlan = weeks[currentWeekIndex];
+        if (currentWeekPlan) {
+            workoutsTarget = currentWeekPlan.workouts.length;
+        }
+    }
 
     const isCoach = ["COACH", "SUPER_ADMIN"].includes(user.role);
 
@@ -43,7 +74,6 @@ export default async function CheckInsPage() {
         });
 
     const workoutsThisWeek = user.workoutLogs?.length ?? 0;
-    const workoutsTarget = user.trainingDaysPerWeek ?? 4;
 
     return (
         <>

@@ -88,7 +88,7 @@ export default async function LogViewPage({ params }: { params: { logId: string 
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-6 border-t border-surface-border">
                         <div className="space-y-1">
                             <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Total Volume</p>
-                            <p className="text-xl font-black text-fg italic">{log.sets.reduce((acc, s) => acc + (s.weightKg || 0) * (s.reps || 0), 0).toLocaleString()} <span className="text-[10px] text-fg-subtle not-italic">KG</span></p>
+                            <p className="text-xl font-black text-fg italic">{log.sets.filter(s => s.isCompleted).reduce((acc, s) => acc + (s.weightKg || 0) * (s.reps || 0), 0).toLocaleString()} <span className="text-[10px] text-fg-subtle not-italic">KG</span></p>
                         </div>
                         <div className="space-y-1">
                             <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Time Logged</p>

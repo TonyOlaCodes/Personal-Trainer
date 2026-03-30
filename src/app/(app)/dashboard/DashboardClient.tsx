@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Walkthrough } from "@/components/shared/Walkthrough";
-import { Dumbbell, ChevronRight, Clock, Flame, Plus, Activity, TrendingUp, Calendar, Ticket, Check, Edit3 } from "lucide-react";
+import { Dumbbell, ChevronRight, Clock, Flame, Plus, Activity, TrendingUp, Calendar, Ticket, Check, Edit3, Trash2, Scale } from "lucide-react";
 import { formatRelative, cn } from "@/lib/utils";
 import { isCardio } from "@/components/shared/ExerciseAutocomplete";
 
@@ -32,7 +32,12 @@ interface RecentLog {
 }
 
 interface Props {
-    user: { name?: string | null; role: string };
+    user: { 
+        name?: string | null; 
+        role: string; 
+        weightKg?: number | null; 
+        targetWeightKg?: number | null; 
+    };
     activePlan: { name: string } | null;
     todayWorkout: Workout | null;
     todayCompleted?: boolean;
@@ -41,22 +46,30 @@ interface Props {
     avgDurationMin?: number;
     weeklyMetrics?: {
         workoutsCompleted: number;
-        totalMins: number;
+        streak: number;
+        weeklyVolumeKg: number;
     };
+    currentCheckin?: {
+        id: string;
+        weekNumber: number;
+        status: string;
+    } | null;
 }
 
-export function DashboardClient({ user, activePlan, todayWorkout, todayCompleted, activeSession, recentLogs, avgDurationMin, weeklyMetrics }: Props) {
+export function DashboardClient({ user, activePlan, todayWorkout, todayCompleted, activeSession, recentLogs, avgDurationMin, weeklyMetrics, currentCheckin }: Props) {
     const router = useRouter();
     const [code, setCode] = useState("");
     const [codeStatus, setCodeStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
     const [codeMsg, setCodeMsg] = useState("");
     const [showTour, setShowTour] = useState(false);
+    const [discarding, setDiscarding] = useState(false);
+    const [weight, setWeight] = useState(user.weightKg?.toString() || "");
+    const [savingWeight, setSavingWeight] = useState(false);
 
     useEffect(() => {
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get("tour") === "true") {
             setShowTour(true);
-            // Clean up URL
             window.history.replaceState({}, document.title, window.location.pathname);
         }
     }, []);
@@ -75,6 +88,40 @@ export function DashboardClient({ user, activePlan, todayWorkout, todayCompleted
             console.error(e);
         }
     };
+
+    const discardSession = async (logId: string) => {
+        if (!confirm("Are you sure you want to discard this session? All progress will be lost.")) return;
+        setDiscarding(true);
+        try {
+            const res = await fetch(`/api/logs/${logId}`, {
+                method: "DELETE"
+            });
+            if (res.ok) {
+                router.refresh();
+            }
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setDiscarding(false);
+        }
+    };
+
+    async function handleUpdateWeight(val: string) {
+        if (!val || savingWeight) return;
+        setSavingWeight(true);
+        try {
+            const res = await fetch("/api/user/profile", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ weightKg: parseFloat(val) })
+            });
+            if (res.ok) router.refresh();
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setSavingWeight(false);
+        }
+    }
 
     const greeting = () => {
         const h = new Date().getHours();
@@ -107,43 +154,43 @@ export function DashboardClient({ user, activePlan, todayWorkout, todayCompleted
     const tourSteps = [
         {
             targetId: "nav-dashboard",
-            title: "Command Center",
+            title: "Dashboard",
             description: "Your daily overview. See your current plan, stats, and today's mission at a glance.",
             position: "right" as const
         },
         {
             targetId: "nav-plans",
-            title: "Military Protocol",
+            title: "Training Plans",
             description: "Access your training programs. View every exercise, set, and rep assigned by your coach.",
             position: "right" as const
         },
         {
             targetId: "nav-calendar",
-            title: "Operations Log",
+            title: "Workout Calendar",
             description: "A bird's eye view of your schedule. See what's coming up and what you've already crushed.",
             position: "right" as const
         },
         {
             targetId: "nav-progress",
-            title: "Performance Intel",
+            title: "Progress Tracking",
             description: "Analyze your gains. Track body metrics and strength plateaus over time.",
             position: "right" as const
         },
         {
             targetId: "nav-check-ins",
-            title: "Strategic Check-ins",
+            title: "Weekly Check-ins",
             description: "Submit your weekly check-ins and progress photos to your coach for feedback.",
             position: "right" as const
         },
         {
             targetId: "nav-chat",
-            title: "Direct Comms",
+            title: "Coach Chat",
             description: "Instant access to your coach. Ask questions or get form checks any time.",
             position: "right" as const
         },
         {
             targetId: "today-workout",
-            title: "Execute Today",
+            title: "Start Training",
             description: "Ready to work? Start your scheduled session right here from the dashboard.",
             position: "bottom" as const
         }
@@ -152,6 +199,53 @@ export function DashboardClient({ user, activePlan, todayWorkout, todayCompleted
     return (
         <div className="space-y-6 animate-fade-in pb-10">
             {showTour && <Walkthrough steps={tourSteps} onComplete={() => setShowTour(false)} />}
+            
+            {/* Weekly Metrics & Quick Updates */}
+            <div id="weekly-metrics" className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {weeklyMetrics && (
+                    <div className="card p-4 flex items-center justify-between bg-gradient-to-br from-surface-card to-brand-950/10">
+                        <div>
+                            <p className="text-[9px] font-black tracking-widest uppercase text-brand-400/80 mb-0.5">Weekly Volume</p>
+                            <div className="flex items-baseline gap-2">
+                                <p className="text-2xl font-black text-fg leading-none">{weeklyMetrics.weeklyVolumeKg.toLocaleString()} <span className="text-sm font-semibold text-fg-muted">kg</span></p>
+                                <p className="text-[10px] font-bold text-fg-subtle uppercase">Total this week ({weeklyMetrics.workoutsCompleted} sessions)</p>
+                            </div>
+                        </div>
+                        <div className="hidden sm:flex w-10 h-10 rounded-xl bg-brand-500/10 items-center justify-center">
+                            <TrendingUp className="w-4 h-4 text-brand-400" />
+                        </div>
+                    </div>
+                )}
+                
+                {/* Quick Weight Update */}
+                <div className="card p-4 flex items-center justify-between bg-surface-muted/10 border-brand-500/10 hover:border-brand-500/30 transition-all group relative overflow-hidden">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-brand-500/5 flex items-center justify-center group-hover:scale-110 transition-transform">
+                            <Scale className="w-4.5 h-4.5 text-brand-400" />
+                        </div>
+                        <div>
+                            <p className="text-[9px] font-black tracking-widest uppercase text-fg-subtle mb-0.5">Bodyweight</p>
+                            <div className="flex items-baseline gap-1">
+                                <input 
+                                    type="number" 
+                                    step="0.1"
+                                    value={weight}
+                                    onChange={(e) => setWeight(e.target.value)}
+                                    onBlur={(e) => handleUpdateWeight(e.target.value)}
+                                    className="w-16 bg-transparent text-2xl font-black text-fg focus:outline-none focus:text-brand-400 transition-colors"
+                                    placeholder="--"
+                                />
+                                <span className="text-sm font-semibold text-fg-muted uppercase">kg</span>
+                            </div>
+                        </div>
+                    </div>
+                    {savingWeight && (
+                        <div className="absolute top-2 right-2">
+                            <div className="w-3 h-3 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+                        </div>
+                    )}
+                </div>
+            </div>
             
             {/* Greeting */}
             <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
@@ -219,36 +313,65 @@ export function DashboardClient({ user, activePlan, todayWorkout, todayCompleted
                                 <p className="text-sm text-brand-300">{activeSession.workoutName}</p>
                             </div>
                         </div>
-                        <Link href={`/plans/log/${activeSession.workoutId}`} className="btn-primary shadow-glow-brand px-6">
-                            Resume
-                        </Link>
+                        <div className="flex items-center gap-3">
+                            <button 
+                                onClick={() => discardSession(activeSession.id)}
+                                disabled={discarding}
+                                className="btn-ghost text-brand-300 hover:text-white hover:bg-brand-500/20 px-4 flex items-center gap-2"
+                            >
+                                <Trash2 className="w-4 h-4" />
+                                <span className="hidden sm:inline">Discard</span>
+                            </button>
+                            <Link href={`/plans/log/${activeSession.workoutId}`} className="btn-primary shadow-glow-brand px-6">
+                                {discarding ? "..." : "Resume"}
+                            </Link>
+                        </div>
                     </div>
                 </div>
             )}
 
-            {/* Weekly Metrics */}
-            {weeklyMetrics && (
-                <div id="weekly-metrics" className="grid grid-cols-2 gap-4">
-                    <div className="card p-4 flex items-center justify-between bg-gradient-to-br from-surface-card to-brand-950/10">
-                        <div>
-                            <p className="text-[9px] font-black tracking-widest uppercase text-brand-400/80 mb-0.5">This Week</p>
-                            <p className="text-2xl font-black text-fg leading-none">{weeklyMetrics.workoutsCompleted} <span className="text-sm font-semibold text-fg-muted">sessions</span></p>
+            {/* Check-in Widget */}
+            {user.role !== "FREE" && (
+                <Link href="/checkins" className="block group">
+                    <div className={cn(
+                        "card p-4 flex items-center justify-between transition-all hover:shadow-glow-sm",
+                        currentCheckin 
+                            ? "border-success/20 bg-success/5 shadow-glow-success-sm" 
+                            : (new Date().getDay() === 6 || new Date().getDay() === 0)
+                                ? "border-warning/20 bg-warning/5"
+                                : "border-surface-border bg-surface-muted/30"
+                    )}>
+                        <div className="flex items-center gap-3">
+                            <div className={cn(
+                                "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
+                                currentCheckin ? "bg-success/15" : "bg-warning/10"
+                            )}>
+                                {currentCheckin 
+                                    ? <Check className="w-5 h-5 text-success" />
+                                    : <Calendar className="w-5 h-5 text-warning" />
+                                }
+                            </div>
+                            <div>
+                                <p className="text-sm font-black text-fg">
+                                    {currentCheckin ? `Week ${currentCheckin.weekNumber} Check-in` : "Weekly Check-in"}
+                                </p>
+                                <p className="text-xs text-fg-muted mt-0.5">
+                                    {currentCheckin 
+                                        ? currentCheckin.status === "REVIEWED" ? "✅ Coach reviewed" : "⏳ Awaiting coach review"
+                                        : new Date().getDay() === 6
+                                            ? "⚠️ Due today — tap to record"
+                                            : new Date().getDay() === 0
+                                                ? "🚨 Overdue — record your week"
+                                                : "Scheduled for Saturday"
+                                    }
+                                </p>
+                            </div>
                         </div>
-                        <div className="hidden sm:flex w-10 h-10 rounded-xl bg-brand-500/10 items-center justify-center">
-                            <Activity className="w-4 h-4 text-brand-400" />
-                        </div>
+                        <ChevronRight className="w-4 h-4 text-fg-subtle group-hover:text-fg transition-colors" />
                     </div>
-                    <div className="card p-4 flex items-center justify-between bg-gradient-to-br from-surface-card to-brand-950/10">
-                        <div>
-                            <p className="text-[9px] font-black tracking-widest uppercase text-brand-400/80 mb-0.5">Time Logged</p>
-                            <p className="text-2xl font-black text-fg leading-none">{weeklyMetrics.totalMins} <span className="text-sm font-semibold text-fg-muted">mins</span></p>
-                        </div>
-                        <div className="hidden sm:flex w-10 h-10 rounded-xl bg-brand-500/10 items-center justify-center">
-                            <Clock className="w-4 h-4 text-brand-400" />
-                        </div>
-                    </div>
-                </div>
+                </Link>
             )}
+
 
             {/* Today's Workout */}
             <div id="today-workout">

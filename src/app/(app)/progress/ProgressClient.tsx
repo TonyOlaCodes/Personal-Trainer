@@ -29,6 +29,7 @@ export function ProgressClient({ userRole }: Props) {
     const [bwDays, setBwDays] = useState<7 | 30 | 90>(30);
     const [showExerciseModal, setShowExerciseModal] = useState(false);
     const [sbdDays, setSbdDays] = useState<30 | 90 | 365>(90);
+    const [volTimeframe, setVolTimeframe] = useState<"daily" | "weekly" | "monthly" | "yearly">("weekly");
 
     useEffect(() => {
         if (!isPremium) { setLoading(false); return; }
@@ -139,9 +140,9 @@ export function ProgressClient({ userRole }: Props) {
                         <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1">Volume</p>
                         <div className="flex items-baseline gap-1">
                             <span className="text-xl font-black text-fg">
-                                {data.weeklySummary?.totalVolume ? `${(data.weeklySummary.totalVolume / 1000).toFixed(1)}` : "0"}
+                                {data.weeklySummary?.totalVolume ? data.weeklySummary.totalVolume.toLocaleString() : "0"}
                             </span>
-                            <span className="text-[10px] font-bold text-fg-muted">t</span>
+                            <span className="text-[10px] font-bold text-fg-muted">kg</span>
                         </div>
                         <div className="flex items-center gap-1.5 mt-1.5">
                             {volumeChangeDir ?
@@ -208,10 +209,8 @@ export function ProgressClient({ userRole }: Props) {
                         </div>
                         <div className="bg-surface-muted/50 rounded-xl p-3 text-center">
                             <p className="text-lg font-black text-fg">
-                                {data.lastWorkout.totalVolume > 1000
-                                    ? `${(data.lastWorkout.totalVolume / 1000).toFixed(1)}t`
-                                    : `${data.lastWorkout.totalVolume}kg`
-                                }
+                                {data.lastWorkout.totalVolume.toLocaleString()}
+                                <span className="text-[10px] text-fg-muted ml-0.5">kg</span>
                             </p>
                             <p className="text-[9px] font-bold text-fg-subtle uppercase tracking-widest">Volume</p>
                         </div>
@@ -293,7 +292,16 @@ export function ProgressClient({ userRole }: Props) {
                                 </defs>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" vertical={false} />
                                 <XAxis dataKey="date" stroke="#4B5563" fontSize={10} tickLine={false} axisLine={false} />
-                                <YAxis stroke="#4B5563" fontSize={10} tickLine={false} axisLine={false} domain={['dataMin - 2', 'dataMax + 2']} />
+                                <YAxis 
+                                    stroke="#4B5563" 
+                                    fontSize={10} 
+                                    tickLine={false} 
+                                    axisLine={false} 
+                                    domain={[
+                                        (min: number) => data.bodyweight.target ? Math.min(min, data.bodyweight.target) - 2 : min - 2,
+                                        (max: number) => data.bodyweight.target ? Math.max(max, data.bodyweight.target) + 2 : max + 2
+                                    ]} 
+                                />
                                 <Tooltip
                                     contentStyle={{ backgroundColor: "#0F172A", borderRadius: "12px", border: "1px solid #1E293B", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.5)" }}
                                     itemStyle={{ fontWeight: 800 }}
@@ -303,10 +311,16 @@ export function ProgressClient({ userRole }: Props) {
                                     <ReferenceLine
                                         y={data.bodyweight.target}
                                         stroke="#10B981"
-                                        strokeDasharray="8 4"
-                                        strokeWidth={2}
-                                        strokeOpacity={0.5}
-                                        label={{ value: `Target: ${data.bodyweight.target}kg`, position: "insideBottomRight", fill: "#10B981", fontSize: 10, fontWeight: 800 }}
+                                        strokeDasharray="4 4"
+                                        strokeWidth={1.5}
+                                        label={{ 
+                                            value: `GOAL: ${data.bodyweight.target}kg`, 
+                                            position: "right", 
+                                            fill: "#10B981", 
+                                            fontSize: 9, 
+                                            fontWeight: 900,
+                                            offset: 10
+                                        }}
                                     />
                                 )}
                                 <Area type="monotone" dataKey="weight" name="Weight" stroke="#8B5CF6" strokeWidth={3} fill="url(#bwGrad)" dot={{ r: 3, fill: "#8B5CF6", strokeWidth: 0 }} activeDot={{ r: 6, fill: "#A78BFA", strokeWidth: 0 }} />
@@ -519,14 +533,17 @@ export function ProgressClient({ userRole }: Props) {
                                             {i < 3 ? "🏆" : (i + 1)}
                                         </div>
                                         <div>
-                                            <p className="text-xs font-black text-fg group-hover:text-brand-400 transition-colors">{pr.name}</p>
-                                            <p className="text-[10px] text-fg-muted">
-                                                {pr.weight}kg × {pr.reps} · <span className="text-fg-subtle">{pr.date}</span>
+                                            <p className="text-xs font-black text-fg group-hover:text-brand-400 transition-colors uppercase italic tracking-tighter">{pr.name}</p>
+                                            <p className="text-[10px] text-fg-muted font-bold">
+                                                {pr.date}
                                             </p>
                                         </div>
                                     </div>
                                     <div className="text-right">
-                                        <p className="text-sm font-black text-fg">{pr.oneRM}<span className="text-[10px] text-fg-muted ml-0.5">kg</span></p>
+                                        <p className="text-sm font-black text-fg">
+                                            {pr.weight}<span className="text-[10px] text-fg-muted ml-0.5">kg</span>
+                                            <span className="text-[10px] font-bold text-fg-subtle ml-1 opacity-60">× {pr.reps}</span>
+                                        </p>
                                         {pr.improvement > 0 && (
                                             <p className="text-[10px] font-bold text-success">+{pr.improvement}%</p>
                                         )}
@@ -539,37 +556,56 @@ export function ProgressClient({ userRole }: Props) {
 
                 {/* Volume Trend */}
                 <div className="card p-5 sm:p-6">
-                    <div className="flex items-center gap-3 mb-6">
-                        <BarChart2 className="w-5 h-5 text-success" />
-                        <h3 className="text-sm font-black text-fg uppercase tracking-widest">Weekly Volume</h3>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                        <div className="flex items-center gap-3">
+                            <BarChart2 className="w-5 h-5 text-success" />
+                            <h3 className="text-sm font-black text-fg uppercase tracking-widest">Training Volume</h3>
+                        </div>
+                        <div className="flex bg-surface-muted p-1 rounded-xl self-start shrink-0">
+                            {(["daily", "weekly", "monthly", "yearly"] as const).map((t) => (
+                                <button
+                                    key={t}
+                                    onClick={() => setVolTimeframe(t)}
+                                    className={cn(
+                                        "px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all",
+                                        volTimeframe === t ? "bg-surface-card text-brand-400 shadow-sm" : "text-fg-subtle hover:text-fg"
+                                    )}
+                                >
+                                    {t.charAt(0)}
+                                </button>
+                            ))}
+                        </div>
                     </div>
                     <div className="h-[280px] w-full">
                         <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={data.weeklyVolume} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                            <BarChart data={data.volumes?.[volTimeframe] || []} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" vertical={false} />
-                                <XAxis dataKey="week" stroke="#4B5563" fontSize={9} tickLine={false} axisLine={false} />
-                                <YAxis stroke="#4B5563" fontSize={9} tickLine={false} axisLine={false} tickFormatter={(v) => v > 1000 ? `${(v / 1000).toFixed(0)}t` : `${v}`} />
+                                <XAxis dataKey="label" stroke="#4B5563" fontSize={9} tickLine={false} axisLine={false} />
+                                <YAxis stroke="#4B5563" fontSize={9} tickLine={false} axisLine={false} tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v} />
                                 <Tooltip
                                     contentStyle={{ backgroundColor: "#0F172A", borderRadius: "12px", border: "1px solid #1E293B" }}
-                                    formatter={(value: any) => [`${(value / 1000).toFixed(1)}t`, "Volume"]}
+                                    formatter={(value: any) => [`${value.toLocaleString()} kg`, "Volume"]}
                                     cursor={{ fill: '#8B5CF610' }}
                                     labelStyle={{ color: "#6B7280", fontSize: 10, fontWeight: 800 }}
                                 />
-                                <Bar dataKey="volume" radius={[6, 6, 0, 0]} barSize={28}>
-                                    {data.weeklyVolume.map((_: any, index: number) => (
-                                        <Cell
-                                            key={`cell-${index}`}
-                                            fill={index === data.weeklyVolume.length - 1 ? "#8B5CF6" : "#1E293B"}
-                                            stroke={index === data.weeklyVolume.length - 1 ? "#8B5CF6" : "#374151"}
-                                            strokeWidth={1}
-                                        />
-                                    ))}
+                                <Bar dataKey="volume" radius={[6, 6, 0, 0]} barSize={volTimeframe === 'daily' ? 12 : 28}>
+                                    {(data.volumes?.[volTimeframe] || []).map((_: any, index: number) => {
+                                        const isLast = index === (data.volumes?.[volTimeframe] || []).length - 1;
+                                        return (
+                                            <Cell
+                                                key={`cell-${index}`}
+                                                fill={isLast ? "#8B5CF6" : "#1E293B"}
+                                                stroke={isLast ? "#8B5CF6" : "#374151"}
+                                                strokeWidth={1}
+                                            />
+                                        );
+                                    })}
                                 </Bar>
                             </BarChart>
                         </ResponsiveContainer>
                     </div>
                     <p className="text-[9px] text-fg-subtle font-bold uppercase tracking-widest mt-3 text-center">
-                        Total kg moved per week · Current week highlighted
+                        Total kg moved per {volTimeframe.replace('ly', '').replace('i', 'y')} · Latest period highlighted
                     </p>
                 </div>
             </section>
@@ -610,11 +646,15 @@ export function ProgressClient({ userRole }: Props) {
                                                         <div className="bg-surface-elevated/95 backdrop-blur-md border border-brand-500/20 p-4 rounded-2xl shadow-2xl">
                                                             <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle mb-2">{label}</p>
                                                             <div className="space-y-1.5">
-                                                                <div className="flex items-center justify-between gap-6">
+                                                                <div className="flex items-center justify-between gap-6 pb-1">
                                                                     <span className="text-xs font-black text-fg">Best Set</span>
                                                                     <span className="text-xs font-bold text-brand-400">{d.weight}kg × {d.reps}</span>
                                                                 </div>
-                                                                <div className="flex items-center justify-between gap-6 border-t border-surface-border/50 pt-1.5">
+                                                                <div className="flex items-center justify-between gap-6 pt-1.5 border-t border-surface-border/50">
+                                                                    <span className="text-xs text-fg-muted">Est. 1RM</span>
+                                                                    <span className="text-xs font-bold text-yellow-400">{d.oneRM || "—"}kg</span>
+                                                                </div>
+                                                                <div className="flex items-center justify-between gap-6 pt-1.5 border-t border-surface-border/50">
                                                                     <span className="text-xs text-fg-muted">Volume</span>
                                                                     <span className="text-xs font-bold text-success">{Math.round(d.volume)}kg</span>
                                                                 </div>
@@ -631,6 +671,15 @@ export function ProgressClient({ userRole }: Props) {
                                             dot={{ r: 4, fill: "#8B5CF6", stroke: "#0F172A", strokeWidth: 2 }}
                                             activeDot={{ r: 6, fill: "#A78BFA", strokeWidth: 0 }}
                                             animationDuration={800}
+                                        />
+                                        <Line 
+                                            type="monotone" 
+                                            dataKey="oneRM" 
+                                            stroke="#FACC15" 
+                                            strokeWidth={2} 
+                                            strokeDasharray="5 5" 
+                                            dot={false}
+                                            activeDot={false}
                                         />
                                     </AreaChart>
                                 </ResponsiveContainer>
@@ -716,10 +765,14 @@ export function ProgressClient({ userRole }: Props) {
                                         <YAxis stroke="#4B5563" fontSize={10} tickLine={false} axisLine={false} />
                                         <Tooltip
                                             contentStyle={{ backgroundColor: "#0F172A", borderRadius: "12px", border: "1px solid #1E293B" }}
-                                            formatter={(value: any, name: any) => name === "weight" ? [`${value}kg`, "Best Weight"] : [`${value}`, name]}
+                                            formatter={(value: any, name: any) => 
+                                                name === "weight" ? [`${value}kg`, "Best Weight"] : 
+                                                name === "oneRM" ? [`${value}kg`, "Est. 1RM"] : 
+                                                [`${value}`, name]}
                                             labelStyle={{ color: "#6B7280", fontSize: 10, fontWeight: 800 }}
                                         />
                                         <Area type="monotone" dataKey="weight" stroke="#8B5CF6" strokeWidth={3} fill="url(#modalGrad)" dot={{ r: 4, fill: "#8B5CF6", stroke: "#0F172A", strokeWidth: 2 }} />
+                                        <Line type="monotone" dataKey="oneRM" stroke="#FACC15" strokeWidth={2} strokeDasharray="4 4" dot={false} activeDot={false} />
                                     </AreaChart>
                                 </ResponsiveContainer>
                             </div>
@@ -731,8 +784,11 @@ export function ProgressClient({ userRole }: Props) {
                                     {(data.exerciseHistory[selectedExercise] || []).slice().reverse().map((session: any, i: number) => (
                                         <div key={i} className="flex items-center justify-between p-3 bg-surface-elevated/50 rounded-xl">
                                             <div className="flex items-center gap-3">
-                                                <span className="text-[10px] font-bold text-fg-subtle w-16">{session.date}</span>
-                                                <span className="text-xs font-black text-fg">{session.weight}kg × {session.reps}</span>
+                                                <span className="text-[10px] font-bold text-fg-subtle w-16 whitespace-nowrap">{session.date}</span>
+                                                <div className="flex flex-col">
+                                                    <span className="text-xs font-black text-fg">{session.weight}kg × {session.reps}</span>
+                                                    <span className="text-[9px] font-bold text-yellow-500/80">Est. 1RM: {session.oneRM}kg</span>
+                                                </div>
                                             </div>
                                             <div className="text-right">
                                                 <span className="text-[10px] font-bold text-fg-muted">Vol: {Math.round(session.volume)}kg</span>

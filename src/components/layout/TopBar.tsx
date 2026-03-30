@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Bell, Search } from "lucide-react";
+import { Bell, Search, Flame } from "lucide-react";
 import { UserButton } from "@clerk/nextjs";
 import { useRole } from "@/lib/RoleContext";
 import { roleLabels, roleBadgeClass } from "@/lib/utils";
@@ -10,9 +10,10 @@ import { roleLabels, roleBadgeClass } from "@/lib/utils";
 interface TopBarProps {
     title?: string;
     subtitle?: string;
+    streak?: number;
 }
 
-export function TopBar({ title, subtitle }: TopBarProps) {
+export function TopBar({ title, subtitle, streak }: TopBarProps) {
     const role = useRole();
     const [showNotifications, setShowNotifications] = useState(false);
     const notifRef = useRef<HTMLDivElement>(null);
@@ -29,9 +30,20 @@ export function TopBar({ title, subtitle }: TopBarProps) {
 
     return (
         <header className="h-16 flex items-center justify-between px-6 border-b border-surface-border bg-surface-card/80 glass sticky top-0 z-30">
-            <div>
-                {title && <h1 className="text-base font-semibold text-fg">{title}</h1>}
-                {subtitle && <p className="text-xs text-fg-muted">{subtitle}</p>}
+            <div className="flex items-center gap-4">
+                <div>
+                    {title && <h1 className="text-base font-semibold text-fg">{title}</h1>}
+                    {subtitle && <p className="text-xs text-fg-muted">{subtitle}</p>}
+                </div>
+                {streak !== undefined && streak > 0 && (
+                    <div 
+                        title="Your training streak — consecutive days with at least one workout logged."
+                        className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-500/10 border border-orange-500/20 text-orange-400 cursor-help group transition-all hover:bg-orange-500/20"
+                    >
+                        <Flame className="w-4 h-4 fill-current transition-transform group-hover:scale-110" />
+                        <span className="text-sm font-black italic tracking-tighter">{streak}</span>
+                    </div>
+                )}
             </div>
 
             <div className="flex items-center gap-3">

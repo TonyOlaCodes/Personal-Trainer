@@ -9,8 +9,10 @@ const logSchema = z.object({
     notes: z.string().optional(),
     feeling: z.number().min(1).max(5).optional(),
     status: z.enum(["IN_PROGRESS", "COMPLETED"]).default("COMPLETED"),
+    loggedAt: z.string().optional(), // ISO date string for retroactive logging
     sets: z.array(z.object({
         exerciseId: z.string(),
+        exerciseName: z.string().optional(),
         setNumber: z.number(),
         reps: z.number().optional(),
         weightKg: z.number().optional(),
@@ -33,7 +35,7 @@ export async function POST(req: Request) {
     const parsed = logSchema.safeParse(body);
     if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-    const { workoutId, duration, notes, feeling, sets, status } = parsed.data;
+    const { workoutId, duration, notes, feeling, sets, status, loggedAt } = parsed.data;
 
     // Detect PRs: only for completed sets that aren't warmups
     const prExerciseIds = new Set<string>();
@@ -61,6 +63,30 @@ export async function POST(req: Request) {
         where: { userId: user.id, workoutId, status: "IN_PROGRESS" }
     });
 
+    // Create any new/ad-hoc exercises first
+    const setsWithRealIds = await Promise.all(sets.map(async (s) => {
+        // If it's a new ad-hoc exercise or a substituted one (client gives us a temporary ID)
+        if (s.exerciseId.startsWith("new-") || s.exerciseId.includes(":sub")) {
+            // Find existing exercise by name for this workout first to avoid duplicates
+            let existingEx = await prisma.exercise.findFirst({
+                where: { workoutId, name: s.exerciseName }
+            });
+
+            if (!existingEx) {
+                existingEx = await prisma.exercise.create({
+                    data: {
+                        workoutId,
+                        name: s.exerciseName || "Custom Exercise",
+                        sets: 1,
+                        reps: "10",
+                    }
+                });
+            }
+            return { ...s, exerciseId: existingEx.id };
+        }
+        return s;
+    }));
+
     const workoutLog = await prisma.workoutLog.create({
         data: {
             userId: user.id,
@@ -69,8 +95,9 @@ export async function POST(req: Request) {
             notes,
             feeling,
             status: status as any,
+            ...(loggedAt ? { loggedAt: new Date(loggedAt) } : {}),
             sets: {
-                create: sets.map((s) => ({
+                create: setsWithRealIds.map((s) => ({
                     exerciseId: s.exerciseId,
                     setNumber: s.setNumber,
                     reps: s.reps,
@@ -102,8 +129,13 @@ export async function GET(req: Request) {
     const limit = parseInt(url.searchParams.get("limit") ?? "20");
 
     if (activeOnly) {
+        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
         const activeLog = await prisma.workoutLog.findFirst({
-            where: { userId: user.id, status: "IN_PROGRESS" },
+            where: { 
+                userId: user.id, 
+                status: "IN_PROGRESS",
+                updatedAt: { gte: twentyFourHoursAgo }
+            },
             include: {
                 workout: { select: { name: true, id: true } },
                 sets: true

@@ -41,6 +41,7 @@ interface FormData {
     preferredSplit: string;
     cardioPreference: string;
     dietAwareness: boolean;
+    secretCode?: string;
 }
 
 const defaultForm: FormData = {
@@ -59,6 +60,7 @@ const defaultForm: FormData = {
     preferredSplit: "",
     cardioPreference: "",
     dietAwareness: false,
+    secretCode: "",
 };
 
 const TOTAL_STEPS = 3; // S1 required, S2 optional, S3 confirm
@@ -357,6 +359,24 @@ export function OnboardingPage() {
                                         </button>
                                     ))}
                                 </div>
+                            </div>
+
+                            {/* Promo Code */}
+                            <div className="pt-4 border-t border-surface-border/50">
+                                <label className="label flex items-center gap-2">
+                                    <Zap className="w-3 h-3 text-brand-400" />
+                                    Access Code (Optional)
+                                </label>
+                                <input
+                                    type="text"
+                                    className="input font-mono uppercase tracking-wider"
+                                    placeholder="Enter access code..."
+                                    value={form.secretCode}
+                                    onChange={(e) => update("secretCode", e.target.value)}
+                                />
+                                <p className="text-[10px] text-fg-subtle mt-1.5">
+                                    Have a trainer code or promotion? Enter it here to unlock premium features.
+                                </p>
                             </div>
                         </div>
                     )}

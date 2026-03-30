@@ -246,7 +246,7 @@ model CheckIn {
   userId        String
   weekNumber    Int
   bodyweightKg  Float?
-  feedback      String
+  feedback      String?
   notes         String?
   frontImageUrl String?
   sideImageUrl  String?

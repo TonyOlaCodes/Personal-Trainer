@@ -26,6 +26,7 @@ interface Message {
     id: string;
     content?: string | null;
     mediaUrl?: string | null;
+    receiverId?: string | null;
     type: string;
     isGeneral: boolean;
     isPinned: boolean;
@@ -715,7 +716,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, team
                                                 </div>
 
                                                 {/* More Menu */}
-                                                {(isMine || canPin) && (
+                                                {(isMine || canPin || (currentUserRole === "SUPER_ADMIN" && msg.isGeneral) || (["COACH", "SUPER_ADMIN"].includes(currentUserRole) && msg.receiverId === teamId)) && (
                                                     <div className="relative">
                                                         <button
                                                             onClick={e => { e.stopPropagation(); setMenuOpenId(menuOpenId === msg.id ? null : msg.id); }}
@@ -748,14 +749,24 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, team
                                                                         <Pencil className="w-3.5 h-3.5 text-brand-400" /> Edit
                                                                     </button>
                                                                 )}
-                                                                {isMine && (
-                                                                    <button
-                                                                        onClick={() => deleteMessage(msg.id)}
-                                                                        className="w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-danger hover:bg-danger/5 transition-colors border-t border-surface-border"
-                                                                    >
-                                                                        <Trash2 className="w-3.5 h-3.5" /> Delete
-                                                                    </button>
-                                                                )}
+                                                                {(() => {
+                                                                    const isOwner = msg.sender.id === currentUserId;
+                                                                    let canModerate = false;
+                                                                    if (currentUserRole === "SUPER_ADMIN" && msg.isGeneral) canModerate = true;
+                                                                    if (["COACH", "SUPER_ADMIN"].includes(currentUserRole) && msg.receiverId === teamId) canModerate = true;
+
+                                                                    if (isOwner || canModerate) {
+                                                                        return (
+                                                                            <button
+                                                                                onClick={() => deleteMessage(msg.id)}
+                                                                                className={cn("w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-danger hover:bg-danger/5 transition-colors border-t border-surface-border", !isOwner && "border-t-0")}
+                                                                            >
+                                                                                <Trash2 className="w-3.5 h-3.5" /> Delete
+                                                                            </button>
+                                                                        );
+                                                                    }
+                                                                    return null;
+                                                                })()}
                                                             </div>
                                                         )}
                                                     </div>

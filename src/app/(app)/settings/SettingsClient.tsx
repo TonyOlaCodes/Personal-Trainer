@@ -4,7 +4,7 @@ import { useState, useRef } from "react";
 import {
     User, Bell, Shield, CreditCard, Palette,
     HelpCircle, LogOut, ChevronRight, Check,
-    Camera, Loader2, Save, Heart, Copy, Target, Edit3
+    Camera, Loader2, Save, Heart, Copy, Target, Edit3, Zap
 } from "lucide-react";
 import { useClerk } from "@clerk/nextjs";
 import { useEffect } from "react";
@@ -62,6 +62,10 @@ export function SettingsClient({ user }: Props) {
     const [currentWeight, setCurrentWeight] = useState(user.weightKg ?? "");
     const [goalSaving, setGoalSaving] = useState(false);
     const [goalSaved, setGoalSaved] = useState(false);
+
+    // Access code state
+    const [secretCode, setSecretCode] = useState("");
+    const [redeeming, setRedeeming] = useState(false);
 
     const sections = [
         { id: "profile", label: "Profile", icon: User },
@@ -137,6 +141,29 @@ export function SettingsClient({ user }: Props) {
             }
         } finally {
             setGoalSaving(false);
+        }
+    };
+
+    const handleRedeemCode = async () => {
+        if (!secretCode.trim()) return;
+        setRedeeming(true);
+        try {
+            const res = await fetch("/api/user/profile", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ secretCode })
+            });
+            if (res.ok) {
+                alert("Success! Your role has been updated.");
+                window.location.reload();
+            } else {
+                const data = await res.json();
+                alert(data.error || "Invalid code");
+            }
+        } catch {
+            alert("Connection error.");
+        } finally {
+            setRedeeming(false);
         }
     };
 
@@ -446,6 +473,33 @@ export function SettingsClient({ user }: Props) {
                             {user.role === "FREE" && (
                                 <button className="btn-primary btn-sm px-6">Upgrade to Premium</button>
                             )}
+                        </div>
+
+                        {/* Special Code Section */}
+                        <div className="p-8 bg-gradient-brand-subtle rounded-3xl border border-brand-500/20 space-y-4">
+                            <div className="flex items-center gap-2 mb-2">
+                                <Zap className="w-4 h-4 text-brand-400 group-hover:animate-pulse-brand" />
+                                <h4 className="font-black text-fg tracking-tight uppercase text-xs">Redeem Athlete Code</h4>
+                            </div>
+                            <p className="text-xs text-fg-muted">
+                                If you have a dedicated trainer code or a promotional access key, enter it below to unlock premium dashboard features.
+                            </p>
+                            <div className="flex flex-col sm:flex-row gap-2 mt-4">
+                                <input
+                                    type="text"
+                                    placeholder="ENTER CODE..."
+                                    className="input h-12 flex-1 font-mono uppercase tracking-widest text-sm font-black border-brand-500/20 focus:border-brand-500 bg-brand-950/20"
+                                    value={secretCode}
+                                    onChange={(e) => setSecretCode(e.target.value)}
+                                />
+                                <button
+                                    onClick={handleRedeemCode}
+                                    disabled={redeeming || !secretCode.trim()}
+                                    className="btn-primary h-12 px-8 shadow-glow-brand text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2"
+                                >
+                                    {redeeming ? <Loader2 className="w-4 h-4 animate-spin" /> : "Unlock Now"}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 )}

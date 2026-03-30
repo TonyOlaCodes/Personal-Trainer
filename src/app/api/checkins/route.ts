@@ -5,7 +5,7 @@ import { z } from "zod";
 
 const checkInSchema = z.object({
     bodyweightKg: z.number().optional(),
-    feedback: z.string().min(1),
+    feedback: z.string().optional(),
     notes: z.string().optional(),
     videoUrl: z.string().optional(),
     weekNumber: z.number(),
@@ -41,7 +41,12 @@ export async function POST(req: Request) {
     if (existingWeek) return NextResponse.json({ error: "Check-in for this week already exists." }, { status: 400 });
 
     const checkIn = await prisma.checkIn.create({
-        data: { userId: user.id, ...parsed.data, status: "PENDING" },
+        data: { 
+            userId: user.id, 
+            ...parsed.data, 
+            feedback: parsed.data.feedback || "Check-in completed.",
+            status: "PENDING" 
+        },
     });
 
     return NextResponse.json(checkIn, { status: 201 });
@@ -90,7 +95,7 @@ export async function GET(req: Request) {
                 } 
             } 
         },
-        orderBy: { createdAt: "desc" },
+        orderBy: { weekNumber: "desc" },
     });
 
     return NextResponse.json(checkIns);
@@ -133,7 +138,7 @@ export async function PATCH(req: Request) {
     } else {
         // User edit
         data = {
-            feedback,
+            feedback: feedback || "Check-in updated.",
             notes,
             videoUrl,
             bodyweightKg: bodyweightKg ? parseFloat(bodyweightKg) : undefined,

@@ -68,28 +68,30 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates }: Props
         const start = new Date(planStartedAt);
         start.setHours(0, 0, 0, 0);
         
-        // Find Monday of the start week to align plan weeks correctly
-        const startDay = start.getDay();
-        const startToMon = startDay === 0 ? -6 : 1 - startDay;
-        const planAnchorMonday = new Date(start.getTime() + (startToMon * 86400000));
-        planAnchorMonday.setHours(0,0,0,0);
+        // Find Monday of the start week
+        const startDow = start.getDay(); // 0=Sun
+        const startToMon = startDow === 0 ? -6 : 1 - startDow;
+        const planAnchorMonday = new Date(start.getTime() + startToMon * 86400000);
+        planAnchorMonday.setHours(0, 0, 0, 0);
 
-        const diffTime = date.getTime() - planAnchorMonday.getTime();
-        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+        const diffDays = Math.floor((date.getTime() - planAnchorMonday.getTime()) / 86400000);
         if (diffDays < 0) return null;
 
         const weekIdx = Math.floor(diffDays / 7);
-        const dayIdx = (date.getDay() + 6) % 7; // 0=Mon, 1=Tue... 6=Sun
+        // 0=Mon,1=Tue,...,6=Sun  (same as plan designer)
+        const jsDay = date.getDay(); // 0=Sun
+        const dayIdx = jsDay === 0 ? 6 : jsDay - 1;
         
-        // Find current week (loop if plan is shorter than current progress)
+        // Loop through plan weeks cyclically
         const week = activePlan.weeks[weekIdx % activePlan.weeks.length];
         if (!week) return null;
         
-        // Map by dayOfWeek (0-6) or dayNumber (1-7)
+        // Match by dayOfWeek (0=Mon) — exact match only
         const workout = week.workouts.find(w => {
             if (w.dayOfWeek !== null && w.dayOfWeek !== undefined) {
                 return w.dayOfWeek === dayIdx;
             }
+            // Fallback: dayNumber-based (1=Mon, 2=Tue...)
             return (w.dayNumber - 1) % 7 === dayIdx;
         });
         
@@ -200,6 +202,24 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates }: Props
     
     const calculateVolume = (sets: LogSet[]) => {
         return Math.round(sets.reduce((acc, s) => acc + ((s.reps || 0) * (s.weightKg || 1)), 0)); // weight 1 if bodyweight
+    };
+
+    const getPreviousPerformance = (exerciseName: string, beforeDate: Date) => {
+        // Find logs before this date, sorted desc (already sorted desc from API)
+        const prevLogs = loggedDates.filter(l => new Date(l.date).getTime() < beforeDate.getTime());
+        for (const log of prevLogs) {
+            const exSets = log.sets.filter(s => s.exerciseName.toLowerCase() === exerciseName.toLowerCase());
+            if (exSets.length > 0) {
+                const maxWeight = Math.max(...exSets.map(s => s.weightKg || 0));
+                const bestSet = exSets.find(s => s.weightKg === maxWeight) || exSets[0];
+                return {
+                    weight: maxWeight,
+                    reps: bestSet.reps,
+                    date: log.date
+                };
+            }
+        }
+        return null;
     };
 
     return (
@@ -437,7 +457,18 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates }: Props
                                             return (
                                                 <div key={idx} className="p-4 bg-surface-muted/20 border border-surface-border/50 rounded-2xl mb-2 group transition-all hover:border-brand-500/30">
                                                     <div className="flex items-center justify-between mb-2">
-                                                        <span className="text-xs font-black text-fg group-hover:text-brand-400 transition-colors uppercase italic tracking-tighter">{exName}</span>
+                                                        <div>
+                                                            <span className="text-xs font-black text-fg group-hover:text-brand-400 transition-colors uppercase italic tracking-tighter">{exName}</span>
+                                                            {(() => {
+                                                                const prev = getPreviousPerformance(exName, selectedDate);
+                                                                if (!prev) return null;
+                                                                return (
+                                                                    <p className="text-[8px] font-black text-brand-400/60 uppercase tracking-widest mt-0.5">
+                                                                        Prev: {prev.weight}kg x {prev.reps}
+                                                                    </p>
+                                                                );
+                                                            })()}
+                                                        </div>
                                                         <span className="text-[10px] font-black text-fg-subtle opacity-60">{exSets.length} sets</span>
                                                     </div>
                                                     <div className="flex flex-wrap gap-1.5">
@@ -451,6 +482,13 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates }: Props
                                             );
                                         })}
                                     </div>
+                                    <Link 
+                                        href={`/plans/log/view/${selectedLog.id}`}
+                                        className="btn-primary w-full h-11 text-[10px] font-black uppercase tracking-[.2em] group flex items-center justify-center gap-2 mt-2 shadow-glow-brand"
+                                    >
+                                        <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                                        Review Session
+                                    </Link>
                                 </div>
                             </div>
                         ) : selectedPlanned ? (
@@ -480,7 +518,18 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates }: Props
                                     <div className="space-y-3">
                                         {selectedPlanned.exercises.map((ex, i) => (
                                             <div key={i} className="flex items-center justify-between py-2.5 px-3 bg-surface-muted/10 rounded-xl border border-surface-border/40 hover:bg-brand-950/10 transition-colors group">
-                                                <span className="text-xs font-bold text-fg leading-tight group-hover:text-brand-400 transition-colors lowercase italic">{ex.name}</span>
+                                                <div className="flex flex-col">
+                                                    <span className="text-xs font-bold text-fg leading-tight group-hover:text-brand-400 transition-colors lowercase italic">{ex.name}</span>
+                                                    {(() => {
+                                                        const prev = getPreviousPerformance(ex.name, selectedDate);
+                                                        if (!prev) return null;
+                                                        return (
+                                                            <p className="text-[8px] font-black text-brand-400/60 uppercase tracking-widest mt-1">
+                                                                Last: {prev.weight}kg x {prev.reps}
+                                                            </p>
+                                                        );
+                                                    })()}
+                                                </div>
                                                 <span className="text-[10px] font-black text-brand-400 bg-brand-400/5 px-2.5 py-1 rounded-lg uppercase tracking-widest border border-brand-400/20">
                                                     {ex.sets}x{ex.reps}
                                                 </span>
@@ -489,9 +538,17 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates }: Props
                                     </div>
                                 </div>
 
-                                {selectedDate >= today && (
+                                {selectedDate < today ? (
                                     <Link
-                                        href={`/plans/log/${selectedPlanned.id}`}
+                                        href={`/plans/log/${selectedPlanned.id}?date=${selectedDate.toISOString().split("T")[0]}`}
+                                        className="btn-secondary w-full h-12 text-xs font-black uppercase tracking-[0.15em] group hover:scale-[1.02] transition-all"
+                                    >
+                                        <PlayCircle className="w-4 h-4 mr-2 group-hover:rotate-12 transition-transform" />
+                                        Log Past Session
+                                    </Link>
+                                ) : (
+                                    <Link
+                                        href={`/plans/log/${selectedPlanned.id}?date=${selectedDate.toISOString().split("T")[0]}`}
                                         className="btn-primary w-full h-14 text-xs font-black uppercase tracking-[0.2em] shadow-glow-brand group hover:scale-[1.02] transition-all"
                                     >
                                         <PlayCircle className="w-5 h-5 mr-3 group-hover:rotate-12 transition-transform" />
