@@ -159,7 +159,7 @@ export function ProgressClient({ userRole }: Props) {
                     <div className="card p-5">
                         <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1">Bodyweight</p>
                         <div className="flex items-baseline gap-1">
-                            <span className="text-xl font-black text-fg">{data.bodyweight.current || "--"}</span>
+                            <span className="text-xl font-black text-fg">{data.bodyweight.current ? data.bodyweight.current.toFixed(2) : "--"}</span>
                             <span className="text-[10px] font-bold text-fg-muted">kg</span>
                         </div>
                         <div className="flex items-center gap-1.5 mt-1.5">
@@ -168,7 +168,7 @@ export function ProgressClient({ userRole }: Props) {
                                 <TrendingDown className="w-3 h-3 text-fg-muted" />
                             }
                             <span className="text-[10px] font-bold text-fg-muted">
-                                {data.bodyweight.changeWeek > 0 ? "+" : ""}{data.bodyweight.changeWeek.toFixed(1)}kg this week
+                                {data.bodyweight.changeWeek > 0 ? "+" : ""}{data.bodyweight.changeWeek.toFixed(2)}kg this week
                             </span>
                         </div>
                     </div>
@@ -198,9 +198,19 @@ export function ProgressClient({ userRole }: Props) {
                                 <p className="text-[10px] font-bold text-fg-muted uppercase tracking-widest">{data.lastWorkout.date}</p>
                             </div>
                         </div>
-                        {data.lastWorkout.feeling && (
-                            <div className="text-lg">{["😵", "😓", "😐", "💪", "🔥"][data.lastWorkout.feeling - 1]}</div>
-                        )}
+                        <div className="flex items-center gap-2">
+                             {data.lastWorkout.id && (
+                                <Link 
+                                    href={`/plans/log/view/${data.lastWorkout.id}`}
+                                    className="btn-ghost btn-sm text-[10px] uppercase font-black tracking-widest text-brand-400 border border-brand-500/10 hover:border-brand-500/30"
+                                >
+                                    Review
+                                </Link>
+                             )}
+                            {data.lastWorkout.feeling && (
+                                <div className="text-lg">{["😵", "😓", "😐", "💪", "🔥"][data.lastWorkout.feeling - 1]}</div>
+                            )}
+                        </div>
                     </div>
                     <div className="grid grid-cols-3 gap-4 mb-4">
                         <div className="bg-surface-muted/50 rounded-xl p-3 text-center">
@@ -239,10 +249,10 @@ export function ProgressClient({ userRole }: Props) {
                                 <h3 className="text-sm font-black text-fg uppercase tracking-widest">Bodyweight Trend</h3>
                                 {data.bodyweight.target && (
                                     <p className="text-[10px] text-fg-muted mt-0.5">
-                                        Target: <span className="text-brand-400 font-bold">{data.bodyweight.target}kg</span>
+                                        Target: <span className="text-brand-400 font-bold">{data.bodyweight.target.toFixed(2)}kg</span>
                                         {" · "}
                                         <span className={cn("font-bold", Math.abs(data.bodyweight.current - data.bodyweight.target) < 2 ? "text-success" : "text-fg-muted")}>
-                                            {Math.abs(data.bodyweight.current - data.bodyweight.target).toFixed(1)}kg away
+                                            {Math.abs(data.bodyweight.current - data.bodyweight.target).toFixed(2)}kg away
                                         </span>
                                     </p>
                                 )}
@@ -269,14 +279,14 @@ export function ProgressClient({ userRole }: Props) {
                         <div>
                             <p className="text-[9px] font-black text-fg-subtle uppercase tracking-widest">Week Change</p>
                             <p className={cn("text-sm font-black", data.bodyweight.changeWeek >= 0 ? "text-fg" : "text-success")}>
-                                {data.bodyweight.changeWeek > 0 ? "+" : ""}{data.bodyweight.changeWeek.toFixed(1)} kg
+                                {data.bodyweight.changeWeek > 0 ? "+" : ""}{data.bodyweight.changeWeek.toFixed(2)} kg
                             </p>
                         </div>
                         <div className="w-px h-8 bg-surface-border" />
                         <div>
                             <p className="text-[9px] font-black text-fg-subtle uppercase tracking-widest">Total Change</p>
                             <p className={cn("text-sm font-black", data.bodyweight.totalChange < 0 ? "text-success" : "text-fg")}>
-                                {data.bodyweight.totalChange > 0 ? "+" : ""}{data.bodyweight.totalChange.toFixed(1)} kg
+                                {data.bodyweight.totalChange > 0 ? "+" : ""}{data.bodyweight.totalChange.toFixed(2)} kg
                             </p>
                         </div>
                     </div>
@@ -303,6 +313,7 @@ export function ProgressClient({ userRole }: Props) {
                                     ]} 
                                 />
                                 <Tooltip
+                                    formatter={(value: any) => [`${Number(value).toFixed(2)}kg`, "Weight"]}
                                     contentStyle={{ backgroundColor: "#0F172A", borderRadius: "12px", border: "1px solid #1E293B", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.5)" }}
                                     itemStyle={{ fontWeight: 800 }}
                                     labelStyle={{ color: "#6B7280", fontSize: 10, fontWeight: 800, textTransform: "uppercase" as const, letterSpacing: "0.1em" }}
@@ -314,7 +325,7 @@ export function ProgressClient({ userRole }: Props) {
                                         strokeDasharray="4 4"
                                         strokeWidth={1.5}
                                         label={{ 
-                                            value: `GOAL: ${data.bodyweight.target}kg`, 
+                                            value: `GOAL: ${data.bodyweight.target.toFixed(2)}kg`, 
                                             position: "right", 
                                             fill: "#10B981", 
                                             fontSize: 9, 
@@ -395,15 +406,24 @@ export function ProgressClient({ userRole }: Props) {
                                 <Tooltip
                                     contentStyle={{ backgroundColor: "#0F172A", borderRadius: "12px", border: "1px solid #1E293B", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.5)" }}
                                     labelStyle={{ color: "#6B7280", fontSize: 10, fontWeight: 800, textTransform: "uppercase" as const, letterSpacing: "0.1em" }}
-                                    formatter={(value: any, name: any) => [
-                                        `${value}kg`,
-                                        name === "squat" ? "Squat" : name === "bench" ? "Bench" : "Deadlift"
-                                    ]}
+                                    formatter={(value: any, name: any) => {
+                                        const n = String(name || "");
+                                        const label = n.includes("1RM") ? "Est. 1RM" : "Peak Weight";
+                                        const lift = n.replace("1RM", "");
+                                        const liftFormatted = lift.charAt(0).toUpperCase() + lift.slice(1);
+                                        return [`${value}kg`, `${liftFormatted} (${label})`];
+                                    }}
                                 />
                                 <Line
                                     type="monotone" dataKey="squat" name="squat"
                                     stroke="#EF4444" strokeWidth={2.5} dot={false}
                                     activeDot={{ r: 5, fill: "#EF4444", strokeWidth: 0 }}
+                                    connectNulls animationDuration={800}
+                                />
+                                <Line
+                                    type="monotone" dataKey="squat1RM" name="squat1RM"
+                                    stroke="#EF4444" strokeWidth={1.5} strokeDasharray="5 5" dot={false}
+                                    activeDot={{ r: 4, fill: "#EF4444", strokeWidth: 0 }}
                                     connectNulls animationDuration={800}
                                 />
                                 <Line
@@ -413,9 +433,21 @@ export function ProgressClient({ userRole }: Props) {
                                     connectNulls animationDuration={800}
                                 />
                                 <Line
+                                    type="monotone" dataKey="bench1RM" name="bench1RM"
+                                    stroke="#3B82F6" strokeWidth={1.5} strokeDasharray="5 5" dot={false}
+                                    activeDot={{ r: 4, fill: "#3B82F6", strokeWidth: 0 }}
+                                    connectNulls animationDuration={800}
+                                />
+                                <Line
                                     type="monotone" dataKey="deadlift" name="deadlift"
                                     stroke="#22C55E" strokeWidth={2.5} dot={false}
                                     activeDot={{ r: 5, fill: "#22C55E", strokeWidth: 0 }}
+                                    connectNulls animationDuration={800}
+                                />
+                                <Line
+                                    type="monotone" dataKey="deadlift1RM" name="deadlift1RM"
+                                    stroke="#22C55E" strokeWidth={1.5} strokeDasharray="5 5" dot={false}
+                                    activeDot={{ r: 4, fill: "#22C55E", strokeWidth: 0 }}
                                     connectNulls animationDuration={800}
                                 />
                             </LineChart>
@@ -423,17 +455,30 @@ export function ProgressClient({ userRole }: Props) {
                     </div>
 
                     {/* Legend */}
-                    <div className="flex items-center justify-center gap-6 mt-4">
-                        {[
-                            { label: "Squat",    color: "#EF4444" },
-                            { label: "Bench",    color: "#3B82F6" },
-                            { label: "Deadlift", color: "#22C55E" },
-                        ].map(({ label, color }) => (
-                            <div key={label} className="flex items-center gap-2">
-                                <span className="w-6 h-0.5 inline-block rounded-full" style={{ backgroundColor: color }} />
-                                <span className="text-[10px] font-bold text-fg-subtle uppercase tracking-wider">{label}</span>
+                    <div className="flex flex-col items-center gap-2 mt-4">
+                        <div className="flex items-center justify-center gap-6">
+                            {[
+                                { label: "Squat",    color: "#EF4444" },
+                                { label: "Bench",    color: "#3B82F6" },
+                                { label: "Deadlift", color: "#22C55E" },
+                            ].map(({ label, color }) => (
+                                <div key={label} className="flex items-center gap-2">
+                                    <span className="w-6 h-0.5 inline-block rounded-full" style={{ backgroundColor: color }} />
+                                    <span className="text-[10px] font-bold text-fg-subtle uppercase tracking-wider">{label}</span>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="flex items-center justify-center gap-4 text-[9px] font-bold text-fg-muted uppercase tracking-widest bg-surface-muted/30 px-4 py-1.5 rounded-full border border-surface-border/50">
+                            <div className="flex items-center gap-2">
+                                <div className="w-4 h-0.5 bg-fg-muted" />
+                                <span>Solid = Peak Weight</span>
                             </div>
-                        ))}
+                            <div className="w-px h-2.5 bg-surface-border" />
+                            <div className="flex items-center gap-2">
+                                <div className="w-4 h-0.5 border-b border-dashed border-fg-muted" />
+                                <span>Dotted = Est. 1RM</span>
+                            </div>
+                        </div>
                     </div>
                 </section>
             )}

@@ -78,12 +78,15 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates }: Props
         if (diffDays < 0) return null;
 
         const weekIdx = Math.floor(diffDays / 7);
+        
+        // If the plan is finite (e.g. 4-week linearity plan), don't cycle — just return nothing
+        if (weekIdx >= activePlan.weeks.length) return null;
+
         // 0=Mon,1=Tue,...,6=Sun  (same as plan designer)
         const jsDay = date.getDay(); // 0=Sun
         const dayIdx = jsDay === 0 ? 6 : jsDay - 1;
         
-        // Loop through plan weeks cyclically
-        const week = activePlan.weeks[weekIdx % activePlan.weeks.length];
+        const week = activePlan.weeks[weekIdx];
         if (!week) return null;
         
         // Match by dayOfWeek (0=Mon) — exact match only

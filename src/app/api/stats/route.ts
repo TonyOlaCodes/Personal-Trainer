@@ -47,7 +47,7 @@ export async function GET() {
         "Deadlift": { weight: 0, reps: 0, date: "", change: 0 }
     };
 
-    const sbdByDate: Record<string, { date: string; squat: number | null; bench: number | null; deadlift: number | null }> = {};
+    const sbdByDate: Record<string, { date: string; dateKey: string; squat: number | null; bench: number | null; deadlift: number | null; squat1RM: number | null; bench1RM: number | null; deadlift1RM: number | null }> = {};
 
     const now = new Date();
     const thisWeekRange = { start: startOfWeek(now, { weekStartsOn: 1 }), end: endOfWeek(now, { weekStartsOn: 1 }) };
@@ -115,10 +115,24 @@ export async function GET() {
                         change: prevWeight > 0 ? sWeight - prevWeight : 0
                     };
                 }
-                if (!sbdByDate[dateStr]) sbdByDate[dateStr] = { date: dateStr, squat: null, bench: null, deadlift: null };
-                const fieldKey = big3Key === "Squat" ? "squat" : big3Key === "Bench Press" ? "bench" : "deadlift";
-                const curVal = sbdByDate[dateStr][fieldKey] ?? 0;
-                if (sWeight > curVal) sbdByDate[dateStr][fieldKey] = sWeight;
+                if (!sbdByDate[dateStr]) sbdByDate[dateStr] = { 
+                    date: dateStr, dateKey: dayKey, 
+                    squat: null, bench: null, deadlift: null,
+                    squat1RM: null, bench1RM: null, deadlift1RM: null
+                };
+                const fieldKey    = big3Key === "Squat" ? "squat"    : big3Key === "Bench Press" ? "bench"    : "deadlift";
+                const fieldKey1RM = big3Key === "Squat" ? "squat1RM" : big3Key === "Bench Press" ? "bench1RM" : "deadlift1RM";
+                
+                const curVal = sbdByDate[dateStr][fieldKey as "squat"|"bench"|"deadlift"] ?? 0;
+                if (sWeight > curVal) {
+                    sbdByDate[dateStr][fieldKey as "squat"|"bench"|"deadlift"] = sWeight;
+                }
+                
+                const cur1RMVal = sbdByDate[dateStr][fieldKey1RM as "squat1RM"|"bench1RM"|"deadlift1RM"] ?? 0;
+                const set1RM = Math.round(sWeight * (1 + sReps / 30));
+                if (set1RM > cur1RMVal) {
+                    sbdByDate[dateStr][fieldKey1RM as "squat1RM"|"bench1RM"|"deadlift1RM"] = set1RM;
+                }
             }
 
             if (sWeight > 0) {
@@ -152,6 +166,7 @@ export async function GET() {
         });
 
         lastWorkoutSummary = {
+            id: log.id,
             name: log.workout?.name || "Workout",
             date: format(log.loggedAt, "EEE, MMM dd"),
             duration: log.duration || null,
@@ -163,12 +178,13 @@ export async function GET() {
     });
 
     const bodyweightHistory = [
-        ...(user.weightKg ? [{ date: format(user.createdAt, "MMM dd"), weight: user.weightKg }] : []),
+        ...(user.weightKg ? [{ date: format(user.createdAt, "MMM dd"), dateKey: user.createdAt.toISOString(), weight: user.weightKg }] : []),
         ...user.checkIns.filter((c: any) => c.bodyweightKg).map((c: any) => ({
             date: format(c.createdAt, "MMM dd"),
+            dateKey: c.createdAt.toISOString(),
             weight: c.bodyweightKg
         }))
-    ];
+    ].sort((a,b) => a.dateKey.localeCompare(b.dateKey));
 
     const currentWeight = bodyweightHistory[bodyweightHistory.length - 1]?.weight || user.weightKg || 0;
     const startWeight = bodyweightHistory[0]?.weight || user.weightKg || 0;
@@ -203,13 +219,29 @@ export async function GET() {
         prsThisWeek: prList.filter(pr => pr.improvement > 0).length
     };
 
-    const sbdTimeline = Object.values(sbdByDate).sort((a, b) => a.date.localeCompare(b.date));
-    let lastS=0, lastB=0, lastD=0;
-    const sbdTimelineFilled = sbdTimeline.map(row => {
-        if (row.squat !== null) lastS = row.squat;
-        if (row.bench !== null) lastB = row.bench;
-        if (row.deadlift !== null) lastD = row.deadlift;
-        return { date: row.date, squat: lastS || null, bench: lastB || null, deadlift: lastD || null };
+    const sbdTimeline = Object.values(sbdByDate).sort((a, b) => a.dateKey!.localeCompare(b.dateKey!));
+    
+    let peakS = 0, peakB = 0, peakD = 0;
+    let peakS1RM = 0, peakB1RM = 0, peakD1RM = 0;
+
+    const sbdTimelineProgressive = sbdTimeline.map(row => {
+        if (row.squat !== null && row.squat > peakS) peakS = row.squat;
+        if (row.bench !== null && row.bench > peakB) peakB = row.bench;
+        if (row.deadlift !== null && row.deadlift > peakD) peakD = row.deadlift;
+
+        if (row.squat1RM !== null && row.squat1RM > peakS1RM) peakS1RM = row.squat1RM;
+        if (row.bench1RM !== null && row.bench1RM > peakB1RM) peakB1RM = row.bench1RM;
+        if (row.deadlift1RM !== null && row.deadlift1RM > peakD1RM) peakD1RM = row.deadlift1RM;
+
+        return {
+            date: row.date,
+            squat: peakS || null,
+            bench: peakB || null,
+            deadlift: peakD || null,
+            squat1RM: peakS1RM || null,
+            bench1RM: peakB1RM || null,
+            deadlift1RM: peakD1RM || null,
+        };
     });
 
     const volumes = {
@@ -227,7 +259,7 @@ export async function GET() {
             changeWeek: weightChangeWeek, totalChange: currentWeight - startWeight, history: bodyweightHistory
         },
         big3,
-        sbdTimeline: sbdTimelineFilled,
+        sbdTimeline: sbdTimelineProgressive,
         muscleVolume,
         exerciseHistory,
         prList,

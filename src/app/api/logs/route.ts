@@ -63,28 +63,35 @@ export async function POST(req: Request) {
         where: { userId: user.id, workoutId, status: "IN_PROGRESS" }
     });
 
-    // Create any new/ad-hoc exercises first
-    const setsWithRealIds = await Promise.all(sets.map(async (s) => {
-        // If it's a new ad-hoc exercise or a substituted one (client gives us a temporary ID)
-        if (s.exerciseId.startsWith("new-") || s.exerciseId.includes(":sub")) {
-            // Find existing exercise by name for this workout first to avoid duplicates
+    // Process exercises to get real IDs safely (avoiding race conditions)
+    const tempToRealId = new Map<string, string>();
+    
+    for (const s of sets) {
+        if ((s.exerciseId.startsWith("new-") || s.exerciseId.includes(":sub")) && !tempToRealId.has(s.exerciseId)) {
+            const exName = s.exerciseName || "Custom Exercise";
+            
+            // Try to find an existing exercise by name in this specific workout to avoid cluttering with duplicates
             let existingEx = await prisma.exercise.findFirst({
-                where: { workoutId, name: s.exerciseName }
+                where: { workoutId, name: exName }
             });
 
             if (!existingEx) {
                 existingEx = await prisma.exercise.create({
                     data: {
                         workoutId,
-                        name: s.exerciseName || "Custom Exercise",
+                        name: exName,
                         sets: 1,
                         reps: "10",
                     }
                 });
             }
-            return { ...s, exerciseId: existingEx.id };
+            tempToRealId.set(s.exerciseId, existingEx.id);
         }
-        return s;
+    }
+
+    const setsWithRealIds = sets.map(s => ({
+        ...s,
+        exerciseId: tempToRealId.get(s.exerciseId) || s.exerciseId
     }));
 
     const workoutLog = await prisma.workoutLog.create({
@@ -138,7 +145,21 @@ export async function GET(req: Request) {
             },
             include: {
                 workout: { select: { name: true, id: true } },
-                sets: true
+                sets: {
+                    include: {
+                        exercise: {
+                            select: {
+                                id: true,
+                                name: true,
+                                sets: true,
+                                reps: true,
+                                weightTargetKg: true,
+                                notes: true,
+                            }
+                        }
+                    },
+                    orderBy: { setNumber: "asc" }
+                }
             },
             orderBy: { updatedAt: "desc" }
         });

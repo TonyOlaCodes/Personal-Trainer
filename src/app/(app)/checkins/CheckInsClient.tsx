@@ -155,7 +155,7 @@ function PrevCheckInCard({ prev }: { prev: CheckIn }) {
                     <Calendar className="w-4 h-4 text-fg-subtle" />
                     <span className="text-xs font-bold text-fg-muted">Week {prev.weekNumber} check-in</span>
                     {prev.bodyweightKg && (
-                        <span className="text-xs font-black text-fg">{prev.bodyweightKg}kg</span>
+                        <span className="text-xs font-black text-fg">{prev.bodyweightKg.toFixed(2)}kg</span>
                     )}
                 </div>
                 <ChevronDown className={cn("w-3.5 h-3.5 text-fg-subtle transition-transform", open && "rotate-180")} />
@@ -242,7 +242,7 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit }: {
                         </div>
                         <div className="flex items-center gap-2 mt-0.5 text-[10px] text-fg-muted font-medium">
                             <span>{formatDate(c.createdAt)}</span>
-                            {c.bodyweightKg && <span className="font-black text-fg">{c.bodyweightKg}kg</span>}
+                            {c.bodyweightKg && <span className="font-black text-fg">{c.bodyweightKg.toFixed(2)}kg</span>}
                         </div>
                     </div>
                 </div>
@@ -433,8 +433,8 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, workoutsT
     const prevCheckIn  = checkIns.find(c => c.weekNumber < (editMode ? selectedWeek : currentWeekReal));
     const prevWeight   = prevCheckIn?.bodyweightKg;
     const currentBw    = bodyweight ? parseFloat(bodyweight) : (currentWeekEntry?.bodyweightKg || null);
-    const weightDelta  = currentBw && prevWeight ? Math.round((currentBw - prevWeight) * 10) / 10 : null;
-    const weightPctChange = currentBw && prevWeight ? Math.round(((currentBw - prevWeight) / prevWeight) * 100 * 10) / 10 : null;
+    const weightDelta  = currentBw && prevWeight ? Math.round((currentBw - prevWeight) * 100) / 100 : null;
+    const weightPctChange = currentBw && prevWeight ? Math.round(((currentBw - prevWeight) / prevWeight) * 100 * 100) / 100 : null;
     const smartMsg     = getSmartFeedback(
         (editMode ? energy : currentWeekEntry?.energyRating) || 0,
         (editMode ? sleep : currentWeekEntry?.sleepRating) || 0,
@@ -617,7 +617,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, workoutsT
                                                 "text-[9px] font-black px-1.5 py-0.5 rounded-md border",
                                                 weightDelta < 0 ? "text-success bg-success/10 border-success/20" : weightDelta > 0 ? "text-warning bg-warning/10 border-warning/20" : "text-fg-subtle bg-surface-muted border-surface-border"
                                             )}>
-                                                {weightDelta > 0 ? "+" : ""}{weightDelta}kg
+                                                {weightDelta > 0 ? "+" : ""}{weightDelta.toFixed(2)}kg
                                             </span>
                                         )}
                                     </div>
@@ -647,10 +647,10 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, workoutsT
                         <div className="grid grid-cols-2 gap-3 pt-2">
                             <div className="bg-surface-card/40 p-4 rounded-2xl border border-surface-border/50">
                                 <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1">Bodyweight</p>
-                                <p className="text-xl font-black text-fg tracking-tight">{currentWeekEntry.bodyweightKg ?? '--'}<span className="text-xs text-fg-muted ml-1">kg</span></p>
+                                <p className="text-xl font-black text-fg tracking-tight">{currentWeekEntry.bodyweightKg?.toFixed(2) ?? '--'}<span className="text-xs text-fg-muted ml-1">kg</span></p>
                                 {weightDelta !== null && weightPctChange !== null && (
                                     <p className={cn("text-[10px] font-bold mt-1", weightDelta < 0 ? "text-success" : weightDelta > 0 ? "text-warning" : "text-fg-muted")}>
-                                        {weightDelta > 0 ? "+" : ""}{weightDelta}kg ({weightPctChange >= 0 ? "+" : ""}{weightPctChange}%) since last
+                                        {weightDelta > 0 ? "+" : ""}{weightDelta.toFixed(2)}kg ({weightPctChange >= 0 ? "+" : ""}{weightPctChange.toFixed(2)}%) since last
                                     </p>
                                 )}
                             </div>
@@ -700,7 +700,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, workoutsT
                         <p className="text-[10px] font-bold text-fg-muted">{checkIns.length} submissions</p>
                     </div>
                     {checkIns.sort((a,b) => b.weekNumber - a.weekNumber).map(c => (
-                        <HistoryItem key={c.id} c={c} isCoach={false} />
+                        <HistoryItem key={c.id} c={c} isCoach={false} onEdit={editCheckIn} />
                     ))}
                 </div>
             </div>
@@ -778,15 +778,15 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, workoutsT
                     </div>
                     {prevWeight && (
                         <span className="text-[10px] text-fg-subtle font-black uppercase tracking-widest">
-                            Baseline: {prevWeight}kg
+                            Baseline: {prevWeight.toFixed(2)}kg
                         </span>
                     )}
                 </div>
                 <div className="flex items-center gap-3">
                     <div className="relative flex-1">
                         <input
-                            type="number" step="0.1"
-                            placeholder={prevWeight ? `${prevWeight}` : "00.0"}
+                            type="number" step="0.01"
+                            placeholder={prevWeight ? `${prevWeight.toFixed(2)}` : "00.00"}
                             className="input h-14 text-2xl font-black pr-10 bg-surface-muted/30 border-none focus:ring-2 focus:ring-brand-500/20 transition-all"
                             value={bodyweight}
                             onChange={e => setBodyweight(e.target.value)}

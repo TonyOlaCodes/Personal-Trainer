@@ -285,6 +285,7 @@ export function OnboardingPage() {
                                         <div className="relative">
                                             <input
                                                 type="number"
+                                                step="0.01"
                                                 className="input pr-10"
                                                 placeholder={f.ph}
                                                 value={form[f.key as keyof FormData] as string}

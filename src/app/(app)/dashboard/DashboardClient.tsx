@@ -63,7 +63,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, todayCompleted
     const [codeMsg, setCodeMsg] = useState("");
     const [showTour, setShowTour] = useState(false);
     const [discarding, setDiscarding] = useState(false);
-    const [weight, setWeight] = useState(user.weightKg?.toString() || "");
+    const [weight, setWeight] = useState(user.weightKg ? user.weightKg.toFixed(2) : "");
     const [savingWeight, setSavingWeight] = useState(false);
 
     useEffect(() => {
@@ -110,10 +110,11 @@ export function DashboardClient({ user, activePlan, todayWorkout, todayCompleted
         if (!val || savingWeight) return;
         setSavingWeight(true);
         try {
+            const toFloat = (v?: string) => (v && v !== "" ? Math.round(parseFloat(v) * 100) / 100 : null);
             const res = await fetch("/api/user/profile", {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ weightKg: parseFloat(val) })
+                body: JSON.stringify({ weightKg: toFloat(val) })
             });
             if (res.ok) router.refresh();
         } catch (e) {
@@ -228,7 +229,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, todayCompleted
                             <div className="flex items-baseline gap-1">
                                 <input 
                                     type="number" 
-                                    step="0.1"
+                                    step="0.01"
                                     value={weight}
                                     onChange={(e) => setWeight(e.target.value)}
                                     onBlur={(e) => handleUpdateWeight(e.target.value)}
@@ -442,7 +443,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, todayCompleted
                                         </p>
                                         {ex.weightTargetKg && (
                                             <p className="text-xs text-fg-muted">
-                                                {isCardio(ex.name) ? `Lvl ${ex.weightTargetKg}` : `${ex.weightTargetKg}kg`}
+                                                {isCardio(ex.name) ? `Lvl ${ex.weightTargetKg}` : `${ex.weightTargetKg.toFixed(2)}kg`}
                                             </p>
                                         )}
                                     </div>

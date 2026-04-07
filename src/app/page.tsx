@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Show, UserButton, SignInButton, SignUpButton } from "@clerk/nextjs";
+import { useAuth, UserButton, SignInButton, SignUpButton } from "@clerk/nextjs";
 import {
   Zap,
   BarChart3,
@@ -120,6 +120,7 @@ const testimonials = [
 ];
 
 export default function LandingPage() {
+  const { isLoaded, isSignedIn } = useAuth();
   return (
     <div className="min-h-screen bg-surface text-fg overflow-hidden">
       {/* ─── Navbar ───────────────────────────────── */}
@@ -133,18 +134,23 @@ export default function LandingPage() {
           </Link>
 
           <div className="flex items-center gap-3">
-            <Show when="signed-out">
-              <SignInButton mode="modal" fallbackRedirectUrl="/dashboard">
-                <button className="btn-ghost text-sm hidden sm:flex">Sign In</button>
-              </SignInButton>
-              <SignUpButton mode="modal" fallbackRedirectUrl="/onboarding">
-                <button className="btn-primary btn-sm">Get Started</button>
-              </SignUpButton>
-            </Show>
-            <Show when="signed-in">
-              <Link href="/dashboard" className="btn-secondary btn-sm">Dashboard</Link>
-              <UserButton />
-            </Show>
+            {!isLoaded ? (
+              <div className="h-8 w-24 bg-surface-muted animate-pulse rounded-lg" />
+            ) : !isSignedIn ? (
+              <>
+                <SignInButton mode="modal" fallbackRedirectUrl="/dashboard">
+                  <button className="btn-ghost text-sm hidden sm:flex">Sign In</button>
+                </SignInButton>
+                <SignUpButton mode="modal" fallbackRedirectUrl="/onboarding">
+                  <button className="btn-primary btn-sm">Get Started</button>
+                </SignUpButton>
+              </>
+            ) : (
+              <>
+                <Link href="/dashboard" className="btn-secondary btn-sm">Dashboard</Link>
+                <UserButton />
+              </>
+            )}
           </div>
         </div>
       </nav>
@@ -172,20 +178,21 @@ export default function LandingPage() {
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Show when="signed-out">
+            {!isLoaded ? (
+              <div className="h-12 w-48 bg-surface-muted animate-pulse rounded-xl" />
+            ) : !isSignedIn ? (
               <SignUpButton mode="modal" fallbackRedirectUrl="/onboarding">
                 <button className="btn-primary btn-lg w-full sm:w-auto">
                   Start for Free
                   <ArrowRight className="w-5 h-5" />
                 </button>
               </SignUpButton>
-            </Show>
-            <Show when="signed-in">
+            ) : (
               <Link href="/dashboard" className="btn-primary btn-lg w-full sm:w-auto">
                 Go to Dashboard
                 <ArrowRight className="w-5 h-5" />
               </Link>
-            </Show>
+            )}
             <Link href="#features" className="btn-secondary btn-lg w-full sm:w-auto">
               See what&apos;s included
             </Link>
@@ -321,20 +328,21 @@ export default function LandingPage() {
                     </li>
                   ))}
                 </ul>
-                <Show when="signed-out">
+                {!isLoaded ? (
+                  <div className="h-11 w-full bg-surface-muted animate-pulse rounded-xl" />
+                ) : !isSignedIn ? (
                   <SignUpButton mode="modal" fallbackRedirectUrl="/onboarding">
                     <button className={cn("w-full h-11 rounded-xl font-bold flex items-center justify-center gap-2 transition-all", p.highlight ? "btn-primary" : "btn-secondary")}>
                       {p.cta}
                       <ChevronRight className="w-4 h-4" />
                     </button>
                   </SignUpButton>
-                </Show>
-                <Show when="signed-in">
+                ) : (
                   <Link href="/dashboard" className={cn("w-full h-11 rounded-xl font-bold flex items-center justify-center gap-2 transition-all", p.highlight ? "btn-primary" : "btn-secondary")}>
                     Go to Dashboard
                     <ChevronRight className="w-4 h-4" />
                   </Link>
-                </Show>
+                )}
               </div>
             ))}
           </div>
@@ -377,20 +385,21 @@ export default function LandingPage() {
             <p className="subheading mb-8">
               Join thousands of athletes already training smarter with FitCoach Pro.
             </p>
-            <Show when="signed-out">
+            {!isLoaded ? (
+              <div className="h-12 w-48 bg-surface-muted animate-pulse rounded-xl mx-auto" />
+            ) : !isSignedIn ? (
               <SignUpButton mode="modal" fallbackRedirectUrl="/onboarding">
                 <button className="btn-primary btn-lg mx-auto w-max">
                   Get Started — it&apos;s free
                   <ArrowRight className="w-5 h-5" />
                 </button>
               </SignUpButton>
-            </Show>
-            <Show when="signed-in">
+            ) : (
               <Link href="/dashboard" className="btn-primary btn-lg mx-auto w-max">
                 Back to Training
                 <ArrowRight className="w-5 h-5" />
               </Link>
-            </Show>
+            )}
           </div>
         </div>
       </section>

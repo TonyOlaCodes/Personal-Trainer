@@ -56,10 +56,10 @@ export default async function LogViewPage({ params }: { params: { logId: string 
             <TopBar title="Performance Archive" subtitle={formatDate(log.loggedAt)} />
             <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-6 animate-fade-in">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <button onClick={() => redirect("/dashboard")} className="btn-ghost btn-sm text-fg-subtle flex items-center gap-2">
+                    <Link href="/dashboard" className="btn-ghost btn-sm text-fg-subtle flex items-center gap-2">
                         <ChevronLeft className="w-4 h-4" />
                         Return
-                    </button>
+                    </Link>
                     <div className="flex items-center gap-3">
                         <div className="flex items-center gap-2">
                             <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Origin:</span>

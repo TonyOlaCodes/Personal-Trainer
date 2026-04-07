@@ -72,8 +72,8 @@ export function WorkoutLogClient({ workout, tutorialUrls = {}, logDate }: Props)
                 if (active && active.workoutId === workout.id) {
                     setActiveLogId(active.id);
                     const restored: Record<string, SetLog[]> = {};
-                    workout.exercises.forEach(ex => restored[ex.id] = []);
-                    
+                    const reconstructedExercises = [...workout.exercises];
+
                     if (active.duration) {
                         setStartTime(Date.now() - (active.duration * 60000));
                     } else if (active.loggedAt) {
@@ -81,18 +81,37 @@ export function WorkoutLogClient({ workout, tutorialUrls = {}, logDate }: Props)
                     }
 
                     active.sets.forEach((s: any) => {
-                        if (restored[s.exerciseId]) {
-                            restored[s.exerciseId].push({
-                                setNumber: s.setNumber,
-                                reps: s.reps ?? 10,
-                                weightKg: s.weightKg?.toString() ?? "",
-                                rpe: s.rpe?.toString() ?? "",
-                                isCompleted: s.isCompleted,
-                                isWarmup: s.isWarmup,
-                                videoUrl: s.videoUrl,
+                        const ex = s.exercise;
+                        // If this exercise is not in our template, add it to reconstructedExercises
+                        if (ex && !reconstructedExercises.some(e => e.id === ex.id)) {
+                            reconstructedExercises.push({
+                                id: ex.id,
+                                name: ex.name,
+                                sets: ex.sets || 1,
+                                reps: ex.reps || "10",
+                                weightTargetKg: ex.weightTargetKg,
+                                notes: ex.notes,
                             });
                         }
+
+                        if (!restored[s.exerciseId]) restored[s.exerciseId] = [];
+                        restored[s.exerciseId].push({
+                            setNumber: s.setNumber,
+                            reps: s.reps ?? 10,
+                            weightKg: s.weightKg?.toString() ?? "",
+                            rpe: s.rpe?.toString() ?? "",
+                            isCompleted: s.isCompleted,
+                            isWarmup: s.isWarmup,
+                            videoUrl: s.videoUrl,
+                        });
                     });
+
+                    // Ensure all exercises (including ones from template) have log entries
+                    reconstructedExercises.forEach(ex => {
+                        if (!restored[ex.id]) restored[ex.id] = [];
+                    });
+
+                    setActiveExercises(reconstructedExercises);
                     setLogs(restored);
                 } else {
                     const initialLogs: Record<string, SetLog[]> = {};
@@ -267,19 +286,33 @@ export function WorkoutLogClient({ workout, tutorialUrls = {}, logDate }: Props)
     const handleReplace = (newName: string) => {
         if (!isSubstituting || !newName) return;
         
+        const originalEx = activeExercises.find(ex => ex.id === isSubstituting);
         const newExId = `${isSubstituting}:sub:${generateId(4)}`;
-        
-        setActiveExercises(prev => prev.map(ex => 
+        const nextExercises = activeExercises.map(ex => 
             ex.id === isSubstituting ? { ...ex, id: newExId, name: newName } : ex
-        ));
+        );
         
+        setActiveExercises(nextExercises);
         setLogs(prev => {
             const next = { ...prev };
-            if (next[isSubstituting]) {
-                next[newExId] = next[isSubstituting];
-                delete next[isSubstituting];
+            // Carry over any existing logs or initialize default sets based on original template
+            const existingSets = prev[isSubstituting] || [];
+            if (existingSets.length > 0) {
+                next[newExId] = existingSets;
+            } else {
+                const count = originalEx?.sets || 3;
+                next[newExId] = Array.from({ length: count }, (_, i) => ({
+                    setNumber: i + 1,
+                    reps: parseInt(originalEx?.reps || "10") || 10,
+                    weightKg: originalEx?.weightTargetKg?.toString() || "",
+                    rpe: "",
+                    isCompleted: false,
+                    isWarmup: false,
+                }));
             }
-            saveProgress(next, activeExercises.map(ex => ex.id === isSubstituting ? { ...ex, name: newName, id: newExId } : ex));
+            delete next[isSubstituting];
+            
+            saveProgress(next, nextExercises);
             return next;
         });
         
@@ -297,7 +330,8 @@ export function WorkoutLogClient({ workout, tutorialUrls = {}, logDate }: Props)
             reps: "10",
         };
 
-        setActiveExercises(prev => [...prev, newEx]);
+        const nextExercises = [...activeExercises, newEx];
+        setActiveExercises(nextExercises);
         setLogs(prev => {
             const next = {
                 ...prev,
@@ -310,12 +344,37 @@ export function WorkoutLogClient({ workout, tutorialUrls = {}, logDate }: Props)
                     isWarmup: false,
                 })),
             };
-            saveProgress(next, [...activeExercises, newEx]);
+            saveProgress(next, nextExercises);
             return next;
         });
 
         setIsAddingExercise(false);
         setSearchQuery("");
+    };
+
+    const removeExercise = async (exId: string) => {
+        if (!confirm("Are you sure you want to remove this exercise? If it's a permanent exercise in your workout, it will be deleted from the plan.")) return;
+        
+        // If it's a real DB ID (not a temporary client ID), delete it permanently from the workout template
+        if (!exId.includes(":sub") && !exId.startsWith("new-")) {
+            try {
+                const res = await fetch(`/api/exercises/${exId}`, { method: "DELETE" });
+                if (!res.ok) {
+                    console.error("Failed to delete exercise from template.");
+                }
+            } catch (err) {
+                console.error("Error deleting exercise:", err);
+            }
+        }
+
+        const nextExercises = activeExercises.filter(ex => ex.id !== exId);
+        setActiveExercises(nextExercises);
+        setLogs(prev => {
+            const next = { ...prev };
+            delete next[exId];
+            saveProgress(next, nextExercises);
+            return next;
+        });
     };
 
     const handleInitiateFinish = () => {
@@ -361,8 +420,9 @@ export function WorkoutLogClient({ workout, tutorialUrls = {}, logDate }: Props)
             });
             
             if (res.ok) {
+                const saved = await res.json();
                 setShowFinishModal(false);
-                router.push("/dashboard");
+                router.push(`/plans/log/view/${saved.id}`);
                 router.refresh();
             } else {
                 const errData = await res.json();
@@ -449,6 +509,12 @@ export function WorkoutLogClient({ workout, tutorialUrls = {}, logDate }: Props)
                                         >
                                             <Flame className="w-2.5 h-2.5" /> Swap
                                         </button>
+                                        <button 
+                                            onClick={() => removeExercise(ex.id)}
+                                            className="text-[10px] font-black uppercase text-danger/40 hover:text-danger bg-danger/5 hover:bg-danger/10 px-2 py-0.5 rounded-md transition-all flex items-center gap-1"
+                                        >
+                                            <Trash2 className="w-2.5 h-2.5" /> Delete
+                                        </button>
                                     </div>
                                     {ex.notes && <p className="text-xs text-fg-muted mt-0.5">{ex.notes}</p>}
                                 </div>
@@ -468,19 +534,19 @@ export function WorkoutLogClient({ workout, tutorialUrls = {}, logDate }: Props)
                             </div>
 
                             <div className="space-y-2">
-                                <div className="grid grid-cols-12 gap-2 text-[10px] font-bold text-fg-subtle uppercase px-2 mb-1">
+                                <div className="grid grid-cols-12 gap-2 text-[11px] font-black text-fg-subtle uppercase px-1 mb-1 tracking-wider">
                                     <div className="col-span-1 text-center">{isCardio(ex.name) ? "Rd" : "Set"}</div>
                                     <div className="col-span-3 text-center">{isCardio(ex.name) ? "Lvl/Spd" : "Weight"}</div>
-                                    <div className="col-span-3 text-center">{isCardio(ex.name) ? "Mins" : "Reps"}</div>
+                                    <div className="col-span-2 text-center">{isCardio(ex.name) ? "Mins" : "Reps"}</div>
                                     <div className="col-span-2 text-center">RPE</div>
-                                    <div className="col-span-3 text-center">Check</div>
+                                    <div className="col-span-4 text-center">Actions</div>
                                 </div>
 
                                 {logs[ex.id]?.map((set, sIdx) => (
                                     <div
                                         key={sIdx}
                                         className={cn(
-                                            "grid grid-cols-12 gap-2 p-1.5 rounded-xl border transition-all duration-200",
+                                            "grid grid-cols-12 gap-2 p-2 rounded-xl border transition-all duration-200",
                                             set.isCompleted
                                                 ? "bg-success-950/20 border-success-800/40"
                                                 : "bg-surface-muted/50 border-surface-border hover:border-brand-700/30"
@@ -490,7 +556,7 @@ export function WorkoutLogClient({ workout, tutorialUrls = {}, logDate }: Props)
                                             <button
                                                 onClick={() => updateSet(ex.id, sIdx, { isWarmup: !set.isWarmup })}
                                                 className={cn(
-                                                    "w-6 h-6 rounded-md text-[10px] font-bold flex items-center justify-center transition-colors",
+                                                    "w-7 h-10 rounded-md text-[10px] font-bold flex items-center justify-center transition-colors shadow-sm",
                                                     set.isWarmup ? "bg-warning-500/20 text-warning-400" : "bg-surface-elevated text-fg-subtle hover:text-fg"
                                                 )}
                                             >
@@ -502,20 +568,20 @@ export function WorkoutLogClient({ workout, tutorialUrls = {}, logDate }: Props)
                                             <div className="relative">
                                                 <input
                                                     type="number"
-                                                    className="input-sm w-full bg-surface-elevated border-none focus:ring-1 focus:ring-brand-500 text-center text-sm font-semibold rounded-lg h-9"
+                                                    className="input-sm w-full bg-surface-elevated border-none focus:ring-1 focus:ring-brand-500 text-center text-sm font-semibold rounded-lg h-10 px-1"
                                                     value={set.weightKg}
                                                     onChange={(e) => updateSet(ex.id, sIdx, { weightKg: e.target.value })}
                                                 />
-                                                {!isCardio(ex.name) && (
-                                                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-fg-subtle pointer-events-none">kg</span>
+                                                {!isCardio(ex.name) && set.weightKg && (
+                                                    <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[9px] text-fg-subtle pointer-events-none">kg</span>
                                                 )}
                                             </div>
                                         </div>
 
-                                        <div className="col-span-3">
+                                        <div className="col-span-2">
                                             <input
                                                 type="number"
-                                                className="input-sm w-full bg-surface-elevated border-none focus:ring-1 focus:ring-brand-500 text-center text-sm font-semibold rounded-lg h-9"
+                                                className="input-sm w-full bg-surface-elevated border-none focus:ring-1 focus:ring-brand-500 text-center text-sm font-semibold rounded-lg h-10 px-0"
                                                 value={set.reps}
                                                 onChange={(e) => updateSet(ex.id, sIdx, { reps: parseInt(e.target.value) || 0 })}
                                             />
@@ -524,14 +590,14 @@ export function WorkoutLogClient({ workout, tutorialUrls = {}, logDate }: Props)
                                         <div className="col-span-2">
                                             <input
                                                 type="number"
-                                                className="input-sm w-full bg-surface-elevated border-none focus:ring-1 focus:ring-brand-500 text-center text-sm font-semibold rounded-lg h-9"
+                                                className="input-sm w-full bg-surface-elevated border-none focus:ring-1 focus:ring-brand-500 text-center text-sm font-semibold rounded-lg h-10 px-0"
                                                 value={set.rpe}
-                                                placeholder="1-10"
+                                                placeholder="RPE"
                                                 onChange={(e) => updateSet(ex.id, sIdx, { rpe: e.target.value })}
                                             />
                                         </div>
 
-                                        <div className="col-span-3 flex items-center justify-end gap-1">
+                                        <div className="col-span-4 flex items-center justify-end gap-1">
                                             <label className="cursor-pointer">
                                                 <input 
                                                     type="file" 
@@ -540,29 +606,29 @@ export function WorkoutLogClient({ workout, tutorialUrls = {}, logDate }: Props)
                                                     onChange={(e) => handleUploadVideo(ex.id, sIdx, e.target.files?.[0])}
                                                 />
                                                 <div className={cn(
-                                                    "w-8 h-9 rounded-lg flex items-center justify-center transition-all",
+                                                    "w-8 h-10 rounded-lg flex items-center justify-center transition-all",
                                                     set.isUploading ? "animate-pulse bg-brand-500/20 text-brand-400" :
                                                     set.videoUrl ? "bg-brand-500/20 text-brand-400" : "bg-surface-elevated text-fg-muted hover:bg-brand-950/20 hover:text-brand-400"
                                                 )}>
-                                                    <Video className="w-3.5 h-3.5" />
+                                                    <Video className="w-4 h-4" />
                                                 </div>
                                             </label>
                                             <button
                                                 onClick={() => updateSet(ex.id, sIdx, { isCompleted: !set.isCompleted })}
                                                 className={cn(
-                                                    "w-8 h-9 rounded-lg flex items-center justify-center transition-all",
+                                                    "w-8 h-10 rounded-lg flex items-center justify-center transition-all",
                                                     set.isCompleted
                                                         ? "bg-success text-white shadow-glow-success"
                                                         : "bg-surface-elevated text-fg-muted hover:bg-brand-950/20 hover:text-brand-400"
                                                 )}
                                             >
-                                                <Check className="w-4 h-4" />
+                                                <Check className="w-5 h-5" />
                                             </button>
                                             <button
                                                 onClick={() => removeSet(ex.id, sIdx)}
-                                                className="w-8 h-9 rounded-lg flex items-center justify-center text-danger/40 hover:text-danger hover:bg-danger-950/20 transition-all"
+                                                className="w-8 h-10 rounded-lg flex items-center justify-center text-danger/40 hover:text-danger hover:bg-danger-950/20 transition-all ml-1"
                                             >
-                                                <Trash2 className="w-3.5 h-3.5" />
+                                                <Trash2 className="w-4 h-4" />
                                             </button>
                                         </div>
                                     </div>

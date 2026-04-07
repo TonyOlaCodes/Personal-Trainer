@@ -58,8 +58,8 @@ export function SettingsClient({ user }: Props) {
     const [trainingDays, setTrainingDays] = useState(user.trainingDaysPerWeek ?? 3);
     const [experience, setExperience] = useState(user.experienceLevel || "");
     const [location, setLocation] = useState(user.trainingLocation || "");
-    const [targetWeight, setTargetWeight] = useState(user.targetWeightKg ?? "");
-    const [currentWeight, setCurrentWeight] = useState(user.weightKg ?? "");
+    const [targetWeight, setTargetWeight] = useState(user.targetWeightKg ? user.targetWeightKg.toFixed(2) : "");
+    const [currentWeight, setCurrentWeight] = useState(user.weightKg ? user.weightKg.toFixed(2) : "");
     const [goalSaving, setGoalSaving] = useState(false);
     const [goalSaved, setGoalSaved] = useState(false);
 
@@ -131,8 +131,8 @@ export function SettingsClient({ user }: Props) {
                     trainingDaysPerWeek: Number(trainingDays) || undefined,
                     experienceLevel: experience || undefined,
                     trainingLocation: location || undefined,
-                    targetWeightKg: targetWeight !== "" ? Number(targetWeight) : undefined,
-                    weightKg: currentWeight !== "" ? Number(currentWeight) : undefined,
+                    targetWeightKg: targetWeight !== "" ? Math.round(Number(targetWeight) * 100) / 100 : undefined,
+                    weightKg: currentWeight !== "" ? Math.round(Number(currentWeight) * 100) / 100 : undefined,
                 })
             });
             if (res.ok) {
@@ -345,7 +345,7 @@ export function SettingsClient({ user }: Props) {
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-fg-subtle uppercase tracking-widest px-1">Current Weight (kg)</label>
                                 <input
-                                    type="number" step="0.1"
+                                    type="number" step="0.01"
                                     className="input h-12 text-sm font-bold"
                                     placeholder="e.g. 80"
                                     value={currentWeight}
@@ -357,7 +357,7 @@ export function SettingsClient({ user }: Props) {
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-fg-subtle uppercase tracking-widest px-1">Target Weight (kg)</label>
                                 <input
-                                    type="number" step="0.1"
+                                    type="number" step="0.01"
                                     className="input h-12 text-sm font-bold"
                                     placeholder="e.g. 75"
                                     value={targetWeight}

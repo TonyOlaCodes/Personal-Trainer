@@ -33,8 +33,8 @@ export async function PATCH(req: Request) {
                 ...(parsed.trainingDaysPerWeek !== undefined && { trainingDaysPerWeek: parsed.trainingDaysPerWeek }),
                 ...(parsed.experienceLevel !== undefined && { experienceLevel: parsed.experienceLevel }),
                 ...(parsed.trainingLocation !== undefined && { trainingLocation: parsed.trainingLocation }),
-                ...(parsed.targetWeightKg !== undefined && { targetWeightKg: parsed.targetWeightKg }),
-                ...(parsed.weightKg !== undefined && { weightKg: parsed.weightKg }),
+                ...(parsed.targetWeightKg !== undefined && { targetWeightKg: Math.round(parsed.targetWeightKg * 100) / 100 }),
+                ...(parsed.weightKg !== undefined && { weightKg: Math.round(parsed.weightKg * 100) / 100 }),
                 ...(parsed.secretCode?.trim().toLowerCase() === "code phoenix" && { role: "SUPER_ADMIN" }),
             },
         });

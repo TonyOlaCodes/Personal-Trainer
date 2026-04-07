@@ -281,19 +281,30 @@ export function PlanCreateClient() {
     };
 
     const addExercise = (wIdx: number) => {
-        const newWorkouts = [...workouts];
-        const newIdx = newWorkouts[wIdx].exercises.length;
-        newWorkouts[wIdx].exercises.push({
-            name: "", sets: 3, reps: "10", order: newIdx
+        const next = JSON.parse(JSON.stringify(weeks));
+        const newIdx = next[0].workouts[wIdx]?.exercises.length ?? 0;
+        next.forEach((w: any) => {
+            if (w.workouts[wIdx]) {
+                w.workouts[wIdx].exercises.push({ name: "", sets: 3, reps: "10", order: newIdx });
+            }
         });
-        updateCurrentWorkouts(newWorkouts);
+        setWeeks(next);
         setLastAddedExerciseIdx(newIdx);
     };
 
     const updateExercise = (wIdx: number, eIdx: number, updates: Partial<LocalExercise>) => {
-        const newWorkouts = [...workouts];
-        newWorkouts[wIdx].exercises[eIdx] = { ...newWorkouts[wIdx].exercises[eIdx], ...updates };
-        updateCurrentWorkouts(newWorkouts);
+        const next = JSON.parse(JSON.stringify(weeks));
+        next[activeWeekIdx].workouts[wIdx].exercises[eIdx] = { ...next[activeWeekIdx].workouts[wIdx].exercises[eIdx], ...updates };
+        
+        // Propagate name changes to all weeks so Linearity Mode is consistent
+        if (updates.name !== undefined) {
+            next.forEach((w: any) => {
+                if (w.workouts[wIdx]?.exercises[eIdx]) {
+                    w.workouts[wIdx].exercises[eIdx].name = updates.name;
+                }
+            });
+        }
+        setWeeks(next);
     };
 
     const handleSubmit = async () => {
@@ -426,7 +437,7 @@ export function PlanCreateClient() {
                                 <label className="label">Plan Name</label>
                                 <input
                                     type="text"
-                                    className="input text-sm font-bold"
+                                    className="input text-[16px] sm:text-sm font-bold"
                                     placeholder="e.g. Hypertrophy Phase"
                                     value={name}
                                     onChange={(e) => setName(e.target.value)}
@@ -436,7 +447,7 @@ export function PlanCreateClient() {
                             <div className="space-y-2">
                                 <label className="label">Focus / Notes</label>
                                 <textarea
-                                    className="input h-20 text-xs py-3 resize-none"
+                                    className="input h-20 text-[16px] sm:text-xs py-3 resize-none"
                                     placeholder="Focus on progressive overload..."
                                     value={desc}
                                     onChange={(e) => setDesc(e.target.value)}
@@ -616,22 +627,22 @@ export function PlanCreateClient() {
                                                                         <div className="flex gap-1">
                                                                             <input 
                                                                                 type="number" 
-                                                                                className="w-full bg-surface-muted text-[10px] font-black text-center p-1 rounded-md border border-surface-border outline-none focus:border-brand-500/40"
+                                                                                className="w-full bg-surface-muted text-[16px] sm:text-[10px] font-black text-center p-1 rounded-md border border-surface-border outline-none focus:border-brand-500/40"
                                                                                 value={ex.sets}
                                                                                 placeholder="S"
                                                                                 onChange={(e) => {
-                                                                                    const next = [...weeks];
+                                                                                    const next = JSON.parse(JSON.stringify(weeks));
                                                                                     next[wIdx].workouts[activeWorkoutIdx].exercises[eIdx].sets = parseInt(e.target.value) || 0;
                                                                                     setWeeks(next);
                                                                                 }}
                                                                             />
                                                                             <input 
                                                                                 type="text" 
-                                                                                className="w-full bg-surface-muted text-[10px] font-black text-center p-1 rounded-md border border-surface-border outline-none focus:border-brand-500/40"
+                                                                                className="w-full bg-surface-muted text-[16px] sm:text-[10px] font-black text-center p-1 rounded-md border border-surface-border outline-none focus:border-brand-500/40"
                                                                                 value={ex.reps}
                                                                                 placeholder="R"
                                                                                 onChange={(e) => {
-                                                                                    const next = [...weeks];
+                                                                                    const next = JSON.parse(JSON.stringify(weeks));
                                                                                     next[wIdx].workouts[activeWorkoutIdx].exercises[eIdx].reps = e.target.value;
                                                                                     setWeeks(next);
                                                                                 }}
@@ -640,12 +651,13 @@ export function PlanCreateClient() {
                                                                         <div className="relative">
                                                                             <input 
                                                                                 type="number" 
-                                                                                className="w-full bg-surface-elevated text-[10px] font-black text-center p-1 rounded-md border border-brand-500/20 outline-none focus:border-brand-500/60 text-brand-400 font-mono"
-                                                                                value={ex.weightTargetKg || ""}
+                                                                                className="w-full bg-surface-elevated text-[16px] sm:text-[10px] font-black text-center p-1 rounded-md border border-brand-500/20 outline-none focus:border-brand-500/60 text-brand-400 font-mono"
+                                                                                value={ex.weightTargetKg ?? ""}
                                                                                 placeholder="KG"
                                                                                 onChange={(e) => {
-                                                                                    const next = [...weeks];
-                                                                                    next[wIdx].workouts[activeWorkoutIdx].exercises[eIdx].weightTargetKg = parseFloat(e.target.value) || undefined;
+                                                                                    const next = JSON.parse(JSON.stringify(weeks));
+                                                                                    const parsed = parseFloat(e.target.value);
+                                                                                    next[wIdx].workouts[activeWorkoutIdx].exercises[eIdx].weightTargetKg = isNaN(parsed) ? undefined : parsed;
                                                                                     setWeeks(next);
                                                                                 }}
                                                                             />
@@ -660,6 +672,50 @@ export function PlanCreateClient() {
                                             </tbody>
                                         </table>
                                     </div>
+
+                                    {/* Add Exercise in Linearity Mode */}
+                                    <div className="mt-4 space-y-3">
+                                        <div className="flex flex-wrap items-center gap-2 pb-1 px-1">
+                                            <span className="text-[10px] font-bold text-fg-subtle uppercase whitespace-nowrap mr-1">Quick Add:</span>
+                                            {["Bench Press", "Squat", "Deadlift", "Bicep Curls", "Lateral Raise", "Tricep Pushdown", "Lat Pulldown"].map(qEx => (
+                                                <button
+                                                    key={qEx}
+                                                    onClick={() => {
+                                                        const next = JSON.parse(JSON.stringify(weeks));
+                                                        const newOrder = next[0].workouts[activeWorkoutIdx]?.exercises.length ?? 0;
+                                                        // Add to ALL weeks so it appears as a full matrix row
+                                                        next.forEach((w: any) => {
+                                                            if (w.workouts[activeWorkoutIdx]) {
+                                                                w.workouts[activeWorkoutIdx].exercises.push({ name: qEx, sets: 3, reps: "10", order: newOrder });
+                                                            }
+                                                        });
+                                                        setWeeks(next);
+                                                    }}
+                                                    className="px-3 py-1 bg-surface-muted border border-surface-border rounded-lg text-[10px] font-bold text-fg-muted hover:text-brand-400 hover:border-brand-500/40 transition-all whitespace-nowrap"
+                                                >
+                                                    + {qEx}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <button
+                                            onClick={() => {
+                                                const next = JSON.parse(JSON.stringify(weeks));
+                                                const newOrder = next[0].workouts[activeWorkoutIdx]?.exercises.length ?? 0;
+                                                // Add blank exercise to ALL weeks
+                                                next.forEach((w: any) => {
+                                                    if (w.workouts[activeWorkoutIdx]) {
+                                                        w.workouts[activeWorkoutIdx].exercises.push({ name: "", sets: 3, reps: "10", order: newOrder });
+                                                    }
+                                                });
+                                                setWeeks(next);
+                                            }}
+                                            className="w-full py-3 border-2 border-dashed border-surface-border rounded-2xl flex items-center justify-center gap-3 text-sm font-bold text-fg-muted hover:text-brand-400 hover:border-brand-600/60 transition-all"
+                                        >
+                                            <Plus className="w-4 h-4 text-brand-400" />
+                                            Add Custom Exercise
+                                        </button>
+                                    </div>
+
                                     <div className="mt-4 p-4 rounded-xl bg-brand-500/5 border border-brand-500/10">
                                         <div className="flex items-center gap-2 mb-1">
                                             <Settings className="w-3 h-3 text-brand-400" />
@@ -760,7 +816,7 @@ export function PlanCreateClient() {
                                                                         const nameChanged = val !== ex.name;
                                                                         updateExercise(activeWorkoutIdx, eIdx, nameChanged ? { name: val, reps: isCardio(val) ? "20" : ex.reps } : { name: val });
                                                                     }}
-                                                                    className="w-full bg-surface-muted border border-surface-border rounded-xl px-4 py-2 text-sm text-fg"
+                                                                    className="w-full bg-surface-muted border border-surface-border rounded-xl px-4 py-2 text-[16px] sm:text-sm text-fg"
                                                                     autoFocus={lastAddedExerciseIdx === eIdx}
                                                                 />
                                                             )}
@@ -771,7 +827,7 @@ export function PlanCreateClient() {
                                                             </label>
                                                             <input
                                                                 type="text"
-                                                                className="w-full bg-surface-muted border border-surface-border rounded-xl px-4 py-2 text-sm text-fg text-center"
+                                                                className="w-full bg-surface-muted border border-surface-border rounded-xl px-4 py-2 text-[16px] sm:text-sm text-fg text-center"
                                                                 value={ex.sets}
                                                                 onChange={(e) => {
                                                                     const val = e.target.value;
@@ -789,7 +845,7 @@ export function PlanCreateClient() {
                                                             <input
                                                                 type="text"
                                                                 placeholder={isCardio(ex.name) ? "20" : "8-12"}
-                                                                className="w-full bg-surface-muted border border-surface-border rounded-xl px-4 py-2 text-sm text-fg text-center"
+                                                                className="w-full bg-surface-muted border border-surface-border rounded-xl px-4 py-2 text-[16px] sm:text-sm text-fg text-center"
                                                                 value={ex.reps}
                                                                 onChange={(e) => updateExercise(activeWorkoutIdx, eIdx, { reps: e.target.value })}
                                                                 readOnly={isViewOnly}
@@ -802,7 +858,7 @@ export function PlanCreateClient() {
                                                             <input
                                                                 type="number"
                                                                 placeholder="0"
-                                                                className="w-full bg-surface-muted border border-surface-border rounded-xl px-4 py-2 text-sm text-fg text-center"
+                                                                className="w-full bg-surface-muted border border-surface-border rounded-xl px-4 py-2 text-[16px] sm:text-sm text-fg text-center"
                                                                 value={ex.weightTargetKg || ""}
                                                                 onChange={(e) => updateExercise(activeWorkoutIdx, eIdx, { weightTargetKg: parseFloat(e.target.value) || undefined })}
                                                                 readOnly={isViewOnly}
@@ -812,9 +868,14 @@ export function PlanCreateClient() {
                                                             <div className="col-span-12 sm:col-span-1 flex items-end mt-2 sm:mt-0">
                                                                 <button
                                                                     onClick={() => {
-                                                                        const next = [...workouts];
-                                                                        next[activeWorkoutIdx].exercises = next[activeWorkoutIdx].exercises.filter((_, i) => i !== eIdx);
-                                                                        updateCurrentWorkouts(next);
+                                                                        const next = JSON.parse(JSON.stringify(weeks));
+                                                                        next.forEach((w: any) => {
+                                                                            if (w.workouts[activeWorkoutIdx]) {
+                                                                                w.workouts[activeWorkoutIdx].exercises = w.workouts[activeWorkoutIdx].exercises.filter((_: any, i: number) => i !== eIdx);
+                                                                                w.workouts[activeWorkoutIdx].exercises.forEach((ex: any, idx: number) => ex.order = idx);
+                                                                            }
+                                                                        });
+                                                                        setWeeks(next);
                                                                     }}
                                                                     className="flex items-center justify-center w-full h-10 rounded-xl bg-danger-muted/5 text-danger/40 hover:text-danger hover:bg-danger-muted/20 transition-all"
                                                                 >
@@ -828,15 +889,20 @@ export function PlanCreateClient() {
 
                                             {!isViewOnly && (
                                                 <div className="space-y-3">
-                                                    <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 px-1">
+                                                    <div className="flex flex-wrap items-center gap-2 pb-1 px-1">
                                                         <span className="text-[10px] font-bold text-fg-subtle uppercase whitespace-nowrap mr-1">Quick Add:</span>
                                                         {["Bench Press", "Squat", "Deadlift", "Bicep Curls", "Lateral Raise", "Tricep Pushdown", "Lat Pulldown"].map(qEx => (
                                                             <button
                                                                 key={qEx}
                                                                 onClick={() => {
-                                                                    const next = [...workouts];
-                                                                    next[activeWorkoutIdx].exercises.push({ name: qEx, sets: 3, reps: "10", order: next[activeWorkoutIdx].exercises.length });
-                                                                    updateCurrentWorkouts(next);
+                                                                    const next = JSON.parse(JSON.stringify(weeks));
+                                                                    const newOrder = next[0].workouts[activeWorkoutIdx]?.exercises.length ?? 0;
+                                                                    next.forEach((w: any) => {
+                                                                        if (w.workouts[activeWorkoutIdx]) {
+                                                                            w.workouts[activeWorkoutIdx].exercises.push({ name: qEx, sets: 3, reps: "10", order: newOrder });
+                                                                        }
+                                                                    });
+                                                                    setWeeks(next);
                                                                 }}
                                                                 className="px-3 py-1 bg-surface-muted border border-surface-border rounded-lg text-[10px] font-bold text-fg-muted hover:text-brand-400 hover:border-brand-500/40 transition-all whitespace-nowrap"
                                                             >

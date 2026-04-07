@@ -3,12 +3,8 @@ const prisma = new PrismaClient();
 
 async function main() {
     try {
-        const user = await prisma.user.findFirst();
-        if (user) {
-            console.log(JSON.stringify(Object.keys(user), null, 2));
-        } else {
-            console.log("No users found.");
-        }
+        const users = await prisma.user.findMany({ select: { id: true, email: true, name: true } });
+        console.log(JSON.stringify(users, null, 2));
     } catch (e) {
         console.error("ERROR: ", e);
     } finally {
