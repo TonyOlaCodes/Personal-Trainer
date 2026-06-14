@@ -10,6 +10,13 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { cn, formatDate, getInitials } from "@/lib/utils";
 
+const CHECK_IN_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const CHECK_IN_FREQUENCIES = [
+    { value: 1, label: "Weekly" },
+    { value: 2, label: "Every 2 weeks" },
+    { value: 4, label: "Every 4 weeks" },
+];
+
 interface Client {
     id: string;
     name?: string | null;
@@ -21,6 +28,11 @@ interface Client {
     goal?: string | null;
     trainingLocation?: string | null;
     trainingDaysPerWeek?: number | null;
+    checkInSchedule: {
+        day: number | null;
+        frequencyWeeks: number | null;
+        startDate: string | null;
+    };
 }
 
 interface ClientLog {
@@ -52,6 +64,9 @@ export function ClientDetailView({ client, availablePlans, logs, checkIns }: Pro
     const [importing, setImporting] = useState(false);
     const [removing, setRemoving] = useState(false);
     const [confirmEmail, setConfirmEmail] = useState("");
+    const [checkInDay, setCheckInDay] = useState(client.checkInSchedule.day ?? 6);
+    const [checkInFrequency, setCheckInFrequency] = useState(client.checkInSchedule.frequencyWeeks ?? 1);
+    const [savingSchedule, setSavingSchedule] = useState(false);
     const router = useRouter();
 
     const updatePlan = async (planId: string) => {
@@ -129,6 +144,30 @@ export function ClientDetailView({ client, availablePlans, logs, checkIns }: Pro
         }
     };
 
+    const saveCheckInSchedule = async () => {
+        setSavingSchedule(true);
+        try {
+            const res = await fetch("/api/coach/clients/checkin-schedule", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    clientId: client.id,
+                    day: checkInDay,
+                    frequencyWeeks: checkInFrequency,
+                }),
+            });
+            if (res.ok) {
+                router.refresh();
+            } else {
+                alert("Failed to update check-in schedule.");
+            }
+        } catch (e) {
+            alert("Network error.");
+        } finally {
+            setSavingSchedule(false);
+        }
+    };
+
     return (
         <div className="space-y-8 animate-fade-in">
             {/* Client Profile Header */}
@@ -162,6 +201,63 @@ export function ClientDetailView({ client, availablePlans, logs, checkIns }: Pro
             <div className="grid lg:grid-cols-2 gap-8">
                 {/* Active Plan & Progress */}
                 <div className="space-y-6">
+                    <div className={cn(
+                        "card p-6 space-y-4",
+                        client.checkInSchedule.day === null ? "border-warning/30 bg-warning/5" : "border-success/20 bg-success/5"
+                    )}>
+                        <div className="flex items-start justify-between gap-4">
+                            <div>
+                                <h3 className="heading-3 flex items-center gap-2 uppercase tracking-widest text-[11px] font-black text-brand-400">
+                                    <Calendar className="w-4 h-4" />
+                                    Check-in Schedule
+                                </h3>
+                                <p className="text-xs text-fg-muted mt-1">
+                                    {client.checkInSchedule.day === null
+                                        ? "Choose when this client should submit check-ins."
+                                        : `${CHECK_IN_FREQUENCIES.find(f => f.value === client.checkInSchedule.frequencyWeeks)?.label ?? "Custom"} on ${CHECK_IN_DAYS[client.checkInSchedule.day]}`}
+                                </p>
+                            </div>
+                            {client.checkInSchedule.day === null && (
+                                <span className="px-2.5 py-1 rounded-lg bg-warning/10 border border-warning/25 text-warning text-[9px] font-black uppercase tracking-widest">
+                                    Required
+                                </span>
+                            )}
+                        </div>
+                        <div className="grid sm:grid-cols-2 gap-3">
+                            <label className="space-y-1">
+                                <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Day</span>
+                                <select
+                                    value={checkInDay}
+                                    onChange={(e) => setCheckInDay(Number(e.target.value))}
+                                    className="input h-11 text-sm font-bold bg-surface-muted/30"
+                                >
+                                    {CHECK_IN_DAYS.map((day, idx) => (
+                                        <option key={day} value={idx}>{day}</option>
+                                    ))}
+                                </select>
+                            </label>
+                            <label className="space-y-1">
+                                <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Frequency</span>
+                                <select
+                                    value={checkInFrequency}
+                                    onChange={(e) => setCheckInFrequency(Number(e.target.value))}
+                                    className="input h-11 text-sm font-bold bg-surface-muted/30"
+                                >
+                                    {CHECK_IN_FREQUENCIES.map((freq) => (
+                                        <option key={freq.value} value={freq.value}>{freq.label}</option>
+                                    ))}
+                                </select>
+                            </label>
+                        </div>
+                        <button
+                            onClick={saveCheckInSchedule}
+                            disabled={savingSchedule}
+                            className="btn-primary w-full h-10 text-xs font-black uppercase tracking-widest"
+                        >
+                            {savingSchedule ? "Saving..." : "Save Check-in Schedule"}
+                        </button>
+                    </div>
+
                     <div className="space-y-4">
                         <h3 className="heading-3 px-2 flex items-center gap-2 uppercase tracking-widest text-[11px] font-black text-brand-400">
                             <Dumbbell className="w-4 h-4" />

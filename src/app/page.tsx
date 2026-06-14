@@ -138,7 +138,7 @@ export default function LandingPage() {
               <div className="h-8 w-24 bg-surface-muted animate-pulse rounded-lg" />
             ) : !isSignedIn ? (
               <>
-                <SignInButton mode="modal" fallbackRedirectUrl="/dashboard">
+                <SignInButton mode="modal" fallbackRedirectUrl="/onboarding">
                   <button className="btn-ghost text-sm hidden sm:flex">Sign In</button>
                 </SignInButton>
                 <SignUpButton mode="modal" fallbackRedirectUrl="/onboarding">

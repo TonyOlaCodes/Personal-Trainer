@@ -24,6 +24,10 @@ export default async function AppLayout({
         console.warn("[AppLayout] DB unreachable, treating as new user:", e);
     }
 
+    if (!user?.onboardingDone) {
+        redirect("/onboarding");
+    }
+
     const cookieStore = await cookies();
     const isClientMode = cookieStore.get("viewMode")?.value === "CLIENT";
 

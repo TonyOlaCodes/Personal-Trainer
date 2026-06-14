@@ -9,8 +9,8 @@ import {
 import {
     TrendingUp, TrendingDown, Loader2,
     Dumbbell, Activity, Search, ChevronRight,
-    Scale, Zap, Trophy, BarChart2,
-    Flame, ArrowUpRight, ArrowDownRight, X
+    Scale, Zap, BarChart2,
+    Flame, ArrowUpRight, ArrowDownRight, X, Utensils, Footprints, Moon
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PremiumLockScreen } from "@/components/shared/PremiumLockScreen";
@@ -56,6 +56,15 @@ export function ProgressClient({ userRole }: Props) {
         return names.filter(ex => exerciseSearchQuery ? getRegex(exerciseSearchQuery).test(ex) : true);
     }, [data, exerciseSearchQuery]);
 
+    const selectedExerciseStats = useMemo(() => {
+        if (!data || !selectedExercise) return null;
+        const history: any[] = data.exerciseHistory[selectedExercise] || [];
+        if (history.length === 0) return null;
+        const currentMax = Math.max(...history.map((h: any) => h.weight || 0));
+        const estimatedMax = Math.max(...history.map((h: any) => h.oneRM || 0));
+        return { currentMax, estimatedMax };
+    }, [data, selectedExercise]);
+
     if (!isPremium) {
         return (
             <div className="p-4 sm:p-10">
@@ -96,6 +105,43 @@ export function ProgressClient({ userRole }: Props) {
         ? Math.min(Math.round((data.consistency.thisWeek / data.consistency.target) * 100), 100) : 0;
 
     const volumeChangeDir = (data.weeklySummary?.volumeChange || 0) >= 0;
+    const formatHabitValue = (value: number | null | undefined, unit: string) => {
+        if (value === null || value === undefined) return "--";
+        const formatted = unit === "hrs" ? value.toFixed(1) : Math.round(value).toLocaleString();
+        return `${formatted}${unit === "hrs" ? "h" : ""}`;
+    };
+    const habitCards = [
+        {
+            key: "calories",
+            label: "Calories",
+            icon: Utensils,
+            unit: "kcal",
+            color: "text-warning",
+            bg: "bg-warning/10",
+            border: "border-warning/20",
+            metric: data.dailyMetrics?.calories,
+        },
+        {
+            key: "steps",
+            label: "Steps",
+            icon: Footprints,
+            unit: "steps",
+            color: "text-success",
+            bg: "bg-success/10",
+            border: "border-success/20",
+            metric: data.dailyMetrics?.steps,
+        },
+        {
+            key: "sleep",
+            label: "Sleep",
+            icon: Moon,
+            unit: "hrs",
+            color: "text-brand-400",
+            bg: "bg-brand-500/10",
+            border: "border-brand-500/20",
+            metric: data.dailyMetrics?.sleep,
+        },
+    ];
 
     return (
         <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8 animate-fade-in mb-24 lg:mb-12">
@@ -106,7 +152,7 @@ export function ProgressClient({ userRole }: Props) {
                     <Flame className="w-4 h-4 text-brand-400" />
                     Weekly Pulse
                 </h2>
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     {/* Consistency Ring */}
                     <div className="card p-5 flex items-center gap-4">
                         <div className="relative w-14 h-14 shrink-0">
@@ -155,33 +201,6 @@ export function ProgressClient({ userRole }: Props) {
                         </div>
                     </div>
 
-                    {/* Weight */}
-                    <div className="card p-5">
-                        <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1">Bodyweight</p>
-                        <div className="flex items-baseline gap-1">
-                            <span className="text-xl font-black text-fg">{data.bodyweight.current ? data.bodyweight.current.toFixed(2) : "--"}</span>
-                            <span className="text-[10px] font-bold text-fg-muted">kg</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 mt-1.5">
-                            {data.bodyweight.changeWeek >= 0 ?
-                                <TrendingUp className="w-3 h-3 text-fg-muted" /> :
-                                <TrendingDown className="w-3 h-3 text-fg-muted" />
-                            }
-                            <span className="text-[10px] font-bold text-fg-muted">
-                                {data.bodyweight.changeWeek > 0 ? "+" : ""}{data.bodyweight.changeWeek.toFixed(2)}kg this week
-                            </span>
-                        </div>
-                    </div>
-
-                    {/* Total Workouts */}
-                    <div className="card p-5">
-                        <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1">Total Logged</p>
-                        <div className="flex items-baseline gap-2">
-                            <span className="text-xl font-black text-fg">{data.totalWorkouts}</span>
-                            <Trophy className="w-4 h-4 text-warning" />
-                        </div>
-                        <p className="text-[10px] text-fg-subtle font-bold mt-1.5 uppercase tracking-tight">Sessions completed</p>
-                    </div>
                 </div>
             </section>
 
@@ -240,56 +259,72 @@ export function ProgressClient({ userRole }: Props) {
             )}
 
             {/* ── BODYWEIGHT TREND ── */}
-            {bodyweightData.length > 1 && (
+            {bodyweightData.length > 0 && (
                 <section className="card p-5 sm:p-6 overflow-hidden">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                    {/* Top bar: title + timeframe toggle */}
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-5">
                         <div className="flex items-center gap-3">
-                            <Scale className="w-5 h-5 text-brand-400" />
+                            <Scale className="w-5 h-5 text-brand-400 shrink-0 mt-0.5" />
                             <div>
-                                <h3 className="text-sm font-black text-fg uppercase tracking-widest">Bodyweight Trend</h3>
+                                <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-0.5">Bodyweight Trend</p>
+                                {/* ── BIG current weight ── */}
+                                <div className="flex items-end gap-3">
+                                    <h3 className="text-4xl font-black text-fg tracking-tighter leading-none">
+                                        {data.bodyweight.current ? data.bodyweight.current.toFixed(1) : "--"}
+                                        <span className="text-lg font-bold text-fg-muted ml-1">kg</span>
+                                    </h3>
+                                    {/* Week delta badge */}
+                                    {data.bodyweight.changeWeek !== 0 && (
+                                        <span className={cn(
+                                            "inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-black mb-1",
+                                            data.bodyweight.changeWeek > 0
+                                                ? "bg-red-500/10 text-red-400"
+                                                : "bg-success/10 text-success"
+                                        )}>
+                                            {data.bodyweight.changeWeek > 0
+                                                ? <TrendingUp className="w-3 h-3" />
+                                                : <TrendingDown className="w-3 h-3" />}
+                                            {data.bodyweight.changeWeek > 0 ? "+" : ""}{data.bodyweight.changeWeek.toFixed(1)} kg this week
+                                        </span>
+                                    )}
+                                </div>
+                                {/* Target line */}
                                 {data.bodyweight.target && (
-                                    <p className="text-[10px] text-fg-muted mt-0.5">
-                                        Target: <span className="text-brand-400 font-bold">{data.bodyweight.target.toFixed(2)}kg</span>
-                                        {" · "}
+                                    <p className="text-[10px] text-fg-muted mt-1.5">
+                                        Goal: <span className="text-red-400 font-bold">{data.bodyweight.target.toFixed(1)} kg</span>
+                                        <span className="mx-1 text-fg-subtle">·</span>
                                         <span className={cn("font-bold", Math.abs(data.bodyweight.current - data.bodyweight.target) < 2 ? "text-success" : "text-fg-muted")}>
-                                            {Math.abs(data.bodyweight.current - data.bodyweight.target).toFixed(2)}kg away
+                                            {Math.abs(data.bodyweight.current - data.bodyweight.target).toFixed(1)} kg away
                                         </span>
                                     </p>
                                 )}
                             </div>
                         </div>
-                        <div className="flex bg-surface-muted p-1 rounded-xl self-start sm:self-auto">
-                            {[7, 30, 90].map((d) => (
-                                <button
-                                    key={d}
-                                    onClick={() => setBwDays(d as any)}
-                                    className={cn(
-                                        "px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
-                                        bwDays === d ? "bg-surface-card text-brand-400 shadow-sm" : "text-fg-subtle hover:text-fg"
-                                    )}
-                                >
-                                    {d}D
-                                </button>
-                            ))}
+                        <div className="flex flex-col items-end gap-3">
+                            <div className="flex bg-surface-muted p-1 rounded-xl self-start sm:self-auto">
+                                {[7, 30, 90].map((d) => (
+                                    <button
+                                        key={d}
+                                        onClick={() => setBwDays(d as any)}
+                                        className={cn(
+                                            "px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
+                                            bwDays === d ? "bg-surface-card text-brand-400 shadow-sm" : "text-fg-subtle hover:text-fg"
+                                        )}
+                                    >
+                                        {d}D
+                                    </button>
+                                ))}
+                            </div>
+                            {/* Total change pill */}
+                            <div className="text-right">
+                                <p className="text-[9px] font-black text-fg-subtle uppercase tracking-widest">Total change</p>
+                                <p className={cn("text-sm font-black", data.bodyweight.totalChange < 0 ? "text-success" : "text-fg")}>
+                                    {data.bodyweight.totalChange > 0 ? "+" : ""}{data.bodyweight.totalChange.toFixed(1)} kg
+                                </p>
+                            </div>
                         </div>
                     </div>
 
-                    {/* Weight Change Summary Bar */}
-                    <div className="flex items-center gap-6 mb-6 px-2">
-                        <div>
-                            <p className="text-[9px] font-black text-fg-subtle uppercase tracking-widest">Week Change</p>
-                            <p className={cn("text-sm font-black", data.bodyweight.changeWeek >= 0 ? "text-fg" : "text-success")}>
-                                {data.bodyweight.changeWeek > 0 ? "+" : ""}{data.bodyweight.changeWeek.toFixed(2)} kg
-                            </p>
-                        </div>
-                        <div className="w-px h-8 bg-surface-border" />
-                        <div>
-                            <p className="text-[9px] font-black text-fg-subtle uppercase tracking-widest">Total Change</p>
-                            <p className={cn("text-sm font-black", data.bodyweight.totalChange < 0 ? "text-success" : "text-fg")}>
-                                {data.bodyweight.totalChange > 0 ? "+" : ""}{data.bodyweight.totalChange.toFixed(2)} kg
-                            </p>
-                        </div>
-                    </div>
 
                     <div className="h-[260px] w-full">
                         <ResponsiveContainer width="100%" height="100%">
@@ -321,22 +356,77 @@ export function ProgressClient({ userRole }: Props) {
                                 {data.bodyweight.target && (
                                     <ReferenceLine
                                         y={data.bodyweight.target}
-                                        stroke="#10B981"
+                                        stroke="#EF4444"
                                         strokeDasharray="4 4"
-                                        strokeWidth={1.5}
+                                        strokeWidth={2}
                                         label={{ 
-                                            value: `GOAL: ${data.bodyweight.target.toFixed(2)}kg`, 
-                                            position: "right", 
-                                            fill: "#10B981", 
+                                            value: `GOAL: ${data.bodyweight.target.toFixed(1)}kg`, 
+                                            position: "insideTopRight", 
+                                            fill: "#EF4444", 
                                             fontSize: 9, 
                                             fontWeight: 900,
-                                            offset: 10
+                                            offset: 6
                                         }}
                                     />
                                 )}
                                 <Area type="monotone" dataKey="weight" name="Weight" stroke="#8B5CF6" strokeWidth={3} fill="url(#bwGrad)" dot={{ r: 3, fill: "#8B5CF6", strokeWidth: 0 }} activeDot={{ r: 6, fill: "#A78BFA", strokeWidth: 0 }} />
                             </AreaChart>
                         </ResponsiveContainer>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-5">
+                        {habitCards.map(({ key, label, icon: Icon, unit, color, bg, border, metric }) => {
+                            const current = metric?.current ?? null;
+                            const target = metric?.target ?? null;
+                            const weeklyAverage = metric?.weeklyAverage ?? null;
+                            const previousAverage = metric?.previousWeeklyAverage ?? null;
+                            const change = weeklyAverage !== null && previousAverage !== null
+                                ? Math.round((weeklyAverage - previousAverage) * 10) / 10
+                                : null;
+                            const isUp = (change ?? 0) >= 0;
+
+                            return (
+                                <div key={key} className={cn("rounded-2xl border p-4 bg-surface-muted/30", border)}>
+                                    <div className="flex items-center justify-between gap-3 mb-3">
+                                        <div className="flex items-center gap-2">
+                                            <div className={cn("w-8 h-8 rounded-xl flex items-center justify-center", bg)}>
+                                                <Icon className={cn("w-4 h-4", color)} />
+                                            </div>
+                                            <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest">{label}</p>
+                                        </div>
+                                        {change !== null && (
+                                            <span className={cn(
+                                                "inline-flex items-center gap-1 text-[10px] font-black",
+                                                isUp ? "text-success" : "text-danger"
+                                            )}>
+                                                {isUp ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+                                                {change > 0 ? "+" : ""}{unit === "hrs" ? change.toFixed(1) : Math.round(change).toLocaleString()}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="flex items-end justify-between gap-3">
+                                        <div>
+                                            <p className="text-2xl font-black text-fg leading-none">
+                                                {formatHabitValue(current, unit)}
+                                                {unit !== "hrs" && unit !== "steps" && <span className="text-[10px] font-bold text-fg-muted ml-1">{unit}</span>}
+                                            </p>
+                                            <p className="text-[10px] font-bold text-fg-muted mt-1">Latest log</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-[9px] font-black text-fg-subtle uppercase tracking-widest">Avg</p>
+                                            <p className="text-xs font-black text-fg">{formatHabitValue(weeklyAverage, unit)}</p>
+                                        </div>
+                                    </div>
+                                    <div className="mt-3 pt-3 border-t border-surface-border/60 flex items-center justify-between">
+                                        <span className="text-[9px] font-black text-fg-subtle uppercase tracking-widest">Goal</span>
+                                        <span className={cn("text-xs font-black", target ? color : "text-fg-muted")}>
+                                            {formatHabitValue(target, unit)}
+                                            {target && unit === "kcal" ? " kcal" : target && unit === "steps" ? " steps" : ""}
+                                        </span>
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
                 </section>
             )}
@@ -483,179 +573,9 @@ export function ProgressClient({ userRole }: Props) {
                 </section>
             )}
 
-            {/* ── STRENGTH EVOLUTION ── */}
-            <section>
-                <h2 className="text-xs font-black text-fg-subtle uppercase tracking-[0.2em] mb-5 flex items-center gap-2">
-                    <Zap className="w-4 h-4 text-warning" />
-                    Strength Evolution
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {(data.topExercises.length > 0 ? data.topExercises.slice(0, 3) : ["Bench Press", "Squat", "Deadlift"]).map((lift: string) => {
-                        const big3Stats = data.big3[lift];
-                        const historyKey = Object.keys(data.exerciseHistory).find(k => k.toLowerCase() === lift.toLowerCase()) || lift;
-                        const history = data.exerciseHistory[historyKey] || [];
-                        const progressData = history.map((h: any) => ({
-                            date: h.date,
-                            e1rm: Math.round(h.weight * (1 + h.reps / 30)),
-                            weight: h.weight
-                        }));
-                        const latestWeight = history[history.length - 1]?.weight || big3Stats?.weight || 0;
-                        const latestReps = history[history.length - 1]?.reps || big3Stats?.reps || 0;
-                        const firstE1RM = progressData[0]?.e1rm || 0;
-                        const latestE1RM = progressData[progressData.length - 1]?.e1rm || big3Stats?.oneRM || 0;
-                        const gain = firstE1RM > 0 ? latestE1RM - firstE1RM : 0;
 
-                        return (
-                            <div
-                                key={lift}
-                                className="card p-5 hover:border-brand-500/20 transition-all cursor-pointer group"
-                                onClick={() => { setSelectedExercise(historyKey); setShowExerciseModal(true); }}
-                            >
-                                <div className="flex justify-between items-start mb-4">
-                                    <div>
-                                        <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest">{lift}</p>
-                                        <h4 className="text-2xl font-black text-fg tracking-tighter mt-1">
-                                            {latestE1RM || "--"}
-                                            <span className="text-xs text-fg-muted ml-1 font-bold">kg e1RM</span>
-                                        </h4>
-                                    </div>
-                                    {gain > 0 && (
-                                        <div className="bg-success/10 text-success text-[10px] font-black px-2 py-1 rounded-lg flex items-center gap-1">
-                                            <TrendingUp className="w-3 h-3" />
-                                            +{gain}kg
-                                        </div>
-                                    )}
-                                </div>
-
-                                {progressData.length > 1 && (
-                                    <div className="h-16 w-full mb-3">
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <LineChart data={progressData}>
-                                                <Line type="monotone" dataKey="e1rm" stroke="#8B5CF6" strokeWidth={2} dot={false} />
-                                            </LineChart>
-                                        </ResponsiveContainer>
-                                    </div>
-                                )}
-
-                                <p className="text-[10px] font-bold text-fg-muted uppercase tracking-tight">
-                                    Last: {latestWeight}kg × {latestReps}
-                                </p>
-                            </div>
-                        );
-                    })}
-                </div>
-            </section>
-
-            {/* ── PR TRACKER & VOLUME ── */}
-            <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* PR Tracker */}
-                <div className="card p-5 sm:p-6">
-                    <div className="flex items-center justify-between mb-6">
-                        <div className="flex items-center gap-3">
-                            <Trophy className="w-5 h-5 text-warning" />
-                            <h3 className="text-sm font-black text-fg uppercase tracking-widest">Personal Records</h3>
-                        </div>
-                        <span className="text-[10px] font-bold text-fg-subtle uppercase">{data.prList.length} PRs</span>
-                    </div>
-                    <div className="space-y-2 max-h-[320px] overflow-y-auto no-scrollbar">
-                        {data.prList.length === 0 ? (
-                            <p className="text-sm text-fg-subtle text-center py-8">Log heavier sets to earn PRs!</p>
-                        ) : (
-                            data.prList.map((pr: any, i: number) => (
-                                <button
-                                    key={pr.name}
-                                    onClick={() => { setSelectedExercise(pr.name); setShowExerciseModal(true); }}
-                                    className="w-full flex items-center justify-between p-3.5 bg-surface-elevated/50 hover:bg-surface-elevated rounded-xl transition-all group text-left"
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <div className={cn(
-                                            "w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-black",
-                                            i === 0 ? "bg-warning/10 text-warning" :
-                                            i === 1 ? "bg-fg-subtle/10 text-fg-subtle" :
-                                            i === 2 ? "bg-amber-700/10 text-amber-600" :
-                                            "bg-surface-muted text-fg-subtle"
-                                        )}>
-                                            {i < 3 ? "🏆" : (i + 1)}
-                                        </div>
-                                        <div>
-                                            <p className="text-xs font-black text-fg group-hover:text-brand-400 transition-colors uppercase italic tracking-tighter">{pr.name}</p>
-                                            <p className="text-[10px] text-fg-muted font-bold">
-                                                {pr.date}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="text-sm font-black text-fg">
-                                            {pr.weight}<span className="text-[10px] text-fg-muted ml-0.5">kg</span>
-                                            <span className="text-[10px] font-bold text-fg-subtle ml-1 opacity-60">× {pr.reps}</span>
-                                        </p>
-                                        {pr.improvement > 0 && (
-                                            <p className="text-[10px] font-bold text-success">+{pr.improvement}%</p>
-                                        )}
-                                    </div>
-                                </button>
-                            ))
-                        )}
-                    </div>
-                </div>
-
-                {/* Volume Trend */}
-                <div className="card p-5 sm:p-6">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                        <div className="flex items-center gap-3">
-                            <BarChart2 className="w-5 h-5 text-success" />
-                            <h3 className="text-sm font-black text-fg uppercase tracking-widest">Training Volume</h3>
-                        </div>
-                        <div className="flex bg-surface-muted p-1 rounded-xl self-start shrink-0">
-                            {(["daily", "weekly", "monthly", "yearly"] as const).map((t) => (
-                                <button
-                                    key={t}
-                                    onClick={() => setVolTimeframe(t)}
-                                    className={cn(
-                                        "px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all",
-                                        volTimeframe === t ? "bg-surface-card text-brand-400 shadow-sm" : "text-fg-subtle hover:text-fg"
-                                    )}
-                                >
-                                    {t.charAt(0)}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                    <div className="h-[280px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={data.volumes?.[volTimeframe] || []} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" vertical={false} />
-                                <XAxis dataKey="label" stroke="#4B5563" fontSize={9} tickLine={false} axisLine={false} />
-                                <YAxis stroke="#4B5563" fontSize={9} tickLine={false} axisLine={false} tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v} />
-                                <Tooltip
-                                    contentStyle={{ backgroundColor: "#0F172A", borderRadius: "12px", border: "1px solid #1E293B" }}
-                                    formatter={(value: any) => [`${value.toLocaleString()} kg`, "Volume"]}
-                                    cursor={{ fill: '#8B5CF610' }}
-                                    labelStyle={{ color: "#6B7280", fontSize: 10, fontWeight: 800 }}
-                                />
-                                <Bar dataKey="volume" radius={[6, 6, 0, 0]} barSize={volTimeframe === 'daily' ? 12 : 28}>
-                                    {(data.volumes?.[volTimeframe] || []).map((_: any, index: number) => {
-                                        const isLast = index === (data.volumes?.[volTimeframe] || []).length - 1;
-                                        return (
-                                            <Cell
-                                                key={`cell-${index}`}
-                                                fill={isLast ? "#8B5CF6" : "#1E293B"}
-                                                stroke={isLast ? "#8B5CF6" : "#374151"}
-                                                strokeWidth={1}
-                                            />
-                                        );
-                                    })}
-                                </Bar>
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </div>
-                    <p className="text-[9px] text-fg-subtle font-bold uppercase tracking-widest mt-3 text-center">
-                        Total kg moved per {volTimeframe.replace('ly', '').replace('i', 'y')} · Latest period highlighted
-                    </p>
-                </div>
-            </section>
-
-            {/* ── EXERCISE HISTORY ── */}
+            {/* ── TRAINING VOLUME ── */}
+                        {/* ── EXERCISE HISTORY ── */}
             <section>
                 <h2 className="text-xs font-black text-fg-subtle uppercase tracking-[0.2em] mb-5 flex items-center gap-2">
                     <Activity className="w-4 h-4 text-brand-400" />
@@ -665,10 +585,22 @@ export function ProgressClient({ userRole }: Props) {
                     {/* Chart */}
                     <div className="lg:col-span-8 card overflow-hidden">
                         <div className="p-5 border-b border-surface-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                            <div>
+                            <div className="flex-1 min-w-0">
                                 <h3 className="text-base font-black text-fg tracking-tight">{selectedExercise || "Select an exercise"}</h3>
                                 <p className="text-[10px] text-fg-muted font-medium mt-0.5">Performance curve over time</p>
                             </div>
+                            {selectedExerciseStats && (
+                                <div className="flex items-center gap-3 shrink-0">
+                                    <div className="text-center px-3 py-1.5 rounded-xl bg-warning/10 border border-warning/20">
+                                        <p className="text-[9px] font-black text-warning/70 uppercase tracking-widest">Est. Max</p>
+                                        <p className="text-sm font-black text-warning">{selectedExerciseStats.estimatedMax}<span className="text-[9px] ml-0.5 font-bold">kg</span></p>
+                                    </div>
+                                    <div className="text-center px-3 py-1.5 rounded-xl bg-brand-500/10 border border-brand-500/20">
+                                        <p className="text-[9px] font-black text-brand-400/70 uppercase tracking-widest">Current Max</p>
+                                        <p className="text-sm font-black text-brand-400">{selectedExerciseStats.currentMax}<span className="text-[9px] ml-0.5 font-bold">kg</span></p>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                         <div className="p-5 sm:p-6">
                             <div className="h-[300px] w-full">
@@ -688,12 +620,12 @@ export function ProgressClient({ userRole }: Props) {
                                                 if (active && payload && payload.length) {
                                                     const d = payload[0].payload;
                                                     return (
-                                                        <div className="bg-surface-elevated/95 backdrop-blur-md border border-brand-500/20 p-4 rounded-2xl shadow-2xl">
-                                                            <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle mb-2">{label}</p>
+                                                        <div className="bg-surface-elevated/95 backdrop-blur-md border border-brand-500/20 p-4 rounded-2xl shadow-2xl min-w-[160px]">
+                                                            <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle mb-2.5">{label}</p>
                                                             <div className="space-y-1.5">
-                                                                <div className="flex items-center justify-between gap-6 pb-1">
-                                                                    <span className="text-xs font-black text-fg">Best Set</span>
-                                                                    <span className="text-xs font-bold text-brand-400">{d.weight}kg × {d.reps}</span>
+                                                                <div className="flex items-center justify-between gap-6">
+                                                                    <span className="text-xs font-bold text-fg-muted">Best Set</span>
+                                                                    <span className="text-xs font-black text-brand-400">{d.weight}kg × {d.reps}</span>
                                                                 </div>
                                                                 <div className="flex items-center justify-between gap-6 pt-1.5 border-t border-surface-border/50">
                                                                     <span className="text-xs text-fg-muted">Est. 1RM</span>
@@ -778,18 +710,85 @@ export function ProgressClient({ userRole }: Props) {
                 </div>
             </section>
 
+            {/* Training Volume */}
+            <section className="card p-5 sm:p-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                    <div className="flex items-center gap-3">
+                        <BarChart2 className="w-5 h-5 text-success" />
+                        <h3 className="text-sm font-black text-fg uppercase tracking-widest">Training Volume</h3>
+                    </div>
+                    <div className="flex bg-surface-muted p-1 rounded-xl self-start shrink-0">
+                        {(["daily", "weekly", "monthly", "yearly"] as const).map((t) => (
+                            <button
+                                key={t}
+                                onClick={() => setVolTimeframe(t)}
+                                className={cn(
+                                    "px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all",
+                                    volTimeframe === t ? "bg-surface-card text-brand-400 shadow-sm" : "text-fg-subtle hover:text-fg"
+                                )}
+                            >
+                                {t.charAt(0)}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                <div className="h-[280px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={data.volumes?.[volTimeframe] || []} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" vertical={false} />
+                            <XAxis dataKey="label" stroke="#4B5563" fontSize={9} tickLine={false} axisLine={false} />
+                            <YAxis stroke="#4B5563" fontSize={9} tickLine={false} axisLine={false} tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v} />
+                            <Tooltip
+                                contentStyle={{ backgroundColor: "#0F172A", borderRadius: "12px", border: "1px solid #1E293B" }}
+                                formatter={(value) => [`${Number(value ?? 0).toLocaleString()} kg`, "Volume"]}
+                                cursor={{ fill: '#8B5CF610' }}
+                                labelStyle={{ color: "#6B7280", fontSize: 10, fontWeight: 800 }}
+                            />
+                            <Bar dataKey="volume" radius={[6, 6, 0, 0]} barSize={volTimeframe === 'daily' ? 12 : 28}>
+                                {(data.volumes?.[volTimeframe] || []).map((_: unknown, index: number) => {
+                                    const isLast = index === (data.volumes?.[volTimeframe] || []).length - 1;
+                                    return (
+                                        <Cell
+                                            key={`cell-${index}`}
+                                            fill={isLast ? "#8B5CF6" : "#1E293B"}
+                                            stroke={isLast ? "#8B5CF6" : "#374151"}
+                                            strokeWidth={1}
+                                        />
+                                    );
+                                })}
+                            </Bar>
+                        </BarChart>
+                    </ResponsiveContainer>
+                </div>
+                <p className="text-[9px] text-fg-subtle font-bold uppercase tracking-widest mt-3 text-center">
+                    Total kg moved per {volTimeframe.replace('ly', '').replace('i', 'y')} - latest period highlighted
+                </p>
+            </section>
+
             {/* ── EXERCISE DETAIL MODAL ── */}
             {showExerciseModal && selectedExercise && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setShowExerciseModal(false)}>
                     <div className="bg-surface-card border border-surface-border rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center justify-between p-6 border-b border-surface-border sticky top-0 bg-surface-card/95 backdrop-blur-md z-10">
-                            <div>
+                            <div className="flex-1 min-w-0">
                                 <h3 className="text-lg font-black text-fg tracking-tight">{selectedExercise}</h3>
                                 <p className="text-[10px] text-fg-muted font-bold uppercase tracking-widest mt-1">
                                     {(data.exerciseHistory[selectedExercise] || []).length} sessions logged
                                 </p>
                             </div>
-                            <button onClick={() => setShowExerciseModal(false)} className="w-8 h-8 rounded-lg bg-surface-muted hover:bg-surface-elevated flex items-center justify-center transition-colors">
+                            {selectedExerciseStats && (
+                                <div className="flex items-center gap-2 mr-3">
+                                    <div className="text-center px-2.5 py-1.5 rounded-xl bg-warning/10 border border-warning/20">
+                                        <p className="text-[8px] font-black text-warning/70 uppercase tracking-widest">Est. Max</p>
+                                        <p className="text-sm font-black text-warning leading-tight">{selectedExerciseStats.estimatedMax}<span className="text-[8px] ml-0.5 font-bold">kg</span></p>
+                                    </div>
+                                    <div className="text-center px-2.5 py-1.5 rounded-xl bg-brand-500/10 border border-brand-500/20">
+                                        <p className="text-[8px] font-black text-brand-400/70 uppercase tracking-widest">Current Max</p>
+                                        <p className="text-sm font-black text-brand-400 leading-tight">{selectedExerciseStats.currentMax}<span className="text-[8px] ml-0.5 font-bold">kg</span></p>
+                                    </div>
+                                </div>
+                            )}
+                            <button onClick={() => setShowExerciseModal(false)} className="w-8 h-8 rounded-lg bg-surface-muted hover:bg-surface-elevated flex items-center justify-center transition-colors shrink-0">
                                 <X className="w-4 h-4 text-fg-muted" />
                             </button>
                         </div>
@@ -809,14 +808,33 @@ export function ProgressClient({ userRole }: Props) {
                                         <XAxis dataKey="date" stroke="#4B5563" fontSize={10} tickLine={false} axisLine={false} />
                                         <YAxis stroke="#4B5563" fontSize={10} tickLine={false} axisLine={false} />
                                         <Tooltip
-                                            contentStyle={{ backgroundColor: "#0F172A", borderRadius: "12px", border: "1px solid #1E293B" }}
-                                            formatter={(value: any, name: any) => 
-                                                name === "weight" ? [`${value}kg`, "Best Weight"] : 
-                                                name === "oneRM" ? [`${value}kg`, "Est. 1RM"] : 
-                                                [`${value}`, name]}
-                                            labelStyle={{ color: "#6B7280", fontSize: 10, fontWeight: 800 }}
+                                            content={({ active, payload, label }) => {
+                                                if (active && payload && payload.length) {
+                                                    const d = payload[0].payload;
+                                                    return (
+                                                        <div className="bg-surface-elevated/95 backdrop-blur-md border border-brand-500/20 p-4 rounded-2xl shadow-2xl min-w-[160px]">
+                                                            <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle mb-2.5">{label}</p>
+                                                            <div className="space-y-1.5">
+                                                                <div className="flex items-center justify-between gap-6">
+                                                                    <span className="text-xs font-bold text-fg-muted">Best Set</span>
+                                                                    <span className="text-xs font-black text-brand-400">{d.weight}kg × {d.reps}</span>
+                                                                </div>
+                                                                <div className="flex items-center justify-between gap-6 pt-1.5 border-t border-surface-border/50">
+                                                                    <span className="text-xs text-fg-muted">Est. 1RM</span>
+                                                                    <span className="text-xs font-bold text-yellow-400">{d.oneRM || "—"}kg</span>
+                                                                </div>
+                                                                <div className="flex items-center justify-between gap-6 pt-1.5 border-t border-surface-border/50">
+                                                                    <span className="text-xs text-fg-muted">Volume</span>
+                                                                    <span className="text-xs font-bold text-success">{Math.round(d.volume)}kg</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                }
+                                                return null;
+                                            }}
                                         />
-                                        <Area type="monotone" dataKey="weight" stroke="#8B5CF6" strokeWidth={3} fill="url(#modalGrad)" dot={{ r: 4, fill: "#8B5CF6", stroke: "#0F172A", strokeWidth: 2 }} />
+                                        <Area type="monotone" dataKey="weight" stroke="#8B5CF6" strokeWidth={3} fill="url(#modalGrad)" dot={{ r: 4, fill: "#8B5CF6", stroke: "#0F172A", strokeWidth: 2 }} activeDot={{ r: 6, fill: "#A78BFA", strokeWidth: 0 }} />
                                         <Line type="monotone" dataKey="oneRM" stroke="#FACC15" strokeWidth={2} strokeDasharray="4 4" dot={false} activeDot={false} />
                                     </AreaChart>
                                 </ResponsiveContainer>
@@ -849,4 +867,3 @@ export function ProgressClient({ userRole }: Props) {
         </div>
     );
 }
-

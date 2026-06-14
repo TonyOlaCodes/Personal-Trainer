@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { normalizeCalories, normalizeSleepHours, normalizeSteps, updateDailyMetricTargets } from "@/lib/dailyMetrics";
 import { z } from "zod";
 
 const profileSchema = z.object({
@@ -13,7 +14,9 @@ const profileSchema = z.object({
     trainingLocation: z.enum(["GYM", "HOME"]).optional(),
     targetWeightKg: z.number().optional(),
     weightKg: z.number().optional(),
-    secretCode: z.string().optional(),
+    targetCalories: z.number().nullable().optional(),
+    targetSteps: z.number().nullable().optional(),
+    targetSleepHours: z.number().nullable().optional(),
 });
 
 export async function PATCH(req: Request) {
@@ -35,15 +38,26 @@ export async function PATCH(req: Request) {
                 ...(parsed.trainingLocation !== undefined && { trainingLocation: parsed.trainingLocation }),
                 ...(parsed.targetWeightKg !== undefined && { targetWeightKg: Math.round(parsed.targetWeightKg * 100) / 100 }),
                 ...(parsed.weightKg !== undefined && { weightKg: Math.round(parsed.weightKg * 100) / 100 }),
-                ...(parsed.secretCode?.trim().toLowerCase() === "code phoenix" && { role: "SUPER_ADMIN" }),
             },
         });
+
+        if (
+            parsed.targetCalories !== undefined ||
+            parsed.targetSteps !== undefined ||
+            parsed.targetSleepHours !== undefined
+        ) {
+            await updateDailyMetricTargets(updated.id, {
+                targetCalories: normalizeCalories(parsed.targetCalories),
+                targetSteps: normalizeSteps(parsed.targetSteps),
+                targetSleepHours: normalizeSleepHours(parsed.targetSleepHours),
+            });
+        }
 
         return NextResponse.json(updated);
     } catch (err) {
         console.error(err);
         if (err instanceof z.ZodError) {
-            return NextResponse.json({ error: (err as any).errors[0].message }, { status: 400 });
+            return NextResponse.json({ error: err.issues[0]?.message ?? "Invalid profile data" }, { status: 400 });
         }
         return NextResponse.json({ error: "Failed to update profile" }, { status: 500 });
     }

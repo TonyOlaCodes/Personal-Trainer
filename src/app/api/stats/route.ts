@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { format, startOfWeek, endOfWeek, subWeeks, isWithinInterval, startOfMonth, startOfYear } from "date-fns";
+import { ensureDailyMetricsTable, getDailyMetricTargets } from "@/lib/dailyMetrics";
 
 export async function GET() {
     const { userId } = await auth();
@@ -14,6 +15,7 @@ export async function GET() {
         }
     });
     if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+    await ensureDailyMetricsTable();
 
     // Fetch completed workout logs
     const logs = await prisma.workoutLog.findMany({
@@ -193,8 +195,81 @@ export async function GET() {
         ? (recentCheckins[recentCheckins.length - 1]?.bodyweightKg || currentWeight) - (recentCheckins[0]?.bodyweightKg || currentWeight)
         : 0;
 
+    const [dailyMetricRows, dailyMetricTargets] = await Promise.all([
+        prisma.$queryRaw<Array<{
+            date: string;
+            dateKey: string;
+            calories: number | null;
+            steps: number | null;
+            sleepHours: number | null;
+        }>>`
+            SELECT
+                to_char("loggedDate", 'Mon DD') AS "date",
+                "loggedDate"::text AS "dateKey",
+                "calories",
+                "steps",
+                "sleepHours"
+            FROM "daily_metric_logs"
+            WHERE "userId" = ${user.id}
+            ORDER BY "loggedDate" ASC
+        `,
+        getDailyMetricTargets(user.id),
+    ]);
+
+    const currentWeekMetricRows = dailyMetricRows.filter((row) =>
+        isWithinInterval(new Date(row.dateKey), thisWeekRange)
+    );
+    const previousWeekMetricRows = dailyMetricRows.filter((row) =>
+        isWithinInterval(new Date(row.dateKey), lastWeekRange)
+    );
+    const averageMetric = (rows: typeof dailyMetricRows, key: "calories" | "steps" | "sleepHours") => {
+        const values = rows
+            .map((row) => row[key])
+            .filter((value): value is number => typeof value === "number");
+        if (values.length === 0) return null;
+        return Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 10) / 10;
+    };
+    const latestMetricWith = (key: "calories" | "steps" | "sleepHours") =>
+        [...dailyMetricRows].reverse().find((row) => typeof row[key] === "number") ?? null;
+
+    const dailyMetrics = {
+        calories: {
+            current: latestMetricWith("calories")?.calories ?? null,
+            target: dailyMetricTargets.targetCalories,
+            weeklyAverage: averageMetric(currentWeekMetricRows, "calories"),
+            previousWeeklyAverage: averageMetric(previousWeekMetricRows, "calories"),
+            history: dailyMetricRows.filter((row) => row.calories !== null).map((row) => ({
+                date: row.date,
+                dateKey: row.dateKey,
+                value: row.calories,
+            })),
+        },
+        steps: {
+            current: latestMetricWith("steps")?.steps ?? null,
+            target: dailyMetricTargets.targetSteps,
+            weeklyAverage: averageMetric(currentWeekMetricRows, "steps"),
+            previousWeeklyAverage: averageMetric(previousWeekMetricRows, "steps"),
+            history: dailyMetricRows.filter((row) => row.steps !== null).map((row) => ({
+                date: row.date,
+                dateKey: row.dateKey,
+                value: row.steps,
+            })),
+        },
+        sleep: {
+            current: latestMetricWith("sleepHours")?.sleepHours ?? null,
+            target: dailyMetricTargets.targetSleepHours,
+            weeklyAverage: averageMetric(currentWeekMetricRows, "sleepHours"),
+            previousWeeklyAverage: averageMetric(previousWeekMetricRows, "sleepHours"),
+            history: dailyMetricRows.filter((row) => row.sleepHours !== null).map((row) => ({
+                date: row.date,
+                dateKey: row.dateKey,
+                value: row.sleepHours,
+            })),
+        },
+    };
+
     const prList = Object.entries(exercisePRs)
-        .filter(([_, pr]) => pr.weight > 0)
+        .filter(([, pr]) => pr.weight > 0)
         .map(([name, pr]) => ({
             name, weight: pr.weight, reps: pr.reps, date: pr.date,
             improvement: pr.prevWeight > 0 ? Math.round(((pr.weight - pr.prevWeight) / pr.prevWeight) * 100) : 0
@@ -258,6 +333,7 @@ export async function GET() {
             current: currentWeight, target: user.targetWeightKg || null, goal: user.goal || null,
             changeWeek: weightChangeWeek, totalChange: currentWeight - startWeight, history: bodyweightHistory
         },
+        dailyMetrics,
         big3,
         sbdTimeline: sbdTimelineProgressive,
         muscleVolume,

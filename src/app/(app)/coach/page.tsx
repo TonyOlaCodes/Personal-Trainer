@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { CoachDashboardClient } from "./CoachDashboardClient";
+import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
 
 export const metadata = { title: "Coach Dashboard" };
 
@@ -34,6 +35,14 @@ export default async function CoachDashboardPage() {
         take: 5
     });
 
+    const clientSchedules = await Promise.all(
+        coach.clients.map(async (client) => ({
+            id: client.id,
+            schedule: await getUserCheckInSchedule(client.id),
+        }))
+    );
+    const scheduleByClientId = new Map(clientSchedules.map((item) => [item.id, item.schedule]));
+
     return (
         <>
             <TopBar title="Coach Command Centre" subtitle="Manage your stable of athletes" />
@@ -44,6 +53,8 @@ export default async function CoachDashboardPage() {
                         name: c.name || "Unnamed Client",
                         email: c.email,
                         avatarUrl: c.avatarUrl,
+                        isDeleted: c.email.endsWith("@deleted.local"),
+                        hasCheckInSchedule: scheduleByClientId.get(c.id)?.day !== null,
                         stats: { logs: c._count.workoutLogs, checkins: c._count.checkIns }
                     }))}
                     recentCheckIns={recentCheckIns.map(ci => ({

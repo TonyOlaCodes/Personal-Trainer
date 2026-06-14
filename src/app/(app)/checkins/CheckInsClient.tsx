@@ -1,14 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
     Scale, Send, Check, Camera, TrendingUp, TrendingDown,
     Plus, Minus, Calendar, MessageSquare, CheckCircle2,
     Zap, Moon, Brain, Activity, ChevronDown, AlertCircle,
-    Dumbbell, Flame, Edit2, Clock, Trash2
+    Dumbbell, Flame, Edit2, Clock, Trash2, X, Loader2
 } from "lucide-react";
 import { formatDate, getWeekNumber, cn } from "@/lib/utils";
 import { PremiumLockScreen } from "@/components/shared/PremiumLockScreen";
+import { MediaLightbox } from "@/components/shared/MediaLightbox";
 
 /* ─────────────────────────── Types ─────────────────────────── */
 interface CheckIn {
@@ -18,12 +19,30 @@ interface CheckIn {
     respondedAt?: string | null;
     sleepRating?: number | null; stressRating?: number | null;
     energyRating?: number | null; intensityRating?: number | null;
-    frontImageUrl?: string | null; sideImageUrl?: string | null;
+    frontImageUrl?: string | null;
+    sideImageUrl?: string | null;
+    videoUrl?: string | null;
+    coachVideoUrl?: string | null;
     user?: { name: string; email: string };
 }
 interface Props {
     checkIns: CheckIn[]; isCoach: boolean; userRole: string;
+    targetWeightKg?: number | null;
     workoutsThisWeek: number; workoutsTarget: number;
+    bodyweightWeeklyAverage: {
+        averageWeightKg: number | null;
+        entries: number;
+        previousAverageWeightKg: number | null;
+        previousEntries: number;
+    };
+    checkInDueState: {
+        isConfigured: boolean;
+        isDueToday: boolean;
+        isOverdue: boolean;
+        daysUntilNext: number | null;
+        dueDayLabel: string | null;
+        frequencyWeeks: number | null;
+    };
 }
 
 /* ─────────────────── Rating bar component ───────────────────── */
@@ -76,13 +95,13 @@ function RatingBar({ icon: Icon, label, sublabels, value, onChange, prevValue, i
                         className={cn(
                             "flex-1 h-11 rounded-xl text-sm font-black border transition-all duration-200 active:scale-90 relative overflow-hidden",
                             getColor(s, s <= value, value),
-                            s === prevValue && "ring-2 ring-brand-400 ring-offset-2 ring-offset-surface-card"
+                            s === prevValue && "ring-2 ring-brand-400/80 ring-offset-2 ring-offset-surface-card bg-brand-500/15 border-brand-400/70"
                         )}
                     >
                         {s}
                         {s === prevValue && (
-                            <div className="absolute top-0 right-0 w-3 h-3 bg-brand-400 rounded-bl-lg flex items-center justify-center">
-                                <Minus className="w-2 h-2 text-white" />
+                            <div className="absolute top-0 right-0 px-1.5 h-4 bg-brand-400 rounded-bl-lg flex items-center justify-center">
+                                <span className="text-[7px] font-black text-white uppercase leading-none">Last</span>
                             </div>
                         )}
                     </button>
@@ -134,6 +153,138 @@ function totalRatingScore(e: number, s: number, st: number, t: number) {
     return e + s + (6 - st) + t;
 }
 
+function getWeightGoalFeedback(current: number | null, previous: number | null, target?: number | null) {
+    if (!current) {
+        return {
+            tone: "neutral",
+            label: "No weekly average yet",
+            detail: "Log daily bodyweight this week to calculate it.",
+            icon: Minus,
+            chipClass: "bg-surface-muted border-surface-border text-fg-muted",
+            textClass: "text-fg-muted",
+        };
+    }
+
+    if (!target || target <= 0) {
+        const delta = previous ? Math.round((current - previous) * 100) / 100 : null;
+        const icon = delta === null || delta === 0 ? Minus : delta > 0 ? TrendingUp : TrendingDown;
+        return {
+            tone: "neutral",
+            label: delta === null ? "Average logged" : delta === 0 ? "No weekly change" : `${delta > 0 ? "Up" : "Down"} ${Math.abs(delta).toFixed(2)}kg`,
+            detail: "Set a target weight to see if this is moving toward your goal.",
+            icon,
+            chipClass: "bg-surface-muted border-surface-border text-fg-muted",
+            textClass: "text-fg-muted",
+        };
+    }
+
+    const delta = previous ? Math.round((current - previous) * 100) / 100 : null;
+    const distancePct = Math.abs(((current - target) / target) * 100);
+    const previousDistance = previous ? Math.abs(previous - target) : null;
+    const currentDistance = Math.abs(current - target);
+    const progressPct = previousDistance && previousDistance > 0
+        ? Math.round(((previousDistance - currentDistance) / previousDistance) * 100)
+        : null;
+    const direction = delta === null || delta === 0 ? 0 : delta > 0 ? 1 : -1;
+    const desiredDirection = target === current ? 0 : target > current ? 1 : -1;
+    const movedTowardGoal = delta !== null && direction !== 0 && previousDistance !== null && currentDistance < previousDistance;
+    const movedAwayFromGoal = delta !== null && direction !== 0 && previousDistance !== null && currentDistance > previousDistance;
+    const icon = direction === 0 ? Minus : direction > 0 ? TrendingUp : TrendingDown;
+
+    if (distancePct <= 0.25) {
+        return {
+            tone: "good",
+            label: "At goal",
+            detail: "You are basically on target. Hold steady and keep logging.",
+            icon,
+            chipClass: "bg-success/10 border-success/30 text-success shadow-glow-success-sm",
+            textClass: "text-success",
+        };
+    }
+
+    if (distancePct <= 1) {
+        return {
+            tone: "good",
+            label: `${distancePct.toFixed(1)}% away`,
+            detail: "Almost at goal. Keep this pace and stay consistent.",
+            icon,
+            chipClass: "bg-success/10 border-success/30 text-success shadow-glow-success-sm",
+            textClass: "text-success",
+        };
+    }
+
+    if (movedTowardGoal) {
+        if (progressPct !== null && progressPct >= 25) {
+            return {
+                tone: "good",
+                label: "Strong progress",
+                detail: `${progressPct}% closer to goal this week. Great direction.`,
+                icon,
+                chipClass: "bg-success/10 border-success/30 text-success shadow-glow-success-sm",
+                textClass: "text-success",
+            };
+        }
+        if (distancePct <= 3) {
+            return {
+                tone: "good",
+                label: "Closing in",
+                detail: `${distancePct.toFixed(1)}% away. You are moving the right way.`,
+                icon,
+                chipClass: "bg-success/10 border-success/30 text-success shadow-glow-success-sm",
+                textClass: "text-success",
+            };
+        }
+        return {
+            tone: "good",
+            label: "On track",
+            detail: "Good direction. Repeat the basics next week.",
+            icon,
+            chipClass: "bg-success/10 border-success/30 text-success shadow-glow-success-sm",
+            textClass: "text-success",
+        };
+    }
+
+    if (movedAwayFromGoal) {
+        if (distancePct <= 3) {
+            return {
+                tone: "warning",
+                label: "Slight deviation",
+                detail: "Small drift from target. You can pull this back next week.",
+                icon,
+                chipClass: "bg-warning/10 border-warning/30 text-warning",
+                textClass: "text-warning",
+            };
+        }
+        if (distancePct <= 6) {
+            return {
+                tone: "warning",
+                label: "Off pace",
+                detail: "Not a disaster, but tighten food, steps, or consistency next week.",
+                icon,
+                chipClass: "bg-warning/10 border-warning/30 text-warning",
+                textClass: "text-warning",
+            };
+        }
+        return {
+            tone: "bad",
+            label: "Needs attention",
+            detail: "Moving away from goal. Adjust the plan before it becomes a trend.",
+            icon,
+            chipClass: "bg-danger/10 border-danger/30 text-danger",
+            textClass: "text-danger",
+        };
+    }
+
+    return {
+        tone: desiredDirection === 0 ? "good" : "neutral",
+        label: `${distancePct.toFixed(1)}% away`,
+        detail: direction === 0 ? "Stable week. A small push next week gets you moving." : "New baseline set for this week.",
+        icon,
+        chipClass: "bg-surface-muted border-surface-border text-fg-muted",
+        textClass: "text-fg-muted",
+    };
+}
+
 function getDateFromWeek(week: number, year: number) {
     const d = new Date(year, 0, 1);
     const dayNum = d.getDay() || 7;
@@ -143,7 +294,7 @@ function getDateFromWeek(week: number, year: number) {
 }
 
 /* ─────────────────── Previous check-in summary ─────────────── */
-function PrevCheckInCard({ prev }: { prev: CheckIn }) {
+function PrevCheckInCard({ prev, setViewerMedia }: { prev: CheckIn, setViewerMedia: (url: string | null) => void }) {
     const [open, setOpen] = useState(false);
     return (
         <div className="rounded-2xl border border-surface-border bg-surface-muted/30 overflow-hidden">
@@ -182,11 +333,49 @@ function PrevCheckInCard({ prev }: { prev: CheckIn }) {
                             "{prev.feedback}"
                         </p>
                     )}
+                    {/* Media */}
+                    {(prev.frontImageUrl || prev.sideImageUrl || prev.videoUrl) && (
+                        <div className="flex gap-2">
+                            {[prev.frontImageUrl, prev.sideImageUrl].filter(Boolean).map((url, i) => (
+                                <img 
+                                    key={i} src={url!} alt="Progress" 
+                                    className="w-16 h-20 object-cover rounded-lg border border-surface-border cursor-pointer hover:opacity-80 transition-opacity" 
+                                    onClick={() => setViewerMedia(url!)}
+                                />
+                            ))}
+                            {prev.videoUrl && (
+                                <div 
+                                    className="relative w-16 h-20 rounded-lg overflow-hidden cursor-pointer group border border-surface-border"
+                                    onClick={() => setViewerMedia(prev.videoUrl!)}
+                                >
+                                    <video src={prev.videoUrl} className="w-full h-full object-cover" />
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                                        <div className="w-5 h-5 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center text-white">
+                                            <div className="w-0 h-0 border-t-2.5 border-t-transparent border-l-4 border-l-white border-b-2.5 border-b-transparent ml-0.5" />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
                     {/* Coach response */}
                     {prev.coachResponse && (
-                        <div className="bg-success/5 border border-success/20 rounded-xl p-3">
+                        <div className="bg-success/5 border border-success/20 rounded-xl p-3 space-y-3">
                             <p className="text-[10px] font-black text-success uppercase tracking-widest mb-1">Coach Feedback</p>
                             <p className="text-xs text-fg leading-relaxed">{prev.coachResponse}</p>
+                            {prev.coachVideoUrl && (
+                                <div 
+                                    className="relative w-full max-w-[200px] aspect-video rounded-xl overflow-hidden cursor-pointer group"
+                                    onClick={() => setViewerMedia(prev.coachVideoUrl!)}
+                                >
+                                    <video src={prev.coachVideoUrl} className="w-full h-full object-cover" />
+                                    <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                                        <div className="w-10 h-10 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center text-white group-hover:scale-110 transition-transform">
+                                            <div className="w-0 h-0 border-t-6 border-t-transparent border-l-10 border-l-white border-b-6 border-b-transparent ml-1" />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
@@ -195,17 +384,20 @@ function PrevCheckInCard({ prev }: { prev: CheckIn }) {
     );
 }
 
-/* ─────────────────── History item ──────────────────────────── */
-function HistoryItem({ c, isCoach, onCoachRespond, onEdit }: {
+function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia }: {
     c: CheckIn; isCoach: boolean;
     onCoachRespond?: (id: string, resp: string) => Promise<void>;
     onEdit?: (c: CheckIn) => void;
+    setViewerMedia: (url: string | null) => void;
 }) {
     const [open, setOpen] = useState(false);
     const [response, setResponse] = useState(c.coachResponse ?? "");
+    const [coachVideo, setCoachVideo] = useState(c.coachVideoUrl ?? "");
+    const [uploadingCoachV, setUploadingCoachV] = useState(false);
+    const coachVideoRef = useRef<HTMLInputElement>(null);
     const [saving, setSaving] = useState(false);
     const [deleting, setDeleting] = useState(false);
-
+    const [isEditing, setIsEditing] = useState(false);
     const remove = async () => {
         if (!confirm("Delete this check-in? This cannot be undone.")) return;
         setDeleting(true);
@@ -217,7 +409,7 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit }: {
     return (
         <div className={cn(
             "rounded-2xl border overflow-hidden",
-            c.status === "REVIEWED" ? "border-success/25 bg-success/3" : "border-surface-border bg-surface-card/60"
+            c.status === "REVIEWED" ? "border-success/25 bg-success/5" : "border-surface-border bg-surface-card/60"
         )}>
             <button onClick={() => setOpen(o => !o)} className="w-full flex items-center justify-between p-4 text-left gap-3">
                 <div className="flex items-center gap-3">
@@ -228,9 +420,9 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit }: {
                         <span className="text-[8px] font-black uppercase leading-none">Wk</span>
                         <span className="text-base font-black leading-tight">{c.weekNumber}</span>
                     </div>
-                    <div>
+                    <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                            <span className="text-sm font-bold text-fg">
+                            <span className="text-sm font-bold text-fg truncate">
                                 {isCoach ? (c.user?.name ?? "Client") : `Week ${c.weekNumber}`}
                             </span>
                             <span className={cn(
@@ -289,13 +481,34 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit }: {
                             <p className="text-sm text-fg leading-relaxed">{c.feedback}</p>
                         </div>
                     )}
-
-                    {/* Photos */}
-                    {(c.frontImageUrl || c.sideImageUrl) && (
-                        <div className="flex gap-2">
-                            {[c.frontImageUrl, c.sideImageUrl].filter(Boolean).map((url, i) => (
-                                <img key={i} src={url!} alt="Progress" className="w-24 h-32 object-cover rounded-xl border border-surface-border" />
-                            ))}
+                    {/* Media */}
+                    {(c.frontImageUrl || c.sideImageUrl || c.videoUrl) && (
+                        <div className="flex flex-col gap-3">
+                            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-fg-subtle">Check-in Media</p>
+                            <div className="flex gap-2 relative">
+                                {[c.frontImageUrl, c.sideImageUrl].filter(Boolean).map((url, i) => (
+                                    <img 
+                                        key={i} 
+                                        src={url!} 
+                                        alt="Progress" 
+                                        className="w-24 h-32 object-cover rounded-xl border border-surface-border cursor-pointer hover:opacity-80 transition-opacity" 
+                                        onClick={(e) => { e.stopPropagation(); setViewerMedia(url!); }}
+                                    />
+                                ))}
+                                {c.videoUrl && (
+                                    <div 
+                                        className="relative w-24 h-32 rounded-xl overflow-hidden cursor-pointer group border border-brand-500/20 shadow-glow-brand-sm"
+                                        onClick={(e) => { e.stopPropagation(); setViewerMedia(c.videoUrl!); }}
+                                    >
+                                        <video src={c.videoUrl} className="w-full h-full object-cover" />
+                                        <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/10 transition-colors">
+                                            <div className="w-10 h-10 bg-brand-500/80 backdrop-blur-md rounded-full flex items-center justify-center text-white shadow-lg">
+                                                <div className="w-0 h-0 border-t-4 border-t-transparent border-l-7 border-l-white border-b-4 border-b-transparent ml-1" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     )}
 
@@ -304,8 +517,40 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit }: {
                         "rounded-xl p-4 border space-y-3",
                         c.status === "REVIEWED" ? "bg-success/5 border-success/20" : "bg-brand-950/20 border-brand-500/20"
                     )}>
-                        <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Coach Feedback</p>
-                        {isCoach && c.status === "PENDING" ? (
+                        <div className="flex items-center justify-between">
+                            <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Coach Feedback</p>
+                            {isCoach && (c.status === "PENDING" || isEditing) && (
+                                <button 
+                                    onClick={() => coachVideoRef.current?.click()}
+                                    disabled={uploadingCoachV}
+                                    className="text-[10px] font-black uppercase tracking-widest text-brand-400 hover:text-brand-300 transition-colors flex items-center gap-1.5"
+                                >
+                                    {uploadingCoachV ? <Loader2 className="w-3 h-3 animate-spin" /> : <Camera className="w-3 h-3" />}
+                                    {coachVideo ? "Change Video" : "Add Video Review"}
+                                </button>
+                            )}
+                        </div>
+                        <input 
+                            type="file" 
+                            ref={coachVideoRef} 
+                            className="hidden" 
+                            accept="video/*" 
+                            onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                setUploadingCoachV(true);
+                                const fd = new FormData();
+                                fd.append("file", file);
+                                try {
+                                    const res = await fetch("/api/upload", { method: "POST", body: fd });
+                                    const data = await res.json();
+                                    if (res.ok) setCoachVideo(data.url);
+                                } finally {
+                                    setUploadingCoachV(false);
+                                }
+                            }}
+                        />
+                        {isCoach && (c.status === "PENDING" || isEditing) ? (
                             <>
                                 <textarea
                                     className="input h-24 resize-none text-sm py-3 leading-relaxed"
@@ -313,23 +558,76 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit }: {
                                     value={response}
                                     onChange={e => setResponse(e.target.value)}
                                 />
-                                <button
-                                    onClick={async () => {
-                                        setSaving(true);
-                                        await onCoachRespond?.(c.id, response);
-                                        setSaving(false);
-                                    }}
-                                    disabled={!response.trim() || saving}
-                                    className="btn-primary w-full h-10 text-xs font-black uppercase tracking-widest"
-                                >
-                                    <CheckCircle2 className="w-3.5 h-3.5 mr-2" />
-                                    {saving ? "Sending…" : "Send Feedback"}
-                                </button>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={async () => {
+                                            setSaving(true);
+                                            // Call the original onCoachRespond logic but with videoUrl too
+                                            const res = await fetch("/api/checkins", {
+                                                method: "PATCH",
+                                                headers: { "Content-Type": "application/json" },
+                                                body: JSON.stringify({ id: c.id, coachResponse: response, coachVideoUrl: coachVideo, status: "REVIEWED" }),
+                                            });
+                                            if (res.ok) {
+                                                window.location.reload(); // Refresh to show the updated state correctly across components
+                                            }
+                                            setSaving(false);
+                                            setIsEditing(false);
+                                        }}
+                                        disabled={(!response.trim() && !coachVideo) || saving || uploadingCoachV}
+                                        className="btn-primary flex-1 h-10 text-xs font-black uppercase tracking-widest"
+                                    >
+                                        <CheckCircle2 className="w-3.5 h-3.5 mr-2" />
+                                        {saving ? "Saving…" : (c.status === "REVIEWED" ? "Update Feedback" : "Send Feedback")}
+                                    </button>
+                                    {c.status === "REVIEWED" && (
+                                        <button onClick={() => { setIsEditing(false); setResponse(c.coachResponse ?? ""); }} className="btn-ghost px-4 h-10 text-xs font-bold uppercase tracking-widest text-fg-subtle">
+                                            Cancel
+                                        </button>
+                                    )}
+                                </div>
                             </>
                         ) : (
-                            <p className="text-sm text-fg leading-relaxed">
-                                {c.coachResponse ?? (isCoach ? "No response yet." : "⏳ Awaiting coach review…")}
-                            </p>
+                            <div>
+                                <p className="text-sm text-fg leading-relaxed whitespace-pre-wrap">
+                                    {c.coachResponse ?? (isCoach ? "No response yet." : "⏳ Awaiting coach review…")}
+                                </p>
+                                {c.coachVideoUrl && (
+                                    <div 
+                                        className="relative mt-3 w-full max-w-[240px] aspect-video rounded-xl overflow-hidden cursor-pointer group shadow-lg border border-surface-border/50"
+                                        onClick={() => setViewerMedia(c.coachVideoUrl!)}
+                                    >
+                                        <video src={c.coachVideoUrl} className="w-full h-full object-cover" />
+                                        <div className="absolute inset-0 bg-black/20 flex items-center justify-center transition-colors group-hover:bg-black/10">
+                                            <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center text-white group-hover:scale-110 transition-transform">
+                                                <div className="w-0 h-0 border-t-8 border-t-transparent border-l-[12px] border-l-white border-b-8 border-b-transparent ml-1" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                                {isCoach && c.status === "REVIEWED" && (
+                                    <button onClick={() => setIsEditing(true)} className="mt-4 text-[10px] font-black uppercase tracking-widest text-brand-400 hover:text-brand-300 transition-colors flex items-center gap-1.5">
+                                        <Edit2 className="w-3 h-3" /> Edit Response
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                        {(isCoach && (c.status === "PENDING" || isEditing) && coachVideo) && (
+                            <div className="relative w-full max-w-[240px] aspect-video rounded-xl overflow-hidden border-2 border-brand-500/30 group shadow-lg">
+                                <video src={coachVideo} className="w-full h-full object-cover" />
+                                <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button 
+                                        onClick={() => setCoachVideo("")}
+                                        className="w-10 h-10 bg-danger rounded-full flex items-center justify-center text-white shadow-xl transform active:scale-90 transition-transform"
+                                    >
+                                        <Trash2 className="w-5 h-5" />
+                                    </button>
+                                </div>
+                                <div className="absolute bottom-2 left-2 px-2 py-1 bg-brand-500/80 backdrop-blur-md rounded-lg flex items-center gap-1.5">
+                                    <Activity className="w-3 h-3 text-white animate-pulse" />
+                                    <span className="text-[10px] font-black text-white uppercase tracking-widest">Video Review Attached</span>
+                                </div>
+                            </div>
                         )}
                     </div>
                 </div>
@@ -341,14 +639,17 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit }: {
 /* ═══════════════════════════════════════════════════════════════
    Main Component
    ═══════════════════════════════════════════════════════════════ */
-export function CheckInsClient({ checkIns: initial, isCoach, userRole, workoutsThisWeek, workoutsTarget }: Props) {
+export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWeightKg, workoutsThisWeek, workoutsTarget, bodyweightWeeklyAverage, checkInDueState }: Props) {
     const isPremium = ["PREMIUM", "COACH", "SUPER_ADMIN"].includes(userRole);
     const [checkIns, setCheckIns] = useState(initial);
 
     // Form
     const [editMode, setEditMode] = useState(false);
     const [checkInId, setCheckInId] = useState<string | null>(null);
-    const [bodyweight, setBodyweight] = useState("");
+    const [weeklyAverageWeight, setWeeklyAverageWeight] = useState(bodyweightWeeklyAverage.averageWeightKg);
+    const [weeklyAverageEntries, setWeeklyAverageEntries] = useState(bodyweightWeeklyAverage.entries);
+    const [previousWeeklyAverageWeight, setPreviousWeeklyAverageWeight] = useState(bodyweightWeeklyAverage.previousAverageWeightKg);
+    const [loadingWeeklyAverage, setLoadingWeeklyAverage] = useState(false);
     const [energy,   setEnergy]   = useState(0);
     const [sleep,    setSleep]    = useState(0);
     const [stress,   setStress]   = useState(0);
@@ -359,6 +660,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, workoutsT
     const [uploadingF, setUploadingF] = useState(false);
     const [uploadingS, setUploadingS] = useState(false);
     const [saving,   setSaving]   = useState(false);
+    const [viewerMedia, setViewerMedia] = useState<string | null>(null);
     const [isLogging, setIsLogging] = useState(false);
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
 
@@ -372,7 +674,6 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, workoutsT
         if (existing) {
             // Found one - ALWAYS load it and set to edit mode
             setCheckInId(existing.id);
-            setBodyweight(existing.bodyweightKg?.toString() || "");
             setEnergy(existing.energyRating || 0);
             setSleep(existing.sleepRating || 0);
             setStress(existing.stressRating || 0);
@@ -385,7 +686,6 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, workoutsT
         } else {
             // New week with no entry - Reset to blank and set to new entry mode
             setCheckInId(null);
-            setBodyweight("");
             setEnergy(0);
             setSleep(0);
             setStress(0);
@@ -397,6 +697,38 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, workoutsT
             setIsLogging(true);
         }
     }, [selectedDate, checkIns]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        async function loadWeeklyAverage() {
+            if (isCoach) return;
+            setLoadingWeeklyAverage(true);
+            try {
+                const res = await fetch(`/api/bodyweight?date=${selectedDate}`);
+                const data = await res.json();
+                if (!res.ok || cancelled) return;
+                setWeeklyAverageWeight(data.weeklyAverage?.averageWeightKg ?? null);
+                setWeeklyAverageEntries(data.weeklyAverage?.entries ?? 0);
+                setPreviousWeeklyAverageWeight(data.weeklyAverage?.previousAverageWeightKg ?? null);
+            } catch (e) {
+                console.error(e);
+                if (!cancelled) {
+                    setWeeklyAverageWeight(null);
+                    setWeeklyAverageEntries(0);
+                    setPreviousWeeklyAverageWeight(null);
+                }
+            } finally {
+                if (!cancelled) setLoadingWeeklyAverage(false);
+            }
+        }
+
+        loadWeeklyAverage();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [selectedDate, isCoach]);
 
     if (!isPremium && !isCoach) {
         return (
@@ -415,26 +747,19 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, workoutsT
     const existingEntry = checkIns.find(c => c.weekNumber === selectedWeek);
     const isEditingSelection = !!existingEntry && editMode;
     
-    // Calculate days until next check-in (Saturday)
-    const today = new Date();
-    const targetDay = 6; // Saturday
-    const nextSat = new Date();
-    nextSat.setDate(today.getDate() + (targetDay + 7 - today.getDay()) % 7);
-    if (nextSat.toDateString() === today.toDateString()) {
-        // If it's Saturday today, and we already have an entry, the next one is next Saturday
-        if (hasTodayEntry) nextSat.setDate(nextSat.getDate() + 7);
-    }
-    nextSat.setHours(0, 0, 0, 0);
-    const msDiff = nextSat.getTime() - today.getTime();
-    const daysUntilNext = Math.ceil(msDiff / (1000 * 60 * 60 * 24));
-    const isDueDay = today.getDay() === 6;
+    const daysUntilNext = checkInDueState.daysUntilNext;
+    const isDueDay = checkInDueState.isDueToday;
+    const isOverdue = !hasTodayEntry && checkInDueState.isOverdue;
+    const needsCheckIn = !hasTodayEntry && (isDueDay || isOverdue);
 
     // Stats based on selection or defaults
     const prevCheckIn  = checkIns.find(c => c.weekNumber < (editMode ? selectedWeek : currentWeekReal));
-    const prevWeight   = prevCheckIn?.bodyweightKg;
-    const currentBw    = bodyweight ? parseFloat(bodyweight) : (currentWeekEntry?.bodyweightKg || null);
+    const prevWeight   = previousWeeklyAverageWeight ?? prevCheckIn?.bodyweightKg;
+    const currentBw    = weeklyAverageWeight ?? existingEntry?.bodyweightKg ?? (selectedWeek === currentWeekReal ? currentWeekEntry?.bodyweightKg : null) ?? null;
     const weightDelta  = currentBw && prevWeight ? Math.round((currentBw - prevWeight) * 100) / 100 : null;
     const weightPctChange = currentBw && prevWeight ? Math.round(((currentBw - prevWeight) / prevWeight) * 100 * 100) / 100 : null;
+    const weightGoalFeedback = getWeightGoalFeedback(currentBw, prevWeight ?? null, targetWeightKg);
+    const WeightTrendIcon = weightGoalFeedback.icon;
     const smartMsg     = getSmartFeedback(
         (editMode ? energy : currentWeekEntry?.energyRating) || 0,
         (editMode ? sleep : currentWeekEntry?.sleepRating) || 0,
@@ -444,6 +769,10 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, workoutsT
     const consistencyPct = workoutsTarget > 0 ? Math.round((workoutsThisWeek / workoutsTarget) * 100) : 100;
 
     const startLogging = () => {
+        if (!checkInDueState.isConfigured) {
+            alert("Your coach needs to set your check-in schedule first.");
+            return;
+        }
         // If a check-in for this week already exists, edit it instead of creating a blank new one
         if (currentWeekEntry) {
             editCheckIn(currentWeekEntry);
@@ -451,7 +780,6 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, workoutsT
         }
         setCheckInId(null);
         setSelectedDate(new Date().toISOString().split("T")[0]);
-        setBodyweight("");
         setEnergy(0);
         setSleep(0);
         setStress(0);
@@ -472,7 +800,6 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, workoutsT
         setCheckInId(c.id);
         const year = new Date(c.createdAt).getFullYear();
         setSelectedDate(getDateFromWeek(c.weekNumber, year));
-        setBodyweight(c.bodyweightKg?.toString() || "");
         setEnergy(c.energyRating || 0);
         setSleep(c.sleepRating || 0);
         setStress(c.stressRating || 0);
@@ -571,8 +898,15 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, workoutsT
                         <p className="font-bold text-fg text-sm">No check-ins yet</p>
                     </div>
                 ) : checkIns.sort((a,b) => b.weekNumber - a.weekNumber).map(c => (
-                    <HistoryItem key={c.id} c={c} isCoach onCoachRespond={handleCoachRespond} />
+                    <HistoryItem key={c.id} c={c} isCoach onCoachRespond={handleCoachRespond} setViewerMedia={setViewerMedia} />
                 ))}
+                {viewerMedia && (
+                    <MediaLightbox 
+                        src={viewerMedia} 
+                        type={viewerMedia.toLowerCase().includes(".mp4") || viewerMedia.toLowerCase().includes(".webm") || viewerMedia.toLowerCase().includes(".mov") ? "VIDEO" : "IMAGE"} 
+                        onClose={() => setViewerMedia(null)} 
+                    />
+                )}
             </div>
         );
     }
@@ -581,12 +915,24 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, workoutsT
     if (!isLogging && !editMode) {
         return (
             <div className="space-y-6 animate-fade-in pb-10">
+                {viewerMedia && (
+                    <MediaLightbox 
+                        src={viewerMedia} 
+                        type={viewerMedia.toLowerCase().includes(".mp4") || viewerMedia.toLowerCase().includes(".webm") || viewerMedia.toLowerCase().includes(".mov") ? "VIDEO" : "IMAGE"} 
+                        onClose={() => setViewerMedia(null)} 
+                    />
+                )}
                 <div className="flex justify-between items-center mb-2">
                     <h2 className="text-xl font-black text-fg tracking-tight">Week Summary</h2>
                     {hasTodayEntry ? (
                          <div className="bg-brand-950/20 border border-brand-500/20 px-3 py-1 rounded-xl flex items-center gap-2">
                             <Clock className="w-3 h-3 text-brand-400" />
                             <span className="text-[10px] font-black text-brand-400 uppercase tracking-widest leading-none">Next in {daysUntilNext}d</span>
+                        </div>
+                    ) : isOverdue ? (
+                         <div className="bg-danger/10 border border-danger/25 px-3 py-1 rounded-xl flex items-center gap-2 animate-pulse-slow">
+                            <AlertCircle className="w-3 h-3 text-danger" />
+                            <span className="text-[10px] font-black text-danger uppercase tracking-widest leading-none">Overdue</span>
                         </div>
                     ) : isDueDay ? (
                          <div className="bg-warning/10 border border-warning/20 px-3 py-1 rounded-xl flex items-center gap-2 animate-pulse-slow">
@@ -596,7 +942,11 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, workoutsT
                     ) : (
                         <div className="bg-surface-muted border border-surface-border px-3 py-1 rounded-xl flex items-center gap-2">
                             <Calendar className="w-3 h-3 text-fg-subtle" />
-                            <span className="text-[10px] font-black text-fg-subtle uppercase tracking-widest leading-none">Due Sat ({daysUntilNext}d)</span>
+                            <span className="text-[10px] font-black text-fg-subtle uppercase tracking-widest leading-none">
+                                {checkInDueState.isConfigured
+                                    ? `Due ${checkInDueState.dueDayLabel}${daysUntilNext !== null ? ` (${daysUntilNext}d)` : ""}`
+                                    : "Schedule not set"}
+                            </span>
                         </div>
                     )}
                 </div>
@@ -615,7 +965,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, workoutsT
                                         {weightDelta !== null && (
                                             <span className={cn(
                                                 "text-[9px] font-black px-1.5 py-0.5 rounded-md border",
-                                                weightDelta < 0 ? "text-success bg-success/10 border-success/20" : weightDelta > 0 ? "text-warning bg-warning/10 border-warning/20" : "text-fg-subtle bg-surface-muted border-surface-border"
+                                                weightGoalFeedback.chipClass
                                             )}>
                                                 {weightDelta > 0 ? "+" : ""}{weightDelta.toFixed(2)}kg
                                             </span>
@@ -646,10 +996,10 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, workoutsT
 
                         <div className="grid grid-cols-2 gap-3 pt-2">
                             <div className="bg-surface-card/40 p-4 rounded-2xl border border-surface-border/50">
-                                <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1">Bodyweight</p>
+                                <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1">Weekly Avg Weight</p>
                                 <p className="text-xl font-black text-fg tracking-tight">{currentWeekEntry.bodyweightKg?.toFixed(2) ?? '--'}<span className="text-xs text-fg-muted ml-1">kg</span></p>
                                 {weightDelta !== null && weightPctChange !== null && (
-                                    <p className={cn("text-[10px] font-bold mt-1", weightDelta < 0 ? "text-success" : weightDelta > 0 ? "text-warning" : "text-fg-muted")}>
+                                    <p className={cn("text-[10px] font-bold mt-1", weightGoalFeedback.textClass)}>
                                         {weightDelta > 0 ? "+" : ""}{weightDelta.toFixed(2)}kg ({weightPctChange >= 0 ? "+" : ""}{weightPctChange.toFixed(2)}%) since last
                                     </p>
                                 )}
@@ -677,7 +1027,14 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, workoutsT
                     /* Log CTA */
                     <div 
                         onClick={startLogging}
-                        className="group relative p-8 rounded-3xl border-2 border-dashed border-surface-border hover:border-brand-500/50 hover:bg-brand-500/5 transition-all text-center cursor-pointer overflow-hidden active:scale-[0.98]"
+                        className={cn(
+                            "group relative p-8 rounded-3xl border-2 border-dashed transition-all text-center cursor-pointer overflow-hidden active:scale-[0.98]",
+                            isOverdue
+                                ? "border-danger/50 bg-danger/5 hover:bg-danger/10 shadow-glow-danger-sm"
+                                : isDueDay
+                                ? "border-warning/50 bg-warning/5 hover:bg-warning/10 shadow-glow-warning-sm"
+                                : "border-surface-border hover:border-brand-500/50 hover:bg-brand-500/5"
+                        )}
                     >
                         <div className="absolute inset-0 bg-gradient-to-br from-brand-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                         <div className="relative z-10 space-y-3">
@@ -685,9 +1042,17 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, workoutsT
                                 <Plus className="w-8 h-8 text-brand-400" />
                             </div>
                             <div>
-                                <p className="text-lg font-black text-fg tracking-tight">Submit Check-in</p>
+                                <p className="text-lg font-black text-fg tracking-tight">
+                                    {!checkInDueState.isConfigured ? "Check-in Schedule Not Set" : isOverdue ? "Check-in Overdue" : isDueDay ? "Check-in Due Today" : "Submit Check-in"}
+                                </p>
                                 <p className="text-sm text-fg-muted max-w-xs mx-auto mt-1 leading-relaxed">
-                                    Share your progress, photos, and performance intel from the past week.
+                                    {!checkInDueState.isConfigured
+                                        ? "Your coach needs to choose your check-in day and frequency first."
+                                        : isOverdue
+                                        ? "You missed this week's check-in. Fill it in now so your coach has the full week."
+                                        : isDueDay
+                                        ? "Your weekly check-in is due. Share your progress, photos, and performance intel."
+                                        : "Share your progress, photos, and performance intel from the past week."}
                                 </p>
                             </div>
                         </div>
@@ -700,7 +1065,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, workoutsT
                         <p className="text-[10px] font-bold text-fg-muted">{checkIns.length} submissions</p>
                     </div>
                     {checkIns.sort((a,b) => b.weekNumber - a.weekNumber).map(c => (
-                        <HistoryItem key={c.id} c={c} isCoach={false} onEdit={editCheckIn} />
+                        <HistoryItem key={c.id} c={c} isCoach={false} onEdit={editCheckIn} setViewerMedia={setViewerMedia} />
                     ))}
                 </div>
             </div>
@@ -767,40 +1132,57 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, workoutsT
                     <Dumbbell className="w-3 h-3" />
                     {workoutsThisWeek}/{workoutsTarget} sessions
                 </div>
+                {!editMode && needsCheckIn && (
+                    <div className={cn(
+                        "px-3 py-2 rounded-xl text-xs font-bold border flex items-center gap-2",
+                        isOverdue ? "border-danger/25 bg-danger/10 text-danger" : "border-warning/25 bg-warning/10 text-warning"
+                    )}>
+                        <AlertCircle className="w-3.5 h-3.5" />
+                        {isOverdue ? "This check-in is overdue. Fill it in now." : "This week&apos;s check-in is due today."}
+                    </div>
+                )}
             </div>
 
-            {/* 1. Bodyweight */}
+            {/* 1. Weekly average bodyweight */}
             <div className="card p-5 space-y-4 border-surface-border hover:border-brand-500/20 transition-all group">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                         <Scale className="w-4 h-4 text-brand-400 group-hover:scale-110 transition-transform" />
-                        <span className="text-sm font-black text-fg uppercase tracking-wide">Bodyweight</span>
+                        <span className="text-sm font-black text-fg uppercase tracking-wide">Weekly Average Weight</span>
                     </div>
                     {prevWeight && (
                         <span className="text-[10px] text-fg-subtle font-black uppercase tracking-widest">
-                            Baseline: {prevWeight.toFixed(2)}kg
+                            Last week avg: {prevWeight.toFixed(2)}kg
                         </span>
                     )}
                 </div>
                 <div className="flex items-center gap-3">
-                    <div className="relative flex-1">
-                        <input
-                            type="number" step="0.01"
-                            placeholder={prevWeight ? `${prevWeight.toFixed(2)}` : "00.00"}
-                            className="input h-14 text-2xl font-black pr-10 bg-surface-muted/30 border-none focus:ring-2 focus:ring-brand-500/20 transition-all"
-                            value={bodyweight}
-                            onChange={e => setBodyweight(e.target.value)}
-                        />
-                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-black text-fg-subtle">kg</span>
+                    <div className="flex-1 h-14 rounded-2xl bg-surface-muted/30 border border-surface-border/40 px-4 flex items-center justify-between">
+                        <div>
+                            <p className="text-2xl font-black text-fg leading-none">
+                                {loadingWeeklyAverage ? "..." : weeklyAverageWeight ? weeklyAverageWeight.toFixed(2) : "--"}
+                                <span className="text-sm font-black text-fg-subtle ml-1">kg</span>
+                            </p>
+                            <p className="text-[10px] font-bold text-fg-muted mt-1 uppercase">
+                                {weeklyAverageEntries > 0 ? `${weeklyAverageEntries} daily log${weeklyAverageEntries === 1 ? "" : "s"} this week` : "Log daily bodyweight to fill this in"}
+                            </p>
+                        </div>
                     </div>
                     <div className={cn(
                         "flex items-center gap-1.5 px-4 h-14 rounded-2xl font-black text-sm border shrink-0 transition-colors",
-                        (weightDelta || 0) < 0 ? "bg-success/10 border-success/30 text-success"
-                            : (weightDelta || 0) > 0 ? "bg-warning/10 border-warning/30 text-warning"
-                            : "bg-surface-muted border-surface-border text-fg-muted"
+                        weightGoalFeedback.chipClass
                     )}>
-                        {(weightDelta || 0) < 0 ? <TrendingDown className="w-4 h-4" /> : (weightDelta || 0) > 0 ? <TrendingUp className="w-4 h-4" /> : <Minus className="w-4 h-4" />}
+                        <WeightTrendIcon className="w-4 h-4" />
                         {weightDelta !== null && weightDelta > 0 ? "+" : ""}{weightDelta || "0"}kg ({weightPctChange !== null && weightPctChange > 0 ? '+' : ''}{weightPctChange || "0"}%)
+                    </div>
+                </div>
+                <div className={cn("rounded-2xl border px-4 py-3 text-xs font-bold leading-relaxed", weightGoalFeedback.chipClass)}>
+                    <div className="flex items-start gap-2">
+                        <WeightTrendIcon className="w-4 h-4 mt-0.5 shrink-0" />
+                        <div>
+                            <p className="font-black uppercase tracking-widest text-[10px]">{weightGoalFeedback.label}</p>
+                            <p className="mt-0.5 opacity-90">{weightGoalFeedback.detail}</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -897,7 +1279,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, workoutsT
             {prevCheckIn && !editMode && (
                 <div className="space-y-2 pt-2">
                     <p className="text-[10px] font-black uppercase tracking-[0.2em] text-fg-subtle px-1">Retrospective</p>
-                    <PrevCheckInCard prev={prevCheckIn} />
+                    <PrevCheckInCard prev={prevCheckIn} setViewerMedia={setViewerMedia} />
                 </div>
             )}
 
@@ -942,6 +1324,14 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, workoutsT
             </div>
 
             <div>{/* Spacer */}</div>
+            
+            {viewerMedia && (
+                <MediaLightbox 
+                    src={viewerMedia} 
+                    type={viewerMedia.toLowerCase().includes(".mp4") || viewerMedia.toLowerCase().includes(".webm") || viewerMedia.toLowerCase().includes(".mov") ? "VIDEO" : "IMAGE"} 
+                    onClose={() => setViewerMedia(null)} 
+                />
+            )}
         </div>
     );
 }

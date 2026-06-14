@@ -23,6 +23,9 @@ interface Props {
         trainingLocation?: string | null;
         targetWeightKg?: number | null;
         weightKg?: number | null;
+        targetCalories?: number | null;
+        targetSteps?: number | null;
+        targetSleepHours?: number | null;
     };
 }
 
@@ -60,6 +63,9 @@ export function SettingsClient({ user }: Props) {
     const [location, setLocation] = useState(user.trainingLocation || "");
     const [targetWeight, setTargetWeight] = useState(user.targetWeightKg ? user.targetWeightKg.toFixed(2) : "");
     const [currentWeight, setCurrentWeight] = useState(user.weightKg ? user.weightKg.toFixed(2) : "");
+    const [targetCalories, setTargetCalories] = useState(user.targetCalories ? String(user.targetCalories) : "");
+    const [targetSteps, setTargetSteps] = useState(user.targetSteps ? String(user.targetSteps) : "");
+    const [targetSleepHours, setTargetSleepHours] = useState(user.targetSleepHours ? user.targetSleepHours.toString() : "");
     const [goalSaving, setGoalSaving] = useState(false);
     const [goalSaved, setGoalSaved] = useState(false);
 
@@ -72,8 +78,6 @@ export function SettingsClient({ user }: Props) {
         { id: "goals", label: "My Goals", icon: Target },
         { id: "appearance", label: "Appearance", icon: Palette },
         { id: "notifications", label: "Notifications", icon: Bell },
-        { id: "billing", label: "Billing", icon: CreditCard },
-        { id: "contribute", label: "Contribute", icon: Heart },
     ];
 
     const [theme, setTheme] = useState(typeof window !== "undefined" ? localStorage.getItem("pt-theme") || "midnight" : "midnight");
@@ -133,6 +137,9 @@ export function SettingsClient({ user }: Props) {
                     trainingLocation: location || undefined,
                     targetWeightKg: targetWeight !== "" ? Math.round(Number(targetWeight) * 100) / 100 : undefined,
                     weightKg: currentWeight !== "" ? Math.round(Number(currentWeight) * 100) / 100 : undefined,
+                    targetCalories: targetCalories !== "" ? Math.round(Number(targetCalories)) : null,
+                    targetSteps: targetSteps !== "" ? Math.round(Number(targetSteps)) : null,
+                    targetSleepHours: targetSleepHours !== "" ? Math.round(Number(targetSleepHours) * 10) / 10 : null,
                 })
             });
             if (res.ok) {
@@ -310,20 +317,7 @@ export function SettingsClient({ user }: Props) {
                                 </select>
                             </div>
 
-                            {/* Training Location */}
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-fg-subtle uppercase tracking-widest px-1">Where do you train?</label>
-                                <select
-                                    value={location}
-                                    onChange={(e) => setLocation(e.target.value)}
-                                    className="input h-12 text-sm font-bold appearance-none"
-                                >
-                                    <option value="">Select location</option>
-                                    {Object.entries(LOC_LABELS).map(([k, v]) => (
-                                        <option key={k} value={k}>{v}</option>
-                                    ))}
-                                </select>
-                            </div>
+
 
                             {/* Training Days Per Week */}
                             <div className="space-y-2">
@@ -364,6 +358,42 @@ export function SettingsClient({ user }: Props) {
                                     onChange={(e) => setTargetWeight(e.target.value)}
                                 />
                             </div>
+
+                            {/* Daily Calories */}
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-fg-subtle uppercase tracking-widest px-1">Daily Calories</label>
+                                <input
+                                    type="number" step="1"
+                                    className="input h-12 text-sm font-bold"
+                                    placeholder="e.g. 2500"
+                                    value={targetCalories}
+                                    onChange={(e) => setTargetCalories(e.target.value)}
+                                />
+                            </div>
+
+                            {/* Daily Steps */}
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-fg-subtle uppercase tracking-widest px-1">Daily Steps</label>
+                                <input
+                                    type="number" step="1"
+                                    className="input h-12 text-sm font-bold"
+                                    placeholder="e.g. 10000"
+                                    value={targetSteps}
+                                    onChange={(e) => setTargetSteps(e.target.value)}
+                                />
+                            </div>
+
+                            {/* Sleep Goal */}
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-fg-subtle uppercase tracking-widest px-1">Sleep Goal (hours)</label>
+                                <input
+                                    type="number" step="0.1"
+                                    className="input h-12 text-sm font-bold"
+                                    placeholder="e.g. 8"
+                                    value={targetSleepHours}
+                                    onChange={(e) => setTargetSleepHours(e.target.value)}
+                                />
+                            </div>
                         </div>
 
                         {/* Current snapshot */}
@@ -373,8 +403,10 @@ export function SettingsClient({ user }: Props) {
                                 <div className="flex flex-wrap gap-2">
                                     {goal && <span className="px-3 py-1 rounded-full bg-brand-400/10 border border-brand-400/20 text-xs font-bold text-brand-300">{GOAL_LABELS[goal] ?? goal}</span>}
                                     {experience && <span className="px-3 py-1 rounded-full bg-success/10 border border-success/20 text-xs font-bold text-success">{EXP_LABELS[experience] ?? experience}</span>}
-                                    {location && <span className="px-3 py-1 rounded-full bg-warning/10 border border-warning/20 text-xs font-bold text-warning">{LOC_LABELS[location] ?? location}</span>}
                                     {trainingDays && <span className="px-3 py-1 rounded-full bg-surface-muted border border-surface-border text-xs font-bold text-fg-muted">{trainingDays}x / week</span>}
+                                    {targetCalories && <span className="px-3 py-1 rounded-full bg-surface-muted border border-surface-border text-xs font-bold text-fg-muted">{Number(targetCalories).toLocaleString()} kcal</span>}
+                                    {targetSteps && <span className="px-3 py-1 rounded-full bg-surface-muted border border-surface-border text-xs font-bold text-fg-muted">{Number(targetSteps).toLocaleString()} steps</span>}
+                                    {targetSleepHours && <span className="px-3 py-1 rounded-full bg-surface-muted border border-surface-border text-xs font-bold text-fg-muted">{targetSleepHours}h sleep</span>}
                                 </div>
                             </div>
                         )}
@@ -453,102 +485,7 @@ export function SettingsClient({ user }: Props) {
                     </div>
                 )}
 
-                {activeTab === "billing" && (
-                    <div className="card p-8 space-y-8 animate-slide-up">
-                         <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-brand-400/10 rounded-2xl flex items-center justify-center">
-                                <CreditCard className="w-6 h-6 text-brand-400" />
-                            </div>
-                            <div>
-                                <h3 className="text-xl font-bold text-fg">Subscription</h3>
-                                <p className="text-sm text-fg-muted">Manage your billing and plan access.</p>
-                            </div>
-                        </div>
 
-                        <div className="p-6 bg-surface-muted/30 rounded-2xl border border-surface-border flex flex-col sm:flex-row items-center justify-between gap-4">
-                            <div>
-                                <p className="text-sm font-bold text-fg">Current Tier: {user.role === "FREE" ? "Free" : "Premium Member"}</p>
-                                <p className="text-xs text-fg-subtle">You have full access to all assigned training blocks.</p>
-                            </div>
-                            {user.role === "FREE" && (
-                                <button className="btn-primary btn-sm px-6">Upgrade to Premium</button>
-                            )}
-                        </div>
-
-                        {/* Special Code Section */}
-                        <div className="p-8 bg-gradient-brand-subtle rounded-3xl border border-brand-500/20 space-y-4">
-                            <div className="flex items-center gap-2 mb-2">
-                                <Zap className="w-4 h-4 text-brand-400 group-hover:animate-pulse-brand" />
-                                <h4 className="font-black text-fg tracking-tight uppercase text-xs">Redeem Athlete Code</h4>
-                            </div>
-                            <p className="text-xs text-fg-muted">
-                                If you have a dedicated trainer code or a promotional access key, enter it below to unlock premium dashboard features.
-                            </p>
-                            <div className="flex flex-col sm:flex-row gap-2 mt-4">
-                                <input
-                                    type="text"
-                                    placeholder="ENTER CODE..."
-                                    className="input h-12 flex-1 font-mono uppercase tracking-widest text-sm font-black border-brand-500/20 focus:border-brand-500 bg-brand-950/20"
-                                    value={secretCode}
-                                    onChange={(e) => setSecretCode(e.target.value)}
-                                />
-                                <button
-                                    onClick={handleRedeemCode}
-                                    disabled={redeeming || !secretCode.trim()}
-                                    className="btn-primary h-12 px-8 shadow-glow-brand text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2"
-                                >
-                                    {redeeming ? <Loader2 className="w-4 h-4 animate-spin" /> : "Unlock Now"}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {activeTab === "contribute" && (
-                    <div className="card p-8 space-y-8 animate-slide-up bg-gradient-to-br from-surface-card to-brand-950/10 border-brand-500/20">
-                        <div className="text-center space-y-3">
-                            <div className="w-16 h-16 bg-brand-400/10 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-glow-brand-sm">
-                                <Heart className="w-8 h-8 text-brand-400 fill-brand-400/20" />
-                            </div>
-                            <h3 className="text-2xl font-black text-fg tracking-tight">Support the Platform</h3>
-                            <p className="text-sm text-fg-muted max-w-md mx-auto">
-                                We are committed to building the most professional training platform available. Your contributions help us maintain infrastructure and develop elite features.
-                            </p>
-                        </div>
-
-                        <div className="space-y-4">
-                            <div className="p-6 bg-surface-card rounded-2xl border border-surface-border shadow-sm space-y-4">
-                                <div className="flex items-center justify-between">
-                                    <span className="text-[10px] font-black text-fg-subtle uppercase tracking-widest">Account Holder</span>
-                                    <button
-                                        className="text-brand-400 hover:text-brand-300 transition-colors flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest"
-                                        onClick={() => { navigator.clipboard.writeText("Tony Olajide"); alert("Copied!"); }}
-                                    >
-                                        <Copy className="w-3 h-3" /> Copy
-                                    </button>
-                                </div>
-                                <p className="text-lg font-black text-fg tracking-tight">Tony Olajide</p>
-                            </div>
-
-                            <div className="p-6 bg-surface-card rounded-2xl border border-surface-border shadow-sm space-y-4">
-                                <div className="flex items-center justify-between">
-                                    <span className="text-[10px] font-black text-fg-subtle uppercase tracking-widest">IBAN</span>
-                                    <button
-                                        className="text-brand-400 hover:text-brand-300 transition-colors flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest"
-                                        onClick={() => { navigator.clipboard.writeText("IE40AIBK93324457543025"); alert("Copied!"); }}
-                                    >
-                                        <Copy className="w-3 h-3" /> Copy
-                                    </button>
-                                </div>
-                                <p className="text-lg font-black text-fg font-mono tracking-wider break-all">IE40 AIBK 9332 4457 5430 25</p>
-                            </div>
-                        </div>
-
-                        <div className="p-4 bg-brand-400/5 rounded-xl border border-brand-400/10 text-center">
-                            <p className="text-xs text-brand-400 font-bold italic">"Strength is built together."</p>
-                        </div>
-                    </div>
-                )}
 
                 {/* Support Card */}
                 <div className="card p-6 border-brand-800/20 bg-brand-950/20 flex flex-col sm:flex-row items-center justify-between gap-4">

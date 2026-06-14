@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { Webhook } from "svix";
 import { prisma } from "@/lib/prisma";
+import { anonymizeDeletedUserAccount } from "@/lib/accountDeletion";
 
 export async function POST(req: Request) {
     const WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET;
@@ -22,7 +23,7 @@ export async function POST(req: Request) {
     const body = JSON.stringify(payload);
 
     const wh = new Webhook(WEBHOOK_SECRET);
-    let evt: { type: string; data: { id: string; email_addresses: { email_address: string }[]; first_name?: string; last_name?: string; image_url?: string } };
+    let evt: { type: string; data: { id: string; email_addresses?: { email_address: string }[]; first_name?: string; last_name?: string; image_url?: string } };
 
     try {
         evt = wh.verify(body, {
@@ -35,13 +36,28 @@ export async function POST(req: Request) {
     }
 
     const { type, data } = evt;
+    const email = data.email_addresses?.[0]?.email_address ?? "";
+    const name = [data.first_name, data.last_name].filter(Boolean).join(" ") || null;
 
     if (type === "user.created") {
-        await prisma.user.create({
-            data: {
+        if (email) {
+            const oldUser = await prisma.user.findUnique({ where: { email } });
+            if (oldUser && oldUser.clerkId !== data.id) {
+                await anonymizeDeletedUserAccount(prisma, oldUser);
+            }
+        }
+
+        await prisma.user.upsert({
+            where: { clerkId: data.id },
+            update: {
+                email,
+                name,
+                avatarUrl: data.image_url ?? null,
+            },
+            create: {
                 clerkId: data.id,
-                email: data.email_addresses[0]?.email_address ?? "",
-                name: [data.first_name, data.last_name].filter(Boolean).join(" ") || null,
+                email,
+                name,
                 avatarUrl: data.image_url ?? null,
             },
         });
@@ -51,15 +67,18 @@ export async function POST(req: Request) {
         await prisma.user.updateMany({
             where: { clerkId: data.id },
             data: {
-                email: data.email_addresses[0]?.email_address ?? "",
-                name: [data.first_name, data.last_name].filter(Boolean).join(" ") || null,
+                email,
+                name,
                 avatarUrl: data.image_url ?? null,
             },
         });
     }
 
     if (type === "user.deleted") {
-        await prisma.user.deleteMany({ where: { clerkId: data.id } });
+        const user = await prisma.user.findUnique({ where: { clerkId: data.id } });
+        if (user) {
+            await anonymizeDeletedUserAccount(prisma, user);
+        }
     }
 
     return NextResponse.json({ received: true });

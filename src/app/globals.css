@@ -111,6 +111,13 @@
            placeholder:text-fg-subtle focus:outline-none focus:ring-2 focus:ring-brand-500/60
            focus:border-brand-600 transition-all duration-200;
   }
+  .input:disabled {
+    @apply bg-surface-elevated text-fg-muted opacity-100;
+  }
+  select.input,
+  select.input option {
+    @apply bg-surface-elevated text-fg;
+  }
   .input-lg { @apply input py-3.5 px-5 text-base; }
   .input-sm { @apply input py-1.5 px-3 h-9 text-xs font-bold text-fg bg-surface-elevated; }
   .label { @apply block text-xs font-semibold text-fg-muted uppercase tracking-wider mb-1.5; }
@@ -209,6 +216,53 @@
 
 .animate-scale-in {
   animation: scaleIn 0.15s ease-out;
+}
+
+/* Clerk account popovers/modals need explicit colors so browser defaults never
+   wash dark-theme text into dark surfaces. */
+.cl-card,
+.cl-modalContent,
+.cl-userButtonPopoverCard {
+  background-color: #111118 !important;
+  border-color: #1e1e2e !important;
+  color: #f8f8fc !important;
+}
+
+.cl-headerTitle,
+.cl-profileSectionTitle,
+.cl-userPreviewMainIdentifier,
+.cl-identityPreviewText,
+.cl-userButtonPopoverActionButtonText {
+  color: #f8f8fc !important;
+}
+
+.cl-headerSubtitle,
+.cl-profileSectionContent,
+.cl-userPreviewSecondaryIdentifier,
+.cl-formFieldLabel,
+.cl-footerActionText,
+.cl-breadcrumbsItem,
+.cl-menuList,
+.cl-menuItem {
+  color: #c9c9dc !important;
+}
+
+.cl-formFieldInput,
+.cl-otpCodeFieldInput {
+  background-color: #16161f !important;
+  border-color: #2b2b3d !important;
+  color: #f8f8fc !important;
+}
+
+.cl-formFieldInput::placeholder,
+.cl-otpCodeFieldInput::placeholder {
+  color: #8888a8 !important;
+}
+
+.cl-userButtonPopoverActionButton:hover,
+.cl-navbarButton:hover,
+.cl-menuButton:hover {
+  background-color: #1a1a26 !important;
 }
 .animate-slide-up {
   animation: slideUp 0.2s ease-out;

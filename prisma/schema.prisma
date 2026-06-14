@@ -253,6 +253,7 @@ model CheckIn {
   videoUrl      String?
   status        CheckInStatus @default(PENDING)
   coachResponse String?
+  coachVideoUrl String?
   respondedAt   DateTime?
 
   // Ratings (1-5)

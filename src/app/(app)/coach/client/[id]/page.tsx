@@ -3,6 +3,7 @@ import { redirect, notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { ClientDetailView } from "./ClientDetailView";
+import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
 
 export const metadata = { title: "Client Details" };
 
@@ -31,8 +32,9 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
         // Optional: check if the coach owns this client
         // redirect("/coach");
     }
+    const isDeletedClient = target.email.endsWith("@deleted.local");
 
-    const [activePlan, availablePlans] = await Promise.all([
+    const [activePlan, availablePlans, checkInSchedule] = await Promise.all([
         Promise.resolve(target.plans[0]?.plan ?? null),
         prisma.plan.findMany({
             where: {
@@ -43,17 +45,21 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
             },
             select: { id: true, name: true, type: true },
         }),
+        getUserCheckInSchedule(target.id),
     ]);
 
     return (
         <>
-            <TopBar title={target.name || "Client Details"} subtitle={target.email} />
+            <TopBar
+                title={isDeletedClient ? "Deleted account" : target.name || "Client Details"}
+                subtitle={isDeletedClient ? "This client account is inactive and its data has been removed." : target.email}
+            />
             <div className="p-6 max-w-5xl mx-auto">
                 <ClientDetailView
                     client={{
                         id: target.id,
-                        name: target.name,
-                        email: target.email,
+                        name: isDeletedClient ? "Deleted account" : target.name,
+                        email: isDeletedClient ? "Inactive account" : target.email,
                         role: target.role,
                         avatarUrl: target.avatarUrl,
                         activePlan: activePlan ? { id: activePlan.id, name: activePlan.name } : null,
@@ -61,6 +67,7 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
                         goal: target.goal,
                         trainingLocation: target.trainingLocation,
                         trainingDaysPerWeek: target.trainingDaysPerWeek,
+                        checkInSchedule,
                     }}
                     availablePlans={availablePlans}
                     logs={(() => {

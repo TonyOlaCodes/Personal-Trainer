@@ -178,8 +178,13 @@ export function PlanCreateClient() {
 
     const updateCurrentWorkouts = (newWorkouts: LocalWorkout[]) => {
         const nextWeeks = [...weeks];
-        // Ensure they stay in order by day number or Day of Week if that's what the user wants
-        const sorted = [...newWorkouts].map((w, i) => ({ ...w, dayNumber: i + 1 }));
+        const sorted = [...newWorkouts]
+            .sort((a, b) => {
+                const aDay = a.dayOfWeek ?? 999;
+                const bDay = b.dayOfWeek ?? 999;
+                return aDay - bDay;
+            })
+            .map((w, i) => ({ ...w, dayNumber: i + 1 }));
         nextWeeks[activeWeekIdx].workouts = sorted;
         setWeeks(nextWeeks);
     };

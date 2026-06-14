@@ -4,10 +4,10 @@ import { useState } from "react";
 import Link from "next/link";
 import {
     Plus, Dumbbell, Calendar, ChevronRight, Star,
-    MoreVertical, Trash2, Play, Ticket, Share2, Check, PauseCircle,
+    Trash2, Play, Ticket, Share2, Check, PauseCircle,
 } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
-import { PremiumLockScreen } from "@/components/shared/PremiumLockScreen";
+import { PLAN_TEMPLATES } from "@/lib/templates";
 
 interface Plan {
     id: string;
@@ -27,14 +27,23 @@ interface Props {
     userRole: string;
 }
 
-const PREBUILT_TEMPLATES = [
-    { id: "ppl", name: "PPL (Push Pull Legs)", desc: "3-day or 6-day split hitting each muscle 2x/wk", icon: "💪" },
-    { id: "upper_lower_4", name: "Upper/Lower (4 Day)", desc: "4-day split balancing strength and hypertrophy", icon: "⚖️" },
-    { id: "arnold", name: "Arnold Split", desc: "6-day chest/back, shoulders/arms, legs split", icon: "🏆" },
-    { id: "bro", name: "Bro Split", desc: "Classic 5-day one-muscle-per-day programme", icon: "🔥" },
-];
+const TEMPLATE_ICONS: Record<string, string> = {
+    bro_split: "BRO",
+    arnold: "ARN",
+    ppl: "PPL",
+    upper_lower: "UL",
+    full_body: "FB",
+    hybrid: "HYB",
+};
 
-export function PlansClient({ plans, userRole }: Props) {
+const PREBUILT_TEMPLATES = Object.values(PLAN_TEMPLATES).map((template) => ({
+    id: template.id,
+    name: template.name,
+    desc: template.description,
+    icon: TEMPLATE_ICONS[template.id] ?? "GYM",
+}));
+
+export function PlansClient({ plans }: Props) {
     const [tab, setTab] = useState<"mine" | "templates" | "code">("mine");
     const [code, setCode] = useState("");
     const [codeStatus, setCodeStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
@@ -261,7 +270,7 @@ export function PlansClient({ plans, userRole }: Props) {
                 <div className="grid sm:grid-cols-2 gap-4">
                     {PREBUILT_TEMPLATES.map((t) => (
                         <div key={t.id} className="card-hover p-5">
-                            <span className="text-3xl">{t.icon}</span>
+                            <span className="inline-flex h-10 min-w-10 items-center justify-center rounded-xl bg-brand-500/10 px-2 text-xs font-black tracking-widest text-brand-300">{t.icon}</span>
                             <h3 className="font-semibold mt-3 mb-1">{t.name}</h3>
                             <p className="text-sm text-fg-muted mb-4">{t.desc}</p>
                             <Link

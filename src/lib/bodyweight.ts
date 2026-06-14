@@ -1,0 +1,146 @@
+import { randomUUID } from "crypto";
+import { prisma } from "@/lib/prisma";
+
+export interface BodyweightEntry {
+    date: string;
+    weightKg: number;
+}
+
+let bodyweightTableReady = false;
+
+export async function ensureBodyweightTable() {
+    if (bodyweightTableReady) return;
+
+    await prisma.$executeRaw`
+        CREATE TABLE IF NOT EXISTS "bodyweight_logs" (
+            "id" TEXT PRIMARY KEY,
+            "userId" TEXT NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+            "loggedDate" DATE NOT NULL,
+            "weightKg" DOUBLE PRECISION NOT NULL,
+            "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    `;
+    await prisma.$executeRaw`
+        CREATE UNIQUE INDEX IF NOT EXISTS "bodyweight_logs_userId_loggedDate_key"
+        ON "bodyweight_logs"("userId", "loggedDate")
+    `;
+
+    bodyweightTableReady = true;
+}
+
+export async function getBodyweightSummary(userId: string, date: string) {
+    await ensureBodyweightTable();
+
+    const [selectedEntry, selectedPreviousEntry, latestEntry] = await Promise.all([
+        prisma.$queryRaw<BodyweightEntry[]>`
+            SELECT "loggedDate"::text AS "date", "weightKg"
+            FROM "bodyweight_logs"
+            WHERE "userId" = ${userId} AND "loggedDate" = ${date}::date
+            LIMIT 1
+        `,
+        prisma.$queryRaw<BodyweightEntry[]>`
+            SELECT "loggedDate"::text AS "date", "weightKg"
+            FROM "bodyweight_logs"
+            WHERE "userId" = ${userId} AND "loggedDate" < ${date}::date
+            ORDER BY "loggedDate" DESC
+            LIMIT 1
+        `,
+        prisma.$queryRaw<BodyweightEntry[]>`
+            SELECT "loggedDate"::text AS "date", "weightKg"
+            FROM "bodyweight_logs"
+            WHERE "userId" = ${userId}
+            ORDER BY "loggedDate" DESC
+            LIMIT 1
+        `,
+    ]);
+
+    const latestPreviousEntry = latestEntry[0]
+        ? await prisma.$queryRaw<BodyweightEntry[]>`
+            SELECT "loggedDate"::text AS "date", "weightKg"
+            FROM "bodyweight_logs"
+            WHERE "userId" = ${userId} AND "loggedDate" < ${latestEntry[0].date}::date
+            ORDER BY "loggedDate" DESC
+            LIMIT 1
+        `
+        : [];
+
+    return {
+        selected: selectedEntry[0] ?? null,
+        selectedPrevious: selectedPreviousEntry[0] ?? null,
+        latest: latestEntry[0] ?? null,
+        latestPrevious: latestPreviousEntry[0] ?? null,
+    };
+}
+
+export async function getBodyweightWeeklyAverage(userId: string, date: string) {
+    await ensureBodyweightTable();
+
+    const rows = await prisma.$queryRaw<Array<{ averageWeightKg: number | null; entries: bigint }>>`
+        SELECT AVG("weightKg")::float AS "averageWeightKg", COUNT(*)::bigint AS "entries"
+        FROM "bodyweight_logs"
+        WHERE "userId" = ${userId}
+            AND "loggedDate" >= date_trunc('week', ${date}::date)::date
+            AND "loggedDate" < (date_trunc('week', ${date}::date)::date + INTERVAL '7 days')
+    `;
+
+    const previousRows = await prisma.$queryRaw<Array<{ averageWeightKg: number | null; entries: bigint }>>`
+        SELECT AVG("weightKg")::float AS "averageWeightKg", COUNT(*)::bigint AS "entries"
+        FROM "bodyweight_logs"
+        WHERE "userId" = ${userId}
+            AND "loggedDate" >= (date_trunc('week', ${date}::date)::date - INTERVAL '7 days')
+            AND "loggedDate" < date_trunc('week', ${date}::date)::date
+    `;
+
+    const current = rows[0];
+    const previous = previousRows[0];
+
+    return {
+        averageWeightKg: current?.averageWeightKg ? Math.round(current.averageWeightKg * 100) / 100 : null,
+        entries: Number(current?.entries ?? 0),
+        previousAverageWeightKg: previous?.averageWeightKg ? Math.round(previous.averageWeightKg * 100) / 100 : null,
+        previousEntries: Number(previous?.entries ?? 0),
+    };
+}
+
+export async function saveBodyweightEntry(userId: string, date: string, weightKg: number) {
+    await ensureBodyweightTable();
+
+    await prisma.$executeRaw`
+        INSERT INTO "bodyweight_logs" ("id", "userId", "loggedDate", "weightKg", "updatedAt")
+        VALUES (${randomUUID()}, ${userId}, ${date}::date, ${weightKg}, CURRENT_TIMESTAMP)
+        ON CONFLICT ("userId", "loggedDate")
+        DO UPDATE SET "weightKg" = ${weightKg}, "updatedAt" = CURRENT_TIMESTAMP
+    `;
+
+    const latest = await prisma.$queryRaw<BodyweightEntry[]>`
+        SELECT "loggedDate"::text AS "date", "weightKg"
+        FROM "bodyweight_logs"
+        WHERE "userId" = ${userId}
+        ORDER BY "loggedDate" DESC
+        LIMIT 1
+    `;
+
+    if (latest[0]?.date === date) {
+        await prisma.user.update({
+            where: { id: userId },
+            data: { weightKg: Math.round(weightKg * 100) / 100 },
+        });
+    }
+
+    return getBodyweightSummary(userId, date);
+}
+
+export function normalizeBodyweightDate(date: string) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        throw new Error("Invalid date");
+    }
+    return date;
+}
+
+export function normalizeBodyweight(weightKg: number) {
+    if (!Number.isFinite(weightKg) || weightKg <= 0 || weightKg > 500) {
+        throw new Error("Invalid weight");
+    }
+    return Math.round(weightKg * 100) / 100;
+}

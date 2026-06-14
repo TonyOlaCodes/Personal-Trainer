@@ -12,8 +12,7 @@ export async function POST(req: Request) {
 
         const buffer = Buffer.from(await file.arrayBuffer());
         const ext = file.name.split('.').pop() || "bin";
-        // Node 19+ has crypto.randomUUID() globally
-        const filename = `${crypto.randomUUID()}.${ext}`;
+        const filename = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${ext}`;
 
         const dir = path.join(process.cwd(), "public", "uploads");
         await mkdir(dir, { recursive: true });
@@ -21,7 +20,7 @@ export async function POST(req: Request) {
         const filePath = path.join(dir, filename);
         await writeFile(filePath, buffer);
 
-        return NextResponse.json({ url: `/uploads/${filename}`, type: file.type });
+        return NextResponse.json({ url: `/api/uploads/${filename}`, type: file.type });
     } catch (e: any) {
         console.error("Upload error:", e);
         return NextResponse.json({ error: "Upload failed: " + e.message }, { status: 500 });

@@ -34,7 +34,7 @@ const navItems: NavItem[] = [
     { href: "/coach", label: "Coach Panel", icon: Users, roles: ["COACH", "SUPER_ADMIN"] },
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, hideRoles: ["COACH", "SUPER_ADMIN"] },
     { href: "/plans", label: "Plans", icon: Dumbbell },
-    { href: "/calendar", label: "Calendar", icon: Calendar },
+    { href: "/calendar", label: "Calendar", icon: Calendar, hideRoles: ["COACH", "SUPER_ADMIN"] },
     { href: "/progress", label: "Progress", icon: BarChart3, hideRoles: ["COACH", "SUPER_ADMIN"] },
     { href: "/checkins", label: "Check-ins", icon: ClipboardList },
     { href: "/chat", label: "Chat", icon: MessageSquare },
@@ -93,11 +93,7 @@ export function Sidebar({ userRole = "FREE", realRole = "FREE", isClientMode = f
 
             {/* Settings + User */}
             <div className="px-3 py-4 border-t border-surface-border space-y-1">
-                {(realRole === "COACH" || realRole === "SUPER_ADMIN") && (
-                    <div className="mb-2">
-                        <RoleSwitcher realRole={realRole as any} isClientMode={isClientMode} />
-                    </div>
-                )}
+
                 <Link
                     href="/settings"
                     className={cn(pathname === "/settings" ? "sidebar-link-active" : "sidebar-link")}

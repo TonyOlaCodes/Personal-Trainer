@@ -12,6 +12,8 @@ interface Client {
     name: string;
     email: string;
     avatarUrl?: string | null;
+    isDeleted?: boolean;
+    hasCheckInSchedule?: boolean;
     stats: { logs: number; checkins: number };
 }
 
@@ -30,6 +32,8 @@ interface Props {
 
 export function CoachDashboardClient({ clients, recentCheckIns }: Props) {
     const pendingCheckIns = recentCheckIns.filter(ci => ci.status === "Pending").length;
+    const activeClients = clients.filter(c => !c.isDeleted);
+    const deletedClients = clients.filter(c => c.isDeleted);
 
     return (
         <div className="space-y-8 animate-fade-in">
@@ -37,7 +41,7 @@ export function CoachDashboardClient({ clients, recentCheckIns }: Props) {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="stat-card">
                     <Users className="w-4 h-4 text-brand-400 mb-1" />
-                    <p className="stat-value">{clients.length}</p>
+                    <p className="stat-value">{activeClients.length}</p>
                     <p className="stat-label">Active Clients</p>
                 </div>
                 <div className="stat-card">
@@ -47,12 +51,12 @@ export function CoachDashboardClient({ clients, recentCheckIns }: Props) {
                 </div>
                 <div className="stat-card">
                     <Activity className="w-4 h-4 text-warning mb-1" />
-                    <p className="stat-value">{clients.reduce((acc, c) => acc + c.stats.logs, 0)}</p>
+                    <p className="stat-value">{activeClients.reduce((acc, c) => acc + c.stats.logs, 0)}</p>
                     <p className="stat-label">Logs (Total)</p>
                 </div>
                 <div className="stat-card">
                     <Calendar className="w-4 h-4 text-brand-300 mb-1" />
-                    <p className="stat-value">{clients.reduce((acc, c) => acc + c.stats.checkins, 0)}</p>
+                    <p className="stat-value">{activeClients.reduce((acc, c) => acc + c.stats.checkins, 0)}</p>
                     <p className="stat-label">Check-ins (Total)</p>
                 </div>
             </div>
@@ -77,15 +81,33 @@ export function CoachDashboardClient({ clients, recentCheckIns }: Props) {
                                 <Link
                                     key={c.id}
                                     href={`/coach/client/${c.id}`}
-                                    className="card p-5 group hover:border-brand-600/40 transition-all"
+                                    className={cn(
+                                        "card p-5 group transition-all",
+                                        c.isDeleted
+                                            ? "opacity-70 grayscale hover:border-surface-border"
+                                            : "hover:border-brand-600/40"
+                                    )}
                                 >
                                     <div className="flex items-center gap-4 mb-4">
-                                        <div className="w-12 h-12 rounded-2xl bg-gradient-brand flex items-center justify-center text-sm font-bold text-white shadow-glow-sm">
+                                        <div className={cn(
+                                            "w-12 h-12 rounded-2xl flex items-center justify-center text-sm font-bold text-white shadow-glow-sm",
+                                            c.isDeleted ? "bg-surface-muted text-fg-subtle" : "bg-gradient-brand"
+                                        )}>
                                             {c.avatarUrl ? <img src={c.avatarUrl} alt="avatar" /> : getInitials(c.name)}
                                         </div>
-                                        <div>
-                                            <p className="font-bold text-fg group-hover:text-brand-400 transition-colors">{c.name}</p>
-                                            <p className="text-xs text-fg-muted">{c.email}</p>
+                                        <div className="min-w-0">
+                                            <div className="flex items-center gap-2">
+                                                <p className="font-bold text-fg group-hover:text-brand-400 transition-colors truncate">{c.name}</p>
+                                                {c.isDeleted && (
+                                                    <span className="badge-muted text-[9px] uppercase tracking-widest">Deleted</span>
+                                                )}
+                                                {!c.isDeleted && !c.hasCheckInSchedule && (
+                                                    <span className="text-[8px] uppercase font-black px-2 py-0.5 rounded-full border border-warning/30 bg-warning/10 text-warning shrink-0">
+                                                        Schedule needed
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p className="text-xs text-fg-muted truncate">{c.isDeleted ? "Inactive account" : c.email}</p>
                                         </div>
                                     </div>
                                     <div className="grid grid-cols-2 gap-2 border-t border-surface-border pt-4">
@@ -102,6 +124,11 @@ export function CoachDashboardClient({ clients, recentCheckIns }: Props) {
                             ))
                         )}
                     </div>
+                    {deletedClients.length > 0 && (
+                        <p className="px-2 text-xs text-fg-subtle">
+                            Deleted clients are kept here as inactive markers only; their account data has been removed.
+                        </p>
+                    )}
                 </div>
 
                 {/* Recent Check-ins Sidebar */}

@@ -17,206 +17,337 @@ export interface Template {
     workouts: TemplateWorkout[];
 }
 
+const broSplitWorkouts: TemplateWorkout[] = [
+    {
+        name: "Chest",
+        dayNumber: 1,
+        exercises: [
+            { name: "Bench Press", sets: 4, reps: "6-8" },
+            { name: "Incline Dumbbell Press", sets: 3, reps: "8-10" },
+            { name: "Chest Fly", sets: 3, reps: "10-12" },
+            { name: "Cable Crossover", sets: 3, reps: "12-15" },
+            { name: "Push Ups", sets: 2, reps: "AMRAP" },
+        ],
+    },
+    {
+        name: "Back",
+        dayNumber: 2,
+        exercises: [
+            { name: "Pull Ups", sets: 4, reps: "6-8" },
+            { name: "Barbell Row", sets: 3, reps: "8-10" },
+            { name: "Lat Pulldown", sets: 3, reps: "10-12" },
+            { name: "Seated Row", sets: 3, reps: "10-12" },
+            { name: "Face Pull", sets: 3, reps: "12-15" },
+        ],
+    },
+    {
+        name: "Shoulders",
+        dayNumber: 3,
+        exercises: [
+            { name: "Overhead Press", sets: 4, reps: "6-8" },
+            { name: "Lateral Raise", sets: 4, reps: "10-12" },
+            { name: "Rear Delt Fly", sets: 3, reps: "12-15" },
+            { name: "Cable Lateral Raise", sets: 3, reps: "12-15" },
+            { name: "Shrugs", sets: 3, reps: "10-12" },
+        ],
+    },
+    {
+        name: "Arms",
+        dayNumber: 4,
+        exercises: [
+            { name: "Barbell Curl", sets: 3, reps: "8-10" },
+            { name: "Hammer Curl", sets: 3, reps: "10-12" },
+            { name: "Preacher Curl", sets: 3, reps: "10-12" },
+            { name: "Tricep Pushdown", sets: 3, reps: "10-12" },
+            { name: "Overhead Tricep Extension", sets: 3, reps: "10-12" },
+            { name: "Skullcrusher", sets: 3, reps: "8-10" },
+        ],
+    },
+    {
+        name: "Legs",
+        dayNumber: 5,
+        exercises: [
+            { name: "Back Squat", sets: 4, reps: "6-8" },
+            { name: "Leg Press", sets: 3, reps: "8-10" },
+            { name: "Leg Extension", sets: 3, reps: "12-15" },
+            { name: "Leg Curl", sets: 3, reps: "10-12" },
+            { name: "Calf Raise", sets: 4, reps: "10-15" },
+        ],
+    },
+];
+
+const arnoldCycle: TemplateWorkout[] = [
+    {
+        name: "Chest + Back",
+        dayNumber: 1,
+        exercises: [
+            { name: "Bench Press", sets: 4, reps: "6-8" },
+            { name: "Incline Dumbbell Press", sets: 3, reps: "8-10" },
+            { name: "Pull Ups", sets: 4, reps: "6-8" },
+            { name: "Barbell Row", sets: 3, reps: "8-10" },
+            { name: "Chest Fly", sets: 3, reps: "10-12" },
+            { name: "Lat Pulldown", sets: 3, reps: "10-12" },
+        ],
+    },
+    {
+        name: "Shoulders + Arms",
+        dayNumber: 2,
+        exercises: [
+            { name: "Overhead Press", sets: 4, reps: "6-8" },
+            { name: "Lateral Raise", sets: 3, reps: "10-12" },
+            { name: "Rear Delt Fly", sets: 3, reps: "12-15" },
+            { name: "Barbell Curl", sets: 3, reps: "8-10" },
+            { name: "Tricep Pushdown", sets: 3, reps: "10-12" },
+            { name: "Hammer Curl", sets: 3, reps: "10-12" },
+            { name: "Overhead Tricep", sets: 3, reps: "10-12" },
+        ],
+    },
+    {
+        name: "Legs",
+        dayNumber: 3,
+        exercises: [
+            { name: "Back Squat", sets: 4, reps: "6-8" },
+            { name: "Romanian Deadlift", sets: 3, reps: "8-10" },
+            { name: "Leg Press", sets: 3, reps: "10-12" },
+            { name: "Leg Curl", sets: 3, reps: "10-12" },
+            { name: "Calf Raise", sets: 4, reps: "10-15" },
+        ],
+    },
+];
+
+const pplCycle: TemplateWorkout[] = [
+    {
+        name: "Push",
+        dayNumber: 1,
+        exercises: [
+            { name: "Bench Press", sets: 4, reps: "6-8" },
+            { name: "Incline Dumbbell Press", sets: 3, reps: "8-10" },
+            { name: "Overhead Press", sets: 3, reps: "6-8" },
+            { name: "Lateral Raise", sets: 3, reps: "10-12" },
+            { name: "Tricep Pushdown", sets: 3, reps: "10-12" },
+            { name: "Overhead Tricep", sets: 3, reps: "10-12" },
+        ],
+    },
+    {
+        name: "Pull",
+        dayNumber: 2,
+        exercises: [
+            { name: "Pull Ups", sets: 4, reps: "6-8" },
+            { name: "Barbell Row", sets: 3, reps: "8-10" },
+            { name: "Lat Pulldown", sets: 3, reps: "10-12" },
+            { name: "Seated Row", sets: 3, reps: "10-12" },
+            { name: "Face Pull", sets: 3, reps: "12-15" },
+            { name: "Barbell Curl", sets: 3, reps: "8-10" },
+            { name: "Hammer Curl", sets: 3, reps: "10-12" },
+        ],
+    },
+    {
+        name: "Legs",
+        dayNumber: 3,
+        exercises: [
+            { name: "Back Squat", sets: 4, reps: "6-8" },
+            { name: "Romanian Deadlift", sets: 3, reps: "8-10" },
+            { name: "Leg Press", sets: 3, reps: "10-12" },
+            { name: "Leg Curl", sets: 3, reps: "10-12" },
+            { name: "Calf Raise", sets: 4, reps: "10-15" },
+        ],
+    },
+];
+
+const cloneWorkoutForDay = (workout: TemplateWorkout, dayNumber: number): TemplateWorkout => ({
+    ...workout,
+    dayNumber,
+    exercises: workout.exercises.map((exercise) => ({ ...exercise })),
+});
+
 export const PLAN_TEMPLATES: Record<string, Template> = {
-    ppl: {
-        id: "ppl",
-        name: "Push Pull Legs (PPL)",
-        description: "A classic 3-6 day split designed for balanced hypertrophy and strength.",
-        workouts: [
-            {
-                name: "Push (Chest, Shoulders, Triceps)",
-                dayNumber: 1,
-                exercises: [
-                    { name: "Barbell Bench Press", sets: 3, reps: "8-12" },
-                    { name: "Overhead Press", sets: 3, reps: "8-12" },
-                    { name: "Incline Dumbbell Press", sets: 3, reps: "10-12" },
-                    { name: "Dumbbell Lateral Raises", sets: 3, reps: "15" },
-                    { name: "Tricep Pushdowns", sets: 3, reps: "12-15" }
-                ]
-            },
-            {
-                name: "Pull (Back, Biceps, Rear Delts)",
-                dayNumber: 2,
-                exercises: [
-                    { name: "Barbell Rows", sets: 3, reps: "8-12" },
-                    { name: "Lat Pulldowns", sets: 3, reps: "10-12" },
-                    { name: "Seated Cable Rows", sets: 3, reps: "12" },
-                    { name: "Face Pulls", sets: 3, reps: "15-20" },
-                    { name: "Barbell Bicep Curls", sets: 3, reps: "10-12" }
-                ]
-            },
-            {
-                name: "Legs (Quads, Hamstrings, Calves)",
-                dayNumber: 3,
-                exercises: [
-                    { name: "Barbell Squats", sets: 3, reps: "6-10" },
-                    { name: "Leg Press", sets: 3, reps: "12-15" },
-                    { name: "Leg Curls", sets: 3, reps: "12-15" },
-                    { name: "Leg Extensions", sets: 3, reps: "12-15" },
-                    { name: "Seated Calf Raises", sets: 4, reps: "15" }
-                ]
-            }
-        ]
+    bro_split: {
+        id: "bro_split",
+        name: "Bro Split",
+        description: "5-day split focusing on one main muscle group per session.",
+        workouts: broSplitWorkouts,
     },
     arnold: {
         id: "arnold",
         name: "Arnold Split",
-        description: "High-volume split focusing on Chest/Back, Shoulders/Arms, and Legs.",
+        description: "6-day bodybuilding split pairing chest/back, shoulders/arms, and legs.",
+        workouts: [
+            ...arnoldCycle,
+            cloneWorkoutForDay(arnoldCycle[0], 4),
+            cloneWorkoutForDay(arnoldCycle[1], 5),
+            cloneWorkoutForDay(arnoldCycle[2], 6),
+        ],
+    },
+    ppl: {
+        id: "ppl",
+        name: "Push Pull Legs",
+        description: "6-day push, pull, legs split for frequent muscle-building sessions.",
+        workouts: [
+            ...pplCycle,
+            cloneWorkoutForDay(pplCycle[0], 4),
+            cloneWorkoutForDay(pplCycle[1], 5),
+            cloneWorkoutForDay(pplCycle[2], 6),
+        ],
+    },
+    upper_lower: {
+        id: "upper_lower",
+        name: "Upper Lower",
+        description: "4-day upper/lower split with a rest day between the first lower and second upper session.",
         workouts: [
             {
-                name: "Chest & Back",
+                name: "Upper",
                 dayNumber: 1,
                 exercises: [
-                    { name: "Incline Bench Press", sets: 4, reps: "10" },
-                    { name: "Flat Dumbbell Flyes", sets: 3, reps: "12" },
-                    { name: "Wide Grip Pull-Ups", sets: 4, reps: "Failure" },
-                    { name: "Bent Over Rows", sets: 4, reps: "10" },
-                    { name: "Dumbbell Pullovers", sets: 3, reps: "12" }
-                ]
+                    { name: "Bench Press", sets: 4, reps: "6-8" },
+                    { name: "Pull Ups", sets: 4, reps: "6-8" },
+                    { name: "Overhead Press", sets: 3, reps: "6-8" },
+                    { name: "Barbell Row", sets: 3, reps: "8-10" },
+                    { name: "Lateral Raise", sets: 3, reps: "10-12" },
+                    { name: "Tricep Pushdown", sets: 3, reps: "10-12" },
+                    { name: "Barbell Curl", sets: 3, reps: "8-10" },
+                ],
             },
             {
-                name: "Shoulders & Arms",
+                name: "Lower",
                 dayNumber: 2,
                 exercises: [
-                    { name: "Military Press", sets: 4, reps: "10" },
-                    { name: "Dumbbell Lateral Raises", sets: 4, reps: "12" },
-                    { name: "Barbell Curls", sets: 4, reps: "10" },
-                    { name: "Skull Crushers", sets: 4, reps: "10" },
-                    { name: "Seated Dumbbell Curls", sets: 3, reps: "12" }
-                ]
+                    { name: "Back Squat", sets: 4, reps: "6-8" },
+                    { name: "Romanian Deadlift", sets: 3, reps: "8-10" },
+                    { name: "Leg Press", sets: 3, reps: "10-12" },
+                    { name: "Leg Curl", sets: 3, reps: "10-12" },
+                    { name: "Calf Raise", sets: 4, reps: "10-15" },
+                ],
+            },
+            {
+                name: "Rest",
+                dayNumber: 3,
+                exercises: [],
+            },
+            {
+                name: "Upper",
+                dayNumber: 4,
+                exercises: [
+                    { name: "Incline Dumbbell Press", sets: 3, reps: "8-10" },
+                    { name: "Lat Pulldown", sets: 3, reps: "10-12" },
+                    { name: "Seated Row", sets: 3, reps: "10-12" },
+                    { name: "Lateral Raise", sets: 3, reps: "12-15" },
+                    { name: "Face Pull", sets: 3, reps: "12-15" },
+                    { name: "Tricep Extension", sets: 3, reps: "10-12" },
+                    { name: "Hammer Curl", sets: 3, reps: "10-12" },
+                ],
+            },
+            {
+                name: "Lower",
+                dayNumber: 5,
+                exercises: [
+                    { name: "Deadlift", sets: 3, reps: "5" },
+                    { name: "Leg Press", sets: 3, reps: "10-12" },
+                    { name: "Leg Extension", sets: 3, reps: "12-15" },
+                    { name: "Leg Curl", sets: 3, reps: "10-12" },
+                    { name: "Calf Raise", sets: 4, reps: "10-15" },
+                ],
+            },
+        ],
+    },
+    full_body: {
+        id: "full_body",
+        name: "Full Body",
+        description: "3-day full-body split for balanced progress with fewer weekly sessions.",
+        workouts: [
+            {
+                name: "Full Body",
+                dayNumber: 1,
+                exercises: [
+                    { name: "Squat", sets: 4, reps: "6-8" },
+                    { name: "Bench Press", sets: 4, reps: "6-8" },
+                    { name: "Row", sets: 3, reps: "8-10" },
+                    { name: "Lateral Raise", sets: 3, reps: "10-12" },
+                    { name: "Tricep Pushdown", sets: 3, reps: "10-12" },
+                    { name: "Curl", sets: 3, reps: "10-12" },
+                ],
+            },
+            {
+                name: "Full Body",
+                dayNumber: 2,
+                exercises: [
+                    { name: "Deadlift", sets: 3, reps: "5" },
+                    { name: "Overhead Press", sets: 4, reps: "6-8" },
+                    { name: "Pull Ups", sets: 4, reps: "6-8" },
+                    { name: "Leg Curl", sets: 3, reps: "10-12" },
+                    { name: "Calf Raise", sets: 4, reps: "10-15" },
+                    { name: "Core", sets: 3, reps: "12-15" },
+                ],
+            },
+            {
+                name: "Full Body",
+                dayNumber: 3,
+                exercises: [
+                    { name: "Leg Press", sets: 3, reps: "10-12" },
+                    { name: "Incline Press", sets: 3, reps: "8-10" },
+                    { name: "Lat Pulldown", sets: 3, reps: "10-12" },
+                    { name: "Lateral Raise", sets: 3, reps: "12-15" },
+                    { name: "Tricep Extension", sets: 3, reps: "10-12" },
+                    { name: "Hammer Curl", sets: 3, reps: "10-12" },
+                ],
+            },
+        ],
+    },
+    hybrid: {
+        id: "hybrid",
+        name: "Hybrid",
+        description: "PPL base with an added arms and delts focus day.",
+        workouts: [
+            {
+                name: "Push",
+                dayNumber: 1,
+                exercises: [
+                    { name: "Bench Press", sets: 4, reps: "6-8" },
+                    { name: "Incline Dumbbell Press", sets: 3, reps: "8-10" },
+                    { name: "Overhead Press", sets: 3, reps: "6-8" },
+                    { name: "Lateral Raise", sets: 3, reps: "10-12" },
+                    { name: "Tricep Pushdown", sets: 3, reps: "10-12" },
+                ],
+            },
+            {
+                name: "Pull",
+                dayNumber: 2,
+                exercises: [
+                    { name: "Pull Ups", sets: 4, reps: "6-8" },
+                    { name: "Barbell Row", sets: 3, reps: "8-10" },
+                    { name: "Lat Pulldown", sets: 3, reps: "10-12" },
+                    { name: "Face Pull", sets: 3, reps: "12-15" },
+                    { name: "Barbell Curl", sets: 3, reps: "8-10" },
+                ],
             },
             {
                 name: "Legs",
                 dayNumber: 3,
                 exercises: [
-                    { name: "Squats", sets: 4, reps: "10" },
-                    { name: "Straight Leg Deadlifts", sets: 4, reps: "12" },
-                    { name: "Leg Extensions", sets: 3, reps: "15" },
-                    { name: "Calf Raises", sets: 5, reps: "15" }
-                ]
-            }
-        ]
-    },
-    pplul: {
-        id: "pplul",
-        name: "PPL / Upper Lower",
-        description: "5-day hybrid split for maximum frequency and recovery balancing.",
-        workouts: [
-            {
-                name: "Upper Power",
-                dayNumber: 1,
-                exercises: [
-                    { name: "Bench Press", sets: 3, reps: "5-8" },
-                    { name: "Weighted Pull-Ups", sets: 3, reps: "5-8" },
-                    { name: "Overhead Press", sets: 3, reps: "8-10" },
-                    { name: "Barbell Rows", sets: 3, reps: "8-10" }
-                ]
-            },
-            {
-                name: "Lower Power",
-                dayNumber: 2,
-                exercises: [
-                    { name: "Squats", sets: 3, reps: "5-8" },
-                    { name: "Deadlifts", sets: 3, reps: "5" },
+                    { name: "Back Squat", sets: 4, reps: "6-8" },
+                    { name: "Romanian Deadlift", sets: 3, reps: "8-10" },
                     { name: "Leg Press", sets: 3, reps: "10-12" },
-                    { name: "Seated Calf Raises", sets: 4, reps: "12" }
-                ]
+                    { name: "Leg Curl", sets: 3, reps: "10-12" },
+                    { name: "Calf Raise", sets: 4, reps: "10-15" },
+                ],
             },
             {
-                name: "Push Hypertrophy",
-                dayNumber: 3,
-                exercises: [
-                    { name: "Incline DB Press", sets: 3, reps: "10-12" },
-                    { name: "Cable Flyes", sets: 3, reps: "15" },
-                    { name: "Lateral Raises", sets: 4, reps: "15" },
-                    { name: "Tricep Extensions", sets: 3, reps: "12" }
-                ]
-            },
-            {
-                name: "Pull Hypertrophy",
+                name: "Arms + Delts",
                 dayNumber: 4,
                 exercises: [
-                    { name: "Seated Cable Rows", sets: 3, reps: "12" },
-                    { name: "Lat Pulldowns", sets: 3, reps: "12" },
-                    { name: "Face Pulls", sets: 3, reps: "20" },
-                    { name: "Hammer Curls", sets: 3, reps: "12" }
-                ]
+                    { name: "Barbell Curl", sets: 3, reps: "8-10" },
+                    { name: "Hammer Curl", sets: 3, reps: "10-12" },
+                    { name: "Preacher Curl", sets: 3, reps: "10-12" },
+                    { name: "Tricep Pushdown", sets: 3, reps: "10-12" },
+                    { name: "Overhead Tricep", sets: 3, reps: "10-12" },
+                    { name: "Lateral Raise", sets: 3, reps: "12-15" },
+                    { name: "Rear Delt Fly", sets: 3, reps: "12-15" },
+                ],
             },
             {
-                name: "Legs Hypertrophy",
+                name: "Rest or Repeat Cycle",
                 dayNumber: 5,
-                exercises: [
-                    { name: "Leg Extensions", sets: 3, reps: "15" },
-                    { name: "Leg Curls", sets: 3, reps: "15" },
-                    { name: "Romanian Deadlifts", sets: 3, reps: "12" },
-                    { name: "Calf Raises", sets: 4, reps: "20" }
-                ]
-            }
-        ]
+                exercises: [],
+            },
+        ],
     },
-    bro: {
-        id: "bro",
-        name: "Classic Bro Split",
-        description: "5-day split hitting one muscle group per day for ultimate pump.",
-        workouts: [
-            { name: "Chest Day", dayNumber: 1, exercises: [{ name: "Bench Press", sets: 4, reps: "10" }, { name: "Incline Press", sets: 3, reps: "10" }, { name: "Decline Press", sets: 3, reps: "10" }, { name: "Cable Crossovers", sets: 4, reps: "15" }] },
-            { name: "Back Day", dayNumber: 2, exercises: [{ name: "Deadlifts", sets: 3, reps: "8" }, { name: "Bent Rows", sets: 4, reps: "10" }, { name: "Lat Pulldowns", sets: 3, reps: "12" }, { name: "One-Arm Rows", sets: 3, reps: "10" }] },
-            { name: "Shoulder Day", dayNumber: 3, exercises: [{ name: "Military Press", sets: 4, reps: "10" }, { name: "Lateral Raises", sets: 4, reps: "15" }, { name: "Front Raises", sets: 3, reps: "12" }, { name: "Rear Delt Flyes", sets: 3, reps: "15" }] },
-            { name: "Leg Day", dayNumber: 4, exercises: [{ name: "Squats", sets: 4, reps: "10" }, { name: "Leg Press", sets: 3, reps: "12" }, { name: "Leg Extensions", sets: 3, reps: "15" }, { name: "Hamstring Curls", sets: 3, reps: "15" }] },
-            { name: "Arm Day", dayNumber: 5, exercises: [{ name: "Barbell Curls", sets: 4, reps: "10" }, { name: "Skull Crushers", sets: 4, reps: "10" }, { name: "Hammer Curls", sets: 3, reps: "12" }, { name: "Pushdowns", sets: 3, reps: "12" }] }
-        ]
-    },
-    upper_lower_4: {
-        id: "upper_lower_4",
-        name: "Upper/Lower 4-Day Split",
-        description: "A highly effective 4-day split striking the perfect balance between frequency and recovery.",
-        workouts: [
-            {
-                name: "Upper Body (Strength)",
-                dayNumber: 1,
-                exercises: [
-                    { name: "Barbell Bench Press", sets: 4, reps: "5-8" },
-                    { name: "Barbell Rows", sets: 4, reps: "5-8" },
-                    { name: "Overhead Military Press", sets: 3, reps: "8-10" },
-                    { name: "Lat Pulldowns", sets: 3, reps: "8-10" },
-                    { name: "Seated Dumbbell Curls", sets: 3, reps: "10-12" },
-                    { name: "Tricep Pushdowns", sets: 3, reps: "10-12" }
-                ]
-            },
-            {
-                name: "Lower Body (Strength)",
-                dayNumber: 2,
-                exercises: [
-                    { name: "Barbell Squats", sets: 4, reps: "5-8" },
-                    { name: "Romanian Deadlifts", sets: 4, reps: "8-10" },
-                    { name: "Leg Press", sets: 3, reps: "10-12" },
-                    { name: "Leg Curls", sets: 3, reps: "10-12" },
-                    { name: "Standing Calf Raises", sets: 4, reps: "15" }
-                ]
-            },
-            {
-                name: "Upper Body (Hypertrophy)",
-                dayNumber: 3,
-                exercises: [
-                    { name: "Incline Dumbbell Press", sets: 3, reps: "10-12" },
-                    { name: "Seated Cable Rows", sets: 3, reps: "10-12" },
-                    { name: "Dumbbell Lateral Raises", sets: 4, reps: "12-15" },
-                    { name: "Face Pulls", sets: 3, reps: "15" },
-                    { name: "Hammer Curls", sets: 3, reps: "12" },
-                    { name: "Overhead Tricep Extensions", sets: 3, reps: "12" }
-                ]
-            },
-            {
-                name: "Lower Body (Hypertrophy)",
-                dayNumber: 4,
-                exercises: [
-                    { name: "Bulgarian Split Squats", sets: 3, reps: "10-12" },
-                    { name: "Leg Extensions", sets: 3, reps: "12-15" },
-                    { name: "Lying Leg Curls", sets: 3, reps: "12-15" },
-                    { name: "Walking Lunges", sets: 3, reps: "12 steps" },
-                    { name: "Seated Calf Raises", sets: 4, reps: "15-20" }
-                ]
-            }
-        ]
-    }
 };

@@ -3,13 +3,13 @@
 import { useState, useMemo } from "react";
 import {
     ChevronLeft, ChevronRight,
-    Dumbbell, Check, X, ArrowRight, Info, Activity, Clock,
-    Layout, Star, MoreVertical, Flame, History, Award, 
-    PlayCircle, CheckCircle2, AlertCircle, BarChart3,
-    Calendar as CalendarIcon, Zap, Hash, Target
+    Info, Clock,
+    Layout, History,
+    PlayCircle,
+    Zap, Hash
 } from "lucide-react";
 import Link from "next/link";
-import { cn, formatDate } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 /* ─────────────────────────── Types ─────────────────────────── */
 interface PlanExercise { name: string; sets: number; reps: string; }
@@ -65,101 +65,33 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates }: Props
 
     const getPlannedWorkoutForDate = (date: Date): PlanWorkout | null => {
         if (!activePlan || !planStartedAt) return null;
+        if (activePlan.weeks.length === 0) return null;
         const start = new Date(planStartedAt);
         start.setHours(0, 0, 0, 0);
         
-        // Find Monday of the start week
-        const startDow = start.getDay(); // 0=Sun
-        const startToMon = startDow === 0 ? -6 : 1 - startDow;
-        const planAnchorMonday = new Date(start.getTime() + startToMon * 86400000);
-        planAnchorMonday.setHours(0, 0, 0, 0);
+        // Use relative days from start date
+        const diffDaysTotal = Math.floor((date.getTime() - start.getTime()) / 86400000);
+        if (diffDaysTotal < 0) return null;
 
-        const diffDays = Math.floor((date.getTime() - planAnchorMonday.getTime()) / 86400000);
-        if (diffDays < 0) return null;
+        const weekIdx = Math.floor(diffDaysTotal / 7) % activePlan.weeks.length;
+        const jsDow = date.getDay();
+        const monBasedDow = jsDow === 0 ? 6 : jsDow - 1;
+        const fallbackDayNumber = monBasedDow + 1;
 
-        const weekIdx = Math.floor(diffDays / 7);
-        
-        // If the plan is finite (e.g. 4-week linearity plan), don't cycle — just return nothing
-        if (weekIdx >= activePlan.weeks.length) return null;
-
-        // 0=Mon,1=Tue,...,6=Sun  (same as plan designer)
-        const jsDay = date.getDay(); // 0=Sun
-        const dayIdx = jsDay === 0 ? 6 : jsDay - 1;
-        
         const week = activePlan.weeks[weekIdx];
         if (!week) return null;
+
+        const usesOneIndexedWeekdays = week.workouts.length >= 5
+            && week.workouts.every(w => w.dayOfWeek !== null && w.dayOfWeek !== undefined && w.dayOfWeek === w.dayNumber);
+        const targetDayOfWeek = usesOneIndexedWeekdays
+            ? (monBasedDow === 6 ? 0 : monBasedDow + 1)
+            : monBasedDow;
         
-        // Match by dayOfWeek (0=Mon) — exact match only
-        const workout = week.workouts.find(w => {
-            if (w.dayOfWeek !== null && w.dayOfWeek !== undefined) {
-                return w.dayOfWeek === dayIdx;
-            }
-            // Fallback: dayNumber-based (1=Mon, 2=Tue...)
-            return (w.dayNumber - 1) % 7 === dayIdx;
-        });
+        const workout = week.workouts.find(w => w.dayOfWeek === targetDayOfWeek)
+                    || week.workouts.find(w => (w.dayOfWeek === null || w.dayOfWeek === undefined) && w.dayNumber === fallbackDayNumber);
         
         return workout ?? null;
     };
-
-    /* ─── Streaks & Consistency ─── */
-    const { currentStreak, bestStreak } = useMemo(() => {
-        const sortedLogDates = Array.from(new Set(loggedDates.map(l => {
-            const d = new Date(l.date);
-            d.setHours(0,0,0,0);
-            return d.getTime();
-        }))).sort((a,b) => b - a);
-
-        let current = 0;
-        let best = 0;
-        let temp = 0;
-
-        // Current
-        const tTime = today.getTime();
-        let checkTime = tTime;
-        for (let i = 0; i < sortedLogDates.length; i++) {
-            if (sortedLogDates[i] === checkTime) {
-                current++;
-                checkTime -= 86400000;
-            } else if (sortedLogDates[i] < checkTime) {
-                // Check if yesterday was a rest day (simplified: if skipping 1 day is fine)
-                // But user wants "X days active", usually meaning consecutive log days
-                break;
-            }
-        }
-
-        // Best
-        const ascDates = [...sortedLogDates].sort((a,b) => a - b);
-        for (let i = 0; i < ascDates.length; i++) {
-            if (i > 0 && ascDates[i] === ascDates[i-1] + 86400000) {
-                temp++;
-            } else {
-                temp = 1;
-            }
-            best = Math.max(best, temp);
-        }
-
-        return { currentStreak: current, bestStreak: best };
-    }, [loggedDates]);
-
-    const weeklyConsistency = useMemo(() => {
-        // Calculate Mon-Sun for current physical week
-        const curr = new Date();
-        const day = curr.getDay();
-        const diff = curr.getDate() - day + (day === 0 ? -6 : 1);
-        const monday = new Date(curr.setDate(diff));
-        monday.setHours(0,0,0,0);
-
-        let completed = 0;
-        let plannedCount = 0;
-
-        for (let i = 0; i < 7; i++) {
-            const d = new Date(monday.getTime() + (i * 86400000));
-            if (logMap[d.toDateString()]) completed++;
-            if (getPlannedWorkoutForDate(d)) plannedCount++;
-        }
-
-        return { completed, target: plannedCount || 5 };
-    }, [logMap, activePlan]);
 
     /* ─── Calendar Generation ─── */
     const firstDay = new Date(view.year, view.month, 1);
@@ -172,31 +104,6 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates }: Props
         ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
     ];
     while (cells.length % 7 !== 0) cells.push(null);
-
-    /* ─── Monthly Snapshot ─── */
-    const monthStats = useMemo(() => {
-        let items = loggedDates.filter(l => {
-            const d = new Date(l.date);
-            return d.getMonth() === view.month && d.getFullYear() === view.year;
-        });
-        
-        let totalVolume = items.reduce((sum, log) => {
-            return sum + log.sets.reduce((sSum, s) => sSum + ((s.reps || 0) * (s.weightKg || 0)), 0);
-        }, 0);
-
-        let plannedInMonth = 0;
-        for (let d = 1; d <= daysInMonth; d++) {
-            const date = new Date(view.year, view.month, d);
-            if (getPlannedWorkoutForDate(date)) plannedInMonth++;
-        }
-
-        return {
-            count: items.length,
-            planned: plannedInMonth,
-            volume: totalVolume,
-            consistency: plannedInMonth > 0 ? Math.round((items.length / plannedInMonth) * 100) : 100
-        };
-    }, [view, loggedDates, activePlan]);
 
     /* ─── Selected Day Helpers ─── */
     const selectedDate = new Date(selectedDateKey);
@@ -227,45 +134,6 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates }: Props
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fade-in">
-            
-            {/* ── Header Area (Stats Cards) ── */}
-            <div className="lg:col-span-12 grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                <div className="card p-4 flex items-center justify-between border-brand-500/10 bg-surface-muted/30">
-                    <div>
-                        <p className="text-[10px] font-black uppercase text-fg-subtle tracking-widest mb-1">Consistency</p>
-                        <p className="text-xl font-black text-fg">{weeklyConsistency.completed}/{weeklyConsistency.target}</p>
-                        <div className="w-24 h-1 bg-surface-muted rounded-full mt-2 overflow-hidden">
-                            <div className="h-full bg-brand-400 rounded-full" style={{ width: `${(weeklyConsistency.completed/weeklyConsistency.target)*100}%` }} />
-                        </div>
-                    </div>
-                    <Target className="w-8 h-8 text-brand-400 opacity-20" />
-                </div>
-                <div className="card p-4 flex items-center justify-between border-brand-500/10 bg-surface-muted/30">
-                    <div>
-                        <p className="text-[10px] font-black uppercase text-fg-subtle tracking-widest mb-1">Current Streak</p>
-                        <p className="text-xl font-black text-brand-400">{currentStreak} <span className="text-xs text-fg-muted">days</span></p>
-                        <p className="text-[9px] font-bold text-fg-subtle mt-1 uppercase">Best: {bestStreak}</p>
-                    </div>
-                    <Flame className={cn("w-8 h-8", currentStreak > 0 ? "text-orange-500 animate-pulse" : "text-fg-subtle opacity-20")} />
-                </div>
-                <div className="card p-4 flex items-center justify-between border-brand-500/10 bg-surface-muted/30">
-                    <div>
-                        <p className="text-[10px] font-black uppercase text-fg-subtle tracking-widest mb-1">Monthly sessions</p>
-                        <p className="text-xl font-black text-fg">{monthStats.count} <span className="text-xs text-fg-muted font-black opacity-30">/ {monthStats.planned}</span></p>
-                        <p className="text-[9px] font-bold text-success mt-1 uppercase">{monthStats.consistency}% Compliance</p>
-                    </div>
-                    <CheckCircle2 className="w-8 h-8 text-success opacity-20" />
-                </div>
-                <div className="card p-4 flex items-center justify-between border-brand-500/10 bg-surface-muted/30">
-                    <div>
-                        <p className="text-[10px] font-black uppercase text-fg-subtle tracking-widest mb-1">Total Volume</p>
-                        <p className="text-xl font-black text-fg">{monthStats.volume.toLocaleString()}<span className="text-xs text-fg-muted ml-1">kg</span></p>
-                        <p className="text-[9px] font-bold text-fg-subtle mt-1 uppercase">This Month</p>
-                    </div>
-                    <BarChart3 className="w-8 h-8 text-brand-400 opacity-20" />
-                </div>
-            </div>
-
             {/* ── Main Grid ── */}
             <div className="lg:col-span-8 space-y-6">
                 <div className="flex items-center justify-between px-2">
@@ -456,7 +324,6 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates }: Props
                                         {/* Group by exercise */}
                                         {Array.from(new Set(selectedLog.sets.map(s => s.exerciseName))).map((exName, idx) => {
                                             const exSets = selectedLog.sets.filter(s => s.exerciseName === exName);
-                                            const maxWeight = Math.max(...exSets.map(s => s.weightKg || 0));
                                             return (
                                                 <div key={idx} className="p-4 bg-surface-muted/20 border border-surface-border/50 rounded-2xl mb-2 group transition-all hover:border-brand-500/30">
                                                     <div className="flex items-center justify-between mb-2">

@@ -2,9 +2,12 @@ import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
-import { getDayName, formatDate } from "@/lib/utils";
+import { getDayName, formatDate, getWeekNumber } from "@/lib/utils";
 import { cookies } from "next/headers";
 import { DashboardClient } from "./DashboardClient";
+import { getBodyweightSummary } from "@/lib/bodyweight";
+import { getCheckInDueState, getUserCheckInSchedule } from "@/lib/checkInSchedule";
+import { getDailyMetricsSummary } from "@/lib/dailyMetrics";
 
 export const metadata = { title: "Dashboard" };
 
@@ -73,11 +76,11 @@ export default async function DashboardPage() {
         orderBy: { updatedAt: "desc" }
     });
 
-    // Current ISO week number
-    const nowDate = new Date();
-    const startOfYear = new Date(nowDate.getFullYear(), 0, 1);
-    const pastDays = Math.floor((nowDate.getTime() - startOfYear.getTime()) / 86400000);
-    const currentIsoWeek = Math.ceil((pastDays + startOfYear.getDay() + 1) / 7);
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const todayDate = now.toISOString().slice(0, 10);
+
+    const currentIsoWeek = getWeekNumber(now);
 
     const currentCheckin = await prisma.checkIn.findFirst({
         where: { userId: user.id, weekNumber: currentIsoWeek },
@@ -88,31 +91,64 @@ export default async function DashboardPage() {
     const weeks = activePlan?.weeks ?? [];
     
     let currentWeekIndex = 0;
-    if (activeUserPlan) {
-        const startedAt = new Date(activeUserPlan.startedAt);
-        const now = new Date();
-        const diffTime = Math.abs(now.getTime() - startedAt.getTime());
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        currentWeekIndex = Math.floor(diffDays / 7);
-        // Fallback to the last available week if the client progresses past the defined weeks
-        if (currentWeekIndex >= weeks.length) {
-            currentWeekIndex = weeks.length - 1;
-        }
-    }
-    const currentWeek = weeks[currentWeekIndex] ?? weeks[0] ?? null;
-    // JS getDay(): 0=Sun, 1=Mon...6=Sat
-    // Plan dayOfWeek: 0=Mon, 1=Tue...6=Sun  (set by the plan designer using 0-indexed Mon-start)
-    // Convert JS getDay to Mon-based index:
-    const jsDow = new Date().getDay();
+    let todayWorkout: any = null;
+    const jsDow = now.getDay();
     const todayDow0Mon = jsDow === 0 ? 6 : jsDow - 1; // 0=Mon ... 6=Sun
 
-    let todayWorkout: any = null;
-    if (currentWeek) {
-        // Exact dayOfWeek match only (0=Mon...6=Sun)
-        todayWorkout = currentWeek.workouts.find((w: any) => w.dayOfWeek === todayDow0Mon)
-                    // Backwards-compat for old data stored with JS getDay() (0=Sun)
-                    ?? currentWeek.workouts.find((w: any) => w.dayOfWeek === jsDow && jsDow !== 0)
-                    ?? null;
+    const findWorkoutForDate = (date: Date) => {
+        if (!activeUserPlan || weeks.length === 0) return null;
+
+        const startedAt = new Date(activeUserPlan.startedAt);
+        startedAt.setHours(0, 0, 0, 0);
+        const targetDate = new Date(date);
+        targetDate.setHours(0, 0, 0, 0);
+        const diffDays = Math.floor((targetDate.getTime() - startedAt.getTime()) / 86400000);
+        if (diffDays < 0) return null;
+
+        let weekIndex = Math.floor(diffDays / 7);
+        if (weekIndex >= weeks.length) weekIndex = weekIndex % weeks.length;
+
+        const week = weeks[weekIndex] || weeks[0];
+        if (!week) return null;
+
+        const targetJsDow = targetDate.getDay();
+        const targetDow0Mon = targetJsDow === 0 ? 6 : targetJsDow - 1;
+        const fallbackDayNumber = targetDow0Mon + 1;
+        const usesOneIndexedWeekdays = week.workouts.length >= 5
+            && week.workouts.every((w: any) => w.dayOfWeek !== null && w.dayOfWeek !== undefined && w.dayOfWeek === w.dayNumber);
+        const targetDayOfWeek = usesOneIndexedWeekdays
+            ? (targetDow0Mon === 6 ? 0 : targetDow0Mon + 1)
+            : targetDow0Mon;
+
+        return week.workouts.find((w: any) => w.dayOfWeek === targetDayOfWeek)
+            || week.workouts.find((w: any) => (w.dayOfWeek === null || w.dayOfWeek === undefined) && w.dayNumber === fallbackDayNumber)
+            || null;
+    };
+
+    if (activeUserPlan && weeks.length > 0) {
+        const startedAt = new Date(activeUserPlan.startedAt);
+        startedAt.setHours(0, 0, 0, 0);
+
+        const diffDays = Math.floor((now.getTime() - startedAt.getTime()) / 86400000);
+        if (diffDays >= 0) {
+            currentWeekIndex = Math.floor(diffDays / 7);
+            if (currentWeekIndex >= weeks.length) currentWeekIndex = currentWeekIndex % weeks.length;
+
+            const fallbackDayNumber = todayDow0Mon + 1;
+            
+            const week = weeks[currentWeekIndex] || weeks[0];
+            if (week) {
+                const usesOneIndexedWeekdays = week.workouts.length >= 5
+                    && week.workouts.every((w: any) => w.dayOfWeek !== null && w.dayOfWeek !== undefined && w.dayOfWeek === w.dayNumber);
+                const targetDayOfWeek = usesOneIndexedWeekdays
+                    ? (todayDow0Mon === 6 ? 0 : todayDow0Mon + 1)
+                    : todayDow0Mon;
+
+                todayWorkout = week.workouts.find((w: any) => w.dayOfWeek === targetDayOfWeek)
+                            || week.workouts.find((w: any) => (w.dayOfWeek === null || w.dayOfWeek === undefined) && w.dayNumber === fallbackDayNumber)
+                            || null;
+            }
+        }
     }
 
     const isTodayWorkoutCompleted = todayWorkout && user.workoutLogs.some(
@@ -127,13 +163,6 @@ export default async function DashboardPage() {
     let totalDuration = 0;
     let durationCount = 0;
     
-    let workoutsThisWeek = 0;
-    let minsThisWeek = 0;
-    
-    // Get start of the current week (Sunday)
-    const now = new Date();
-    const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
-
     user.workoutLogs
         .filter((l: any) => l.status === "COMPLETED")
         .forEach((l: any) => {
@@ -141,14 +170,6 @@ export default async function DashboardPage() {
                 totalDuration += l.duration;
                 durationCount++;
             }
-            
-            // Check if within this week
-            const logDate = new Date(l.loggedAt);
-            if (logDate >= startOfWeek) {
-                workoutsThisWeek++;
-                if (l.duration) minsThisWeek += l.duration;
-            }
-
             if (!seenNames.has(l.workout.name) && activeSession?.id !== l.id) {
                 seenNames.add(l.workout.name);
                 uniqueLogs.push(l);
@@ -176,32 +197,40 @@ export default async function DashboardPage() {
         }
     }
 
-    // Weekly volume in kg
-    const weeklyVolumeKg = user.workoutLogs
-        .filter((l: any) => l.status === "COMPLETED" && new Date(l.loggedAt) >= startOfWeek)
-        .reduce((total: number, l: any) => {
-            const vol = (l as any).sets?.filter((set: any) => set.isCompleted).reduce((s: number, set: any) =>
-                s + ((set.reps || 0) * (set.weightKg || 0)), 0) || 0;
-            return total + vol;
-        }, 0);
+    let nextTrainingDay: { id: string; name: string; date: string; dayLabel: string } | null = null;
+    for (let offset = 1; offset <= 42; offset++) {
+        const candidateDate = new Date(now);
+        candidateDate.setDate(now.getDate() + offset);
+        const candidateWorkout = findWorkoutForDate(candidateDate);
+        if (candidateWorkout) {
+            nextTrainingDay = {
+                id: candidateWorkout.id,
+                name: candidateWorkout.name,
+                date: candidateDate.toISOString(),
+                dayLabel: getDayName(candidateDate),
+            };
+            break;
+        }
+    }
 
-    const weeklyMetrics = {
-        workoutsCompleted: workoutsThisWeek,
-        streak,
-        weeklyVolumeKg: Math.round(weeklyVolumeKg),
-    };
+    const [bodyweight, dailyMetrics] = await Promise.all([
+        getBodyweightSummary(user.id, todayDate),
+        getDailyMetricsSummary(user.id, todayDate),
+    ]);
+    const checkInSchedule = await getUserCheckInSchedule(user.id);
+    const checkInDueState = getCheckInDueState(checkInSchedule, new Date());
 
     return (
         <>
-            <TopBar title={getDayName()} subtitle={formatDate(new Date())} streak={weeklyMetrics.streak} />
+            <TopBar title={getDayName()} subtitle={formatDate(new Date())} streak={streak} />
             <div className="p-6 max-w-5xl mx-auto">
                     <DashboardClient
                         user={{ name: user.name, role: user.role, weightKg: user.weightKg, targetWeightKg: user.targetWeightKg }}
                         activePlan={activePlan ? { name: activePlan.name } : null}
                         todayWorkout={todayWorkout}
+                        nextTrainingDay={nextTrainingDay}
                         todayCompleted={!!isTodayWorkoutCompleted}
                         avgDurationMin={avgDurationMin}
-                        weeklyMetrics={weeklyMetrics}
                         activeSession={activeSession ? {
                             id: activeSession.id,
                             workoutId: activeSession.workoutId,
@@ -221,6 +250,25 @@ export default async function DashboardPage() {
                             weekNumber: currentCheckin.weekNumber,
                             status: currentCheckin.status as string,
                         } : null}
+                        checkInDueState={checkInDueState}
+                        bodyweight={{
+                            selectedDate: todayDate,
+                            selectedWeightKg: bodyweight.selected?.weightKg ?? null,
+                            selectedPreviousWeightKg: bodyweight.selectedPrevious?.weightKg ?? null,
+                            latestWeightKg: bodyweight.latest?.weightKg ?? user.weightKg ?? null,
+                            latestPreviousWeightKg: bodyweight.latestPrevious?.weightKg ?? null,
+                            latestDate: bodyweight.latest?.date ?? null,
+                        }}
+                        dailyMetrics={{
+                            selectedDate: todayDate,
+                            calories: dailyMetrics.selected?.calories ?? null,
+                            steps: dailyMetrics.selected?.steps ?? null,
+                            sleepHours: dailyMetrics.selected?.sleepHours ?? null,
+                            latestCalories: dailyMetrics.latest?.calories ?? null,
+                            latestSteps: dailyMetrics.latest?.steps ?? null,
+                            latestSleepHours: dailyMetrics.latest?.sleepHours ?? null,
+                            targets: dailyMetrics.targets,
+                        }}
                     />
             </div>
         </>

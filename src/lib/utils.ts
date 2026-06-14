@@ -66,7 +66,7 @@ export function plural(count: number, word: string) {
     return count === 1 ? `${count} ${word}` : `${count} ${word}s`;
 }
 
-/** Generate a random access code */
+/** Generate a random code */
 export function generateCode(length = 8) {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     let code = "";
@@ -74,6 +74,13 @@ export function generateCode(length = 8) {
         code += chars.charAt(Math.floor(Math.random() * chars.length));
     }
     return code;
+}
+
+/** Generate a readable coach access code prefix */
+export function getAccessCodePrefix(name?: string | null, email?: string | null) {
+    const fallback = email?.split("@")[0] ?? "COACH";
+    const firstName = (name ?? fallback).trim().split(/\s+/)[0] ?? "COACH";
+    return firstName.replace(/[^a-z0-9]/gi, "").toUpperCase() || "COACH";
 }
 
 /** Generate a simple unique ID */

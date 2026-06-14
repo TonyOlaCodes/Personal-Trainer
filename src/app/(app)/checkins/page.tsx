@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { CheckInsClient } from "./CheckInsClient";
 import { startOfWeek, endOfWeek } from "date-fns";
+import { getBodyweightWeeklyAverage } from "@/lib/bodyweight";
+import { getCheckInDueState, getUserCheckInSchedule } from "@/lib/checkInSchedule";
 
 export const metadata = { title: "Check-ins" };
 
@@ -62,18 +64,43 @@ export default async function CheckInsPage() {
 
     const isCoach = ["COACH", "SUPER_ADMIN"].includes(user.role);
 
-    const checkIns = isCoach
-        ? await prisma.checkIn.findMany({
-            where: { user: { coachId: user.id } },
-            include: { user: { select: { name: true, email: true } } },
-            orderBy: { createdAt: "desc" },
-        })
-        : await prisma.checkIn.findMany({
-            where: { userId: user.id },
-            orderBy: { createdAt: "desc" },
-        });
+    let checkIns: any[] = [];
+    try {
+        checkIns = isCoach
+            ? await prisma.checkIn.findMany({
+                where: { user: { coachId: user.id } },
+                include: { user: { select: { name: true, email: true } } },
+                orderBy: { createdAt: "desc" },
+            })
+            : await prisma.checkIn.findMany({
+                where: { userId: user.id },
+                orderBy: { createdAt: "desc" },
+            });
+    } catch (err) {
+        console.error("[CheckInsPage] Failed to fetch check-ins:", err);
+        checkIns = [];
+    }
 
     const workoutsThisWeek = user.workoutLogs?.length ?? 0;
+    const todayDate = new Date().toISOString().slice(0, 10);
+    const bodyweightWeeklyAverage = isCoach
+        ? { averageWeightKg: null, entries: 0, previousAverageWeightKg: null, previousEntries: 0 }
+        : await getBodyweightWeeklyAverage(user.id, todayDate);
+    const checkInSchedule = isCoach ? null : await getUserCheckInSchedule(user.id);
+    const checkInDueState = checkInSchedule
+        ? getCheckInDueState(checkInSchedule, new Date())
+        : {
+            day: null,
+            frequencyWeeks: null,
+            startDate: null,
+            isConfigured: false,
+            isDueWeek: false,
+            isDueToday: false,
+            isOverdue: false,
+            daysUntilNext: null,
+            nextDueDate: null,
+            dueDayLabel: null,
+        };
 
     return (
         <>
@@ -99,12 +126,17 @@ export default async function CheckInsPage() {
                         intensityRating: c.intensityRating,
                         frontImageUrl: c.frontImageUrl,
                         sideImageUrl: c.sideImageUrl,
+                        videoUrl: c.videoUrl,
+                        coachVideoUrl: c.coachVideoUrl,
                         user: c.user ? { name: c.user.name, email: c.user.email } : undefined,
                     }))}
                     isCoach={isCoach}
                     userRole={user.role}
+                    targetWeightKg={user.targetWeightKg}
                     workoutsThisWeek={workoutsThisWeek}
                     workoutsTarget={workoutsTarget}
+                    bodyweightWeeklyAverage={bodyweightWeeklyAverage}
+                    checkInDueState={checkInDueState}
                 />
             </div>
         </>

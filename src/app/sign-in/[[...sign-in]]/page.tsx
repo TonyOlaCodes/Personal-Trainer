@@ -16,7 +16,11 @@ export default function SignInPage() {
                 </span>
             </Link>
 
-            <SignIn />
+            <SignIn fallbackRedirectUrl="/onboarding" />
+
+            <Link href="/" className="mt-6 text-sm font-semibold text-brand-400 hover:text-brand-300 transition-colors">
+                Back to home
+            </Link>
         </div>
     );
 }

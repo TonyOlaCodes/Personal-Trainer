@@ -6,6 +6,7 @@ import {
     Check, MoreVertical, Reply, Pin, SmilePlus, CheckCheck, ChevronDown, Search, AtSign
 } from "lucide-react";
 import { getInitials, formatRelative, cn, roleLabels } from "@/lib/utils";
+import { MediaLightbox } from "@/components/shared/MediaLightbox";
 
 /* ─── Types ──────────────────────────────────────────── */
 interface ReplyPreview {
@@ -50,16 +51,16 @@ interface Props {
     currentUserId: string;
     currentUserRole: string;
     conversations: Conversation[];
-    teamId?: string | null;
-    teamMembers?: { id: string; name: string | null; role: string; avatarUrl: string | null; updatedAt: string }[];
 }
 
 const REACTION_EMOJIS = ["👍", "🔥", "💪", "❤️", "😂", "🎯"];
 
 /* ─── Component ──────────────────────────────────────── */
-export function ChatClient({ currentUserId, currentUserRole, conversations, teamId, teamMembers }: Props) {
-    const [tab, setTab] = useState<"direct" | "general" | "team">("general");
+export function ChatClient({ currentUserId, currentUserRole, conversations }: Props) {
+    const [tab, setTab] = useState<"direct" | "general">("general");
     const [selectedConv, setSelectedConv] = useState<Conversation | null>(conversations[0] ?? null);
+    const [isHydrated, setIsHydrated] = useState(false);
+    const [viewerMedia, setViewerMedia] = useState<{ src: string; type: "IMAGE" | "VIDEO" } | null>(null);
 
     // Core state
     const [messages, setMessages] = useState<Message[]>([]);
@@ -80,7 +81,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, team
     const [showPinned, setShowPinned] = useState(false);
     const [isTyping, setIsTyping] = useState(false);
     const [typingUsers, setTypingUsers] = useState<string[]>([]);
-    const [mobileShowChat, setMobileShowChat] = useState(false);
+    const [mobileShowChat, setMobileShowChat] = useState(true);
 
     const bottomRef = useRef<HTMLDivElement>(null);
     const fileRef = useRef<HTMLInputElement>(null);
@@ -92,27 +93,32 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, team
     // Tab persistence
     useEffect(() => {
         const saved = localStorage.getItem("lastChatTab") as any;
-        if (saved && ["direct", "general", "team"].includes(saved)) {
-            if (saved === "team" && !teamId) setTab("general");
-            else setTab(saved);
+        if (saved && ["direct", "general"].includes(saved)) {
+            setTab(saved);
+            if (saved !== "direct") setMobileShowChat(true);
         }
-    }, [teamId]);
+        setIsHydrated(true);
+    }, []);
 
-    const handleTabChange = (newTab: "direct" | "general" | "team") => {
+    const handleTabChange = (newTab: "direct" | "general") => {
         setTab(newTab);
         setReplyTo(null);
         setShowPinned(false);
         localStorage.setItem("lastChatTab", newTab);
+        
+        // Auto-open chat for full-room modes (Team and Global) when tapped
+        if (newTab !== "direct") {
+            setMobileShowChat(true);
+        }
     };
 
     /* ─── Fetch Messages ────────────────────────────── */
     const fetchMessages = useCallback(async () => {
-        if (isFetchingRef.current) return;
+        if (!isHydrated || isFetchingRef.current) return;
         isFetchingRef.current = true;
         try {
             let url = "";
             if (tab === "general") url = "/api/messages?general=true";
-            else if (tab === "team" && teamId) url = `/api/messages?with=${teamId}`;
             else if (tab === "direct" && selectedConv) url = `/api/messages?with=${selectedConv.userId}`;
             else return;
 
@@ -138,7 +144,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, team
         } finally {
             isFetchingRef.current = false;
         }
-    }, [tab, selectedConv, teamId, currentUserId]);
+    }, [tab, selectedConv, currentUserId, isHydrated]);
 
     useEffect(() => {
         fetchMessages();
@@ -177,17 +183,11 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, team
         return () => clearInterval(t);
     }, [messages, currentUserId]);
 
-    // Mention helpers
     const mentionableUsers = useMemo(() => {
         const allUsers: { id: string; name: string }[] = [];
         conversations.forEach(c => allUsers.push({ id: c.userId, name: c.name }));
-        teamMembers?.forEach(m => {
-            if (m.id !== currentUserId && !allUsers.find(u => u.id === m.id)) {
-                allUsers.push({ id: m.id, name: m.name || "User" });
-            }
-        });
         return allUsers;
-    }, [conversations, teamMembers, currentUserId]);
+    }, [conversations]);
 
     const filteredMentions = useMemo(() => {
         if (!mentionQuery) return mentionableUsers;
@@ -234,25 +234,64 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, team
     const send = async () => {
         if ((!input.trim() && !stagedMedia) || sending) return;
         setSending(true);
+
+        const currentInput = input.trim() || undefined;
+        const currentMedia = stagedMedia;
+        const currentReply = replyTo;
         const mentions = extractMentions(input);
-        await fetch("/api/messages", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                content: input.trim() || undefined,
-                isGeneral: tab === "general",
-                receiverId: tab === "team" ? teamId : (tab === "direct" && selectedConv ? selectedConv.userId : undefined),
-                type: stagedMedia ? stagedMedia.type : "TEXT",
-                mediaUrl: stagedMedia?.url,
-                replyToId: replyTo?.id,
-                mentions,
-            }),
-        });
+
+        // Optimistic UI Update - Instantly show the message on screen without waiting for the server
+        const optimisticId = `temp-${Date.now()}`;
+        const newMsg: Message = {
+            id: optimisticId,
+            content: currentInput,
+            mediaUrl: currentMedia?.url,
+            type: currentMedia ? currentMedia.type : "TEXT",
+            isGeneral: tab === "general",
+            receiverId: (tab === "direct" && selectedConv) ? selectedConv.userId : undefined,
+            isPinned: false,
+            status: "SENT",
+            mentions,
+            createdAt: new Date().toISOString(),
+            reactions: [],
+            sender: { id: currentUserId, role: currentUserRole },
+            replyTo: currentReply ? {
+                id: currentReply.id,
+                content: currentReply.content,
+                type: currentReply.type,
+                sender: currentReply.sender
+            } : undefined
+        };
+        
+        setMessages(prev => [...prev, newMsg]);
+
+        // Instantly clear inputs for zero latency feel
         setInput("");
         setStagedMedia(null);
         setReplyTo(null);
-        setSending(false);
-        fetchMessages();
+
+        try {
+            await fetch("/api/messages", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    content: currentInput,
+                    isGeneral: tab === "general",
+                    receiverId: newMsg.receiverId,
+                    type: newMsg.type,
+                    mediaUrl: newMsg.mediaUrl,
+                    replyToId: currentReply?.id,
+                    mentions,
+                }),
+            });
+            fetchMessages(); // Pull the real DB message to replace the temporary optimistic one
+        } catch (e) {
+            console.error("Failed to send message", e);
+            // Optionally remove the optimistic message on fail
+            setMessages(prev => prev.filter(m => m.id !== optimisticId));
+        } finally {
+            setSending(false);
+        }
     };
 
     const saveEdit = async (id: string) => {
@@ -318,7 +357,11 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, team
             if (res.ok) {
                 const isVideo = data.type?.startsWith("video/");
                 setStagedMedia({ url: data.url, type: isVideo ? "VIDEO" : "IMAGE" });
+            } else {
+                alert("Upload failed: " + (data.error || "Unknown server error"));
             }
+        } catch (e: any) {
+            alert("Network error: " + e.message);
         } finally {
             setUploading(false);
             if (fileRef.current) fileRef.current.value = "";
@@ -362,7 +405,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, team
 
     /* ─── Sidebar Content ────────────────────────────── */
     const renderSidebar = () => (
-        <div className="w-72 border-r border-surface-border flex flex-col bg-surface-card">
+        <div className="w-full sm:w-72 border-r border-surface-border flex flex-col bg-surface-card h-full">
             {/* Tab Switcher */}
             <div className="p-3 border-b border-surface-border">
                 <div className="flex gap-1 bg-surface-muted p-1 rounded-xl">
@@ -373,15 +416,6 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, team
                     >
                         <MessageSquare className="w-3 h-3" /> Direct
                     </button>
-                    {teamId && (
-                        <button
-                            onClick={() => handleTabChange("team")}
-                            className={cn("flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[11px] font-bold transition-all",
-                                tab === "team" ? "bg-surface-card text-fg shadow-sm" : "text-fg-muted hover:text-fg")}
-                        >
-                            <Star className="w-3 h-3" /> Team
-                        </button>
-                    )}
                     <button
                         onClick={() => handleTabChange("general")}
                         className={cn("flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[11px] font-bold transition-all",
@@ -427,35 +461,12 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, team
                 </div>
             )}
 
-            {tab === "team" && (
-                <div className="flex-1 overflow-y-auto p-2 space-y-0.5 no-scrollbar">
-                    <h4 className="text-[10px] font-black uppercase tracking-widest text-fg-subtle px-3 mt-2 mb-2">Team Roster</h4>
-                    {teamMembers?.map((m) => {
-                        const isOnline = m.updatedAt && (Date.now() - new Date(m.updatedAt).getTime() < 15 * 60 * 1000);
-                        return (
-                            <div key={m.id} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-surface-muted transition-all">
-                                <div className="relative">
-                                    <div className="w-9 h-9 rounded-full bg-gradient-brand flex items-center justify-center text-xs font-bold text-white flex-shrink-0 overflow-hidden">
-                                        {m.avatarUrl ? <img src={m.avatarUrl} alt={m.name ?? "User"} className="w-full h-full object-cover" /> : getInitials(m.name)}
-                                    </div>
-                                    <div className={cn("absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-surface-card", isOnline ? "bg-success" : "bg-fg-muted/30")} />
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                    <p className="text-sm font-bold text-fg truncate">{m.name ?? "Athlete"}</p>
-                                    <p className="text-[10px] uppercase font-bold tracking-widest text-fg-subtle">{roleLabels[m.role] ?? m.role}</p>
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            )}
-
             {tab === "general" && (
-                <div className="flex-1 flex items-center justify-center p-6 text-center">
+                <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
                     <div>
                         <Globe className="w-10 h-10 text-brand-400/30 mx-auto mb-3" />
                         <p className="text-sm font-bold text-fg-muted">Community Chat</p>
-                        <p className="text-[10px] text-fg-subtle mt-1">Open to all members</p>
+                        <p className="text-[10px] text-fg-subtle mt-1 mb-6">Open to all members</p>
                     </div>
                 </div>
             )}
@@ -464,38 +475,48 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, team
 
     /* ─── Main Render ────────────────────────────────── */
     return (
-        <div className="flex h-[calc(100vh-4rem)] animate-fade-in" onClick={() => { setMenuOpenId(null); setReactionPickerId(null); }}>
+        <div className="flex h-[calc(100dvh-5rem)] lg:h-[calc(100dvh-4rem)] animate-fade-in" onClick={() => { setMenuOpenId(null); setReactionPickerId(null); }}>
+            
+            {viewerMedia && (
+                <MediaLightbox 
+                    src={viewerMedia.src} 
+                    type={viewerMedia.type} 
+                    onClose={() => setViewerMedia(null)} 
+                />
+            )}
+
             {/* Desktop Sidebar */}
             <div className="hidden sm:flex">
                 {renderSidebar()}
             </div>
 
             {/* Mobile: Show sidebar or chat */}
-            <div className="sm:hidden flex-1 flex flex-col min-w-0">
-                {!mobileShowChat ? (
+            {!mobileShowChat && (
+                <div className="sm:hidden flex-1 flex flex-col min-w-0">
                     <div className="flex flex-col h-full">
                         {renderSidebar()}
                     </div>
-                ) : null}
-            </div>
+                </div>
+            )}
 
             {/* Chat Area */}
             <div className={cn("flex-1 flex flex-col min-w-0", !mobileShowChat && "hidden sm:flex")}>
                 {/* ── Header ── */}
                 <div className="h-14 flex items-center justify-between px-5 border-b border-surface-border bg-surface-card/80 backdrop-blur-md shrink-0">
                     <div className="flex items-center gap-3">
-                        <button className="sm:hidden btn-icon" onClick={() => setMobileShowChat(false)}>
-                            <ChevronDown className="w-4 h-4 rotate-90" />
+                        <button 
+                            className="sm:hidden flex items-center gap-1 text-brand-400 font-bold hover:text-brand-300 transition-colors bg-brand-400/10 hover:bg-brand-400/20 px-2 py-1.5 rounded-lg -ml-2" 
+                            onClick={() => {
+                                setMobileShowChat(false);
+                                if (tab !== "direct") {
+                                    setTab("direct");
+                                    localStorage.setItem("lastChatTab", "direct");
+                                }
+                            }}
+                        >
+                            <ChevronDown className="w-5 h-5 rotate-90" />
                         </button>
-                        {tab === "team" ? (
-                            <>
-                                <Star className="w-5 h-5 text-brand-400" />
-                                <div>
-                                    <p className="font-bold text-sm">Team Chat</p>
-                                    <p className="text-[10px] text-fg-muted font-medium">Coach & Athletes</p>
-                                </div>
-                            </>
-                        ) : tab === "general" ? (
+                        {tab === "general" ? (
                             <>
                                 <Globe className="w-5 h-5 text-brand-400" />
                                 <div>
@@ -619,7 +640,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, team
                                                 <div className="flex items-center gap-2 min-w-[200px]">
                                                     <input
                                                         autoFocus
-                                                        className="input flex-1 h-9 text-sm py-0 px-3"
+                                                        className="input flex-1 h-9 text-[16px] sm:text-sm py-0 px-3"
                                                         value={editText}
                                                         onChange={e => setEditText(e.target.value)}
                                                         onKeyDown={e => {
@@ -638,9 +659,24 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, team
                                                     )}
                                                 </div>
                                             ) : msg.type === "VIDEO" ? (
-                                                <video src={msg.mediaUrl ?? ""} controls className="max-w-xs rounded-2xl" />
+                                                <div 
+                                                    className="relative max-w-xs cursor-pointer rounded-2xl overflow-hidden shadow-sm"
+                                                    onClick={() => msg.mediaUrl && setViewerMedia({ src: msg.mediaUrl, type: "VIDEO" })}
+                                                >
+                                                    <video src={msg.mediaUrl ?? ""} className="w-full pointer-events-none" />
+                                                    <div className="absolute inset-0 bg-black/20 flex items-center justify-center transition-colors hover:bg-black/10">
+                                                        <div className="w-12 h-12 bg-white/30 backdrop-blur-md rounded-full flex items-center justify-center text-white">
+                                                            <div className="w-0 h-0 border-t-8 border-t-transparent border-l-[12px] border-l-white border-b-8 border-b-transparent ml-1" />
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             ) : (
-                                                <img src={msg.mediaUrl ?? ""} alt="media" className="max-w-xs rounded-2xl" />
+                                                <img 
+                                                    src={msg.mediaUrl ?? ""} 
+                                                    alt="media" 
+                                                    className="max-w-xs rounded-2xl cursor-pointer hover:opacity-90 transition-opacity shadow-sm" 
+                                                    onClick={() => msg.mediaUrl && setViewerMedia({ src: msg.mediaUrl, type: "IMAGE" })}
+                                                />
                                             )}
 
                                             {/* Reactions */}
@@ -696,10 +732,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, team
                                                     </button>
                                                     {reactionPickerId === msg.id && (
                                                         <div
-                                                            className={cn(
-                                                                "absolute bottom-8 z-50 flex gap-1 bg-surface-elevated border border-surface-border rounded-xl p-1.5 shadow-2xl animate-scale-in",
-                                                                isMine ? "right-0" : "left-0"
-                                                            )}
+                                                            className="absolute bottom-9 left-1/2 -translate-x-1/2 z-50 grid grid-cols-3 sm:flex gap-1.5 bg-surface-elevated border border-surface-border rounded-2xl p-2 shadow-modal animate-scale-in w-max max-w-[150px] sm:max-w-none"
                                                             onClick={e => e.stopPropagation()}
                                                         >
                                                             {REACTION_EMOJIS.map(emoji => (
@@ -716,7 +749,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, team
                                                 </div>
 
                                                 {/* More Menu */}
-                                                {(isMine || canPin || (currentUserRole === "SUPER_ADMIN" && msg.isGeneral) || (["COACH", "SUPER_ADMIN"].includes(currentUserRole) && msg.receiverId === teamId)) && (
+                                                {(isMine || canPin || (currentUserRole === "SUPER_ADMIN" && msg.isGeneral)) && (
                                                     <div className="relative">
                                                         <button
                                                             onClick={e => { e.stopPropagation(); setMenuOpenId(menuOpenId === msg.id ? null : msg.id); }}
@@ -726,10 +759,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, team
                                                         </button>
                                                         {menuOpenId === msg.id && (
                                                             <div
-                                                                className={cn(
-                                                                    "absolute bottom-8 z-50 bg-surface-elevated border border-surface-border rounded-xl shadow-2xl overflow-hidden min-w-[140px]",
-                                                                    isMine ? "right-0" : "left-0"
-                                                                )}
+                                                                className="absolute bottom-9 left-1/2 -translate-x-1/2 z-50 bg-surface-elevated border border-surface-border rounded-xl shadow-modal overflow-hidden min-w-[140px] w-max"
                                                                 onClick={e => e.stopPropagation()}
                                                             >
                                                                 {canPin && (
@@ -753,7 +783,6 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, team
                                                                     const isOwner = msg.sender.id === currentUserId;
                                                                     let canModerate = false;
                                                                     if (currentUserRole === "SUPER_ADMIN" && msg.isGeneral) canModerate = true;
-                                                                    if (["COACH", "SUPER_ADMIN"].includes(currentUserRole) && msg.receiverId === teamId) canModerate = true;
 
                                                                     if (isOwner || canModerate) {
                                                                         return (
@@ -836,7 +865,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, team
                         <input
                             ref={inputRef}
                             type="text"
-                            className="input flex-1 h-10 py-0"
+                            className="input flex-1 h-10 py-0 text-[16px] sm:text-sm"
                             placeholder={replyTo ? "Write a reply..." : stagedMedia ? "Add caption..." : "Message..."}
                             value={input}
                             onChange={handleInputChange}

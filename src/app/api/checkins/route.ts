@@ -50,20 +50,6 @@ export async function POST(req: Request) {
         },
     });
     
-    // Update user's current weight if this is the most recent check-in
-    if (parsed.data.bodyweightKg) {
-        const latestCheckin = await prisma.checkIn.findFirst({
-            where: { userId: user.id },
-            orderBy: { weekNumber: "desc" }
-        });
-        if (!latestCheckin || parsed.data.weekNumber >= latestCheckin.weekNumber) {
-            await prisma.user.update({
-                where: { id: user.id },
-                data: { weightKg: Math.round(parsed.data.bodyweightKg * 100) / 100 }
-            });
-        }
-    }
-
     return NextResponse.json(checkIn, { status: 201 });
 }
 
@@ -146,6 +132,7 @@ export async function PATCH(req: Request) {
     if (isCoach) {
         data = {
             coachResponse,
+            coachVideoUrl: body.coachVideoUrl,
             status: (status as any) || "REVIEWED",
             respondedAt: new Date(),
             coachLastSeenAt: new Date(),
@@ -166,6 +153,7 @@ export async function PATCH(req: Request) {
             frontImageUrl,
             sideImageUrl,
             lastUpdatedByClientAt: new Date(),
+            status: "PENDING",
         };
     }
     
@@ -173,21 +161,6 @@ export async function PATCH(req: Request) {
         where: { id },
         data
     });
-
-    // Update user's current weight if this is a client edit and it's their most recent point
-    if (!isCoach && bodyweightKg) {
-        const bwValue = Math.round(parseFloat(bodyweightKg) * 100) / 100;
-        const latestCheckin = await prisma.checkIn.findFirst({
-            where: { userId: existing.userId },
-            orderBy: { weekNumber: "desc" }
-        });
-        if (latestCheckin && existing.weekNumber >= latestCheckin.weekNumber) {
-            await prisma.user.update({
-                where: { id: existing.userId },
-                data: { weightKg: bwValue }
-            });
-        }
-    }
 
     return NextResponse.json(updated);
 }

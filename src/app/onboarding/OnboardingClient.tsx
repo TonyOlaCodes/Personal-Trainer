@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Zap, ChevronRight, ChevronLeft, SkipForward, Check } from "lucide-react";
+import { Zap, ChevronRight, ChevronLeft, SkipForward, Check, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useClerk } from "@clerk/nextjs";
 
 // ── Step 1 data ─────────────────────────────────────────────────────────────
 const goals = [
@@ -19,10 +20,6 @@ const experienceLevels = [
 ];
 const trainingDayOptions = [2, 3, 4, 5, 6];
 
-// ── Step 2 data ─────────────────────────────────────────────────────────────
-const muscleGroups = ["Chest", "Back", "Shoulders", "Arms", "Legs", "Glutes", "Core"];
-const splits = ["PPL", "Upper/Lower", "Bro Split", "Arnold", "Full Body", "Custom"];
-
 interface FormData {
     // Step 1
     goal: string;
@@ -36,11 +33,11 @@ interface FormData {
     heightCm: string;
     weightKg: string;
     targetWeightKg: string;
-    sessionLengthMin: string;
-    weakMuscles: string[];
-    preferredSplit: string;
     cardioPreference: string;
     dietAwareness: boolean;
+    targetCalories: string;
+    targetSteps: string;
+    targetSleepHours: string;
     secretCode?: string;
 }
 
@@ -55,11 +52,11 @@ const defaultForm: FormData = {
     heightCm: "",
     weightKg: "",
     targetWeightKg: "",
-    sessionLengthMin: "60",
-    weakMuscles: [],
-    preferredSplit: "",
     cardioPreference: "",
     dietAwareness: false,
+    targetCalories: "",
+    targetSteps: "",
+    targetSleepHours: "",
     secretCode: "",
 };
 
@@ -67,23 +64,74 @@ const TOTAL_STEPS = 3; // S1 required, S2 optional, S3 confirm
 
 export function OnboardingPage() {
     const router = useRouter();
+    const { signOut } = useClerk();
     const [step, setStep] = useState(1);
     const [form, setForm] = useState<FormData>(defaultForm);
     const [saving, setSaving] = useState(false);
+    const [exiting, setExiting] = useState(false);
+    const [codeStatus, setCodeStatus] = useState<"idle" | "checking" | "valid" | "error">("idle");
+    const [codeMessage, setCodeMessage] = useState("");
+    const [coachName, setCoachName] = useState("");
 
     const progress = (step / TOTAL_STEPS) * 100;
 
     const update = (key: keyof FormData, value: unknown) => {
+        if (key === "secretCode") {
+            setCodeStatus("idle");
+            setCodeMessage("");
+            setCoachName("");
+        }
         setForm((prev) => ({ ...prev, [key]: value }));
     };
 
-    const toggleMuscle = (m: string) => {
-        setForm((prev) => ({
-            ...prev,
-            weakMuscles: prev.weakMuscles.includes(m)
-                ? prev.weakMuscles.filter((x) => x !== m)
-                : [...prev.weakMuscles, m],
-        }));
+    const handleSkipOptional = () => {
+        setCodeStatus("idle");
+        setCodeMessage("");
+        setCoachName("");
+        setForm((prev) => ({ ...prev, secretCode: "" }));
+        setStep(3);
+    };
+
+    const handleExitSetup = async () => {
+        setExiting(true);
+        await signOut({ redirectUrl: "/?view=landing" });
+    };
+
+    const handleContinue = async () => {
+        if (step !== 2) {
+            setStep((s) => s + 1);
+            return;
+        }
+
+        const code = form.secretCode?.trim();
+        if (!code) {
+            setStep(3);
+            return;
+        }
+
+        setCodeStatus("checking");
+        setCodeMessage("");
+        try {
+            const res = await fetch("/api/codes/validate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ code }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                setCodeStatus("error");
+                setCodeMessage(data.error || "Invalid code");
+                return;
+            }
+
+            setCodeStatus("valid");
+            setCoachName(data.coachName || "your coach");
+            setCodeMessage("Code looks good.");
+            setStep(3);
+        } catch {
+            setCodeStatus("error");
+            setCodeMessage("Could not check code. Try again.");
+        }
     };
 
     const handleSubmit = async () => {
@@ -97,10 +145,10 @@ export function OnboardingPage() {
             if (res.ok) {
                 router.push("/dashboard");
             } else {
-                const data = await res.json();
+                const data = await res.json().catch(() => ({ error: "Failed to save profile." }));
                 alert(data.error || "Failed to save profile.");
             }
-        } catch (e) {
+        } catch {
             alert("Connection error.");
         } finally {
             setSaving(false);
@@ -124,7 +172,17 @@ export function OnboardingPage() {
                 <div className="mb-6">
                     <div className="flex justify-between text-xs text-fg-muted mb-2">
                         <span>Step {step} of {TOTAL_STEPS}</span>
-                        <span>{Math.round(progress)}%</span>
+                        <div className="flex items-center gap-3">
+                            <button
+                                type="button"
+                                onClick={handleExitSetup}
+                                disabled={exiting}
+                                className="font-semibold text-brand-400 hover:text-brand-300 transition-colors disabled:opacity-60"
+                            >
+                                {exiting ? "Exiting..." : "Exit setup"}
+                            </button>
+                            <span>{Math.round(progress)}%</span>
+                        </div>
                     </div>
                     <div className="progress-bar">
                         <div className="progress-fill" style={{ width: `${progress}%` }} />
@@ -299,70 +357,36 @@ export function OnboardingPage() {
                                 ))}
                             </div>
 
-                            {/* Session length */}
-                            <div>
-                                <label className="label">Preferred session length</label>
-                                <div className="flex gap-2">
-                                    {["30", "45", "60", "75", "90"].map((min) => (
-                                        <button
-                                            key={min}
-                                            onClick={() => update("sessionLengthMin", min)}
-                                            className={cn(
-                                                "flex-1 py-2.5 rounded-xl text-xs font-semibold border transition-all",
-                                                form.sessionLengthMin === min
-                                                    ? "border-brand-600 bg-brand-950/60 text-brand-300"
-                                                    : "border-surface-border bg-surface-muted text-fg-muted"
-                                            )}
-                                        >
-                                            {min}m
-                                        </button>
+                            {/* Daily targets */}
+                            <div className="pt-4 border-t border-surface-border/50">
+                                <label className="label">Daily targets (optional)</label>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    {[
+                                        { key: "targetCalories", label: "Calories", ph: "e.g. 2500", unit: "kcal", step: "1" },
+                                        { key: "targetSteps", label: "Steps", ph: "e.g. 10000", unit: "steps", step: "1" },
+                                        { key: "targetSleepHours", label: "Sleep", ph: "e.g. 8", unit: "hrs", step: "0.1" },
+                                    ].map((f) => (
+                                        <div key={f.key}>
+                                            <label className="text-[10px] font-black uppercase tracking-widest text-fg-subtle mb-1 block">{f.label}</label>
+                                            <div className="relative">
+                                                <input
+                                                    type="number"
+                                                    step={f.step}
+                                                    className="input pr-14"
+                                                    placeholder={f.ph}
+                                                    value={form[f.key as keyof FormData] as string}
+                                                    onChange={(e) => update(f.key as keyof FormData, e.target.value)}
+                                                />
+                                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-fg-subtle">
+                                                    {f.unit}
+                                                </span>
+                                            </div>
+                                        </div>
                                     ))}
                                 </div>
                             </div>
 
-                            {/* Weak muscles */}
-                            <div>
-                                <label className="label">Weak muscle groups (optional)</label>
-                                <div className="flex flex-wrap gap-2">
-                                    {muscleGroups.map((m) => (
-                                        <button
-                                            key={m}
-                                            onClick={() => toggleMuscle(m)}
-                                            className={cn(
-                                                "px-3 py-1.5 rounded-full text-xs font-medium border transition-all",
-                                                form.weakMuscles.includes(m)
-                                                    ? "border-brand-600 bg-brand-950/60 text-brand-300"
-                                                    : "border-surface-border bg-surface-muted text-fg-muted"
-                                            )}
-                                        >
-                                            {m}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Preferred split */}
-                            <div>
-                                <label className="label">Preferred split</label>
-                                <div className="flex flex-wrap gap-2">
-                                    {splits.map((s) => (
-                                        <button
-                                            key={s}
-                                            onClick={() => update("preferredSplit", s)}
-                                            className={cn(
-                                                "px-3 py-1.5 rounded-full text-xs font-medium border transition-all",
-                                                form.preferredSplit === s
-                                                    ? "border-brand-600 bg-brand-950/60 text-brand-300"
-                                                    : "border-surface-border bg-surface-muted text-fg-muted"
-                                            )}
-                                        >
-                                            {s}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Promo Code */}
+                            {/* Access code */}
                             <div className="pt-4 border-t border-surface-border/50">
                                 <label className="label flex items-center gap-2">
                                     <Zap className="w-3 h-3 text-brand-400" />
@@ -370,14 +394,24 @@ export function OnboardingPage() {
                                 </label>
                                 <input
                                     type="text"
-                                    className="input font-mono uppercase tracking-wider"
+                                    className={cn(
+                                        "input font-mono uppercase tracking-wider",
+                                        codeStatus === "error" && "border-danger focus:border-danger focus:ring-danger/40",
+                                        codeStatus === "valid" && "border-success focus:border-success focus:ring-success/40"
+                                    )}
                                     placeholder="Enter access code..."
                                     value={form.secretCode}
                                     onChange={(e) => update("secretCode", e.target.value)}
                                 />
-                                <p className="text-[10px] text-fg-subtle mt-1.5">
-                                    Have a trainer code or promotion? Enter it here to unlock premium features.
-                                </p>
+                                {codeMessage ? (
+                                    <p className={cn("text-[10px] mt-1.5 font-semibold", codeStatus === "error" ? "text-danger" : "text-success")}>
+                                        {codeMessage}
+                                    </p>
+                                ) : (
+                                    <p className="text-[10px] text-fg-subtle mt-1.5">
+                                        Have a coach access code? Enter it here to unlock premium features.
+                                    </p>
+                                )}
                             </div>
                         </div>
                     )}
@@ -393,6 +427,11 @@ export function OnboardingPage() {
                                 <p className="subheading">
                                     Your profile is ready. Let&apos;s take you to your dashboard and get you training.
                                 </p>
+                                {coachName && (
+                                    <p className="mt-3 text-sm text-brand-300 font-semibold">
+                                        Your coach is {coachName}.
+                                    </p>
+                                )}
                             </div>
                             <div className="text-left card p-4 space-y-2">
                                 <p className="text-sm"><span className="text-fg-muted">Goal:</span> <span className="font-medium">{form.goal.replace("_", " ")}</span></p>
@@ -417,7 +456,7 @@ export function OnboardingPage() {
                         <div className="flex gap-2">
                             {step === 2 && (
                                 <button
-                                    onClick={() => setStep(3)}
+                                    onClick={handleSkipOptional}
                                     className="btn-ghost text-fg-muted"
                                 >
                                     <SkipForward className="w-4 h-4" />
@@ -427,12 +466,12 @@ export function OnboardingPage() {
 
                             {step < 3 ? (
                                 <button
-                                    onClick={() => setStep((s) => s + 1)}
-                                    disabled={step === 1 && (!form.goal || !form.experienceLevel)}
+                                    onClick={handleContinue}
+                                    disabled={(step === 1 && (!form.goal || !form.experienceLevel)) || codeStatus === "checking"}
                                     className="btn-primary"
                                 >
-                                    Continue
-                                    <ChevronRight className="w-4 h-4" />
+                                    {codeStatus === "checking" ? "Checking..." : "Continue"}
+                                    {codeStatus === "checking" ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
                                 </button>
                             ) : (
                                 <button

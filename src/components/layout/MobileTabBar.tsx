@@ -8,7 +8,8 @@ import {
     Calendar,
     BarChart3,
     MessageSquare,
-    Users
+    Users,
+    ClipboardList
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -24,7 +25,7 @@ const mobileNavItems: MobileNavItem[] = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, hideRoles: ["COACH", "SUPER_ADMIN"] },
     { href: "/coach", label: "Coach", icon: Users, roles: ["COACH", "SUPER_ADMIN"] },
     { href: "/plans", label: "Plans", icon: Dumbbell },
-    { href: "/checkins", label: "Check-ins", icon: Calendar },
+    { href: "/checkins", label: "Check-ins", icon: ClipboardList },
     { href: "/progress", label: "Progress", icon: BarChart3, hideRoles: ["COACH", "SUPER_ADMIN"] },
     { href: "/chat", label: "Chat", icon: MessageSquare },
 ];
@@ -64,12 +65,7 @@ export function MobileTabBar({ userRole = "FREE", realRole = "FREE", isClientMod
                         </Link>
                     );
                 })}
-                {(realRole === "COACH" || realRole === "SUPER_ADMIN") && (
-                    <div className="flex flex-col items-center justify-center gap-1 min-w-[3.5rem] mt-1">
-                        <RoleSwitcher realRole={realRole as any} isClientMode={isClientMode} compact />
-                        <span className="text-[9px] text-fg-muted font-medium mt-0.5 whitespace-nowrap overflow-visible">Switch</span>
-                    </div>
-                )}
+
             </div>
         </nav>
     );
