@@ -5,34 +5,44 @@ import { cn } from "@/lib/utils";
 
 const EXERCISES = [
     // Chest
-    "Bench Press", "Incline Bench Press", "Decline Bench Press", "Flat Dumbbell Fly",
-    "Incline Dumbbell Press", "Cable Fly", "Pec Deck", "Push-Up", "Dips",
+    "Bench Press", "Barbell Bench Press", "Incline Bench Press", "Decline Bench Press", 
+    "Dumbbell Bench Press", "Incline Dumbbell Bench Press", "Decline Dumbbell Bench Press",
+    "Flat Dumbbell Fly", "Incline Dumbbell Press", "Cable Fly", "Pec Deck", "Push-Up", "Pushup",
+    "Incline Push-Up", "Decline Push-Up", "Wall Pushup", "Wall Pushups", "Dips", "Chest Dips",
     // Back
-    "Deadlift", "Barbell Row", "Pull-Up", "Chin-Up", "Lat Pulldown",
-    "Seated Cable Row", "T-Bar Row", "Single Arm Dumbbell Row", "Face Pull",
-    "Good Morning", "Hyperextension",
+    "Deadlift", "Barbell Deadlift", "Romanian Deadlift", "Dumbbell Romanian Deadlift", 
+    "Sumo Deadlift", "Trap Bar Deadlift", "Barbell Row", "Barbell Rows", "Pull-Up", "Pull-Ups", 
+    "Chin-Up", "Chin-Ups", "Lat Pulldown", "Lat Pulldowns", "Close-Grip Lat Pulldown", 
+    "Seated Cable Row", "Seated Cable Rows", "T-Bar Row", "Single Arm Dumbbell Row", 
+    "Face Pull", "Face Pulls", "Good Morning", "Hyperextension", "Back Extension", "Shrugs",
     // Shoulders
-    "Overhead Press", "Dumbbell Shoulder Press", "Arnold Press", "Lateral Raise",
-    "Front Raise", "Rear Delt Fly", "Upright Row", "Shrugs",
+    "Overhead Press", "Military Press", "Dumbbell Shoulder Press", "Arnold Press", 
+    "Lateral Raise", "Lateral Raises", "Cable Lateral Raise", "Front Raise", "Dumbbell Front Raise", 
+    "Rear Delt Fly", "Dumbbell Rear Delt Fly", "Cable Rear Delt Fly", "Upright Row",
     // Biceps
-    "Barbell Curl", "Dumbbell Curl", "Hammer Curl", "Preacher Curl",
-    "Incline Dumbbell Curl", "Cable Curl", "Concentration Curl",
+    "Barbell Curl", "Barbell Curls", "Dumbbell Curl", "Dumbbell Curls", "Hammer Curl", "Hammer Curls",
+    "Preacher Curl", "Incline Dumbbell Curl", "Cable Curl", "Concentration Curl", "EZ Bar Curl",
     // Triceps
-    "Tricep Pushdown", "Skull Crushers", "Close Grip Bench Press",
-    "Overhead Tricep Extension", "Tricep Kickback", "Cable Overhead Tricep Extension",
+    "Tricep Pushdown", "Tricep Pushdowns", "Tricep Rope Pushdown", "Skull Crushers", "Skull Crusher", 
+    "Close Grip Bench Press", "Overhead Tricep Extension", "Tricep Dips", "Tricep Kickback", 
+    "Cable Overhead Tricep Extension",
     // Legs
-    "Squat", "Back Squat", "Front Squat", "Goblet Squat", "Bulgarian Split Squat",
-    "Leg Press", "Hack Squat", "Lunges", "Walking Lunges", "Step Ups",
-    "Romanian Deadlift", "Stiff Leg Deadlift", "Leg Curl", "Leg Extension",
-    "Hip Thrust", "Glute Bridge", "Calf Raise", "Seated Calf Raise",
+    "Squat", "Squats", "Back Squat", "Front Squat", "Goblet Squat", "Bulgarian Split Squat", 
+    "Bulgarian Split Squats", "Leg Press", "Hack Squat", "Lunges", "Walking Lunges", "Reverse Lunges", 
+    "Step Up", "Step Ups", "Romanian Deadlift", "Stiff Leg Deadlift", "Leg Curl", "Leg Curls", 
+    "Leg Extension", "Leg Extensions", "Hip Thrust", "Hip Thrusts", "Glute Bridge", 
+    "Calf Raise", "Calf Raises", "Standing Calf Raise", "Seated Calf Raise", "Seated Calf Raises",
     // Core
-    "Plank", "Ab Wheel Rollout", "Cable Crunch", "Hanging Leg Raise",
-    "Russian Twist", "Bicycle Crunch", "Crunch", "Sit Up", "Side Plank",
+    "Plank", "Planks", "Side Plank", "Ab Wheel Rollout", "Cable Crunch", "Cable Crunches", 
+    "Decline Crunch", "Hanging Leg Raise", "Hanging Leg Raises", "Hanging Knee Raise", 
+    "Russian Twist", "Russian Twists", "Bicycle Crunch", "Crunch", "Crunches", "Sit-Up", 
+    "Sit Up", "Sit-Ups", "Sit Ups",
     // Cardio / Compound
     "Treadmill", "Stairmaster", "Elliptical", "Stationary Bike", "Rowing Machine",
     "Running", "Cycling", "Swimming", "Jump Rope", "Farmers Walk", 
     "Trap Bar Deadlift", "Sumo Deadlift", "Power Clean", "Hang Clean", 
-    "Snatch", "Box Jump", "Burpee", "Battle Ropes", "Sled Push", "Sled Pull",
+    "Snatch", "Box Jump", "Burpee", "Burpees", "Battle Ropes", "Sled Push", "Sled Pull",
+    "Kettlebell Swing",
 ];
 
 const CARDIO_MATCHERS = [
