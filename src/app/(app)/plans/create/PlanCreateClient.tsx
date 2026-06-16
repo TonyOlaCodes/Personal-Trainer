@@ -83,6 +83,8 @@ export function PlanCreateClient() {
     const [error, setError] = useState<string | null>(null);
     const [lastAddedExerciseIdx, setLastAddedExerciseIdx] = useState<number | null>(null);
     const [draggedWorkoutIdx, setDraggedWorkoutIdx] = useState<number | null>(null);
+    const [draggedExerciseIdx, setDraggedExerciseIdx] = useState<number | null>(null);
+    const [dragEnabledIdx, setDragEnabledIdx] = useState<number | null>(null);
 
     const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
     const cloneWeeks = (source: LocalWeek[]): LocalWeek[] => source.map((week) => ({
@@ -345,6 +347,24 @@ export function PlanCreateClient() {
                 }
             });
         }
+        setWeeks(next);
+    };
+
+    const reorderExercises = (wIdx: number, fromIdx: number, toIdx: number) => {
+        if (fromIdx === toIdx) return;
+        const next = cloneWeeks(weeks);
+        next.forEach((w) => {
+            const workout = w.workouts[wIdx];
+            if (workout && workout.exercises) {
+                const list = [...workout.exercises];
+                const [removed] = list.splice(fromIdx, 1);
+                list.splice(toIdx, 0, removed);
+                list.forEach((ex, idx) => {
+                    ex.order = idx;
+                });
+                workout.exercises = list;
+            }
+        });
         setWeeks(next);
     };
 
@@ -841,9 +861,43 @@ export function PlanCreateClient() {
                                     ) : (
                                         <>
                                             {workouts[activeWorkoutIdx].exercises.map((ex, eIdx) => (
-                                                <div key={eIdx} className="card p-4 group flex items-start gap-4">
-                                                    <div className="pt-2 text-fg-subtle flex flex-col items-center gap-1">
-                                                        <span className="text-[10px] font-bold">{eIdx + 1}</span>
+                                                <div 
+                                                    key={eIdx} 
+                                                    draggable={!isViewOnly && dragEnabledIdx === eIdx}
+                                                    onDragStart={(e) => {
+                                                        e.dataTransfer.effectAllowed = "move";
+                                                        e.dataTransfer.setData("text/plain", String(eIdx));
+                                                        setDraggedExerciseIdx(eIdx);
+                                                    }}
+                                                    onDragEnd={() => {
+                                                        setDraggedExerciseIdx(null);
+                                                        setDragEnabledIdx(null);
+                                                    }}
+                                                    onDragOver={(e) => {
+                                                        e.preventDefault();
+                                                     }}
+                                                    onDragEnter={() => {
+                                                        if (draggedExerciseIdx !== null && draggedExerciseIdx !== eIdx) {
+                                                            reorderExercises(activeWorkoutIdx, draggedExerciseIdx, eIdx);
+                                                            setDraggedExerciseIdx(eIdx);
+                                                        }
+                                                    }}
+                                                    className={cn(
+                                                        "card p-4 group flex items-start gap-4 transition-all duration-200 border-surface-border",
+                                                        draggedExerciseIdx === eIdx ? "opacity-30 border-dashed border-brand-500 bg-brand-500/5 scale-[0.98]" : "hover:border-surface-border-hover"
+                                                    )}
+                                                >
+                                                    <div className="pt-2 text-fg-subtle flex items-center gap-1.5 shrink-0 select-none">
+                                                        {!isViewOnly && (
+                                                            <GripVertical 
+                                                                onMouseEnter={() => setDragEnabledIdx(eIdx)}
+                                                                onMouseLeave={() => setDragEnabledIdx(null)}
+                                                                className="w-4 h-4 cursor-grab active:cursor-grabbing text-fg-subtle hover:text-fg transition-colors select-none shrink-0" 
+                                                            />
+                                                        )}
+                                                        <span className="text-[10px] font-bold bg-surface-muted w-5 h-5 rounded-md flex items-center justify-center border border-surface-border">
+                                                            {eIdx + 1}
+                                                        </span>
                                                     </div>
                                                     <div className="flex-1 grid grid-cols-12 gap-4">
                                                         <div className="col-span-12 sm:col-span-4 lg:col-span-4">
