@@ -660,7 +660,11 @@ export function ChatClient({ currentUserId, currentUserRole, conversations }: Pr
                                                     <button onClick={() => { setEditingId(null); setEditText(""); }} className="btn-icon w-8 h-8"><X className="w-4 h-4" /></button>
                                                 </div>
                                             ) : msg.type === "TEXT" ? (
-                                                <div className={cn(isMine ? "bubble-sent" : "bubble-received", msg.isPinned && "ring-1 ring-brand-400/30")}>
+                                                <div className={cn(
+                                                     isMine ? "bubble-sent" : "bubble-received",
+                                                     (!isMine && msg.mentions?.includes(currentUserId)) && "bg-brand-500/10 border-brand-500/30 shadow-glow-brand-sm ring-1 ring-brand-500/20",
+                                                     msg.isPinned && "ring-1 ring-brand-400/30"
+                                                 )}>
                                                     {renderContent(msg.content || "")}
                                                     {msg.updatedAt && (new Date(msg.updatedAt).getTime() - new Date(msg.createdAt).getTime() > 1000) && (
                                                         <span className="text-[9px] opacity-50 ml-2 italic">(edited)</span>
