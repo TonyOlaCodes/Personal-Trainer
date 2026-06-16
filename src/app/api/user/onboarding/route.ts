@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { redeemAccessCodeForUser } from "@/lib/accessCodes";
 import { anonymizeDeletedUserAccount } from "@/lib/accountDeletion";
 import { normalizeCalories, normalizeSleepHours, normalizeSteps, updateDailyMetricTargets } from "@/lib/dailyMetrics";
+import { getUserDeactivationStatusByClerkId } from "@/lib/userDeactivation";
 import { z } from "zod";
 
 const schema = z.object({
@@ -44,6 +45,9 @@ export async function POST(req: Request) {
         const name = user.firstName ? `${user.firstName} ${user.lastName ?? ""}`.trim() : null;
 
         const existingUser = await prisma.user.findUnique({ where: { clerkId: userId } });
+        if (existingUser && await getUserDeactivationStatusByClerkId(userId)) {
+            return NextResponse.json({ error: "Account deactivated" }, { status: 403 });
+        }
 
         const accessCode = d.secretCode?.trim();
         let savedUserId = existingUser?.id;

@@ -65,9 +65,23 @@ model User {
   name              String?
   avatarUrl         String?
   role              Role     @default(FREE)
+  isDeactivated     Boolean  @default(false)
+  isDeleted         Boolean  @default(false)
+  deletedAt         DateTime?
+  deletedName       String?
+  deletedEmail      String?
   onboardingDone    Boolean  @default(false)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+
+  // Presence
+  lastActiveAt      DateTime?
+
+  // Coach preferences
+  defaultCheckInDay    Int?     // 0=Sun, 1=Mon … 6=Sat
+  notifyOnWorkout      Boolean  @default(true)
+  notifyOnCheckIn      Boolean  @default(true)
+  notifyOnMetricUpdate Boolean  @default(true)
 
   // Onboarding Step 1
   goal              Goal?
@@ -108,6 +122,9 @@ model User {
   generatedCodes    AccessCode[] @relation("GeneratedCodes")
   createdPlans      Plan[]       @relation("CreatedPlans")
   reactions         Reaction[]
+  notifications     Notification[]
+  workoutNotes      WorkoutNote[] @relation("CoachWorkoutNotes")
+  clientGoals       ClientGoals?
 
   @@map("users")
 }
@@ -213,8 +230,24 @@ model WorkoutLog {
   user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   workout Workout  @relation(fields: [workoutId], references: [id], onDelete: Cascade)
   sets    LogSet[]
+  coachNotes WorkoutNote[]
 
   @@map("workout_logs")
+}
+
+model WorkoutNote {
+  id           String   @id @default(cuid())
+  workoutLogId String
+  coachId      String
+  text         String
+  createdAt    DateTime @default(now())
+
+  workoutLog WorkoutLog @relation(fields: [workoutLogId], references: [id], onDelete: Cascade)
+  coach      User       @relation("CoachWorkoutNotes", fields: [coachId], references: [id], onDelete: Cascade)
+
+  @@index([workoutLogId])
+  @@index([coachId])
+  @@map("workout_notes")
 }
 
 model LogSet {
@@ -274,11 +307,13 @@ model CheckIn {
 }
 
 model GlobalExercise {
-  id          String   @id @default(cuid())
-  name        String   @unique
-  videoUrl    String?
-  muscleGroup String?
-  createdAt   DateTime @default(now())
+  id           String   @id @default(cuid())
+  name         String   @unique
+  videoUrl     String?
+  instructions String?
+  thumbnailUrl String?
+  muscleGroup  String?
+  createdAt    DateTime @default(now())
 
   @@map("global_exercises")
 }
@@ -325,6 +360,24 @@ model Reaction {
   @@map("reactions")
 }
 
+model Notification {
+  id         String   @id @default(cuid())
+  type       String
+  message    String
+  read       Boolean  @default(false)
+  userId     String
+  entityType String
+  entityId   String?
+  route      String
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@index([entityType, entityId])
+  @@map("notifications")
+}
+
 model AccessCode {
   id          String    @id @default(cuid())
   code        String    @unique
@@ -335,6 +388,7 @@ model AccessCode {
   expiresAt   DateTime?
   upgradesTo  Role      @default(PREMIUM)
   isActive    Boolean   @default(true)
+  status      String    @default("active") // active | expired | deleted
   createdAt   DateTime  @default(now())
 
   plan      Plan? @relation(fields: [planId], references: [id])
@@ -342,4 +396,17 @@ model AccessCode {
   usedBy    User? @relation("UsedCodes", fields: [usedById], references: [id])
 
   @@map("access_codes")
+}
+
+/// Per-client fitness goals (step, calorie, weight targets)
+model ClientGoals {
+  id           String  @id @default(cuid())
+  userId       String  @unique
+  stepGoal     Int?
+  calorieGoal  Int?
+  weightGoalKg Float?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("client_goals")
 }

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Walkthrough } from "@/components/shared/Walkthrough";
+import { WorkoutSessionModal } from "@/components/shared/WorkoutSessionModal";
 import { Dumbbell, ChevronRight, Clock, Flame, Activity, Calendar, Ticket, Check, Edit3, Trash2, Scale, Utensils, Footprints, Moon } from "lucide-react";
 import { formatDate, formatRelative, cn } from "@/lib/utils";
 import { isCardio } from "@/components/shared/ExerciseAutocomplete";
@@ -109,6 +110,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
     const [metricsMsg, setMetricsMsg] = useState("");
     const [savingMetrics, setSavingMetrics] = useState(false);
     const [localActiveSession, setLocalActiveSession] = useState(activeSession);
+    const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
 
     useEffect(() => {
         setLocalActiveSession(activeSession);
@@ -118,6 +120,11 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get("tour") === "true") {
             setShowTour(true);
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+        const sessionId = urlParams.get("sessionId");
+        if (sessionId) {
+            setSelectedSessionId(sessionId);
             window.history.replaceState({}, document.title, window.location.pathname);
         }
     }, []);
@@ -398,6 +405,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
 
     return (
         <div className="space-y-6 animate-fade-in pb-10">
+            <WorkoutSessionModal sessionId={selectedSessionId} onClose={() => setSelectedSessionId(null)} />
             {showTour && <Walkthrough steps={tourSteps} onComplete={() => setShowTour(false)} />}
 
             {/* Greeting */}
@@ -817,7 +825,12 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                 {recentLogs.length > 0 ? (
                     <div className="card divide-y divide-surface-border">
                         {recentLogs.slice(0, 5).map((log) => (
-                            <Link href={`/plans/log/view/${log.id}`} key={log.id} className="flex items-center justify-between px-4 py-3 hover:bg-surface-muted/30 transition-colors">
+                            <button
+                                type="button"
+                                onClick={() => setSelectedSessionId(log.id)}
+                                key={log.id}
+                                className="w-full flex items-center justify-between px-4 py-3 hover:bg-surface-muted/30 transition-colors text-left"
+                            >
                                 <div className="flex items-center gap-3">
                                     <div className="w-8 h-8 rounded-lg bg-success-muted flex items-center justify-center">
                                         <Activity className="w-3.5 h-3.5 text-success" />
@@ -839,7 +852,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                                     </button>
                                     <ChevronRight className="w-4 h-4 text-fg-subtle" />
                                 </div>
-                            </Link>
+                            </button>
                         ))}
                     </div>
                 ) : (

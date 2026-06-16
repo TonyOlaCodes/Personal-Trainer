@@ -92,13 +92,20 @@ export function ChatClient({ currentUserId, currentUserRole, conversations }: Pr
 
     // Tab persistence
     useEffect(() => {
-        const saved = localStorage.getItem("lastChatTab") as any;
-        if (saved && ["direct", "general"].includes(saved)) {
+        const saved = localStorage.getItem("lastChatTab");
+        const requestedConversation = new URLSearchParams(window.location.search).get("with");
+        const matchedConversation = conversations.find(c => c.userId === requestedConversation);
+
+        if (matchedConversation) {
+            setTab("direct");
+            setSelectedConv(matchedConversation);
+            localStorage.setItem("lastChatTab", "direct");
+        } else if (saved === "direct" || saved === "general") {
             setTab(saved);
             if (saved !== "direct") setMobileShowChat(true);
         }
         setIsHydrated(true);
-    }, []);
+    }, [conversations]);
 
     const handleTabChange = (newTab: "direct" | "general") => {
         setTab(newTab);
@@ -360,8 +367,9 @@ export function ChatClient({ currentUserId, currentUserRole, conversations }: Pr
             } else {
                 alert("Upload failed: " + (data.error || "Unknown server error"));
             }
-        } catch (e: any) {
-            alert("Network error: " + e.message);
+        } catch (e: unknown) {
+            const message = e instanceof Error ? e.message : "Upload failed";
+            alert("Network error: " + message);
         } finally {
             setUploading(false);
             if (fileRef.current) fileRef.current.value = "";

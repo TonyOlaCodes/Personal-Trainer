@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import {
     Scale, Send, Check, Camera, TrendingUp, TrendingDown,
     Plus, Minus, Calendar, MessageSquare, CheckCircle2,
     Zap, Moon, Brain, Activity, ChevronDown, AlertCircle,
     Dumbbell, Flame, Edit2, Clock, Trash2, X, Loader2
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { formatDate, getWeekNumber, cn } from "@/lib/utils";
 import { PremiumLockScreen } from "@/components/shared/PremiumLockScreen";
 import { MediaLightbox } from "@/components/shared/MediaLightbox";
@@ -28,6 +30,7 @@ interface CheckIn {
 interface Props {
     checkIns: CheckIn[]; isCoach: boolean; userRole: string;
     targetWeightKg?: number | null;
+    initialWeightKg?: number | null;
     workoutsThisWeek: number; workoutsTarget: number;
     bodyweightWeeklyAverage: {
         averageWeightKg: number | null;
@@ -52,7 +55,7 @@ const STRESS_LABELS  = ["None",   "Little", "Some",  "High",  "Max"];
 const TRAIN_LABELS   = ["Skipped","Light",  "Solid", "Hard",  "Beast"];
 
 function RatingBar({ icon: Icon, label, sublabels, value, onChange, prevValue, inverse = false }: {
-    icon: any; label: string; sublabels: string[];
+    icon: LucideIcon; label: string; sublabels: string[];
     value: number; onChange: (v: number) => void; 
     prevValue?: number | null; 
     inverse?: boolean;
@@ -330,7 +333,7 @@ function PrevCheckInCard({ prev, setViewerMedia }: { prev: CheckIn, setViewerMed
                     {/* Notes */}
                     {prev.feedback && (
                         <p className="text-xs text-fg-muted leading-relaxed italic border-l-2 border-surface-border pl-3">
-                            "{prev.feedback}"
+                            &ldquo;{prev.feedback}&rdquo;
                         </p>
                     )}
                     {/* Media */}
@@ -384,13 +387,16 @@ function PrevCheckInCard({ prev, setViewerMedia }: { prev: CheckIn, setViewerMed
     );
 }
 
-function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia }: {
+function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highlighted, targetWeightKg }: {
     c: CheckIn; isCoach: boolean;
     onCoachRespond?: (id: string, resp: string) => Promise<void>;
     onEdit?: (c: CheckIn) => void;
     setViewerMedia: (url: string | null) => void;
+    highlighted?: boolean;
+    targetWeightKg?: number | null;
 }) {
-    const [open, setOpen] = useState(false);
+    const [open, setOpen] = useState(Boolean(highlighted));
+    const itemTargetWeight = isCoach ? (c.user as any)?.targetWeightKg : targetWeightKg;
     const [response, setResponse] = useState(c.coachResponse ?? "");
     const [coachVideo, setCoachVideo] = useState(c.coachVideoUrl ?? "");
     const [uploadingCoachV, setUploadingCoachV] = useState(false);
@@ -409,7 +415,8 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia }: {
     return (
         <div className={cn(
             "rounded-2xl border overflow-hidden",
-            c.status === "REVIEWED" ? "border-success/25 bg-success/5" : "border-surface-border bg-surface-card/60"
+            c.status === "REVIEWED" ? "border-success/25 bg-success/5" : "border-surface-border bg-surface-card/60",
+            highlighted && "ring-2 ring-brand-400 shadow-glow-brand-sm"
         )}>
             <button onClick={() => setOpen(o => !o)} className="w-full flex items-center justify-between p-4 text-left gap-3">
                 <div className="flex items-center gap-3">
@@ -432,9 +439,14 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia }: {
                                     : "text-brand-400 bg-brand-400/10 border-brand-400/20"
                             )}>{c.status}</span>
                         </div>
-                        <div className="flex items-center gap-2 mt-0.5 text-[10px] text-fg-muted font-medium">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5 text-[10px] text-fg-muted font-medium">
                             <span>{formatDate(c.createdAt)}</span>
                             {c.bodyweightKg && <span className="font-black text-fg">{c.bodyweightKg.toFixed(2)}kg</span>}
+                            {itemTargetWeight && c.bodyweightKg && (
+                                <span className="text-brand-400 font-bold uppercase tracking-wider">
+                                    • Goal: {itemTargetWeight}kg ({Math.abs(((c.bodyweightKg - itemTargetWeight) / itemTargetWeight) * 100).toFixed(1)}% away)
+                                </span>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -639,13 +651,16 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia }: {
 /* ═══════════════════════════════════════════════════════════════
    Main Component
    ═══════════════════════════════════════════════════════════════ */
-export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWeightKg, workoutsThisWeek, workoutsTarget, bodyweightWeeklyAverage, checkInDueState }: Props) {
+export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWeightKg, initialWeightKg, workoutsThisWeek, workoutsTarget, bodyweightWeeklyAverage, checkInDueState }: Props) {
+    const searchParams = useSearchParams();
+    const highlightedCheckInId = searchParams.get("highlight");
     const isPremium = ["PREMIUM", "COACH", "SUPER_ADMIN"].includes(userRole);
     const [checkIns, setCheckIns] = useState(initial);
 
     // Form
     const [editMode, setEditMode] = useState(false);
     const [checkInId, setCheckInId] = useState<string | null>(null);
+    const [manualWeight, setManualWeight] = useState<string>("");
     const [weeklyAverageWeight, setWeeklyAverageWeight] = useState(bodyweightWeeklyAverage.averageWeightKg);
     const [weeklyAverageEntries, setWeeklyAverageEntries] = useState(bodyweightWeeklyAverage.entries);
     const [previousWeeklyAverageWeight, setPreviousWeeklyAverageWeight] = useState(bodyweightWeeklyAverage.previousAverageWeightKg);
@@ -755,7 +770,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
     // Stats based on selection or defaults
     const prevCheckIn  = checkIns.find(c => c.weekNumber < (editMode ? selectedWeek : currentWeekReal));
     const prevWeight   = previousWeeklyAverageWeight ?? prevCheckIn?.bodyweightKg;
-    const currentBw    = weeklyAverageWeight ?? existingEntry?.bodyweightKg ?? (selectedWeek === currentWeekReal ? currentWeekEntry?.bodyweightKg : null) ?? null;
+    const currentBw    = (manualWeight && !isNaN(parseFloat(manualWeight))) ? parseFloat(manualWeight) : (weeklyAverageWeight ?? existingEntry?.bodyweightKg ?? (selectedWeek === currentWeekReal ? currentWeekEntry?.bodyweightKg : null) ?? null);
     const weightDelta  = currentBw && prevWeight ? Math.round((currentBw - prevWeight) * 100) / 100 : null;
     const weightPctChange = currentBw && prevWeight ? Math.round(((currentBw - prevWeight) / prevWeight) * 100 * 100) / 100 : null;
     const weightGoalFeedback = getWeightGoalFeedback(currentBw, prevWeight ?? null, targetWeightKg);
@@ -787,6 +802,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
         setNotes("");
         setFrontImg("");
         setSideImg("");
+        setManualWeight("");
         setEditMode(false);
         setIsLogging(true);
     };
@@ -807,6 +823,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
         setNotes(c.feedback || "");
         setFrontImg(c.frontImageUrl || "");
         setSideImg(c.sideImageUrl || "");
+        setManualWeight(c.bodyweightKg ? String(c.bodyweightKg) : "");
         setEditMode(true);
         setIsLogging(false);
     };
@@ -898,7 +915,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                         <p className="font-bold text-fg text-sm">No check-ins yet</p>
                     </div>
                 ) : checkIns.sort((a,b) => b.weekNumber - a.weekNumber).map(c => (
-                    <HistoryItem key={c.id} c={c} isCoach onCoachRespond={handleCoachRespond} setViewerMedia={setViewerMedia} />
+                    <HistoryItem key={c.id} c={c} isCoach onCoachRespond={handleCoachRespond} setViewerMedia={setViewerMedia} highlighted={highlightedCheckInId === c.id} />
                 ))}
                 {viewerMedia && (
                     <MediaLightbox 
@@ -995,13 +1012,26 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                         </div>
 
                         <div className="grid grid-cols-2 gap-3 pt-2">
-                            <div className="bg-surface-card/40 p-4 rounded-2xl border border-surface-border/50">
-                                <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1">Weekly Avg Weight</p>
-                                <p className="text-xl font-black text-fg tracking-tight">{currentWeekEntry.bodyweightKg?.toFixed(2) ?? '--'}<span className="text-xs text-fg-muted ml-1">kg</span></p>
-                                {weightDelta !== null && weightPctChange !== null && (
-                                    <p className={cn("text-[10px] font-bold mt-1", weightGoalFeedback.textClass)}>
-                                        {weightDelta > 0 ? "+" : ""}{weightDelta.toFixed(2)}kg ({weightPctChange >= 0 ? "+" : ""}{weightPctChange.toFixed(2)}%) since last
-                                    </p>
+                            <div className="bg-surface-card/40 p-4 rounded-2xl border border-surface-border/50 flex flex-col justify-between">
+                                <div>
+                                    <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1">Weekly Avg Weight</p>
+                                    <p className="text-xl font-black text-fg tracking-tight">{currentWeekEntry.bodyweightKg?.toFixed(2) ?? '--'}<span className="text-xs text-fg-muted ml-1">kg</span></p>
+                                    {weightDelta !== null && weightPctChange !== null && (
+                                        <p className={cn("text-[10px] font-bold mt-1", weightGoalFeedback.textClass)}>
+                                            {weightDelta > 0 ? "+" : ""}{weightDelta.toFixed(2)}kg ({weightPctChange >= 0 ? "+" : ""}{weightPctChange.toFixed(2)}%) since last
+                                        </p>
+                                    )}
+                                </div>
+                                {targetWeightKg && targetWeightKg > 0 && currentWeekEntry.bodyweightKg && (
+                                    <div className="mt-2 pt-2 border-t border-surface-border/30 text-[10px] font-bold text-fg-muted uppercase tracking-wider space-y-0.5">
+                                        <div className="flex justify-between">
+                                            <span>Goal: {targetWeightKg.toFixed(1)}kg</span>
+                                            <span className="text-brand-400">{Math.abs(((currentWeekEntry.bodyweightKg - targetWeightKg) / targetWeightKg) * 100).toFixed(1)}% away</span>
+                                        </div>
+                                        <div className="text-[9px] lowercase opacity-85">
+                                            {Math.abs(currentWeekEntry.bodyweightKg - targetWeightKg).toFixed(1)}kg {currentWeekEntry.bodyweightKg > targetWeightKg ? "above" : "below"} goal
+                                        </div>
+                                    </div>
                                 )}
                             </div>
                             <div className="bg-surface-card/40 p-4 rounded-2xl border border-surface-border/50">
@@ -1065,7 +1095,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                         <p className="text-[10px] font-bold text-fg-muted">{checkIns.length} submissions</p>
                     </div>
                     {checkIns.sort((a,b) => b.weekNumber - a.weekNumber).map(c => (
-                        <HistoryItem key={c.id} c={c} isCoach={false} onEdit={editCheckIn} setViewerMedia={setViewerMedia} />
+                        <HistoryItem key={c.id} c={c} isCoach={false} onEdit={editCheckIn} setViewerMedia={setViewerMedia} highlighted={highlightedCheckInId === c.id} targetWeightKg={targetWeightKg} />
                     ))}
                 </div>
             </div>
@@ -1105,11 +1135,13 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                 <div 
                     className="relative cursor-pointer group active:scale-[0.98] transition-all"
                     onClick={(e) => {
-                        const input = e.currentTarget.querySelector('input');
-                        if (input && 'showPicker' in input) {
-                            try { (input as any).showPicker(); } catch(err) { (input as any).focus(); }
-                        } else if (input) {
-                            (input as any).focus();
+                        const input = e.currentTarget.querySelector<HTMLInputElement>('input');
+                        if (!input) return;
+                        const dateInput = input as HTMLInputElement & { showPicker?: () => void };
+                        if (dateInput.showPicker) {
+                            try { dateInput.showPicker(); } catch { dateInput.focus(); }
+                        } else {
+                            dateInput.focus();
                         }
                     }}
                 >
@@ -1176,6 +1208,43 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                         {weightDelta !== null && weightDelta > 0 ? "+" : ""}{weightDelta || "0"}kg ({weightPctChange !== null && weightPctChange > 0 ? '+' : ''}{weightPctChange || "0"}%)
                     </div>
                 </div>
+                <div className="flex flex-col gap-2 pt-2 border-t border-surface-border/20">
+                    <label className="text-[10px] font-black text-fg-subtle uppercase tracking-widest px-1">Actual Weight for Check-in (kg)</label>
+                    <input
+                        type="number" step="0.01"
+                        className="input h-11 text-xs font-bold bg-surface-muted/20 border-surface-border/40 focus:border-brand-500/30"
+                        placeholder={weeklyAverageWeight ? `${weeklyAverageWeight.toFixed(2)} (weekly average)` : "Enter weight in kg"}
+                        value={manualWeight}
+                        onChange={e => setManualWeight(e.target.value)}
+                    />
+                </div>
+                {targetWeightKg && targetWeightKg > 0 && currentBw && (
+                    <div className="bg-surface-card/40 rounded-2xl border border-surface-border/50 p-4 space-y-3">
+                        <div className="flex justify-between items-center text-xs">
+                            <span className="text-fg-subtle font-bold uppercase tracking-wider">Weight Goal Progress</span>
+                            <span className="font-black text-brand-400">{Math.abs(((currentBw - targetWeightKg) / targetWeightKg) * 100).toFixed(1)}% away</span>
+                        </div>
+                        <div className="flex justify-between items-end">
+                            <div>
+                                <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest leading-none mb-1">Target Goal</p>
+                                <p className="text-lg font-black text-fg tracking-tight">{targetWeightKg.toFixed(1)}<span className="text-xs text-fg-muted ml-0.5">kg</span></p>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest leading-none mb-1">Actual Weight</p>
+                                <p className="text-lg font-black text-fg tracking-tight">{currentBw.toFixed(1)}<span className="text-xs text-fg-muted ml-0.5">kg</span></p>
+                            </div>
+                        </div>
+                        <div className="h-2 rounded-full bg-surface-muted/50 overflow-hidden relative border border-surface-border/20">
+                            <div 
+                                className="h-full bg-brand-500 rounded-full transition-all duration-500" 
+                                style={{ width: `${Math.max(5, Math.min(100, (1 - Math.abs((currentBw - targetWeightKg) / targetWeightKg)) * 100))}%` }}
+                            />
+                        </div>
+                        <p className="text-[10px] font-bold text-fg-muted text-center uppercase tracking-wider">
+                            You are {Math.abs(currentBw - targetWeightKg).toFixed(1)}kg {currentBw > targetWeightKg ? "above" : "below"} your goal weight
+                        </p>
+                    </div>
+                )}
                 <div className={cn("rounded-2xl border px-4 py-3 text-xs font-bold leading-relaxed", weightGoalFeedback.chipClass)}>
                     <div className="flex items-start gap-2">
                         <WeightTrendIcon className="w-4 h-4 mt-0.5 shrink-0" />

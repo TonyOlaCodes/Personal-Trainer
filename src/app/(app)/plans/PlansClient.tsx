@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
     Plus, Dumbbell, Calendar, ChevronRight, Star,
     Trash2, Play, Ticket, Share2, Check, PauseCircle,
@@ -44,6 +45,8 @@ const PREBUILT_TEMPLATES = Object.values(PLAN_TEMPLATES).map((template) => ({
 }));
 
 export function PlansClient({ plans }: Props) {
+    const searchParams = useSearchParams();
+    const highlightedPlanId = searchParams.get("highlight");
     const [tab, setTab] = useState<"mine" | "templates" | "code">("mine");
     const [code, setCode] = useState("");
     const [codeStatus, setCodeStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
@@ -176,7 +179,11 @@ export function PlansClient({ plans }: Props) {
                         </div>
                     ) : (
                         plans.map((plan) => (
-                            <div key={plan.id} className={cn("card-hover p-5", plan.isActive && "border-brand-600/40")}>
+                            <div key={plan.id} className={cn(
+                                "card-hover p-5",
+                                plan.isActive && "border-brand-600/40",
+                                highlightedPlanId === plan.id && "ring-2 ring-brand-400 shadow-glow-brand-sm"
+                            )}>
                                 <div className="flex items-start gap-4">
                                     <div className="w-10 h-10 rounded-xl bg-surface-muted flex items-center justify-center flex-shrink-0">
                                         <Dumbbell className="w-5 h-5 text-brand-400" />

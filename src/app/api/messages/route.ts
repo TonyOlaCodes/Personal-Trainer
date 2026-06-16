@@ -1,7 +1,9 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { z } from "zod";
+import { createNotification } from "@/lib/notifications";
 
 // GET messages
 export async function GET(req: Request) {
@@ -19,7 +21,7 @@ export async function GET(req: Request) {
     const withUserId = url.searchParams.get("with");
     const limit = parseInt(url.searchParams.get("limit") ?? "80");
 
-    let where: any = {};
+    let where: Prisma.MessageWhereInput = {};
 
     if (isGeneral) {
         where = { isGeneral: true };
@@ -103,7 +105,7 @@ export async function POST(req: Request) {
             receiverId: isGeneral ? null : receiverId,
             content,
             isGeneral,
-            type: type as any,
+            type,
             mediaUrl,
             replyToId: replyToId || null,
             mentions: mentions || [],
@@ -120,6 +122,23 @@ export async function POST(req: Request) {
             reactions: true,
         },
     });
+
+    if (!isGeneral && receiverId && ["COACH", "SUPER_ADMIN"].includes(user.role)) {
+        const receiver = await prisma.user.findUnique({
+            where: { id: receiverId },
+            select: { id: true, coachId: true },
+        });
+        if (receiver && (user.role === "SUPER_ADMIN" || receiver.coachId === user.id)) {
+            await createNotification({
+                userId: receiver.id,
+                type: "NEW_CHAT_MESSAGE",
+                message: "New message from your coach",
+                entityType: "CHAT_MESSAGE",
+                entityId: message.id,
+                route: `/chat?with=${user.id}`,
+            });
+        }
+    }
 
     return NextResponse.json(message, { status: 201 });
 }

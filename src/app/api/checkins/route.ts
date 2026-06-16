@@ -1,7 +1,9 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { CheckInStatus, Prisma } from "@prisma/client";
 import { z } from "zod";
+import { createNotification } from "@/lib/notifications";
 
 const checkInSchema = z.object({
     bodyweightKg: z.number().optional(),
@@ -27,6 +29,11 @@ export async function POST(req: Request) {
     const user = await prisma.user.findUnique({ where: { clerkId } });
     if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
+    // Coaches do not submit client check-ins — they review them
+    if (user.role === "COACH") {
+        return NextResponse.json({ error: "Coaches cannot submit check-ins" }, { status: 403 });
+    }
+
     if (user.role === "FREE") {
         return NextResponse.json({ error: "Check-ins require Premium" }, { status: 403 });
     }
@@ -41,15 +48,33 @@ export async function POST(req: Request) {
     if (existingWeek) return NextResponse.json({ error: "Check-in for this week already exists." }, { status: 400 });
 
     const checkIn = await prisma.checkIn.create({
-        data: { 
-            userId: user.id, 
-            ...parsed.data, 
+        data: {
+            userId: user.id,
+            ...parsed.data,
             bodyweightKg: parsed.data.bodyweightKg ? Math.round(parsed.data.bodyweightKg * 100) / 100 : undefined,
             feedback: parsed.data.feedback || "Check-in completed.",
-            status: "PENDING" 
+            status: "PENDING",
         },
     });
-    
+
+    // Notify coach if they have a coach and notifications enabled
+    if (user.coachId) {
+        const coach = await prisma.user.findUnique({
+            where: { id: user.coachId },
+            select: { notifyOnCheckIn: true },
+        });
+        if (coach?.notifyOnCheckIn) {
+            await createNotification({
+                userId: user.coachId,
+                type: "CLIENT_CHECKIN",
+                message: `${user.name ?? user.email} submitted a check-in`,
+                entityType: "CHECK_IN",
+                entityId: checkIn.id,
+                route: `/coach/client/${user.id}?tab=checkins`,
+            });
+        }
+    }
+
     return NextResponse.json(checkIn, { status: 201 });
 }
 
@@ -64,8 +89,8 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const clientId = url.searchParams.get("clientId");
 
-    let where: any = { userId: user.id };
-    
+    let where: Prisma.CheckInWhereInput = { userId: user.id };
+
     // Coaches can see all their clients or a specific one
     if (["COACH", "SUPER_ADMIN"].includes(user.role)) {
         if (clientId) {
@@ -77,10 +102,10 @@ export async function GET(req: Request) {
 
     const checkIns = await prisma.checkIn.findMany({
         where,
-        include: { 
-            user: { 
-                select: { 
-                    name: true, 
+        include: {
+            user: {
+                select: {
+                    name: true,
                     email: true,
                     workoutLogs: {
                         take: 15,
@@ -89,12 +114,12 @@ export async function GET(req: Request) {
                             workout: { select: { name: true } },
                             sets: {
                                 where: { videoUrl: { not: null } },
-                                include: { exercise: { select: { name: true } } }
-                            }
-                        }
-                    }
-                } 
-            } 
+                                include: { exercise: { select: { name: true } } },
+                            },
+                        },
+                    },
+                },
+            },
         },
         orderBy: { weekNumber: "desc" },
     });
@@ -112,11 +137,12 @@ export async function PATCH(req: Request) {
 
     const body = await req.json();
     const { id, coachResponse, status, feedback, notes, videoUrl, bodyweightKg, sleepRating, dietRating, stressRating, injuryRating, energyRating, intensityRating, frontImageUrl, sideImageUrl } = body;
-    
+
     const existing = await prisma.checkIn.findUnique({
         where: { id },
+        include: { user: { select: { coachId: true } } },
     });
-    
+
     if (!existing) return NextResponse.json({ error: "Check-in not found" }, { status: 404 });
 
     const isCoach = ["COACH", "SUPER_ADMIN"].includes(user.role);
@@ -125,15 +151,19 @@ export async function PATCH(req: Request) {
     if (!isCoach && !isOwner) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+    if (isCoach && user.role !== "SUPER_ADMIN" && existing.user.coachId !== user.id) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     // Determine what to update based on who is editing
-    let data: any = {};
+    const parsedStatus = status === "PENDING" || status === "REVIEWED" ? status : "REVIEWED";
+    let data: Prisma.CheckInUpdateInput = {};
 
     if (isCoach) {
         data = {
             coachResponse,
             coachVideoUrl: body.coachVideoUrl,
-            status: (status as any) || "REVIEWED",
+            status: parsedStatus as CheckInStatus,
             respondedAt: new Date(),
             coachLastSeenAt: new Date(),
         };
@@ -156,11 +186,22 @@ export async function PATCH(req: Request) {
             status: "PENDING",
         };
     }
-    
+
     const updated = await prisma.checkIn.update({
         where: { id },
-        data
+        data,
     });
+
+    if (isCoach) {
+        await createNotification({
+            userId: existing.userId,
+            type: "CHECKIN_REVIEWED",
+            message: "Your coach reviewed your check-in",
+            entityType: "CHECK_IN",
+            entityId: existing.id,
+            route: `/checkins?highlight=${existing.id}`,
+        });
+    }
 
     return NextResponse.json(updated);
 }

@@ -5,16 +5,17 @@ import { prisma } from "@/lib/prisma";
 // DELETE a check-in
 export async function DELETE(
     req: Request,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     const { userId: clerkId } = await auth();
     if (!clerkId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+    const { id } = await params;
     const user = await prisma.user.findUnique({ where: { clerkId } });
     if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
     const checkIn = await prisma.checkIn.findUnique({
-        where: { id: params.id },
+        where: { id },
     });
     if (!checkIn) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
@@ -26,7 +27,7 @@ export async function DELETE(
     }
 
     await prisma.checkIn.delete({
-        where: { id: params.id },
+        where: { id },
     });
 
     return NextResponse.json({ success: true });

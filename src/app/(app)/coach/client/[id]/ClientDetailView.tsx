@@ -22,6 +22,7 @@ interface Client {
     name?: string | null;
     email: string;
     role: string;
+    assignedCoachName?: string | null;
     avatarUrl?: string | null;
     activePlan: { id: string; name: string } | null;
     experience?: string | null;
@@ -181,6 +182,11 @@ export function ClientDetailView({ client, availablePlans, logs, checkIns }: Pro
                         <p className="text-sm text-fg-muted mb-1">{client.email}</p>
                         <div className="flex flex-wrap gap-2 mt-3 justify-center sm:justify-start">
                             <span className="badge-brand text-[9px] uppercase font-bold tracking-widest">{client.role} Member</span>
+                            {client.assignedCoachName && (
+                                <span className="badge text-[9px] bg-surface-muted text-fg-muted border border-surface-border">
+                                    Coach: {client.assignedCoachName}
+                                </span>
+                            )}
                             {client.goal && <span className="badge text-[9px] bg-brand-500/10 text-brand-400 border border-brand-500/20">{client.goal.replace("_", " ")}</span>}
                             {client.experience && <span className="badge text-[9px] bg-warning-500/10 text-warning border border-warning-500/20">{client.experience.replace("_", " ")}</span>}
                             {client.trainingLocation && <span className="badge text-[9px] bg-success-500/10 text-success border border-success-500/20">{client.trainingLocation} Training</span>}

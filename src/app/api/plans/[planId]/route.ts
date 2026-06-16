@@ -1,6 +1,38 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { createNotification } from "@/lib/notifications";
+
+interface PlanExercisePayload {
+    name: string;
+    sets: number;
+    reps: string;
+    weightTargetKg?: number | null;
+    restSeconds?: number | null;
+    notes?: string | null;
+    order?: number | null;
+    muscleGroup?: string | null;
+}
+
+interface PlanWorkoutPayload {
+    dayNumber: number;
+    dayOfWeek?: number | null;
+    name: string;
+    notes?: string | null;
+    exercises: PlanExercisePayload[];
+}
+
+interface PlanWeekPayload {
+    weekNumber: number;
+    name?: string | null;
+    workouts: PlanWorkoutPayload[];
+}
+
+interface PlanPatchPayload {
+    name: string;
+    description?: string | null;
+    weeks: PlanWeekPayload[];
+}
 
 export async function GET(
     req: Request,
@@ -67,7 +99,7 @@ export async function PATCH(
     const user = await prisma.user.findUnique({ where: { clerkId: userId } });
     if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-    const body = await req.json();
+    const body = await req.json() as PlanPatchPayload;
     const { name, description, weeks } = body;
 
     const existing = await prisma.plan.findUnique({
@@ -104,25 +136,25 @@ export async function PATCH(
                     name,
                     description,
                     weeks: {
-                        create: weeks.map((w: any) => ({
+                        create: weeks.map((w) => ({
                             weekNumber: w.weekNumber,
                             name: w.name,
                             workouts: {
-                                create: w.workouts.map((wd: any) => ({
+                                create: w.workouts.map((wd) => ({
                                     dayNumber: wd.dayNumber,
                                     dayOfWeek: wd.dayOfWeek,
                                     name: wd.name,
                                     notes: wd.notes,
                                     exercises: {
-                                        create: wd.exercises.map((ex: any) => ({
+                                        create: wd.exercises.map((ex) => ({
                                             name: ex.name,
                                             sets: ex.sets,
                                             reps: ex.reps,
-                                            weightTargetKg: ex.weightTargetKg,
-                                            restSeconds: ex.restSeconds,
-                                            notes: ex.notes,
-                                            order: ex.order,
-                                            muscleGroup: ex.muscleGroup,
+                                            weightTargetKg: ex.weightTargetKg ?? undefined,
+                                            restSeconds: ex.restSeconds ?? undefined,
+                                            notes: ex.notes ?? undefined,
+                                            order: ex.order ?? undefined,
+                                            muscleGroup: ex.muscleGroup ?? undefined,
                                         })),
                                     },
                                 })),
@@ -138,10 +170,24 @@ export async function PATCH(
             });
         });
 
+        const assignedUsers = await prisma.userPlan.findMany({
+            where: { planId, isActive: true },
+            select: { userId: true },
+        });
+        await Promise.all(assignedUsers.map((assignment) => createNotification({
+            userId: assignment.userId,
+            type: "PLAN_UPDATED",
+            message: "Your plan has been updated",
+            entityType: "PLAN",
+            entityId: planId,
+            route: `/plans?highlight=${planId}`,
+        })));
+
         return NextResponse.json(updatedPlan);
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error("Plan Update Error:", err);
-        return NextResponse.json({ error: err.message || "Failed to edit plan" }, { status: 500 });
+        const message = err instanceof Error ? err.message : "Failed to edit plan";
+        return NextResponse.json({ error: message }, { status: 500 });
     }
 }
 

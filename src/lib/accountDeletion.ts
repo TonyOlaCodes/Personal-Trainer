@@ -1,10 +1,11 @@
 import type { Prisma, PrismaClient, Role } from "@prisma/client";
+import { markUserAccountDeleted } from "@/lib/userDeactivation";
 
 const emptyList: string[] = [];
 
 export async function anonymizeDeletedUserAccount(
     prisma: PrismaClient,
-    user: { id: string; clerkId: string; role: Role; coachId?: string | null }
+    user: { id: string; clerkId: string; email: string; name?: string | null; role: Role; coachId?: string | null }
 ) {
     const now = new Date();
     const deletedIdentity = `deleted-${user.id}`;
@@ -48,7 +49,7 @@ export async function anonymizeDeletedUserAccount(
             data: {
                 clerkId: `${deletedIdentity}-${Date.now()}`,
                 email: `${deletedIdentity}@deleted.local`,
-                name: "Deleted account",
+                name: user.name ?? "Deleted account",
                 avatarUrl: null,
                 role: "FREE",
                 onboardingDone: false,
@@ -77,5 +78,7 @@ export async function anonymizeDeletedUserAccount(
                 coachId: isCoachAccount ? null : user.coachId ?? null,
             },
         });
+
+        await markUserAccountDeleted(user, tx);
     });
 }

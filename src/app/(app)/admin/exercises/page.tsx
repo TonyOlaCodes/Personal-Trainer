@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { AdminExercisesClient } from "./AdminExercisesClient";
+import { getExerciseMediaByIds } from "@/lib/exerciseMedia";
 
 export const metadata = { title: "Admin - Exercises" };
 
@@ -17,8 +18,9 @@ export default async function AdminExercisesPage() {
     const globalExercises = await prisma.globalExercise.findMany({
         orderBy: { name: "asc" }
     });
+    const mediaById = await getExerciseMediaByIds(globalExercises.map((exercise) => exercise.id));
 
-    // 2. Get all unique names from existing plans/workouts to suggest adding videos for them
+    // 2. Get all unique names from existing plans/workouts to suggest dictionary entries
     const workoutExercises = await prisma.exercise.findMany({
         select: { name: true, muscleGroup: true }
     });
@@ -27,7 +29,15 @@ export default async function AdminExercisesPage() {
     const globalNames = new Set(globalExercises.map(e => e.name.toLowerCase()));
     
     // Add unique missing names from workouts to global list (locally for display)
-    const uniqueFromWorkouts: any[] = [];
+    const uniqueFromWorkouts: {
+        id: string;
+        name: string;
+        muscleGroup: string | null;
+        videoUrl: string | null;
+        instructions: string | null;
+        thumbnailUrl: string | null;
+        isSuggestion: boolean;
+    }[] = [];
     const seenNames = new Set();
 
     for (const ex of workoutExercises) {
@@ -36,21 +46,30 @@ export default async function AdminExercisesPage() {
             uniqueFromWorkouts.push({
                 id: `suggestion-${Math.random().toString(36).substr(2, 9)}`,
                 name: ex.name,
-                videoUrl: null,
                 muscleGroup: ex.muscleGroup || "Uncategorized",
+                videoUrl: null,
+                instructions: null,
+                thumbnailUrl: null,
                 isSuggestion: true
             });
             seenNames.add(lowerName);
         }
     }
 
-    const allExercises = [...globalExercises, ...uniqueFromWorkouts].sort((a, b) => 
+    const allExercises = [
+        ...globalExercises.map((exercise) => ({
+            ...exercise,
+            instructions: mediaById.get(exercise.id)?.instructions ?? null,
+            thumbnailUrl: mediaById.get(exercise.id)?.thumbnailUrl ?? null,
+        })),
+        ...uniqueFromWorkouts,
+    ].sort((a, b) => 
         a.name.localeCompare(b.name)
     );
 
     return (
         <>
-            <TopBar title="Global Exercises" subtitle="Manage video tutorials and dictionary" />
+            <TopBar title="Global Exercises" subtitle="Manage the exercise dictionary" />
             <AdminExercisesClient initialExercises={allExercises} />
         </>
     );

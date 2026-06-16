@@ -3,8 +3,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
-    ChevronLeft, Timer, Flame, Check, HelpCircle,
-    Trash2, Plus, Info, InfoIcon, Award, Video, Play, Zap
+    Timer, Flame, Check, HelpCircle,
+    Trash2, Plus, InfoIcon, Award, Video, Play, Zap, X
 } from "lucide-react";
 import { cn, generateId } from "@/lib/utils";
 import { isCardio, ExerciseAutocomplete } from "@/components/shared/ExerciseAutocomplete";
@@ -35,13 +35,52 @@ interface SetLog {
     isUploading?: boolean;
 }
 
+interface ActiveLogSet {
+    exerciseId: string;
+    exercise?: Exercise | null;
+    setNumber: number;
+    reps?: number | null;
+    weightKg?: number | null;
+    rpe?: number | null;
+    isCompleted?: boolean | null;
+    isWarmup?: boolean | null;
+    videoUrl?: string | null;
+}
+
 interface Props {
     workout: Workout;
-    tutorialUrls?: Record<string, string>;
+    exerciseMedia?: Record<string, ExercisePreviewMedia>;
     logDate?: string; // ISO date string for retroactive logging (e.g. "2026-03-25")
 }
 
-export function WorkoutLogClient({ workout, tutorialUrls = {}, logDate }: Props) {
+type ExercisePreviewMedia = {
+    videoUrl?: string | null;
+    instructions?: string | null;
+    thumbnailUrl?: string | null;
+};
+
+function getEmbedUrl(url: string) {
+    try {
+        const parsed = new URL(url);
+        if (parsed.hostname.includes("youtube.com")) {
+            const id = parsed.searchParams.get("v");
+            return id ? `https://www.youtube.com/embed/${id}` : url;
+        }
+        if (parsed.hostname.includes("youtu.be")) {
+            const id = parsed.pathname.replace("/", "");
+            return id ? `https://www.youtube.com/embed/${id}` : url;
+        }
+        return url;
+    } catch {
+        return url;
+    }
+}
+
+function isDirectVideo(url: string) {
+    return /\.(mp4|webm|ogg)(\?.*)?$/i.test(url);
+}
+
+export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate }: Props) {
     const router = useRouter();
     const [logs, setLogs] = useState<Record<string, SetLog[]>>({});
     const [startTime, setStartTime] = useState(Date.now());
@@ -60,6 +99,8 @@ export function WorkoutLogClient({ workout, tutorialUrls = {}, logDate }: Props)
     const [searchQuery, setSearchQuery] = useState("");
     const [activeLogId, setActiveLogId] = useState<string | null>(null);
     const [isDiscarding, setIsDiscarding] = useState(false);
+    const [previewExercise, setPreviewExercise] = useState<{ name: string; media: ExercisePreviewMedia } | null>(null);
+    const [modalTouchStart, setModalTouchStart] = useState<number | null>(null);
 
     // Initialize logs from workout data or fetch existing IN_PROGRESS log
     useEffect(() => {
@@ -80,7 +121,7 @@ export function WorkoutLogClient({ workout, tutorialUrls = {}, logDate }: Props)
                         setStartTime(new Date(active.loggedAt).getTime());
                     }
 
-                    active.sets.forEach((s: any) => {
+                    active.sets.forEach((s: ActiveLogSet) => {
                         const ex = s.exercise;
                         // If this exercise is not in our template, add it to reconstructedExercises
                         if (ex && !reconstructedExercises.some(e => e.id === ex.id)) {
@@ -100,9 +141,9 @@ export function WorkoutLogClient({ workout, tutorialUrls = {}, logDate }: Props)
                             reps: s.reps ?? 10,
                             weightKg: s.weightKg?.toString() ?? "",
                             rpe: s.rpe?.toString() ?? "",
-                            isCompleted: s.isCompleted,
-                            isWarmup: s.isWarmup,
-                            videoUrl: s.videoUrl,
+                            isCompleted: s.isCompleted ?? true,
+                            isWarmup: s.isWarmup ?? false,
+                            videoUrl: s.videoUrl ?? undefined,
                         });
                     });
 
@@ -138,22 +179,6 @@ export function WorkoutLogClient({ workout, tutorialUrls = {}, logDate }: Props)
         };
         load();
     }, [workout]);
-
-    // Handle potential updates to activeExercises from DB
-    useEffect(() => {
-        const fetchActiveLog = async () => {
-            try {
-                const res = await fetch("/api/logs?active=true");
-                const active = await res.json();
-                if (active && active.workoutId === workout.id) {
-                    // If we have custom exercises saved in the log (not in the original workout)
-                    // we should ideally reconstruct them from the sets.
-                    // But for now, let's assume we just need to ensure logs has entries for everything in activeExercises.
-                }
-            } catch {}
-        };
-        // fetchActiveLog();
-    }, []);
 
     // Timer
     useEffect(() => {
@@ -211,7 +236,7 @@ export function WorkoutLogClient({ workout, tutorialUrls = {}, logDate }: Props)
             const currentSet = prev[exId][setIdx];
             
             // Auto-check logic: if weight is entered and it's not currently completed, check it
-            let finalUpdates = { ...updates };
+            const finalUpdates = { ...updates };
             if (updates.weightKg && updates.weightKg.trim() !== "" && !currentSet.isCompleted && updates.isCompleted === undefined) {
                 finalUpdates.isCompleted = true;
             }
@@ -497,12 +522,26 @@ export function WorkoutLogClient({ workout, tutorialUrls = {}, logDate }: Props)
 
             <div className="flex-1 p-4 pt-20 pb-24 overflow-y-auto no-scrollbar lg:pl-[var(--sidebar-width) + 1rem]">
                 <div className="max-w-2xl mx-auto space-y-6">
-                    {activeExercises.map((ex) => (
+                    {activeExercises.map((ex) => {
+                        const media = exerciseMedia[ex.name];
+                        const hasPreview = !!(media?.videoUrl || media?.instructions);
+
+                        return (
                         <div key={ex.id} id={`exercise-${ex.id}`} className="card p-4 space-y-4 animate-slide-up">
                             <div className="flex items-start justify-between">
                                 <div className="flex-1">
                                     <div className="flex items-center gap-2">
                                         <h3 className="font-bold text-fg text-base">{ex.name}</h3>
+                                        {hasPreview && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setPreviewExercise({ name: ex.name, media })}
+                                                className="w-6 h-6 rounded-full bg-brand-500/10 text-brand-400 border border-brand-500/20 flex items-center justify-center hover:bg-brand-500 hover:text-white transition-colors"
+                                                title="Exercise preview"
+                                            >
+                                                {media?.videoUrl ? <Play className="w-3 h-3 fill-current" /> : <HelpCircle className="w-3.5 h-3.5" />}
+                                            </button>
+                                        )}
                                         <button 
                                             onClick={() => setIsSubstituting(ex.id)}
                                             className="text-[10px] font-black uppercase text-brand-400/60 hover:text-brand-400 bg-brand-400/5 hover:bg-brand-400/10 px-2 py-0.5 rounded-md transition-all flex items-center gap-1"
@@ -518,16 +557,8 @@ export function WorkoutLogClient({ workout, tutorialUrls = {}, logDate }: Props)
                                     </div>
                                     {ex.notes && <p className="text-xs text-fg-muted mt-0.5">{ex.notes}</p>}
                                 </div>
-                                {tutorialUrls[ex.name] ? (
-                                    <a
-                                        href={tutorialUrls[ex.name]}
-                                        target="_blank"
-                                        className="btn-secondary btn-sm flex items-center gap-1.5 text-[10px] uppercase font-black text-brand-400 border-brand-500/20 hover:bg-brand-500 hover:text-white transition-colors"
-                                    >
-                                        <Play className="w-3 h-3 fill-current" /> Tutorial
-                                    </a>
-                                ) : (
-                                    <button className="text-fg-subtle p-1 hover:text-fg transition-colors">
+                                {!hasPreview && (
+                                    <button className="text-fg-subtle p-1 hover:text-fg transition-colors" title="No preview available">
                                         <InfoIcon className="w-4 h-4" />
                                     </button>
                                 )}
@@ -643,7 +674,7 @@ export function WorkoutLogClient({ workout, tutorialUrls = {}, logDate }: Props)
                                 Add Set
                             </button>
                         </div>
-                    ))}
+                    )})}
 
                     <button
                         onClick={() => setIsAddingExercise(true)}
@@ -671,6 +702,71 @@ export function WorkoutLogClient({ workout, tutorialUrls = {}, logDate }: Props)
                     </div>
                 </div>
             </div>
+
+            {previewExercise && (
+                <div
+                    className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/80 animate-fade-in sm:p-4 backdrop-blur-sm"
+                    onClick={() => setPreviewExercise(null)}
+                >
+                    <div
+                        className="bg-surface-card w-full h-[92vh] sm:h-auto sm:max-h-[88vh] sm:max-w-2xl rounded-t-[2rem] sm:rounded-3xl border border-surface-border shadow-glow-brand-lg overflow-hidden animate-slide-up flex flex-col"
+                        onClick={(event) => event.stopPropagation()}
+                        onPointerDown={(event) => setModalTouchStart(event.clientY)}
+                        onPointerUp={(event) => {
+                            if (modalTouchStart !== null && event.clientY - modalTouchStart > 90) {
+                                setPreviewExercise(null);
+                            }
+                            setModalTouchStart(null);
+                        }}
+                    >
+                        <div className="flex items-center justify-between gap-4 px-5 py-4 border-b border-surface-border">
+                            <div className="min-w-0">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">Exercise Preview</p>
+                                <h3 className="text-lg font-black text-fg truncate">{previewExercise.name}</h3>
+                            </div>
+                            <button
+                                onClick={() => setPreviewExercise(null)}
+                                className="btn-icon"
+                                title="Close preview"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                            {previewExercise.media.videoUrl && (
+                                <div className="w-full overflow-hidden rounded-2xl border border-surface-border bg-black aspect-video">
+                                    {isDirectVideo(previewExercise.media.videoUrl) ? (
+                                        <video
+                                            src={previewExercise.media.videoUrl}
+                                            controls
+                                            playsInline
+                                            poster={previewExercise.media.thumbnailUrl || undefined}
+                                            className="w-full h-full object-contain"
+                                        />
+                                    ) : (
+                                        <iframe
+                                            src={getEmbedUrl(previewExercise.media.videoUrl)}
+                                            title={`${previewExercise.name} video preview`}
+                                            className="w-full h-full"
+                                            loading="lazy"
+                                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                            allowFullScreen
+                                        />
+                                    )}
+                                </div>
+                            )}
+
+                            {previewExercise.media.instructions && (
+                                <div className="rounded-2xl border border-surface-border bg-surface-muted/30 p-4">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle mb-2">Instructions</p>
+                                    <p className="text-sm text-fg-muted leading-relaxed whitespace-pre-wrap">{previewExercise.media.instructions}</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Substitution / Add Modal */}
             {(isSubstituting || isAddingExercise) && (

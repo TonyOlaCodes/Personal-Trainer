@@ -2,16 +2,22 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Users, Dumbbell, Ticket, Shield, Copy, Check, ChevronRight, Plus, Trash2 } from "lucide-react";
-import { cn, formatDate, roleLabels, roleBadgeClass } from "@/lib/utils";
+import { Users, Dumbbell, Ticket, Shield, Copy, Check, ChevronRight, Plus, Trash2, UserX, RotateCcw } from "lucide-react";
+import { cn, formatDate, getInitials, roleLabels, roleBadgeClass } from "@/lib/utils";
+import { PLAN_TEMPLATES } from "@/lib/templates";
 
 interface AdminUser {
     id: string;
     name?: string | null;
     email: string;
+    avatarUrl?: string | null;
     role: string;
     createdAt: string;
     onboardingDone: boolean;
+    isDeactivated: boolean;
+    isDeleted: boolean;
+    coachName?: string | null;
+    coachId?: string | null;
 }
 
 interface AdminPlan {
@@ -19,6 +25,15 @@ interface AdminPlan {
     name: string;
     type: string;
     userCount: number;
+    users: {
+        id: string;
+        name?: string | null;
+        email: string;
+        avatarUrl?: string | null;
+        role: string;
+        isDeactivated: boolean;
+        isDeleted: boolean;
+    }[];
 }
 
 interface AdminCode {
@@ -26,25 +41,93 @@ interface AdminCode {
     code: string;
     planName?: string | null;
     usedBy?: string | null;
+    usedByName?: string | null;
+    usedByEmail?: string | null;
     usedById?: string | null;
+    usedByStatus?: "ACTIVE" | "DEACTIVATED" | "DELETED" | null;
+    upgradesTo: string;
     isActive: boolean;
     createdAt: string;
     expiresAt?: string | null;
 }
 
+type RawAdminCode = Omit<AdminCode, "usedBy"> & {
+    usedBy?: string | { id?: string; name?: string | null; email?: string | null } | null;
+};
+
+interface AdminCoach {
+    id: string;
+    name?: string | null;
+    email: string;
+    avatarUrl?: string | null;
+    activeClientCount: number;
+    clients: {
+        id: string;
+        name?: string | null;
+        email: string;
+        avatarUrl?: string | null;
+        role: string;
+        isDeactivated: boolean;
+        isDeleted: boolean;
+    }[];
+}
+
 interface Props {
     users: AdminUser[];
+    coaches: AdminCoach[];
     plans: AdminPlan[];
     codes: AdminCode[];
     userRole: string;
 }
 
-type Tab = "users" | "plans" | "codes";
+type Tab = "users" | "coaches" | "plans" | "codes";
 type CodeFilter = "ALL" | "ACTIVE" | "USED" | "EXPIRED";
 
-export function AdminClient({ users, plans, codes: initialCodes, userRole }: Props) {
+function accountSortRank(account: { isDeleted: boolean; isDeactivated: boolean }) {
+    if (account.isDeleted) return 2;
+    if (account.isDeactivated) return 1;
+    return 0;
+}
+
+function sortAdminUsers(users: AdminUser[]) {
+    return [...users].sort((a, b) =>
+        accountSortRank(a) - accountSortRank(b) ||
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+}
+
+function normalizeCode(code: RawAdminCode): AdminCode {
+    const usedByObject = typeof code.usedBy === "object" && code.usedBy !== null ? code.usedBy : null;
+    return {
+        ...code,
+        usedBy: typeof code.usedBy === "string"
+            ? code.usedBy
+            : code.usedByName ?? usedByObject?.name ?? usedByObject?.email ?? code.usedByEmail ?? null,
+        usedById: code.usedById ?? usedByObject?.id ?? null,
+    };
+}
+
+function ProfileAvatar({ name, email, avatarUrl }: { name?: string | null; email: string; avatarUrl?: string | null }) {
+    const label = name || email;
+
+    return (
+        <div className="w-9 h-9 rounded-full overflow-hidden bg-brand-500/10 border border-surface-border flex items-center justify-center shrink-0">
+            {avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={avatarUrl} alt={label} className="w-full h-full object-cover" />
+            ) : (
+                <span className="text-[11px] font-black text-brand-400 uppercase">
+                    {getInitials(label)}
+                </span>
+            )}
+        </div>
+    );
+}
+
+export function AdminClient({ users: initialUsers, coaches, plans, codes: initialCodes, userRole }: Props) {
     const [tab, setTab] = useState<Tab>("users");
-    const [codes, setCodes] = useState<AdminCode[]>(initialCodes);
+    const [users, setUsers] = useState<AdminUser[]>(sortAdminUsers(initialUsers));
+    const [codes, setCodes] = useState<AdminCode[]>(initialCodes.map(normalizeCode));
     const [codeFilter, setCodeFilter] = useState<CodeFilter>("ALL");
     const [generatingCode, setGeneratingCode] = useState(false);
     const [deletingCodeId, setDeletingCodeId] = useState<string | null>(null);
@@ -56,6 +139,8 @@ export function AdminClient({ users, plans, codes: initialCodes, userRole }: Pro
     const [promotingId, setPromotingId] = useState<string | null>(null);
     const [confirmingUser, setConfirmingUser] = useState<{ id: string, email: string, role: string } | null>(null);
     const [confirmEmail, setConfirmEmail] = useState("");
+    const [selectedCoachId, setSelectedCoachId] = useState<string>("NONE");
+    const [accountActionId, setAccountActionId] = useState<string | null>(null);
 
     const generateCode = async () => {
         setGeneratingCode(true);
@@ -63,7 +148,8 @@ export function AdminClient({ users, plans, codes: initialCodes, userRole }: Pro
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ 
-                planId: selectedPlanId || undefined, 
+                planId: selectedRole === "COACH" || selectedPlanId.startsWith("template:") ? undefined : selectedPlanId || undefined,
+                templateId: selectedRole === "COACH" ? undefined : selectedPlanId.startsWith("template:") ? selectedPlanId.replace("template:", "") : undefined,
                 upgradesTo: selectedRole,
                 expiresInHours: selectedExpiresIn !== "0" ? parseInt(selectedExpiresIn) : undefined
             }),
@@ -71,9 +157,13 @@ export function AdminClient({ users, plans, codes: initialCodes, userRole }: Pro
         if (res.ok) {
             const data = await res.json();
             setNewCode(data.code);
+            setSelectedPlanId("");
             // Refresh codes
             const refreshRes = await fetch("/api/codes");
-            if (refreshRes.ok) setCodes(await refreshRes.json());
+            if (refreshRes.ok) {
+                const refreshedCodes = await refreshRes.json() as RawAdminCode[];
+                setCodes(refreshedCodes.map(normalizeCode));
+            }
         }
         setGeneratingCode(false);
     };
@@ -118,23 +208,67 @@ export function AdminClient({ users, plans, codes: initialCodes, userRole }: Pro
         const res = await fetch("/api/admin/users/role", {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userId, role }),
+            body: JSON.stringify({
+                userId,
+                role,
+                coachId: role === "PREMIUM" && selectedCoachId !== "NONE" ? selectedCoachId : null,
+            }),
         });
         
         if (res.ok) {
+            const coach = coaches.find(c => c.id === selectedCoachId);
+            setUsers(prev => prev.map(u => u.id === userId ? {
+                ...u,
+                role,
+                isDeactivated: false,
+                isDeleted: false,
+                coachId: role === "PREMIUM" && selectedCoachId !== "NONE" ? selectedCoachId : null,
+                coachName: role === "PREMIUM" && selectedCoachId !== "NONE" ? (coach?.name ?? coach?.email ?? null) : null,
+            } : u));
             setConfirmingUser(null);
             setConfirmEmail("");
-            window.location.reload();
+            setSelectedCoachId("NONE");
         } else {
             alert("Failed to update user status.");
         }
         setPromotingId(null);
     };
 
+    const updateAccountStatus = async (user: AdminUser, action: "deactivate" | "reactivate" | "delete") => {
+        const actionLabel = action === "delete" ? "delete" : action === "deactivate" ? "deactivate" : "reactivate";
+        if (!confirm(`Are you sure you want to ${actionLabel} ${user.email}?`)) return;
+
+        setAccountActionId(user.id);
+        const res = await fetch("/api/admin/users/account", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: user.id, action }),
+        });
+
+        if (res.ok) {
+            if (action === "delete") {
+                setUsers(prev => sortAdminUsers(prev.map(u => u.id === user.id ? {
+                    ...u,
+                    role: "FREE",
+                    isDeactivated: true,
+                    isDeleted: true,
+                    coachId: null,
+                    coachName: null,
+                } : u)));
+            } else {
+                setUsers(prev => sortAdminUsers(prev.map(u => u.id === user.id ? { ...u, isDeactivated: action === "deactivate" } : u)));
+            }
+        } else {
+            const data = await res.json().catch(() => null);
+            alert(data?.error || "Failed to update account.");
+        }
+        setAccountActionId(null);
+    };
+
     const stats = [
         { label: "Total Users", val: users.length, icon: Users, color: "text-brand-400" },
-        { label: "Premium Users", val: users.filter(u => u.role === "PREMIUM").length, icon: Shield, color: "text-success" },
-        { label: "Coaches", val: users.filter(u => u.role === "COACH").length, icon: Users, color: "text-warning" },
+        { label: "Premium Users", val: users.filter(u => u.role === "PREMIUM" && !u.isDeactivated && !u.isDeleted).length, icon: Shield, color: "text-success" },
+        { label: "Coaches", val: users.filter(u => u.role === "COACH" && !u.isDeleted).length, icon: Users, color: "text-warning" },
         { label: "Active Codes", val: codes.filter(c => c.isActive).length, icon: Ticket, color: "text-brand-300" },
     ];
 
@@ -155,6 +289,7 @@ export function AdminClient({ users, plans, codes: initialCodes, userRole }: Pro
             <div className="flex gap-1 bg-surface-muted p-1 rounded-xl">
                 {[
                     { id: "users", label: "Users", icon: Users },
+                    { id: "coaches", label: "Coaches", icon: Shield },
                     { id: "plans", label: "Plans", icon: Dumbbell },
                     { id: "codes", label: "Codes", icon: Ticket },
                 ].map((t) => (
@@ -181,32 +316,78 @@ export function AdminClient({ users, plans, codes: initialCodes, userRole }: Pro
                     </div>
                     <div className="divide-y divide-surface-border">
                         {users.map((u) => (
-                            <div key={u.id} className="flex items-center justify-between px-5 py-3.5">
-                                <div>
-                                    <p className="font-medium text-sm text-fg">{u.name ?? "No name"}</p>
-                                    <p className="text-xs text-fg-muted">{u.email}</p>
-                                    <p className="text-xs text-fg-subtle">{formatDate(u.createdAt)}</p>
+                            <div key={u.id} className={cn("flex items-start justify-between gap-4 px-5 py-3.5", (u.isDeactivated || u.isDeleted) && "opacity-60 bg-surface-muted/20")}>
+                                <div className="flex items-start gap-3 min-w-0">
+                                    <ProfileAvatar name={u.name} email={u.email} avatarUrl={u.avatarUrl} />
+                                    <div className="min-w-0">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <p className="font-medium text-sm text-fg truncate">{u.name ?? "No name"}</p>
+                                            {(u.isDeleted || u.isDeactivated) && (
+                                                <span className={cn(
+                                                    "text-[9px] font-black uppercase tracking-widest border px-2 py-0.5 rounded",
+                                                    u.isDeleted ? "text-fg-subtle bg-surface-muted border-surface-border" : "text-danger bg-danger/10 border-danger/20"
+                                                )}>
+                                                    {u.isDeleted ? "Deleted" : "Deactivated"}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p className="text-xs text-fg-muted truncate">{u.email}</p>
+                                        <p className="text-xs text-fg-subtle">{formatDate(u.createdAt)}</p>
+                                        {u.role === "PREMIUM" && (
+                                            <p className="text-[10px] text-fg-subtle font-bold uppercase tracking-widest mt-1">
+                                                Coach: {u.coachName || "No coach"}
+                                            </p>
+                                        )}
+                                    </div>
                                 </div>
                                 <div className="flex flex-col items-end gap-2">
-                                    <div className="flex items-center gap-1.5 p-1 bg-surface-muted rounded-xl border border-surface-border">
-                                        {["FREE", "PREMIUM", "COACH", "SUPER_ADMIN"].map((r) => {
-                                            const isActive = u.role === r;
-                                            return (
+                                    {!u.isDeleted && (
+                                        <>
+                                            <div className="flex items-center gap-1.5 p-1 bg-surface-muted rounded-xl border border-surface-border">
+                                                {["FREE", "PREMIUM", "COACH", "SUPER_ADMIN"].map((r) => {
+                                                    const isActive = u.role === r;
+                                                    return (
+                                                        <button
+                                                            key={r}
+                                                            onClick={() => {
+                                                                if (!isActive) {
+                                                                    setConfirmingUser({ id: u.id, email: u.email, role: r });
+                                                                    setSelectedCoachId(r === "PREMIUM" ? (u.coachId || "NONE") : "NONE");
+                                                                }
+                                                            }}
+                                                            className={cn(
+                                                                "px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
+                                                                isActive 
+                                                                    ? roleBadgeClass[r] + " shadow-sm scale-105 z-10" 
+                                                                    : "text-fg-subtle hover:text-fg hover:bg-surface-elevated"
+                                                            )}
+                                                        >
+                                                            {roleLabels[r].replace(" Member", "")}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+
+                                            <div className="flex items-center gap-2">
                                                 <button
-                                                    key={r}
-                                                    onClick={() => !isActive && setConfirmingUser({ id: u.id, email: u.email, role: r })}
-                                                    className={cn(
-                                                        "px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
-                                                        isActive 
-                                                            ? roleBadgeClass[r] + " shadow-sm scale-105 z-10" 
-                                                            : "text-fg-subtle hover:text-fg hover:bg-surface-elevated"
-                                                    )}
+                                                    onClick={() => updateAccountStatus(u, u.isDeactivated ? "reactivate" : "deactivate")}
+                                                    disabled={accountActionId === u.id}
+                                                    className="btn-secondary btn-sm text-[10px] font-black uppercase tracking-widest h-8"
                                                 >
-                                                    {roleLabels[r].replace(" Member", "")}
+                                                    {u.isDeactivated ? <RotateCcw className="w-3.5 h-3.5" /> : <UserX className="w-3.5 h-3.5" />}
+                                                    {u.isDeactivated ? "Reactivate" : "Deactivate"}
                                                 </button>
-                                            );
-                                        })}
-                                    </div>
+                                                <button
+                                                    onClick={() => updateAccountStatus(u, "delete")}
+                                                    disabled={accountActionId === u.id}
+                                                    className="btn-secondary btn-sm text-[10px] font-black uppercase tracking-widest h-8 border-danger/30 text-danger hover:bg-danger hover:text-white"
+                                                >
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                    Delete
+                                                </button>
+                                            </div>
+                                        </>
+                                    )}
 
                                     {confirmingUser?.id === u.id && (
                                         <div className="mt-3 p-4 bg-surface-card rounded-2xl border-2 border-brand-500/20 shadow-glow-brand-sm space-y-4 animate-slide-up max-w-[300px] relative overflow-hidden">
@@ -231,6 +412,24 @@ export function AdminClient({ users, plans, codes: initialCodes, userRole }: Pro
                                                 />
                                             </div>
 
+                                            {confirmingUser.role === "PREMIUM" && (
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-bold text-fg-subtle uppercase tracking-widest ml-1">Coach Assignment</label>
+                                                    <select
+                                                        className="input input-sm text-xs"
+                                                        value={selectedCoachId}
+                                                        onChange={(e) => setSelectedCoachId(e.target.value)}
+                                                    >
+                                                        <option value="NONE">No coach</option>
+                                                        {coaches.map((coach) => (
+                                                            <option key={coach.id} value={coach.id}>
+                                                                {coach.name || coach.email} ({coach.activeClientCount} active)
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            )}
+
                                             <div className="flex gap-2 pt-2">
                                                 <button 
                                                     onClick={() => promoteUser(u.id, confirmingUser.role, u.email)}
@@ -240,12 +439,94 @@ export function AdminClient({ users, plans, codes: initialCodes, userRole }: Pro
                                                     {promotingId === u.id ? "Processing..." : "Authorize Change"}
                                                 </button>
                                                 <button 
-                                                    onClick={() => { setConfirmingUser(null); setConfirmEmail(""); }}
+                                                    onClick={() => { setConfirmingUser(null); setConfirmEmail(""); setSelectedCoachId("NONE"); }}
                                                     className="btn-secondary btn-sm text-[10px] font-black uppercase tracking-widest h-10 px-4"
                                                 >
                                                     Abort
                                                 </button>
                                             </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Tab: Coaches */}
+            {tab === "coaches" && (
+                <div className="card overflow-hidden">
+                    <div className="px-5 py-4 border-b border-surface-border flex items-center justify-between">
+                        <h3 className="heading-3">Coaches</h3>
+                        <p className="text-xs text-fg-muted">{coaches.length} total</p>
+                    </div>
+                    <div className="divide-y divide-surface-border">
+                        {coaches.map((coach) => (
+                            <div key={coach.id} className="px-5 py-4">
+                                <div className="flex items-start justify-between gap-4">
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <ProfileAvatar name={coach.name} email={coach.email} avatarUrl={coach.avatarUrl} />
+                                        <div className="min-w-0">
+                                            <p className="font-medium text-sm text-fg truncate">{coach.name ?? "No name"}</p>
+                                            <p className="text-xs text-fg-muted truncate">{coach.email}</p>
+                                        </div>
+                                    </div>
+                                    <div className="text-right shrink-0">
+                                        <p className="text-2xl font-black text-brand-400 leading-none">{coach.activeClientCount}</p>
+                                        <p className="text-[10px] text-fg-subtle font-black uppercase tracking-widest mt-1">
+                                            Active {coach.activeClientCount === 1 ? "Client" : "Clients"}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="mt-4 rounded-xl border border-surface-border bg-surface-muted/20 overflow-hidden">
+                                    <div className="px-3 py-2 border-b border-surface-border flex items-center justify-between">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Assigned Clients</p>
+                                        <span className="text-[10px] font-bold text-fg-muted">{coach.clients.length}</span>
+                                    </div>
+                                    {coach.clients.length === 0 ? (
+                                        <p className="px-3 py-3 text-xs text-fg-muted">No clients assigned.</p>
+                                    ) : (
+                                        <div className="divide-y divide-surface-border">
+                                            {coach.clients.map((client) => (
+                                                <div
+                                                    key={client.id}
+                                                    className={cn(
+                                                        "flex items-center justify-between gap-3 px-3 py-2.5",
+                                                        (client.isDeleted || client.isDeactivated) && "opacity-60"
+                                                    )}
+                                                >
+                                                    <div className="flex items-center gap-2 min-w-0">
+                                                        <ProfileAvatar name={client.name} email={client.email} avatarUrl={client.avatarUrl} />
+                                                        <div className="min-w-0">
+                                                            {client.isDeleted ? (
+                                                                <p className="text-sm font-medium text-fg truncate">{client.name ?? "No name"}</p>
+                                                            ) : (
+                                                                <Link href={`/coach/client/${client.id}`} className="text-sm font-medium text-fg truncate hover:text-brand-400">
+                                                                    {client.name ?? "No name"}
+                                                                </Link>
+                                                            )}
+                                                            <p className="text-xs text-fg-muted truncate">{client.email}</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 shrink-0">
+                                                        <span className={cn(
+                                                            "text-[9px] font-black uppercase tracking-widest border px-2 py-0.5 rounded",
+                                                            client.isDeleted
+                                                                ? "text-fg-subtle bg-surface-muted border-surface-border"
+                                                                : client.isDeactivated
+                                                                    ? "text-danger bg-danger/10 border-danger/20"
+                                                                    : "text-success bg-success/10 border-success/20"
+                                                        )}>
+                                                            {client.isDeleted ? "Deleted" : client.isDeactivated ? "Deactivated" : "Active"}
+                                                        </span>
+                                                        <span className={cn("text-[9px] px-2 py-0.5 rounded border font-black uppercase tracking-widest", roleBadgeClass[client.role])}>
+                                                            {roleLabels[client.role]?.replace(" Member", "") ?? client.role}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            ))}
                                         </div>
                                     )}
                                 </div>
@@ -263,14 +544,64 @@ export function AdminClient({ users, plans, codes: initialCodes, userRole }: Pro
                     </div>
                     <div className="divide-y divide-surface-border">
                         {plans.map((p) => (
-                            <div key={p.id} className="flex items-center justify-between px-5 py-3.5">
-                                <div>
-                                    <p className="font-medium text-sm text-fg">{p.name}</p>
-                                    <p className="text-xs text-fg-muted">{p.type.replace("_", " ")}</p>
+                            <div key={p.id} className="px-5 py-4">
+                                <div className="flex items-start justify-between gap-4">
+                                    <Link href={`/plans/create?id=${p.id}&view=true`} className="min-w-0 group">
+                                        <p className="font-medium text-sm text-fg group-hover:text-brand-400 truncate">{p.name}</p>
+                                        <p className="text-xs text-fg-muted">{p.type.replace("_", " ")}</p>
+                                    </Link>
+                                    <div className="flex items-center gap-3 shrink-0">
+                                        <span className="text-xs text-fg-muted">{p.userCount} active {p.userCount === 1 ? "user" : "users"}</span>
+                                        <Link href={`/plans/create?id=${p.id}&view=true`} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-surface-muted">
+                                            <ChevronRight className="w-4 h-4 text-fg-subtle" />
+                                        </Link>
+                                    </div>
                                 </div>
-                                <div className="flex items-center gap-3">
-                                    <span className="text-xs text-fg-muted">{p.userCount} users</span>
-                                    <ChevronRight className="w-4 h-4 text-fg-subtle" />
+
+                                <div className="mt-3 rounded-xl border border-surface-border bg-surface-muted/20 overflow-hidden">
+                                    <div className="px-3 py-2 border-b border-surface-border flex items-center justify-between">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Using This As Active Plan</p>
+                                        <span className="text-[10px] font-bold text-fg-muted">{p.users.length}</span>
+                                    </div>
+                                    {p.users.length === 0 ? (
+                                        <p className="px-3 py-3 text-xs text-fg-muted">No users have this as their active plan.</p>
+                                    ) : (
+                                        <div className="divide-y divide-surface-border">
+                                            {p.users.map((planUser) => (
+                                                <div
+                                                    key={planUser.id}
+                                                    className={cn(
+                                                        "flex items-center justify-between gap-3 px-3 py-2.5",
+                                                        (planUser.isDeleted || planUser.isDeactivated) && "opacity-60"
+                                                    )}
+                                                >
+                                                    <div className="flex items-center gap-2 min-w-0">
+                                                        <ProfileAvatar name={planUser.name} email={planUser.email} avatarUrl={planUser.avatarUrl} />
+                                                        <div className="min-w-0">
+                                                            {planUser.isDeleted ? (
+                                                                <p className="text-sm font-medium text-fg truncate">{planUser.name ?? "No name"}</p>
+                                                            ) : (
+                                                                <Link href={`/coach/client/${planUser.id}`} className="text-sm font-medium text-fg truncate hover:text-brand-400">
+                                                                    {planUser.name ?? "No name"}
+                                                                </Link>
+                                                            )}
+                                                            <p className="text-xs text-fg-muted truncate">{planUser.email}</p>
+                                                        </div>
+                                                    </div>
+                                                    <span className={cn(
+                                                        "text-[9px] font-black uppercase tracking-widest border px-2 py-0.5 rounded shrink-0",
+                                                        planUser.isDeleted
+                                                            ? "text-fg-subtle bg-surface-muted border-surface-border"
+                                                            : planUser.isDeactivated
+                                                                ? "text-danger bg-danger/10 border-danger/20"
+                                                                : "text-success bg-success/10 border-success/20"
+                                                    )}>
+                                                        {planUser.isDeleted ? "Deleted" : planUser.isDeactivated ? "Deactivated" : "Active"}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         ))}
@@ -288,20 +619,32 @@ export function AdminClient({ users, plans, codes: initialCodes, userRole }: Pro
                             <select
                                 className="input flex-1"
                                 value={selectedRole}
-                                onChange={(e) => setSelectedRole(e.target.value)}
+                                onChange={(e) => {
+                                    const nextRole = e.target.value;
+                                    setSelectedRole(nextRole);
+                                    if (nextRole === "COACH") setSelectedPlanId("");
+                                }}
                             >
                                 <option value="PREMIUM">Premium Member Code</option>
                                 {userRole === "SUPER_ADMIN" && <option value="COACH">Coach Code</option>}
                             </select>
                             <select
-                                className="input flex-1"
+                                className={cn("input flex-1", selectedRole === "COACH" && "opacity-50 bg-surface-muted cursor-not-allowed")}
                                 value={selectedPlanId}
                                 onChange={(e) => setSelectedPlanId(e.target.value)}
+                                disabled={selectedRole === "COACH"}
                             >
                                 <option value="">No specific plan (Open)</option>
-                                {plans.map((p) => (
-                                    <option key={p.id} value={p.id}>{p.name}</option>
-                                ))}
+                                <optgroup label="Saved plans">
+                                    {plans.map((p) => (
+                                        <option key={p.id} value={p.id}>{p.name}</option>
+                                    ))}
+                                </optgroup>
+                                <optgroup label="Templates">
+                                    {Object.values(PLAN_TEMPLATES).map((template) => (
+                                        <option key={template.id} value={`template:${template.id}`}>{template.name}</option>
+                                    ))}
+                                </optgroup>
                             </select>
                             <select
                                 className="input flex-1"
@@ -368,10 +711,20 @@ export function AdminClient({ users, plans, codes: initialCodes, userRole }: Pro
                                                 <p className="font-mono font-black text-sm text-fg tracking-[0.2em]">{c.code}</p>
                                                 <span className={cn(
                                                     "text-[8px] px-1.5 py-0.5 rounded font-black uppercase tracking-widest",
-                                                    (c as any).upgradesTo === "COACH" ? "bg-warning-500/10 text-warning border border-warning/20" : "bg-brand-500/10 text-brand-400 border border-brand/20"
+                                                    c.upgradesTo === "COACH" ? "bg-warning-500/10 text-warning border border-warning/20" : "bg-brand-500/10 text-brand-400 border border-brand/20"
                                                 )}>
-                                                    {(c as any).upgradesTo === "COACH" ? "Coach" : "Member"}
+                                                    {c.upgradesTo === "COACH" ? "Coach" : "Member"}
                                                 </span>
+                                                {c.usedByStatus && c.usedByStatus !== "ACTIVE" && (
+                                                    <span className={cn(
+                                                        "text-[8px] px-1.5 py-0.5 rounded font-black uppercase tracking-widest border",
+                                                        c.usedByStatus === "DELETED"
+                                                            ? "bg-surface-muted text-fg-subtle border-surface-border"
+                                                            : "bg-danger/10 text-danger border-danger/20"
+                                                    )}>
+                                                        {c.usedByStatus === "DELETED" ? "Deleted" : "Deactivated"}
+                                                    </span>
+                                                )}
                                             </div>
                                             <p className="text-[10px] text-fg-muted font-bold uppercase tracking-widest mt-1">
                                                 {c.planName ? c.planName : "Open Entry"} · {formatDate(c.createdAt)}
@@ -380,15 +733,23 @@ export function AdminClient({ users, plans, codes: initialCodes, userRole }: Pro
                                             {c.usedBy && (
                                                 <div className="flex items-center gap-1.5 mt-1">
                                                     <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
-                                                    {c.usedById ? (
+                                                    {c.usedById && c.usedByStatus !== "DELETED" ? (
                                                         <Link 
                                                             href={`/coach/client/${c.usedById}`}
-                                                            className="text-[10px] font-black text-success uppercase tracking-widest hover:underline"
+                                                            className={cn(
+                                                                "text-[10px] font-black uppercase tracking-widest hover:underline",
+                                                                c.usedByStatus === "DEACTIVATED" ? "text-danger" : "text-success"
+                                                            )}
                                                         >
-                                                            Claimed: {c.usedBy}
+                                                            Claimed: {c.usedBy}{c.usedByStatus === "DEACTIVATED" ? " (deactivated)" : ""}
                                                         </Link>
                                                     ) : (
-                                                        <p className="text-[10px] font-black text-success uppercase tracking-widest">Claimed: {c.usedBy}</p>
+                                                        <p className={cn(
+                                                            "text-[10px] font-black uppercase tracking-widest",
+                                                            c.usedByStatus === "DELETED" ? "text-fg-subtle" : "text-success"
+                                                        )}>
+                                                            Claimed: {c.usedBy}{c.usedByStatus === "DELETED" ? " (deleted)" : ""}
+                                                        </p>
                                                     )}
                                                 </div>
                                             )}

@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { MobileTabBar } from "@/components/layout/MobileTabBar";
 import { RoleProvider } from "@/lib/RoleContext";
+import { getUserDeactivationStatusByClerkId } from "@/lib/userDeactivation";
 
 export default async function AppLayout({
     children,
@@ -15,13 +16,19 @@ export default async function AppLayout({
     if (!userId) redirect("/sign-in");
 
     let user: { role: string; onboardingDone: boolean; id: string } | null = null;
+    let isDeactivated = false;
     try {
         user = await prisma.user.findUnique({
             where: { clerkId: userId },
             select: { role: true, onboardingDone: true, id: true },
         });
+        isDeactivated = await getUserDeactivationStatusByClerkId(userId);
     } catch (e) {
         console.warn("[AppLayout] DB unreachable, treating as new user:", e);
+    }
+
+    if (isDeactivated) {
+        redirect("/sign-in");
     }
 
     if (!user?.onboardingDone) {

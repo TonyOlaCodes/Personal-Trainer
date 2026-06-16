@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import { createNotification } from "@/lib/notifications";
 
 const planUpdateSchema = z.object({
     clientId: z.string().min(1),
@@ -56,8 +57,18 @@ export async function POST(req: Request) {
             }
         });
 
+        await createNotification({
+            userId: client.id,
+            type: "PLAN_UPDATED",
+            message: "Your plan has been updated",
+            entityType: "PLAN",
+            entityId: plan.id,
+            route: `/plans?highlight=${plan.id}`,
+        });
+
         return NextResponse.json({ success: true });
-    } catch (err: any) {
-        return NextResponse.json({ error: err.message }, { status: 400 });
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Failed to assign plan";
+        return NextResponse.json({ error: message }, { status: 400 });
     }
 }

@@ -31,6 +31,10 @@ export async function POST(req: Request) {
     const user = await prisma.user.findUnique({ where: { clerkId: userId } });
     if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
+    // Coaches do not log workouts — they manage clients
+    if (user.role === "COACH") {
+        return NextResponse.json({ error: "Coaches cannot log workouts" }, { status: 403 });
+    }
     const body = await req.json();
     const parsed = logSchema.safeParse(body);
     if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });

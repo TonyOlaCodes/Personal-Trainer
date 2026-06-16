@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { redirect, notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { WorkoutLogClient } from "./WorkoutLogClient";
+import { getExerciseMediaByNames } from "@/lib/exerciseMedia";
 
 export const metadata = { title: "Logging session" };
 
@@ -25,11 +26,8 @@ export default async function WorkoutLogPage({
 
     if (!workout) notFound();
 
-    const globalEx = await prisma.globalExercise.findMany({ where: { videoUrl: { not: null } } });
-    const tutorialUrls = globalEx.reduce((acc: any, ex: any) => {
-        acc[ex.name] = ex.videoUrl;
-        return acc;
-    }, {} as Record<string, string>);
+    const mediaByName = await getExerciseMediaByNames(workout.exercises.map((exercise) => exercise.name));
+    const exerciseMedia = Object.fromEntries(mediaByName.entries());
 
     return (
         <div className="bg-surface min-h-screen">
@@ -37,7 +35,7 @@ export default async function WorkoutLogPage({
                 workout={{
                     id: workout.id,
                     name: workout.name,
-                    exercises: workout.exercises.map((ex: any) => ({
+                    exercises: workout.exercises.map((ex) => ({
                         id: ex.id,
                         name: ex.name,
                         sets: ex.sets,
@@ -46,7 +44,7 @@ export default async function WorkoutLogPage({
                         notes: ex.notes,
                     })),
                 }}
-                tutorialUrls={tutorialUrls}
+                exerciseMedia={exerciseMedia}
                 logDate={date}
             />
         </div>

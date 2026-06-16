@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { getUserDeactivationStatusByClerkId } from "@/lib/userDeactivation";
 import { OnboardingPage as OnboardingClient } from "./OnboardingClient";
 
 export const metadata = { title: "Onboarding | FitCoach Pro" };
@@ -15,6 +16,10 @@ export default async function OnboardingServerPage() {
         where: { clerkId: userId },
         select: { onboardingDone: true },
     });
+
+    if (await getUserDeactivationStatusByClerkId(userId)) {
+        redirect("/sign-in");
+    }
 
     if (user?.onboardingDone) {
         redirect("/dashboard");

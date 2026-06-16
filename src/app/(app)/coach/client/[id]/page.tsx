@@ -7,7 +7,8 @@ import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
 
 export const metadata = { title: "Client Details" };
 
-export default async function ClientDetailPage({ params }: { params: { id: string } }) {
+export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
+    const { id } = await params;
     const { userId } = await auth();
     if (!userId) redirect("/sign-in");
 
@@ -15,7 +16,7 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
     if (!actor || !["COACH", "SUPER_ADMIN"].includes(actor.role)) redirect("/dashboard");
 
     const target = await prisma.user.findUnique({
-        where: { id: params.id },
+        where: { id },
         include: {
             workoutLogs: {
                 include: { workout: { select: { name: true } }, sets: true },
@@ -24,6 +25,7 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
             },
             checkIns: { orderBy: { createdAt: "desc" }, take: 5 },
             plans: { where: { isActive: true }, include: { plan: true }, take: 1 },
+            coach: { select: { name: true, email: true } },
         },
     });
 
@@ -61,6 +63,7 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
                         name: isDeletedClient ? "Deleted account" : target.name,
                         email: isDeletedClient ? "Inactive account" : target.email,
                         role: target.role,
+                        assignedCoachName: actor.role === "SUPER_ADMIN" ? target.coach?.name ?? target.coach?.email ?? null : null,
                         avatarUrl: target.avatarUrl,
                         activePlan: activePlan ? { id: activePlan.id, name: activePlan.name } : null,
                         experience: target.experienceLevel,

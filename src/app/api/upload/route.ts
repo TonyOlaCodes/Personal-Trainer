@@ -20,7 +20,7 @@ export async function POST(req: Request) {
         const filePath = path.join(dir, filename);
         await writeFile(filePath, buffer);
 
-        return NextResponse.json({ url: `/api/uploads/${filename}`, type: file.type });
+        return NextResponse.json({ url: `/uploads/${filename}`, type: file.type });
     } catch (e: any) {
         console.error("Upload error:", e);
         return NextResponse.json({ error: "Upload failed: " + e.message }, { status: 500 });

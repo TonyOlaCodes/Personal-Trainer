@@ -32,6 +32,34 @@ interface LocalWeek {
     workouts: LocalWorkout[];
 }
 
+interface PlanExercisePayload {
+    name: string;
+    sets: number;
+    reps: string;
+    weightTargetKg?: number | null;
+    order?: number | null;
+}
+
+interface PlanWorkoutPayload {
+    name: string;
+    dayNumber: number;
+    dayOfWeek?: number | null;
+    exercises?: PlanExercisePayload[];
+}
+
+interface PlanWeekPayload {
+    weekNumber: number;
+    name?: string;
+    workouts?: PlanWorkoutPayload[];
+}
+
+interface PlanPayload {
+    name: string;
+    description?: string | null;
+    weeks?: PlanWeekPayload[];
+    error?: string;
+}
+
 export function PlanCreateClient() {
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -57,6 +85,13 @@ export function PlanCreateClient() {
     const [draggedWorkoutIdx, setDraggedWorkoutIdx] = useState<number | null>(null);
 
     const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    const cloneWeeks = (source: LocalWeek[]): LocalWeek[] => source.map((week) => ({
+        ...week,
+        workouts: week.workouts.map((workout) => ({
+            ...workout,
+            exercises: workout.exercises.map((exercise) => ({ ...exercise })),
+        })),
+    }));
 
     // Load data (Template or Edit)
     useEffect(() => {
@@ -65,24 +100,24 @@ export function PlanCreateClient() {
                 setLoading(true);
                 try {
                     const res = await fetch(`/api/plans/${editId}`);
-                    const data = await res.json();
+                    const data = await res.json() as PlanPayload;
                     if (res.ok) {
                         setName(data.name);
                         setDesc(data.description || "");
                         
-                        const mappedWeeks = data.weeks?.map((week: any) => ({
+                        const mappedWeeks = data.weeks?.map((week) => ({
                             weekNumber: week.weekNumber,
                             name: week.name,
-                            workouts: (week.workouts || []).map((w: any) => ({
+                            workouts: (week.workouts || []).map((w) => ({
                                 name: w.name,
                                 dayNumber: w.dayNumber,
                                 dayOfWeek: w.dayOfWeek,
-                                exercises: (w.exercises || []).map((e: any) => ({
+                                exercises: (w.exercises || []).map((e) => ({
                                     name: e.name,
                                     sets: e.sets,
                                     reps: e.reps,
-                                    weightTargetKg: e.weightTargetKg,
-                                    order: e.order
+                                    weightTargetKg: e.weightTargetKg ?? undefined,
+                                    order: e.order ?? 0
                                 }))
                             }))
                         })) || [];
@@ -286,9 +321,9 @@ export function PlanCreateClient() {
     };
 
     const addExercise = (wIdx: number) => {
-        const next = JSON.parse(JSON.stringify(weeks));
-        const newIdx = next[0].workouts[wIdx]?.exercises.length ?? 0;
-        next.forEach((w: any) => {
+        const next = cloneWeeks(weeks);
+        const newIdx = next[activeWeekIdx].workouts[wIdx]?.exercises.length ?? 0;
+        next.forEach((w) => {
             if (w.workouts[wIdx]) {
                 w.workouts[wIdx].exercises.push({ name: "", sets: 3, reps: "10", order: newIdx });
             }
@@ -298,14 +333,15 @@ export function PlanCreateClient() {
     };
 
     const updateExercise = (wIdx: number, eIdx: number, updates: Partial<LocalExercise>) => {
-        const next = JSON.parse(JSON.stringify(weeks));
+        const next = cloneWeeks(weeks);
         next[activeWeekIdx].workouts[wIdx].exercises[eIdx] = { ...next[activeWeekIdx].workouts[wIdx].exercises[eIdx], ...updates };
         
         // Propagate name changes to all weeks so Linearity Mode is consistent
         if (updates.name !== undefined) {
-            next.forEach((w: any) => {
+            const nextName = updates.name;
+            next.forEach((w) => {
                 if (w.workouts[wIdx]?.exercises[eIdx]) {
-                    w.workouts[wIdx].exercises[eIdx].name = updates.name;
+                    w.workouts[wIdx].exercises[eIdx].name = nextName;
                 }
             });
         }
@@ -636,7 +672,7 @@ export function PlanCreateClient() {
                                                                                 value={ex.sets}
                                                                                 placeholder="S"
                                                                                 onChange={(e) => {
-                                                                                    const next = JSON.parse(JSON.stringify(weeks));
+                                                                                    const next = cloneWeeks(weeks);
                                                                                     next[wIdx].workouts[activeWorkoutIdx].exercises[eIdx].sets = parseInt(e.target.value) || 0;
                                                                                     setWeeks(next);
                                                                                 }}
@@ -647,7 +683,7 @@ export function PlanCreateClient() {
                                                                                 value={ex.reps}
                                                                                 placeholder="R"
                                                                                 onChange={(e) => {
-                                                                                    const next = JSON.parse(JSON.stringify(weeks));
+                                                                                    const next = cloneWeeks(weeks);
                                                                                     next[wIdx].workouts[activeWorkoutIdx].exercises[eIdx].reps = e.target.value;
                                                                                     setWeeks(next);
                                                                                 }}
@@ -660,7 +696,7 @@ export function PlanCreateClient() {
                                                                                 value={ex.weightTargetKg ?? ""}
                                                                                 placeholder="KG"
                                                                                 onChange={(e) => {
-                                                                                    const next = JSON.parse(JSON.stringify(weeks));
+                                                                                    const next = cloneWeeks(weeks);
                                                                                     const parsed = parseFloat(e.target.value);
                                                                                     next[wIdx].workouts[activeWorkoutIdx].exercises[eIdx].weightTargetKg = isNaN(parsed) ? undefined : parsed;
                                                                                     setWeeks(next);
@@ -686,10 +722,10 @@ export function PlanCreateClient() {
                                                 <button
                                                     key={qEx}
                                                     onClick={() => {
-                                                        const next = JSON.parse(JSON.stringify(weeks));
-                                                        const newOrder = next[0].workouts[activeWorkoutIdx]?.exercises.length ?? 0;
+                                                        const next = cloneWeeks(weeks);
+                                                        const newOrder = next[activeWeekIdx].workouts[activeWorkoutIdx]?.exercises.length ?? 0;
                                                         // Add to ALL weeks so it appears as a full matrix row
-                                                        next.forEach((w: any) => {
+                                                        next.forEach((w) => {
                                                             if (w.workouts[activeWorkoutIdx]) {
                                                                 w.workouts[activeWorkoutIdx].exercises.push({ name: qEx, sets: 3, reps: "10", order: newOrder });
                                                             }
@@ -704,10 +740,10 @@ export function PlanCreateClient() {
                                         </div>
                                         <button
                                             onClick={() => {
-                                                const next = JSON.parse(JSON.stringify(weeks));
-                                                const newOrder = next[0].workouts[activeWorkoutIdx]?.exercises.length ?? 0;
+                                                const next = cloneWeeks(weeks);
+                                                const newOrder = next[activeWeekIdx].workouts[activeWorkoutIdx]?.exercises.length ?? 0;
                                                 // Add blank exercise to ALL weeks
-                                                next.forEach((w: any) => {
+                                                next.forEach((w) => {
                                                     if (w.workouts[activeWorkoutIdx]) {
                                                         w.workouts[activeWorkoutIdx].exercises.push({ name: "", sets: 3, reps: "10", order: newOrder });
                                                     }
@@ -873,11 +909,11 @@ export function PlanCreateClient() {
                                                             <div className="col-span-12 sm:col-span-1 flex items-end mt-2 sm:mt-0">
                                                                 <button
                                                                     onClick={() => {
-                                                                        const next = JSON.parse(JSON.stringify(weeks));
-                                                                        next.forEach((w: any) => {
+                                                                        const next = cloneWeeks(weeks);
+                                                                        next.forEach((w: LocalWeek) => {
                                                                             if (w.workouts[activeWorkoutIdx]) {
-                                                                                w.workouts[activeWorkoutIdx].exercises = w.workouts[activeWorkoutIdx].exercises.filter((_: any, i: number) => i !== eIdx);
-                                                                                w.workouts[activeWorkoutIdx].exercises.forEach((ex: any, idx: number) => ex.order = idx);
+                                                                                w.workouts[activeWorkoutIdx].exercises = w.workouts[activeWorkoutIdx].exercises.filter((_, i: number) => i !== eIdx);
+                                                                                w.workouts[activeWorkoutIdx].exercises.forEach((ex, idx: number) => ex.order = idx);
                                                                             }
                                                                         });
                                                                         setWeeks(next);
@@ -900,9 +936,9 @@ export function PlanCreateClient() {
                                                             <button
                                                                 key={qEx}
                                                                 onClick={() => {
-                                                                    const next = JSON.parse(JSON.stringify(weeks));
-                                                                    const newOrder = next[0].workouts[activeWorkoutIdx]?.exercises.length ?? 0;
-                                                                    next.forEach((w: any) => {
+                                                                    const next = cloneWeeks(weeks);
+                                                                    const newOrder = next[activeWeekIdx].workouts[activeWorkoutIdx]?.exercises.length ?? 0;
+                                                                    next.forEach((w) => {
                                                                         if (w.workouts[activeWorkoutIdx]) {
                                                                             w.workouts[activeWorkoutIdx].exercises.push({ name: qEx, sets: 3, reps: "10", order: newOrder });
                                                                         }
