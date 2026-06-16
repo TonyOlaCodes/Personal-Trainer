@@ -36,7 +36,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
     }
     const isDeletedClient = target.email.endsWith("@deleted.local");
 
-    const [activePlan, availablePlans, checkInSchedule] = await Promise.all([
+    const [activePlan, availablePlans, checkInSchedule, bodyweightRows, workoutNotesRows] = await Promise.all([
         Promise.resolve(target.plans[0]?.plan ?? null),
         prisma.plan.findMany({
             where: {
@@ -48,6 +48,25 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             select: { id: true, name: true, type: true },
         }),
         getUserCheckInSchedule(target.id),
+        prisma.$queryRaw<Array<{ date: string; weightKg: number }>>`
+            SELECT "loggedDate"::text AS "date", "weightKg"
+            FROM "bodyweight_logs"
+            WHERE "userId" = ${target.id}
+            ORDER BY "loggedDate" ASC
+        `,
+        prisma.$queryRaw<Array<{ id: string; workoutLogId: string; text: string; createdAt: Date; workoutName: string }>>`
+            SELECT
+                wn."id",
+                wn."workoutLogId",
+                wn."text",
+                wn."createdAt",
+                w."name" AS "workoutName"
+            FROM "workout_notes" wn
+            JOIN "workout_logs" wl ON wl."id" = wn."workoutLogId"
+            JOIN "workouts" w ON w."id" = wl."workoutId"
+            WHERE wl."userId" = ${target.id}
+            ORDER BY wn."createdAt" DESC
+        `,
     ]);
 
     return (
@@ -71,6 +90,8 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                         trainingLocation: target.trainingLocation,
                         trainingDaysPerWeek: target.trainingDaysPerWeek,
                         checkInSchedule,
+                        targetWeightKg: target.targetWeightKg,
+                        currentWeightKg: target.weightKg,
                     }}
                     availablePlans={availablePlans}
                     logs={(() => {
@@ -93,6 +114,14 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                         week: ci.weekNumber,
                         date: ci.createdAt.toISOString(),
                         status: ci.coachResponse ? "Responded" : "Pending",
+                    }))}
+                    bodyweightHistory={bodyweightRows || []}
+                    workoutNotes={(workoutNotesRows || []).map(n => ({
+                        id: n.id,
+                        workoutLogId: n.workoutLogId,
+                        text: n.text,
+                        createdAt: n.createdAt.toISOString(),
+                        workoutName: n.workoutName,
                     }))}
                 />
             </div>

@@ -34,6 +34,8 @@ interface Client {
         frequencyWeeks: number | null;
         startDate: string | null;
     };
+    targetWeightKg?: number | null;
+    currentWeightKg?: number | null;
 }
 
 interface ClientLog {
@@ -50,14 +52,24 @@ interface ClientCheckIn {
     status: string;
 }
 
+interface ClientWorkoutNote {
+    id: string;
+    workoutLogId: string;
+    text: string;
+    createdAt: string;
+    workoutName: string;
+}
+
 interface Props {
     client: Client;
     availablePlans: { id: string; name: string; type: string }[];
     logs: ClientLog[];
     checkIns: ClientCheckIn[];
+    bodyweightHistory: { date: string; weightKg: number }[];
+    workoutNotes: ClientWorkoutNote[];
 }
 
-export function ClientDetailView({ client, availablePlans, logs, checkIns }: Props) {
+export function ClientDetailView({ client, availablePlans, logs, checkIns, bodyweightHistory, workoutNotes }: Props) {
     const [assigning, setAssigning] = useState(false);
     const [assignMode, setAssignMode] = useState<"MENU" | "LIST" | "IMPORT">("MENU");
     const [updating, setUpdating] = useState(false);
@@ -168,6 +180,24 @@ export function ClientDetailView({ client, availablePlans, logs, checkIns }: Pro
             setSavingSchedule(false);
         }
     };
+    const chartValues = bodyweightHistory.map(r => r.weightKg);
+    if (client.targetWeightKg) chartValues.push(client.targetWeightKg);
+    const chartMin = chartValues.length > 0 ? Math.floor(Math.min(...chartValues) - 2) : 0;
+    const chartMax = chartValues.length > 0 ? Math.ceil(Math.max(...chartValues) + 2) : 1;
+    const chartRange = Math.max(chartMax - chartMin, 1);
+    const chartWidth = 640;
+    const chartHeight = 240;
+    const chartPadding = { top: 20, right: 24, bottom: 34, left: 42 };
+    const plotWidth = chartWidth - chartPadding.left - chartPadding.right;
+    const plotHeight = chartHeight - chartPadding.top - chartPadding.bottom;
+    const toX = (index: number) => chartPadding.left + (bodyweightHistory.length === 1 ? plotWidth / 2 : (index / (bodyweightHistory.length - 1)) * plotWidth);
+    const toY = (weight: number) => chartPadding.top + ((chartMax - weight) / chartRange) * plotHeight;
+    const chartPoints = bodyweightHistory.map((row, index) => ({ ...row, x: toX(index), y: toY(row.weightKg) }));
+    const linePath = chartPoints.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(" ");
+    const areaPath = chartPoints.length > 0
+        ? `${linePath} L ${chartPoints[chartPoints.length - 1].x.toFixed(1)} ${(chartPadding.top + plotHeight).toFixed(1)} L ${chartPoints[0].x.toFixed(1)} ${(chartPadding.top + plotHeight).toFixed(1)} Z`
+        : "";
+    const targetY = client.targetWeightKg ? toY(client.targetWeightKg) : null;
 
     return (
         <div className="space-y-8 animate-fade-in">
@@ -201,6 +231,97 @@ export function ClientDetailView({ client, availablePlans, logs, checkIns }: Pro
                     <button className="btn-icon bg-surface-elevated w-11 h-11 rounded-xl">
                         <MoreHorizontal className="w-5 h-5 text-fg-muted" />
                     </button>
+                </div>
+            </div>
+
+            {/* Bodyweight Goal Tracking & Workout Notes Grid */}
+            <div className="grid lg:grid-cols-3 gap-8">
+                {/* Weight chart */}
+                <div className="card p-5 lg:col-span-2">
+                    <div className="flex items-center justify-between gap-4 mb-4">
+                        <div>
+                            <h3 className="heading-3">Bodyweight Goal Tracking</h3>
+                            <p className="text-xs text-fg-muted mt-1">Weight progression trend</p>
+                        </div>
+                        <div className="text-right">
+                            <p className="text-xl font-black text-fg">{client.currentWeightKg ? `${client.currentWeightKg.toFixed(1)}kg` : "--"}</p>
+                            <p className="text-[10px] text-fg-subtle font-bold uppercase tracking-widest">
+                                Target {client.targetWeightKg ? `${client.targetWeightKg.toFixed(1)}kg` : "--"}
+                            </p>
+                        </div>
+                    </div>
+                    {bodyweightHistory.length > 0 ? (
+                        <div className="h-64 overflow-hidden">
+                            <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="h-full w-full" role="img" aria-label="Bodyweight trend chart">
+                                <defs>
+                                    <linearGradient id="clientBodyweightFill" x1="0" x2="0" y1="0" y2="1">
+                                        <stop offset="5%" stopColor="#38bdf8" stopOpacity="0.35" />
+                                        <stop offset="95%" stopColor="#38bdf8" stopOpacity="0" />
+                                    </linearGradient>
+                                </defs>
+                                {[0, 1, 2, 3].map((line) => {
+                                    const y = chartPadding.top + (line / 3) * plotHeight;
+                                    const value = chartMax - (line / 3) * chartRange;
+                                    return (
+                                        <g key={line}>
+                                            <line x1={chartPadding.left} x2={chartWidth - chartPadding.right} y1={y} y2={y} stroke="rgba(148,163,184,0.16)" strokeDasharray="4 4" />
+                                            <text x={10} y={y + 4} fill="#94a3b8" fontSize="11" fontWeight="700">{value.toFixed(0)}</text>
+                                        </g>
+                                    );
+                                })}
+                                {targetY !== null && (
+                                    <g>
+                                        <line x1={chartPadding.left} x2={chartWidth - chartPadding.right} y1={targetY} y2={targetY} stroke="#f87171" strokeDasharray="6 6" strokeWidth="2" />
+                                        <text x={chartWidth - chartPadding.right - 54} y={Math.max(14, targetY - 7)} fill="#f87171" fontSize="11" fontWeight="800">Target</text>
+                                    </g>
+                                )}
+                                <path d={areaPath} fill="url(#clientBodyweightFill)" />
+                                <path d={linePath} fill="none" stroke="#38bdf8" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+                                {chartPoints.map((point) => (
+                                    <g key={`${point.date}-${point.weightKg}`}>
+                                        <circle cx={point.x} cy={point.y} r="4" fill="#0f172a" stroke="#38bdf8" strokeWidth="3" />
+                                        <title>{point.date}: {point.weightKg.toFixed(1)}kg</title>
+                                    </g>
+                                ))}
+                                {chartPoints[0] && (
+                                    <text x={chartPoints[0].x} y={chartHeight - 10} textAnchor="middle" fill="#94a3b8" fontSize="11" fontWeight="700">{chartPoints[0].date}</text>
+                                )}
+                                {chartPoints.length > 1 && (
+                                    <text x={chartPoints[chartPoints.length - 1].x} y={chartHeight - 10} textAnchor="middle" fill="#94a3b8" fontSize="11" fontWeight="700">{chartPoints[chartPoints.length - 1].date}</text>
+                                )}
+                            </svg>
+                        </div>
+                    ) : (
+                        <div className="h-64 rounded-2xl border border-dashed border-surface-border flex items-center justify-center text-sm text-fg-muted">
+                            No bodyweight logs recorded for this client.
+                        </div>
+                    )}
+                </div>
+
+                {/* Workout Notes */}
+                <div className="card p-5 lg:col-span-1 flex flex-col justify-between">
+                    <div>
+                        <div className="flex items-center gap-2 mb-4">
+                            <MessageSquare className="w-4 h-4 text-warning" />
+                            <h3 className="heading-3">Workout Notes</h3>
+                        </div>
+                        <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1 no-scrollbar">
+                            {workoutNotes.length === 0 ? (
+                                <p className="text-sm text-fg-muted italic">No notes recorded for this client.</p>
+                            ) : workoutNotes.map(note => (
+                                <div key={note.id} className="w-full text-left rounded-xl border border-surface-border bg-surface-muted/30 p-3">
+                                    <p className="text-[10px] font-black text-brand-400 uppercase tracking-widest">{formatDate(note.createdAt)}</p>
+                                    <p className="text-sm font-bold text-fg mt-1">{note.workoutName}</p>
+                                    <p className="text-xs text-fg-muted mt-1 line-clamp-3">{note.text}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="pt-4 border-t border-surface-border/50 text-center">
+                        <Link href={`/plans/create?clientId=${client.id}`} className="text-xs font-black text-brand-400 hover:text-brand-300 transition-colors uppercase tracking-widest flex items-center justify-center gap-1.5">
+                            <Dumbbell className="w-3.5 h-3.5" /> Modify Workouts
+                        </Link>
+                    </div>
                 </div>
             </div>
 
@@ -518,7 +639,7 @@ export function ClientDetailView({ client, availablePlans, logs, checkIns }: Pro
                         ) : (
                             checkIns.map((ci) => (
                                 <Link 
-                                    href={`/coach/checkins/${ci.id}`}
+                                    href={`/checkins?highlight=${ci.id}`}
                                     key={ci.id} 
                                     className={cn(
                                         "card-hover p-5 border transition-all flex items-center justify-between group",

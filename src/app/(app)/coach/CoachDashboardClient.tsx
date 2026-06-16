@@ -335,10 +335,10 @@ export function CoachDashboardClient({ clients, recentCheckIns, activePlans, rec
                                 >
                                     <div className="flex items-center gap-4 mb-4">
                                         <div className={cn(
-                                            "w-12 h-12 rounded-2xl flex items-center justify-center text-sm font-bold text-white shadow-glow-sm",
+                                            "w-12 h-12 rounded-2xl flex items-center justify-center text-sm font-bold text-white shadow-glow-sm overflow-hidden",
                                             c.isDeleted ? "bg-surface-muted text-fg-subtle" : "bg-gradient-brand"
                                         )}>
-                                            {c.avatarUrl ? <img src={c.avatarUrl} alt="avatar" /> : getInitials(c.name)}
+                                            {c.avatarUrl ? <img src={c.avatarUrl} alt="avatar" className="w-full h-full object-cover rounded-2xl" /> : getInitials(c.name)}
                                         </div>
                                         <div className="min-w-0">
                                             <div className="flex items-center gap-2">
@@ -386,7 +386,7 @@ export function CoachDashboardClient({ clients, recentCheckIns, activePlans, rec
                         {recentCheckIns.map((ci) => (
                             <Link
                                 key={ci.id}
-                                href={`/coach/checkins/${ci.id}`}
+                                href={`/checkins?highlight=${ci.id}`}
                                 className={cn(
                                     "block card p-4 border transition-all",
                                     ci.status === "Pending" ? "border-brand-600/30 bg-brand-500/5 shadow-glow-brand-sm" : "hover:bg-surface-muted/30"
