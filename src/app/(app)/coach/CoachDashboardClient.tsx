@@ -121,7 +121,12 @@ export function CoachDashboardClient({ clients, recentCheckIns, activePlans, rec
             {/* Stats row */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="stat-card">
-                    <Users className="w-4 h-4 text-brand-400 mb-1" />
+                    <div className="flex justify-between items-start">
+                        <Users className="w-4 h-4 text-brand-400 mb-1" />
+                        <Link href="/coach/invites" className="text-[10px] font-black text-brand-400 hover:text-brand-300 transition-colors uppercase tracking-widest">
+                            Invite +
+                        </Link>
+                    </div>
                     <p className="stat-value">{activeClients.length}</p>
                     <p className="stat-label">Active Clients</p>
                 </div>
@@ -309,9 +314,6 @@ export function CoachDashboardClient({ clients, recentCheckIns, activePlans, rec
                 <div className="lg:col-span-2 space-y-4">
                     <div className="flex items-center justify-between px-2">
                         <h3 className="heading-3">My Stable</h3>
-                        <Link href="/coach/invites" className="btn-ghost btn-sm text-xs border-dashed">
-                            Invite Client +
-                        </Link>
                     </div>
 
                     <div className="grid sm:grid-cols-2 gap-4">
