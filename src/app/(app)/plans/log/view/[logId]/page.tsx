@@ -7,7 +7,8 @@ import Link from "next/link";
 import { ChevronLeft, Dumbbell, Clock, Zap, Video, FileText, Smile } from "lucide-react";
 import { EditSessionButton } from "./EditSessionButton";
 
-export default async function LogViewPage({ params }: { params: { logId: string } }) {
+export default async function LogViewPage({ params }: { params: Promise<{ logId: string }> }) {
+    const { logId } = await params;
     const { userId } = await auth();
     if (!userId) redirect("/sign-in");
 
@@ -15,7 +16,7 @@ export default async function LogViewPage({ params }: { params: { logId: string 
     if (!actor) redirect("/sign-in");
 
     const log = await prisma.workoutLog.findUnique({
-        where: { id: params.logId },
+        where: { id: logId },
         include: {
             user: { select: { id: true, coachId: true, name: true } },
             workout: true,

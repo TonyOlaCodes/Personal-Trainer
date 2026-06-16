@@ -180,7 +180,7 @@ export function CoachDashboardClient({ clients, recentCheckIns, activePlans, rec
                                 <div className="flex items-start justify-between gap-3">
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2 mb-1">
-                                            <span className="text-[10px] font-black text-brand-400 uppercase tracking-widest">Protocol Week {ci.week}</span>
+                                            <span className="text-[10px] font-black text-brand-400 uppercase tracking-widest">Week {ci.week} Check-in</span>
                                             {ci.status === "Pending" ? (
                                                 <span className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-pulse shadow-glow-brand" />
                                             ) : (

@@ -378,20 +378,8 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate }: Props
     };
 
     const removeExercise = async (exId: string) => {
-        if (!confirm("Are you sure you want to remove this exercise? If it's a permanent exercise in your workout, it will be deleted from the plan.")) return;
+        if (!confirm("Are you sure you want to remove this exercise from this session?")) return;
         
-        // If it's a real DB ID (not a temporary client ID), delete it permanently from the workout template
-        if (!exId.includes(":sub") && !exId.startsWith("new-")) {
-            try {
-                const res = await fetch(`/api/exercises/${exId}`, { method: "DELETE" });
-                if (!res.ok) {
-                    console.error("Failed to delete exercise from template.");
-                }
-            } catch (err) {
-                console.error("Error deleting exercise:", err);
-            }
-        }
-
         const nextExercises = activeExercises.filter(ex => ex.id !== exId);
         setActiveExercises(nextExercises);
         setLogs(prev => {

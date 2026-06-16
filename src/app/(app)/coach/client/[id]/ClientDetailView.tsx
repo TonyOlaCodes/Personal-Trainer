@@ -1,12 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
     Users, Activity, Calendar, MessageSquare,
     MapPin, Info, Dumbbell, Award, Scale, MoreHorizontal, ChevronRight, CheckCircle2, Edit3, Zap, Settings,
-    Trash2, AlertTriangle
+    Trash2, AlertTriangle, Clock, Search
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import {
+    AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Line
+} from "recharts";
 import Link from "next/link";
 import { cn, formatDate, getInitials } from "@/lib/utils";
 
@@ -60,6 +63,14 @@ interface ClientWorkoutNote {
     workoutName: string;
 }
 
+interface WorkoutHistoryEntry {
+    id: string;
+    workoutName: string;
+    date: string;
+    duration: number;
+    volume: number;
+}
+
 interface Props {
     client: Client;
     availablePlans: { id: string; name: string; type: string }[];
@@ -67,9 +78,12 @@ interface Props {
     checkIns: ClientCheckIn[];
     bodyweightHistory: { date: string; weightKg: number }[];
     workoutNotes: ClientWorkoutNote[];
+    workoutHistory: WorkoutHistoryEntry[];
+    exerciseHistory: Record<string, Array<{ date: string, weight: number, reps: number, volume: number, oneRM: number }>>;
+    exerciseLastDone: Record<string, number>;
 }
 
-export function ClientDetailView({ client, availablePlans, logs, checkIns, bodyweightHistory, workoutNotes }: Props) {
+export function ClientDetailView({ client, availablePlans, logs, checkIns, bodyweightHistory, workoutNotes, workoutHistory, exerciseHistory, exerciseLastDone }: Props) {
     const [assigning, setAssigning] = useState(false);
     const [assignMode, setAssignMode] = useState<"MENU" | "LIST" | "IMPORT">("MENU");
     const [updating, setUpdating] = useState(false);
@@ -81,6 +95,11 @@ export function ClientDetailView({ client, availablePlans, logs, checkIns, bodyw
     const [checkInFrequency, setCheckInFrequency] = useState(client.checkInSchedule.frequencyWeeks ?? 1);
     const [savingSchedule, setSavingSchedule] = useState(false);
     const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; date: string; weightKg: number } | null>(null);
+    const [hoveredVolPoint, setHoveredVolPoint] = useState<{ id: string; workoutName: string; date: string; formattedDate: string; volume: number; x: number; y: number } | null>(null);
+    const [activeChartTab, setActiveChartTab] = useState<"weight" | "volume">("weight");
+    const [selectedExercise, setSelectedExercise] = useState<string>("");
+    const [exerciseSearchQuery, setExerciseSearchQuery] = useState("");
+    const [weightTimeframe, setWeightTimeframe] = useState<"week" | "month" | "year" | "all">("all");
     const router = useRouter();
 
     const updatePlan = async (planId: string) => {
@@ -181,7 +200,21 @@ export function ClientDetailView({ client, availablePlans, logs, checkIns, bodyw
             setSavingSchedule(false);
         }
     };
-    const chartValues = bodyweightHistory.map(r => r.weightKg);
+    const filteredBodyweightHistory = useMemo(() => {
+        if (weightTimeframe === "all") return bodyweightHistory;
+        const now = new Date();
+        const cutoff = new Date();
+        if (weightTimeframe === "week") {
+            cutoff.setDate(now.getDate() - 7);
+        } else if (weightTimeframe === "month") {
+            cutoff.setDate(now.getDate() - 30);
+        } else if (weightTimeframe === "year") {
+            cutoff.setDate(now.getDate() - 365);
+        }
+        return bodyweightHistory.filter(h => new Date(h.date) >= cutoff);
+    }, [bodyweightHistory, weightTimeframe]);
+
+    const chartValues = filteredBodyweightHistory.map(r => r.weightKg);
     if (client.targetWeightKg) chartValues.push(client.targetWeightKg);
     const chartMin = chartValues.length > 0 ? Math.floor(Math.min(...chartValues) - 2) : 0;
     const chartMax = chartValues.length > 0 ? Math.ceil(Math.max(...chartValues) + 2) : 1;
@@ -191,14 +224,80 @@ export function ClientDetailView({ client, availablePlans, logs, checkIns, bodyw
     const chartPadding = { top: 20, right: 24, bottom: 34, left: 42 };
     const plotWidth = chartWidth - chartPadding.left - chartPadding.right;
     const plotHeight = chartHeight - chartPadding.top - chartPadding.bottom;
-    const toX = (index: number) => chartPadding.left + (bodyweightHistory.length === 1 ? plotWidth / 2 : (index / (bodyweightHistory.length - 1)) * plotWidth);
+    const toX = (index: number) => chartPadding.left + (filteredBodyweightHistory.length === 1 ? plotWidth / 2 : (index / (filteredBodyweightHistory.length - 1)) * plotWidth);
     const toY = (weight: number) => chartPadding.top + ((chartMax - weight) / chartRange) * plotHeight;
-    const chartPoints = bodyweightHistory.map((row, index) => ({ ...row, x: toX(index), y: toY(row.weightKg) }));
+    const chartPoints = filteredBodyweightHistory.map((row, index) => ({ ...row, x: toX(index), y: toY(row.weightKg) }));
     const linePath = chartPoints.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(" ");
     const areaPath = chartPoints.length > 0
         ? `${linePath} L ${chartPoints[chartPoints.length - 1].x.toFixed(1)} ${(chartPadding.top + plotHeight).toFixed(1)} L ${chartPoints[0].x.toFixed(1)} ${(chartPadding.top + plotHeight).toFixed(1)} Z`
         : "";
     const targetY = client.targetWeightKg ? toY(client.targetWeightKg) : null;
+
+    // Sort workout history ascending for chart progression
+    const volumeHistory = [...workoutHistory].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const volumeValues = volumeHistory.map(h => h.volume);
+    
+    const volMin = volumeValues.length > 0 ? Math.max(0, Math.floor(Math.min(...volumeValues) - 200)) : 0;
+    const volMax = volumeValues.length > 0 ? Math.ceil(Math.max(...volumeValues) + 200) : 1000;
+    const volRange = Math.max(volMax - volMin, 1);
+    
+    const volChartWidth = 640;
+    const volChartHeight = 240;
+    const volChartPadding = { top: 20, right: 24, bottom: 34, left: 48 };
+    const volPlotWidth = volChartWidth - volChartPadding.left - volChartPadding.right;
+    const volPlotHeight = volChartHeight - volChartPadding.top - volChartPadding.bottom;
+    
+    const toVolX = (index: number) => volChartPadding.left + (volumeHistory.length === 1 ? volPlotWidth / 2 : (index / (volumeHistory.length - 1)) * volPlotWidth);
+    const toVolY = (vol: number) => volChartPadding.top + ((volMax - vol) / volRange) * volPlotHeight;
+    
+    const volChartPoints = volumeHistory.map((row, index) => ({ 
+        ...row, 
+        formattedDate: new Date(row.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        x: toVolX(index), 
+        y: toVolY(row.volume) 
+    }));
+    
+    const volLinePath = volChartPoints.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(" ");
+    const volAreaPath = volChartPoints.length > 0
+        ? `${volLinePath} L ${volChartPoints[volChartPoints.length - 1].x.toFixed(1)} ${(volChartPadding.top + volPlotHeight).toFixed(1)} L ${volChartPoints[0].x.toFixed(1)} ${(volChartPadding.top + volPlotHeight).toFixed(1)} Z`
+        : "";
+
+    // Average duration math
+    const validDurations = workoutHistory.filter(h => h.duration > 0);
+    const totalDuration = validDurations.reduce((sum, h) => sum + h.duration, 0);
+    const avgDuration = validDurations.length > 0 ? Math.round(totalDuration / validDurations.length) : 0;
+
+    const exerciseListOrdered = useMemo(() => {
+        const names = Object.keys(exerciseHistory);
+        return names.sort((a, b) => (exerciseLastDone[b] || 0) - (exerciseLastDone[a] || 0));
+    }, [exerciseHistory, exerciseLastDone]);
+
+    useEffect(() => {
+        if (!selectedExercise && exerciseListOrdered.length > 0) {
+            setSelectedExercise(exerciseListOrdered[0]);
+        }
+    }, [exerciseListOrdered, selectedExercise]);
+
+    const getRegex = (q: string) => {
+        try {
+            return new RegExp(q.trim().split('').map(c => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*'), 'i');
+        } catch { return new RegExp(q, 'i'); }
+    };
+
+    const exerciseListFiltered = useMemo(() => {
+        return exerciseListOrdered.filter(ex => 
+            exerciseSearchQuery ? getRegex(exerciseSearchQuery).test(ex) : true
+        );
+    }, [exerciseListOrdered, exerciseSearchQuery]);
+
+    const selectedExerciseStats = useMemo(() => {
+        if (!selectedExercise) return null;
+        const history = exerciseHistory[selectedExercise] || [];
+        if (history.length === 0) return null;
+        const currentMax = Math.max(...history.map((h: any) => h.weight || 0));
+        const estimatedMax = Math.max(...history.map((h: any) => h.oneRM || 0));
+        return { currentMax, estimatedMax };
+    }, [exerciseHistory, selectedExercise]);
 
     return (
         <div className="space-y-8 animate-fade-in">
@@ -235,189 +334,367 @@ export function ClientDetailView({ client, availablePlans, logs, checkIns, bodyw
                 </div>
             </div>
 
-            {/* Bodyweight Goal Tracking & Workout Notes Grid */}
-            <div className="grid lg:grid-cols-3 gap-8">
-                {/* Weight chart */}
-                <div className="card p-5 lg:col-span-2">
-                    <div className="flex items-center justify-between gap-4 mb-4">
-                        <div>
-                            <h3 className="heading-3">Bodyweight Goal Tracking</h3>
-                            <p className="text-xs text-fg-muted mt-1">Weight progression trend</p>
-                        </div>
-                        <div className="text-right">
-                            <p className="text-xl font-black text-fg">{client.currentWeightKg ? `${client.currentWeightKg.toFixed(1)}kg` : "--"}</p>
-                            <p className="text-[10px] text-fg-subtle font-bold uppercase tracking-widest">
-                                Target {client.targetWeightKg ? `${client.targetWeightKg.toFixed(1)}kg` : "--"}
-                            </p>
-                        </div>
-                    </div>
-                    {bodyweightHistory.length > 0 ? (
-                        <div className="h-64 overflow-hidden relative">
-                            <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="h-full w-full" role="img" aria-label="Bodyweight trend chart">
-                                <defs>
-                                    <linearGradient id="clientBodyweightFill" x1="0" x2="0" y1="0" y2="1">
-                                        <stop offset="5%" stopColor="#38bdf8" stopOpacity="0.35" />
-                                        <stop offset="95%" stopColor="#38bdf8" stopOpacity="0" />
-                                    </linearGradient>
-                                </defs>
-                                {[0, 1, 2, 3].map((line) => {
-                                    const y = chartPadding.top + (line / 3) * plotHeight;
-                                    const value = chartMax - (line / 3) * chartRange;
-                                    return (
-                                        <g key={line}>
-                                            <line x1={chartPadding.left} x2={chartWidth - chartPadding.right} y1={y} y2={y} stroke="rgba(148,163,184,0.16)" strokeDasharray="4 4" />
-                                            <text x={10} y={y + 4} fill="#94a3b8" fontSize="11" fontWeight="700">{value.toFixed(0)}</text>
-                                        </g>
-                                    );
-                                })}
-                                {targetY !== null && (
-                                    <g>
-                                        <line x1={chartPadding.left} x2={chartWidth - chartPadding.right} y1={targetY} y2={targetY} stroke="#f87171" strokeDasharray="6 6" strokeWidth="2" />
-                                        <text x={chartWidth - chartPadding.right - 54} y={Math.max(14, targetY - 7)} fill="#f87171" fontSize="11" fontWeight="800">Target</text>
-                                    </g>
-                                )}
-                                <path d={areaPath} fill="url(#clientBodyweightFill)" />
-                                <path d={linePath} fill="none" stroke="#38bdf8" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
-                                {chartPoints.map((point) => (
-                                    <g key={`${point.date}-${point.weightKg}`}>
-                                        <circle 
-                                            cx={point.x} 
-                                            cy={point.y} 
-                                            r={hoveredPoint?.date === point.date ? "6" : "4"} 
-                                            fill={hoveredPoint?.date === point.date ? "#38bdf8" : "#0f172a"} 
-                                            stroke="#38bdf8" 
-                                            strokeWidth="3"
-                                            className="transition-all duration-150"
-                                        />
-                                        <circle
-                                            cx={point.x}
-                                            cy={point.y}
-                                            r="12"
-                                            fill="transparent"
-                                            className="cursor-pointer"
-                                            onMouseEnter={() => setHoveredPoint(point)}
-                                            onMouseLeave={() => setHoveredPoint(null)}
-                                        />
-                                    </g>
-                                ))}
-                                {chartPoints[0] && (
-                                    <text x={chartPoints[0].x} y={chartHeight - 10} textAnchor="middle" fill="#94a3b8" fontSize="11" fontWeight="700">{chartPoints[0].date}</text>
-                                )}
-                                {chartPoints.length > 1 && (
-                                    <text x={chartPoints[chartPoints.length - 1].x} y={chartHeight - 10} textAnchor="middle" fill="#94a3b8" fontSize="11" fontWeight="700">{chartPoints[chartPoints.length - 1].date}</text>
-                                )}
-                            </svg>
-                            {hoveredPoint && (
-                                <div 
-                                    className="absolute z-10 pointer-events-none bg-surface-elevated/95 backdrop-blur-md border border-brand-500/30 px-3 py-1.5 rounded-xl text-center shadow-glow-brand-sm -translate-x-1/2 -translate-y-full transition-all duration-150 animate-scale-in"
-                                    style={{
-                                        left: `${(hoveredPoint.x / chartWidth) * 100}%`,
-                                        top: `${(hoveredPoint.y / chartHeight) * 100 - 4}%`,
-                                    }}
-                                >
-                                    <p className="text-[9px] font-black text-brand-400 uppercase tracking-widest leading-none mb-1">
-                                        {formatDate(hoveredPoint.date)}
-                                    </p>
-                                    <p className="text-xs font-black text-fg leading-none font-mono">
-                                        {hoveredPoint.weightKg.toFixed(1)}<span className="text-[9px] text-fg-muted ml-0.5">kg</span>
-                                    </p>
-                                </div>
-                            )}
-                        </div>
-                    ) : (
-                        <div className="h-64 rounded-2xl border border-dashed border-surface-border flex items-center justify-center text-sm text-fg-muted">
-                            No bodyweight logs recorded for this client.
-                        </div>
-                    )}
+            {/* Performance Intelligence Card (moved to top of details for better optimized hierarchy) */}
+            <div className="card p-6 border-brand-500/20 bg-gradient-brand/5 shadow-glow-brand-sm">
+                <div className="flex items-center gap-2 mb-6 text-brand-400">
+                    <Zap className="w-4 h-4" />
+                    <h4 className="text-[10px] font-black uppercase tracking-widest italic">Performance Intelligence</h4>
                 </div>
-
-                {/* Workout Notes */}
-                <div className="card p-5 lg:col-span-1 flex flex-col justify-between">
-                    <div>
-                        <div className="flex items-center gap-2 mb-4">
-                            <MessageSquare className="w-4 h-4 text-warning" />
-                            <h3 className="heading-3">Workout Notes</h3>
-                        </div>
-                        <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1 no-scrollbar">
-                            {workoutNotes.length === 0 ? (
-                                <p className="text-sm text-fg-muted italic">No notes recorded for this client.</p>
-                            ) : workoutNotes.map(note => (
-                                <div key={note.id} className="w-full text-left rounded-xl border border-surface-border bg-surface-muted/30 p-3">
-                                    <p className="text-[10px] font-black text-brand-400 uppercase tracking-widest">{formatDate(note.createdAt)}</p>
-                                    <p className="text-sm font-bold text-fg mt-1">{note.workoutName}</p>
-                                    <p className="text-xs text-fg-muted mt-1 line-clamp-3">{note.text}</p>
-                                </div>
-                            ))}
-                        </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                    <div className="space-y-1">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Adherence</p>
+                        <p className="text-2xl font-black text-fg leading-none italic">94<span className="text-brand-400">%</span></p>
                     </div>
-                    <div className="pt-4 border-t border-surface-border/50 text-center">
-                        <Link href={`/plans/create?clientId=${client.id}`} className="text-xs font-black text-brand-400 hover:text-brand-300 transition-colors uppercase tracking-widest flex items-center justify-center gap-1.5">
-                            <Dumbbell className="w-3.5 h-3.5" /> Modify Workouts
-                        </Link>
+                    <div className="space-y-1">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Workouts</p>
+                        <p className="text-2xl font-black text-fg leading-none italic">{workoutHistory.length}</p>
+                    </div>
+                    <div className="space-y-1">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Avg Duration</p>
+                        <p className="text-2xl font-black text-fg leading-none italic">
+                            {avgDuration}<span className="text-xs text-indigo-400 ml-0.5 font-sans not-italic">m</span>
+                        </p>
+                    </div>
+                    <div className="space-y-1 text-right">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Trend</p>
+                        <p className="text-2xl font-black text-brand-400 leading-none italic font-mono">↗</p>
                     </div>
                 </div>
             </div>
 
-            <div className="grid lg:grid-cols-2 gap-8">
-                {/* Active Plan & Progress */}
-                <div className="space-y-6">
-                    <div className={cn(
-                        "card p-6 space-y-4",
-                        client.checkInSchedule.day === null ? "border-warning/30 bg-warning/5" : "border-success/20 bg-success/5"
-                    )}>
-                        <div className="flex items-start justify-between gap-4">
-                            <div>
-                                <h3 className="heading-3 flex items-center gap-2 uppercase tracking-widest text-[11px] font-black text-brand-400">
-                                    <Calendar className="w-4 h-4" />
-                                    Check-in Schedule
-                                </h3>
-                                <p className="text-xs text-fg-muted mt-1">
-                                    {client.checkInSchedule.day === null
-                                        ? "Choose when this client should submit check-ins."
-                                        : `${CHECK_IN_FREQUENCIES.find(f => f.value === client.checkInSchedule.frequencyWeeks)?.label ?? "Custom"} on ${CHECK_IN_DAYS[client.checkInSchedule.day]}`}
+            {/* Trends Grid: Weight/Volume Chart (2/3 width) & Check-ins Sidebar (1/3 width) */}
+            <div className="grid lg:grid-cols-3 gap-8">
+                {/* Weight/Volume chart */}
+                <div className="card p-5 lg:col-span-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-surface-border/50">
+                        <div className="flex flex-wrap items-center gap-6">
+                            <div className="flex items-center gap-4">
+                                <button
+                                    onClick={() => setActiveChartTab("weight")}
+                                    className={cn(
+                                        "text-sm font-black uppercase tracking-wider pb-2 border-b-2 transition-all",
+                                        activeChartTab === "weight" 
+                                            ? "border-brand-500 text-fg" 
+                                            : "border-transparent text-fg-muted hover:text-fg"
+                                    )}
+                                >
+                                    Bodyweight Trend
+                                </button>
+                                <button
+                                    onClick={() => setActiveChartTab("volume")}
+                                    className={cn(
+                                        "text-sm font-black uppercase tracking-wider pb-2 border-b-2 transition-all",
+                                        activeChartTab === "volume" 
+                                            ? "border-brand-500 text-fg" 
+                                            : "border-transparent text-fg-muted hover:text-fg"
+                                    )}
+                                >
+                                    Training Volume
+                                </button>
+                            </div>
+                            
+                            {activeChartTab === "weight" && (
+                                <div className="flex items-center gap-1 bg-surface-muted/50 p-1 rounded-xl border border-surface-border/60">
+                                    {(["week", "month", "year", "all"] as const).map((tf) => (
+                                        <button
+                                            key={tf}
+                                            onClick={() => setWeightTimeframe(tf)}
+                                            className={cn(
+                                                "px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all",
+                                                weightTimeframe === tf
+                                                    ? "bg-brand-500 text-white shadow-sm"
+                                                    : "text-fg-muted hover:text-fg"
+                                            )}
+                                        >
+                                            {tf}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                        {activeChartTab === "weight" ? (
+                            <div className="text-right">
+                                <p className="text-xl font-black text-fg leading-none">{client.currentWeightKg ? `${client.currentWeightKg.toFixed(1)}kg` : "--"}</p>
+                                <p className="text-[10px] text-fg-subtle font-bold uppercase tracking-widest mt-1">
+                                    Target {client.targetWeightKg ? `${client.targetWeightKg.toFixed(1)}kg` : "--"}
                                 </p>
                             </div>
-                            {client.checkInSchedule.day === null && (
+                        ) : (
+                            <div className="text-right">
+                                <p className="text-xl font-black text-fg leading-none font-mono">
+                                    {volumeHistory.length > 0 ? `${volumeHistory[volumeHistory.length - 1].volume.toLocaleString()}kg` : "--"}
+                                </p>
+                                <p className="text-[10px] text-fg-subtle font-bold uppercase tracking-widest mt-1">
+                                    Last Workout Volume
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                    {activeChartTab === "weight" ? (
+                        filteredBodyweightHistory.length > 0 ? (
+                            <div className="h-64 overflow-hidden relative">
+                                <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="h-full w-full" role="img" aria-label="Bodyweight trend chart">
+                                    <defs>
+                                        <linearGradient id="clientBodyweightFill" x1="0" x2="0" y1="0" y2="1">
+                                            <stop offset="5%" stopColor="#38bdf8" stopOpacity="0.35" />
+                                            <stop offset="95%" stopColor="#38bdf8" stopOpacity="0" />
+                                        </linearGradient>
+                                    </defs>
+                                    {[0, 1, 2, 3].map((line) => {
+                                        const y = chartPadding.top + (line / 3) * plotHeight;
+                                        const value = chartMax - (line / 3) * chartRange;
+                                        return (
+                                            <g key={line}>
+                                                <line x1={chartPadding.left} x2={chartWidth - chartPadding.right} y1={y} y2={y} stroke="rgba(148,163,184,0.16)" strokeDasharray="4 4" />
+                                                <text x={10} y={y + 4} fill="#94a3b8" fontSize="11" fontWeight="700">{value.toFixed(0)}</text>
+                                            </g>
+                                        );
+                                    })}
+                                    {targetY !== null && (
+                                        <g>
+                                            <line x1={chartPadding.left} x2={chartWidth - chartPadding.right} y1={targetY} y2={targetY} stroke="#f87171" strokeDasharray="6 6" strokeWidth="2" />
+                                            <text x={chartWidth - chartPadding.right - 54} y={Math.max(14, targetY - 7)} fill="#f87171" fontSize="11" fontWeight="800">Target</text>
+                                        </g>
+                                    )}
+                                    <path d={areaPath} fill="url(#clientBodyweightFill)" />
+                                    <path d={linePath} fill="none" stroke="#38bdf8" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+                                    {chartPoints.map((point) => (
+                                        <g key={`${point.date}-${point.weightKg}`}>
+                                            <circle 
+                                                cx={point.x} 
+                                                cy={point.y} 
+                                                r={hoveredPoint?.date === point.date ? "6" : "4"} 
+                                                fill={hoveredPoint?.date === point.date ? "#38bdf8" : "#0f172a"} 
+                                                stroke="#38bdf8" 
+                                                strokeWidth="3"
+                                                className="transition-all duration-150"
+                                            />
+                                            <circle
+                                                cx={point.x}
+                                                cy={point.y}
+                                                r="12"
+                                                fill="transparent"
+                                                className="cursor-pointer"
+                                                onMouseEnter={() => setHoveredPoint(point)}
+                                                onMouseLeave={() => setHoveredPoint(null)}
+                                            />
+                                        </g>
+                                    ))}
+                                    {chartPoints[0] && (
+                                        <text x={chartPoints[0].x} y={chartHeight - 10} textAnchor="middle" fill="#94a3b8" fontSize="11" fontWeight="700">{chartPoints[0].date}</text>
+                                    )}
+                                    {chartPoints.length > 1 && (
+                                        <text x={chartPoints[chartPoints.length - 1].x} y={chartHeight - 10} textAnchor="middle" fill="#94a3b8" fontSize="11" fontWeight="700">{chartPoints[chartPoints.length - 1].date}</text>
+                                    )}
+                                </svg>
+                                {hoveredPoint && (
+                                    <div 
+                                        className="absolute z-10 pointer-events-none bg-surface-elevated/95 backdrop-blur-md border border-brand-500/30 px-3 py-1.5 rounded-xl text-center shadow-glow-brand-sm -translate-x-1/2 -translate-y-full transition-all duration-150 animate-scale-in"
+                                        style={{
+                                            left: `${(hoveredPoint.x / chartWidth) * 100}%`,
+                                            top: `${(hoveredPoint.y / chartHeight) * 100 - 4}%`,
+                                        }}
+                                    >
+                                        <p className="text-[9px] font-black text-brand-400 uppercase tracking-widest leading-none mb-1">
+                                            {formatDate(hoveredPoint.date)}
+                                        </p>
+                                        <p className="text-xs font-black text-fg leading-none font-mono">
+                                            {hoveredPoint.weightKg.toFixed(1)}<span className="text-[9px] text-fg-muted ml-0.5">kg</span>
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="h-64 rounded-2xl border border-dashed border-surface-border flex items-center justify-center text-sm text-fg-muted">
+                                No bodyweight logs recorded for this timeframe.
+                            </div>
+                        )
+                    ) : (
+                        volumeHistory.length > 0 ? (
+                            <div className="h-64 overflow-hidden relative">
+                                <svg viewBox={`0 0 ${volChartWidth} ${volChartHeight}`} className="h-full w-full" role="img" aria-label="Training volume progression chart">
+                                    <defs>
+                                        <linearGradient id="clientVolumeFill" x1="0" x2="0" y1="0" y2="1">
+                                            <stop offset="5%" stopColor="#818cf8" stopOpacity="0.35" />
+                                            <stop offset="95%" stopColor="#818cf8" stopOpacity="0" />
+                                        </linearGradient>
+                                    </defs>
+                                    {[0, 1, 2, 3].map((line) => {
+                                        const y = volChartPadding.top + (line / 3) * volPlotHeight;
+                                        const value = volMax - (line / 3) * volRange;
+                                        return (
+                                            <g key={line}>
+                                                <line x1={volChartPadding.left} x2={volChartWidth - volChartPadding.right} y1={y} y2={y} stroke="rgba(148,163,184,0.16)" strokeDasharray="4 4" />
+                                                <text x={10} y={y + 4} fill="#94a3b8" fontSize="10" fontWeight="700">{value.toLocaleString()}</text>
+                                            </g>
+                                        );
+                                    })}
+                                    <path d={volAreaPath} fill="url(#clientVolumeFill)" />
+                                    <path d={volLinePath} fill="none" stroke="#818cf8" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+                                    {volChartPoints.map((point) => (
+                                        <g key={`${point.id}-${point.volume}`}>
+                                            <circle 
+                                                cx={point.x} 
+                                                cy={point.y} 
+                                                r={hoveredVolPoint?.id === point.id ? "6" : "4"} 
+                                                fill={hoveredVolPoint?.id === point.id ? "#818cf8" : "#0f172a"} 
+                                                stroke="#818cf8" 
+                                                strokeWidth="3"
+                                                className="transition-all duration-150"
+                                            />
+                                            <circle
+                                                cx={point.x}
+                                                cy={point.y}
+                                                r="12"
+                                                fill="transparent"
+                                                className="cursor-pointer"
+                                                onMouseEnter={() => setHoveredVolPoint(point)}
+                                                onMouseLeave={() => setHoveredVolPoint(null)}
+                                            />
+                                        </g>
+                                    ))}
+                                    {volChartPoints[0] && (
+                                        <text x={volChartPoints[0].x} y={volChartHeight - 10} textAnchor="middle" fill="#94a3b8" fontSize="11" fontWeight="700">{volChartPoints[0].formattedDate}</text>
+                                    )}
+                                    {volChartPoints.length > 1 && (
+                                        <text x={volChartPoints[volChartPoints.length - 1].x} y={volChartHeight - 10} textAnchor="middle" fill="#94a3b8" fontSize="11" fontWeight="700">{volChartPoints[volChartPoints.length - 1].formattedDate}</text>
+                                    )}
+                                </svg>
+                                {hoveredVolPoint && (
+                                    <div 
+                                        className="absolute z-10 pointer-events-none bg-surface-elevated/95 backdrop-blur-md border border-indigo-500/30 px-3 py-1.5 rounded-xl text-center shadow-glow-brand-sm -translate-x-1/2 -translate-y-full transition-all duration-150 animate-scale-in"
+                                        style={{
+                                            left: `${(hoveredVolPoint.x / volChartWidth) * 100}%`,
+                                            top: `${(hoveredVolPoint.y / volChartHeight) * 100 - 4}%`,
+                                        }}
+                                    >
+                                        <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest leading-none mb-1">
+                                            {hoveredVolPoint.workoutName}
+                                        </p>
+                                        <p className="text-[9px] text-fg-subtle font-bold mb-1">
+                                            {new Date(hoveredVolPoint.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                        </p>
+                                        <p className="text-xs font-black text-fg leading-none font-mono">
+                                            {hoveredVolPoint.volume.toLocaleString()}<span className="text-[9px] text-fg-muted ml-0.5">kg</span>
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="h-64 rounded-2xl border border-dashed border-surface-border flex items-center justify-center text-sm text-fg-muted">
+                                No workout logs recorded for this client.
+                            </div>
+                        )
+                    )}
+                </div>
+
+                {/* Check-ins Sidebar (renamed from Accountability Log) */}
+                <div className="space-y-4 lg:col-span-1">
+                    <h3 className="heading-3 px-2 flex items-center gap-2 uppercase tracking-widest text-[11px] font-black text-success">
+                        <Calendar className="w-4 h-4" />
+                        Check-ins
+                    </h3>
+                    <div className="space-y-3 max-h-[340px] overflow-y-auto no-scrollbar pr-1">
+                        {checkIns.length === 0 ? (
+                            <div className="card p-12 text-center border-dashed opacity-50 flex flex-col items-center">
+                                <Calendar className="w-8 h-8 text-fg-subtle mb-3" />
+                                <p className="text-xs text-fg-muted font-black uppercase tracking-widest italic">No deployments found.</p>
+                            </div>
+                        ) : (
+                            checkIns.map((ci) => (
+                                <Link 
+                                    href={`/checkins?highlight=${ci.id}`}
+                                    key={ci.id} 
+                                    className={cn(
+                                        "card-hover p-5 border transition-all flex items-center justify-between group",
+                                        ci.status === "Pending" ? "border-brand-500/40 bg-brand-500/5 shadow-glow-brand-sm" : "hover:bg-surface-subtle"
+                                    )}
+                                >
+                                    <div className="flex items-center gap-4">
+                                        <div className={cn(
+                                            "w-12 h-12 rounded-2xl flex items-center justify-center border transition-all",
+                                            ci.status === "Pending" ? "bg-brand-500/10 border-brand-500/30 text-brand-400" : "bg-surface-muted text-fg-subtle group-hover:border-brand-500/30"
+                                        )}>
+                                            <Scale className="w-6 h-6" />
+                                        </div>
+                                        <div>
+                                            <p className="text-xs font-black text-fg uppercase tracking-widest">Week {ci.week} Check-in</p>
+                                            <p className="text-[10px] text-fg-subtle font-bold uppercase tracking-[0.1em] mt-0.5">{formatDate(ci.date)}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        {ci.status === "Pending" ? (
+                                            <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-brand-500 text-white text-[9px] font-black uppercase tracking-widest shadow-glow-brand animate-pulse">Review</span>
+                                        ) : (
+                                            <span className="text-[9px] font-black uppercase tracking-widest text-success border border-success/30 px-3 py-1.5 rounded-xl">Reviewed</span>
+                                        )}
+                                        <ChevronRight className="w-4 h-4 text-fg-subtle group-hover:text-brand-400 group-hover:translate-x-1 transition-all" />
+                                    </div>
+                                </Link>
+                            ))
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* Workouts Management & Notes Grid */}
+            <div className="grid lg:grid-cols-3 gap-8">
+                {/* Workouts Management Column */}
+                <div className="lg:col-span-2 space-y-6">
+                    {/* Check-in Schedule (if NOT set yet) */}
+                    {client.checkInSchedule.day === null && (
+                        <div className="card p-6 space-y-4 border-warning/30 bg-warning/5">
+                            <div className="flex items-start justify-between gap-4">
+                                <div>
+                                    <h3 className="heading-3 flex items-center gap-2 uppercase tracking-widest text-[11px] font-black text-brand-400">
+                                        <Calendar className="w-4 h-4" />
+                                        Check-in Schedule
+                                    </h3>
+                                    <p className="text-xs text-fg-muted mt-1">
+                                        Choose when this client should submit check-ins.
+                                    </p>
+                                </div>
                                 <span className="px-2.5 py-1 rounded-lg bg-warning/10 border border-warning/25 text-warning text-[9px] font-black uppercase tracking-widest">
                                     Required
                                 </span>
-                            )}
+                            </div>
+                            <div className="grid sm:grid-cols-2 gap-3">
+                                <label className="space-y-1">
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Day</span>
+                                    <select
+                                        value={checkInDay}
+                                        onChange={(e) => setCheckInDay(Number(e.target.value))}
+                                        className="input h-11 text-sm font-bold bg-surface-muted/30"
+                                    >
+                                        {CHECK_IN_DAYS.map((day, idx) => (
+                                            <option key={day} value={idx}>{day}</option>
+                                        ))}
+                                    </select>
+                                </label>
+                                <label className="space-y-1">
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Frequency</span>
+                                    <select
+                                        value={checkInFrequency}
+                                        onChange={(e) => setCheckInFrequency(Number(e.target.value))}
+                                        className="input h-11 text-sm font-bold bg-surface-muted/30"
+                                    >
+                                        {CHECK_IN_FREQUENCIES.map((freq) => (
+                                            <option key={freq.value} value={freq.value}>{freq.label}</option>
+                                        ))}
+                                    </select>
+                                </label>
+                            </div>
+                            <button
+                                onClick={saveCheckInSchedule}
+                                disabled={savingSchedule}
+                                className="btn-primary w-full h-10 text-xs font-black uppercase tracking-widest"
+                            >
+                                {savingSchedule ? "Saving..." : "Save Check-in Schedule"}
+                            </button>
                         </div>
-                        <div className="grid sm:grid-cols-2 gap-3">
-                            <label className="space-y-1">
-                                <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Day</span>
-                                <select
-                                    value={checkInDay}
-                                    onChange={(e) => setCheckInDay(Number(e.target.value))}
-                                    className="input h-11 text-sm font-bold bg-surface-muted/30"
-                                >
-                                    {CHECK_IN_DAYS.map((day, idx) => (
-                                        <option key={day} value={idx}>{day}</option>
-                                    ))}
-                                </select>
-                            </label>
-                            <label className="space-y-1">
-                                <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Frequency</span>
-                                <select
-                                    value={checkInFrequency}
-                                    onChange={(e) => setCheckInFrequency(Number(e.target.value))}
-                                    className="input h-11 text-sm font-bold bg-surface-muted/30"
-                                >
-                                    {CHECK_IN_FREQUENCIES.map((freq) => (
-                                        <option key={freq.value} value={freq.value}>{freq.label}</option>
-                                    ))}
-                                </select>
-                            </label>
-                        </div>
-                        <button
-                            onClick={saveCheckInSchedule}
-                            disabled={savingSchedule}
-                            className="btn-primary w-full h-10 text-xs font-black uppercase tracking-widest"
-                        >
-                            {savingSchedule ? "Saving..." : "Save Check-in Schedule"}
-                        </button>
-                    </div>
+                    )}
 
+                    {/* Active Programme */}
                     <div className="space-y-4">
                         <h3 className="heading-3 px-2 flex items-center gap-2 uppercase tracking-widest text-[11px] font-black text-brand-400">
                             <Dumbbell className="w-4 h-4" />
@@ -438,7 +715,7 @@ export function ClientDetailView({ client, availablePlans, logs, checkIns, bodyw
 
                                 {assigning ? (
                                     <div className="mt-6 space-y-3 animate-fade-in bg-surface-muted/50 p-4 rounded-2xl border border-surface-border">
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Select New Protocol</p>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Select New Plan</p>
                                         <div className="flex flex-col gap-2">
                                             {availablePlans.map((p) => (
                                                 <button
@@ -480,7 +757,7 @@ export function ClientDetailView({ client, availablePlans, logs, checkIns, bodyw
                                         {assignMode === "MENU" && (
                                             <>
                                                 <div className="space-y-1 text-center mb-6">
-                                                    <h4 className="text-sm font-black uppercase tracking-widest text-fg">Assign New Protocol</h4>
+                                                    <h4 className="text-sm font-black uppercase tracking-widest text-fg">Assign New Plan</h4>
                                                     <p className="text-[10px] text-fg-muted font-bold uppercase tracking-widest leading-relaxed">Choose a strategic path for this athlete.</p>
                                                 </div>
                                                 <div className="grid gap-3">
@@ -509,7 +786,7 @@ export function ClientDetailView({ client, availablePlans, logs, checkIns, bodyw
                                                                 <Dumbbell className="w-5 h-5" />
                                                             </div>
                                                             <div className="text-left">
-                                                                <p className="text-sm font-black text-fg uppercase tracking-tight group-hover:text-warning">Forge New Protocol</p>
+                                                                <p className="text-sm font-black text-fg uppercase tracking-tight group-hover:text-warning">Create New Plan</p>
                                                                 <p className="text-[9px] text-fg-muted font-bold uppercase tracking-widest italic">Build from scratch for this client</p>
                                                             </div>
                                                         </div>
@@ -526,7 +803,7 @@ export function ClientDetailView({ client, availablePlans, logs, checkIns, bodyw
                                                             </div>
                                                             <div className="text-left">
                                                                 <p className="text-sm font-black text-fg uppercase tracking-tight group-hover:text-success">Import via Code</p>
-                                                                <p className="text-[9px] text-fg-muted font-bold uppercase tracking-widest italic">Deploy via protocol share key</p>
+                                                                <p className="text-[9px] text-fg-muted font-bold uppercase tracking-widest italic">Deploy via plan share key</p>
                                                             </div>
                                                         </div>
                                                         <ChevronRight className="w-4 h-4 text-fg-subtle" />
@@ -548,7 +825,7 @@ export function ClientDetailView({ client, availablePlans, logs, checkIns, bodyw
                                                 </button>
                                                 <div className="grid gap-2 max-h-[300px] overflow-y-auto no-scrollbar">
                                                     {availablePlans.length === 0 ? (
-                                                        <p className="p-8 text-center text-[10px] font-bold uppercase tracking-widest text-fg-subtle italic">No protocols found in database.</p>
+                                                        <p className="p-8 text-center text-[10px] font-bold uppercase tracking-widest text-fg-subtle italic">No plans found in database.</p>
                                                     ) : availablePlans.map((p) => (
                                                         <button
                                                             key={p.id}
@@ -569,7 +846,7 @@ export function ClientDetailView({ client, availablePlans, logs, checkIns, bodyw
                                                     <ChevronRight className="w-3 h-3 rotate-180" /> Back
                                                 </button>
                                                 <div className="card p-6 bg-surface-card border-brand-500/20 shadow-glow-brand-sm">
-                                                    <label className="text-[10px] font-black uppercase tracking-widest text-brand-400 mb-2 block">Protocol Share Key</label>
+                                                    <label className="text-[10px] font-black uppercase tracking-widest text-brand-400 mb-2 block">Plan Share Key</label>
                                                     <div className="flex gap-2">
                                                         <input 
                                                             type="text"
@@ -597,7 +874,7 @@ export function ClientDetailView({ client, availablePlans, logs, checkIns, bodyw
                                                 <Settings className="w-6 h-6 animate-spin-slow" />
                                             </div>
                                         </div>
-                                        <p className="text-fg-muted text-[10px] font-black uppercase tracking-widest italic mb-6">No protocol currently deployed to athlete line.</p>
+                                        <p className="text-fg-muted text-[10px] font-black uppercase tracking-widest italic mb-6">No plan currently deployed to this client.</p>
                                         <button onClick={() => { setAssigning(true); setAssignMode("MENU"); }} className="btn-primary px-10 h-12 shadow-glow-brand">Deploy New Plan</button>
                                     </>
                                 )}
@@ -605,6 +882,7 @@ export function ClientDetailView({ client, availablePlans, logs, checkIns, bodyw
                         )}
                     </div>
 
+                    {/* Recent Output */}
                     <div className="space-y-4">
                         <h3 className="heading-3 px-2 flex items-center gap-2 uppercase tracking-widest text-[11px] font-black text-warning">
                             <Activity className="w-4 h-4" />
@@ -629,85 +907,236 @@ export function ClientDetailView({ client, availablePlans, logs, checkIns, bodyw
                             )}
                         </div>
                     </div>
-
-                    {/* Advanced Metrics Card */}
-                    <div className="card p-6 border-brand-500/20 bg-gradient-brand/5 shadow-glow-brand-sm">
-                        <div className="flex items-center gap-2 mb-6 text-brand-400">
-                            <Zap className="w-4 h-4" />
-                            <h4 className="text-[10px] font-black uppercase tracking-widest italic">Performance Intelligence</h4>
-                        </div>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                            <div className="space-y-1">
-                                <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Adherence</p>
-                                <p className="text-2xl font-black text-fg leading-none italic">94<span className="text-brand-400">%</span></p>
-                            </div>
-                            <div className="space-y-1">
-                                <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Logs</p>
-                                <p className="text-2xl font-black text-fg leading-none italic">{logs.length}</p>
-                            </div>
-                            <div className="space-y-1">
-                                <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Check-ins</p>
-                                <p className="text-2xl font-black text-fg leading-none italic">100<span className="text-success">%</span></p>
-                            </div>
-                            <div className="space-y-1 text-right">
-                                <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Trend</p>
-                                <p className="text-2xl font-black text-brand-400 leading-none italic font-mono">↗</p>
-                            </div>
-                        </div>
-                    </div>
                 </div>
 
-                {/* Check-ins Sidebar */}
-                <div className="space-y-4">
-                    <h3 className="heading-3 px-2 flex items-center gap-2 uppercase tracking-widest text-[11px] font-black text-success">
-                        <Calendar className="w-4 h-4" />
-                        Accountability Log
-                    </h3>
-                    <div className="space-y-3">
-                        {checkIns.length === 0 ? (
-                            <div className="card p-12 text-center border-dashed opacity-50 flex flex-col items-center">
-                                <Calendar className="w-8 h-8 text-fg-subtle mb-3" />
-                                <p className="text-xs text-fg-muted font-black uppercase tracking-widest italic">No deployments found.</p>
+                {/* Workout Notes Column */}
+                <div className="lg:col-span-1">
+                    <div className="card p-5 h-full flex flex-col justify-between">
+                        <div>
+                            <div className="flex items-center gap-2 mb-4">
+                                <MessageSquare className="w-4 h-4 text-warning" />
+                                <h3 className="heading-3">Workout Notes</h3>
                             </div>
-                        ) : (
-                            checkIns.map((ci) => (
-                                <Link 
-                                    href={`/checkins?highlight=${ci.id}`}
-                                    key={ci.id} 
-                                    className={cn(
-                                        "card-hover p-5 border transition-all flex items-center justify-between group",
-                                        ci.status === "Pending" ? "border-brand-500/40 bg-brand-500/5 shadow-glow-brand-sm" : "hover:bg-surface-subtle"
-                                    )}
-                                >
-                                    <div className="flex items-center gap-4">
-                                        <div className={cn(
-                                            "w-12 h-12 rounded-2xl flex items-center justify-center border transition-all",
-                                            ci.status === "Pending" ? "bg-brand-500/10 border-brand-500/30 text-brand-400" : "bg-surface-muted text-fg-subtle group-hover:border-brand-500/30"
-                                        )}>
-                                            <Scale className="w-6 h-6" />
-                                        </div>
-                                        <div>
-                                            <p className="text-xs font-black text-fg uppercase tracking-widest">Protocol Week {ci.week}</p>
-                                            <p className="text-[10px] text-fg-subtle font-bold uppercase tracking-[0.1em] mt-0.5">{formatDate(ci.date)}</p>
-                                        </div>
+                            <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1 no-scrollbar">
+                                {workoutNotes.length === 0 ? (
+                                    <p className="text-sm text-fg-muted italic">No notes recorded for this client.</p>
+                                ) : workoutNotes.map(note => (
+                                    <div key={note.id} className="w-full text-left rounded-xl border border-surface-border bg-surface-muted/30 p-3">
+                                        <p className="text-[10px] font-black text-brand-400 uppercase tracking-widest">{formatDate(note.createdAt)}</p>
+                                        <p className="text-sm font-bold text-fg mt-1">{note.workoutName}</p>
+                                        <p className="text-xs text-fg-muted mt-1 line-clamp-3">{note.text}</p>
                                     </div>
-                                    <div className="flex items-center gap-3">
-                                        {ci.status === "Pending" ? (
-                                            <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-brand-500 text-white text-[9px] font-black uppercase tracking-widest shadow-glow-brand animate-pulse">Review</span>
-                                        ) : (
-                                            <span className="text-[9px] font-black uppercase tracking-widest text-success border border-success/30 px-3 py-1.5 rounded-xl">Clearance</span>
-                                        )}
-                                        <ChevronRight className="w-4 h-4 text-fg-subtle group-hover:text-brand-400 group-hover:translate-x-1 transition-all" />
-                                    </div>
-                                </Link>
-                            ))
-                        )}
+                                ))}
+                            </div>
+                        </div>
+                        <div className="pt-4 border-t border-surface-border/50 text-center mt-4">
+                            <Link href={`/plans/create?clientId=${client.id}`} className="text-xs font-black text-brand-400 hover:text-brand-300 transition-colors uppercase tracking-widest flex items-center justify-center gap-1.5">
+                                <Dumbbell className="w-3.5 h-3.5" /> Modify Workouts
+                            </Link>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            {/* Danger Zone */}
-            <div className="border-t border-surface-border pt-12 mt-12">
+            {/* ── EXERCISE PROGRESSION HISTORY ── */}
+            <section className="space-y-4 border-t border-surface-border pt-12 mt-12">
+                <div className="flex items-center gap-2 mb-2">
+                    <Activity className="w-4 h-4 text-brand-400" />
+                    <h3 className="heading-3 uppercase tracking-widest text-[11px] font-black text-brand-400">Exercise Progression History</h3>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    {/* Chart */}
+                    <div className="lg:col-span-8 card overflow-hidden">
+                        <div className="p-5 border-b border-surface-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <div className="flex-1 min-w-0">
+                                <h4 className="text-base font-black text-fg tracking-tight">{selectedExercise || "Select an exercise"}</h4>
+                                <p className="text-[10px] text-fg-muted font-bold uppercase tracking-wide mt-0.5">Performance curve over time</p>
+                            </div>
+                            {selectedExerciseStats && (
+                                <div className="flex items-center gap-3 shrink-0">
+                                    <div className="text-center px-3 py-1.5 rounded-xl bg-warning/10 border border-warning/20">
+                                        <p className="text-[9px] font-black text-warning/70 uppercase tracking-widest">Est. Max</p>
+                                        <p className="text-sm font-black text-warning">{selectedExerciseStats.estimatedMax}<span className="text-[9px] ml-0.5 font-bold">kg</span></p>
+                                    </div>
+                                    <div className="text-center px-3 py-1.5 rounded-xl bg-brand-500/10 border border-brand-500/20">
+                                        <p className="text-[9px] font-black text-brand-400/70 uppercase tracking-widest">Current Max</p>
+                                        <p className="text-sm font-black text-brand-400">{selectedExerciseStats.currentMax}<span className="text-[9px] ml-0.5 font-bold">kg</span></p>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        <div className="p-5 sm:p-6 bg-surface/10">
+                            {selectedExercise ? (
+                                <div className="h-[300px] w-full">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <AreaChart data={exerciseHistory[selectedExercise] || []} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                            <defs>
+                                                <linearGradient id="exGrad" x1="0" x2="0" y1="0" y2="1">
+                                                    <stop offset="5%" stopColor="#818cf8" stopOpacity={0.2} />
+                                                    <stop offset="95%" stopColor="#818cf8" stopOpacity={0} />
+                                                </linearGradient>
+                                            </defs>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" vertical={false} />
+                                            <XAxis dataKey="date" stroke="#4B5563" fontSize={10} tickLine={false} axisLine={false} />
+                                            <YAxis stroke="#4B5563" fontSize={10} tickLine={false} axisLine={false} domain={['auto', 'auto']} />
+                                            <Tooltip
+                                                content={({ active, payload, label }) => {
+                                                    if (active && payload && payload.length) {
+                                                        const d = payload[0].payload;
+                                                        return (
+                                                            <div className="bg-surface-elevated/95 backdrop-blur-md border border-indigo-500/20 p-4 rounded-2xl shadow-2xl min-w-[160px]">
+                                                                <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle mb-2.5">{label}</p>
+                                                                <div className="space-y-1.5">
+                                                                    <div className="flex items-center justify-between gap-6">
+                                                                        <span className="text-xs font-bold text-fg-muted">Best Set</span>
+                                                                        <span className="text-xs font-black text-brand-400">{d.weight}kg × {d.reps}</span>
+                                                                    </div>
+                                                                    <div className="flex items-center justify-between gap-6 pt-1.5 border-t border-surface-border/50">
+                                                                        <span className="text-xs text-fg-muted">Est. 1RM</span>
+                                                                        <span className="text-xs font-bold text-yellow-400">{d.oneRM || "—"}kg</span>
+                                                                    </div>
+                                                                    <div className="flex items-center justify-between gap-6 pt-1.5 border-t border-surface-border/50">
+                                                                        <span className="text-xs text-fg-muted">Volume</span>
+                                                                        <span className="text-xs font-bold text-success">{Math.round(d.volume)}kg</span>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    }
+                                                    return null;
+                                                 }}
+                                             />
+                                             <Area
+                                                 type="monotone" dataKey="weight" stroke="#818cf8" strokeWidth={3}
+                                                 fill="url(#exGrad)"
+                                                 dot={{ r: 4, fill: "#818cf8", stroke: "#0F172A", strokeWidth: 2 }}
+                                                 activeDot={{ r: 6, fill: "#a5b4fc", strokeWidth: 0 }}
+                                                 animationDuration={800}
+                                             />
+                                             <Line 
+                                                 type="monotone" 
+                                                 dataKey="oneRM" 
+                                                 stroke="#FACC15" 
+                                                 strokeWidth={2} 
+                                                 strokeDasharray="5 5" 
+                                                 dot={false}
+                                                 activeDot={false}
+                                             />
+                                         </AreaChart>
+                                     </ResponsiveContainer>
+                                 </div>
+                             ) : (
+                                 <div className="h-[300px] flex items-center justify-center text-sm text-fg-muted">
+                                     No exercise history recorded for this client.
+                                 </div>
+                             )}
+                         </div>
+                     </div>
+
+                     {/* Exercise Library */}
+                     <div className="lg:col-span-4 card flex flex-col h-[412px] overflow-hidden">
+                         <div className="p-4 border-b border-surface-border">
+                             <div className="relative">
+                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-fg-subtle" />
+                                 <input
+                                     type="text"
+                                     className="pl-9 pr-4 py-2.5 w-full bg-surface-elevated border border-surface-border rounded-xl text-xs font-bold outline-none focus:border-brand-500/50 transition-all text-fg"
+                                     placeholder="Search exercises..."
+                                     value={exerciseSearchQuery}
+                                     onChange={(e) => setExerciseSearchQuery(e.target.value)}
+                                 />
+                             </div>
+                         </div>
+                         <div className="flex-1 overflow-y-auto no-scrollbar p-2 space-y-1">
+                             {exerciseListFiltered.length === 0 ? (
+                                 <p className="text-xs text-fg-muted italic p-4 text-center">No exercises found.</p>
+                             ) : (
+                                 exerciseListFiltered.map(ex => {
+                                     const hist = exerciseHistory[ex] || [];
+                                     const latest = hist[hist.length - 1];
+                                     const isActive = selectedExercise === ex;
+                                     return (
+                                         <button
+                                             key={ex}
+                                             onClick={() => setSelectedExercise(ex)}
+                                             className={cn(
+                                                 "w-full flex items-center justify-between p-3 rounded-xl transition-all text-left",
+                                                 isActive ? "bg-brand-500/10 border border-brand-500/20" : "hover:bg-surface-elevated border border-transparent"
+                                             )}
+                                         >
+                                             <div className="flex items-center gap-3 min-w-0">
+                                                 <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", isActive ? "bg-brand-500 text-white" : "bg-surface-muted text-fg-subtle")}>
+                                                     <Dumbbell className="w-3.5 h-3.5" />
+                                                 </div>
+                                                 <div className="min-w-0">
+                                                     <p className={cn("text-xs font-black truncate", isActive ? "text-brand-400" : "text-fg")}>{ex}</p>
+                                                     <p className="text-[10px] text-fg-muted truncate">Best: {latest?.weight}kg · {hist.length} sessions</p>
+                                                 </div>
+                                             </div>
+                                             <ChevronRight className={cn("w-4 h-4 shrink-0 transition-opacity", isActive ? "text-brand-400 opacity-100" : "opacity-0")} />
+                                         </button>
+                                     );
+                                 })
+                             )}
+                         </div>
+                     </div>
+                 </div>
+             </section>
+
+             {/* Check-in Schedule (if already set, moved to very bottom above Danger Zone) */}
+             {client.checkInSchedule.day !== null && (
+                 <div className="border-t border-surface-border pt-12 mt-12">
+                     <div className="card p-6 space-y-4 border-success/20 bg-success/5 max-w-2xl">
+                         <div className="flex items-start justify-between gap-4">
+                             <div>
+                                 <h3 className="heading-3 flex items-center gap-2 uppercase tracking-widest text-[11px] font-black text-brand-400">
+                                     <Calendar className="w-4 h-4" />
+                                     Check-in Schedule
+                                 </h3>
+                                 <p className="text-xs text-fg-muted mt-1">
+                                     Currently active: {CHECK_IN_FREQUENCIES.find(f => f.value === client.checkInSchedule.frequencyWeeks)?.label ?? "Custom"} on {CHECK_IN_DAYS[client.checkInSchedule.day]}
+                                 </p>
+                             </div>
+                         </div>
+                         <div className="grid sm:grid-cols-2 gap-3">
+                             <label className="space-y-1">
+                                 <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Day</span>
+                                 <select
+                                     value={checkInDay}
+                                     onChange={(e) => setCheckInDay(Number(e.target.value))}
+                                     className="input h-11 text-sm font-bold bg-surface-muted/30"
+                                 >
+                                     {CHECK_IN_DAYS.map((day, idx) => (
+                                         <option key={day} value={idx}>{day}</option>
+                                     ))}
+                                 </select>
+                             </label>
+                             <label className="space-y-1">
+                                 <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Frequency</span>
+                                 <select
+                                     value={checkInFrequency}
+                                     onChange={(e) => setCheckInFrequency(Number(e.target.value))}
+                                     className="input h-11 text-sm font-bold bg-surface-muted/30"
+                                 >
+                                     {CHECK_IN_FREQUENCIES.map((freq) => (
+                                         <option key={freq.value} value={freq.value}>{freq.label}</option>
+                                     ))}
+                                 </select>
+                             </label>
+                         </div>
+                         <button
+                             onClick={saveCheckInSchedule}
+                             disabled={savingSchedule}
+                             className="btn-primary w-full h-10 text-xs font-black uppercase tracking-widest"
+                         >
+                             {savingSchedule ? "Saving..." : "Update Check-in Schedule"}
+                         </button>
+                     </div>
+                 </div>
+             )}
+
+             {/* Danger Zone */}
+             <div className="border-t border-surface-border pt-12 mt-12">
                 <div className="card p-6 border-danger-500/20 bg-danger-500/5">
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
                         <div className="space-y-1">

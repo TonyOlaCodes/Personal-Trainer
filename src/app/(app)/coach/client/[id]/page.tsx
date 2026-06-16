@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { ClientDetailView } from "./ClientDetailView";
 import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
+import { calculateOneRM } from "@/lib/utils";
 
 export const metadata = { title: "Client Details" };
 
@@ -21,7 +22,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             workoutLogs: {
                 include: { workout: { select: { name: true } }, sets: true },
                 orderBy: { loggedAt: "desc" },
-                take: 10,
+                take: 40,
             },
             checkIns: { orderBy: { createdAt: "desc" }, take: 5 },
             plans: { where: { isActive: true }, include: { plan: true }, take: 1 },
@@ -36,7 +37,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
     }
     const isDeletedClient = target.email.endsWith("@deleted.local");
 
-    const [activePlan, availablePlans, checkInSchedule, bodyweightRows, workoutNotesRows] = await Promise.all([
+    const [activePlan, availablePlans, checkInSchedule, bodyweightRows, workoutNotesRows, completedLogs] = await Promise.all([
         Promise.resolve(target.plans[0]?.plan ?? null),
         prisma.plan.findMany({
             where: {
@@ -67,7 +68,54 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             WHERE wl."userId" = ${target.id}
             ORDER BY wn."createdAt" DESC
         `,
+        prisma.workoutLog.findMany({
+            where: { userId: target.id, status: "COMPLETED" },
+            include: {
+                workout: { select: { name: true } },
+                sets: {
+                    include: {
+                        exercise: { select: { name: true, muscleGroup: true } }
+                    },
+                    orderBy: { setNumber: "asc" }
+                }
+            },
+            orderBy: { loggedAt: "asc" }
+        })
     ]);
+
+    const exerciseHistory: Record<string, any[]> = {};
+    const exerciseLastDone: Record<string, number> = {};
+
+    completedLogs.forEach(log => {
+        const dateStr = log.loggedAt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+        const logTime = log.loggedAt.getTime();
+        
+        log.sets.forEach((set: any) => {
+            if (!set.exercise || !set.isCompleted) return;
+            const exName = set.exercise.name;
+            const sWeight = set.weightKg || 0;
+            const sReps = set.reps || 0;
+            const sVol = sWeight * sReps;
+            const currentOneRM = calculateOneRM(sWeight, sReps);
+            
+            exerciseLastDone[exName] = Math.max(exerciseLastDone[exName] || 0, logTime);
+            
+            if (!exerciseHistory[exName]) exerciseHistory[exName] = [];
+            const existingSession = exerciseHistory[exName].find((h: any) => h.date === dateStr);
+            if (existingSession) {
+                if (sWeight > existingSession.weight) { 
+                    existingSession.weight = sWeight; 
+                    existingSession.reps = sReps; 
+                }
+                if (currentOneRM > (existingSession.oneRM || 0)) {
+                    existingSession.oneRM = currentOneRM;
+                }
+                existingSession.volume += sVol;
+            } else {
+                exerciseHistory[exName].push({ date: dateStr, weight: sWeight, reps: sReps, volume: sVol, oneRM: currentOneRM });
+            }
+        });
+    });
 
     return (
         <>
@@ -123,6 +171,15 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                         createdAt: n.createdAt.toISOString(),
                         workoutName: n.workoutName,
                     }))}
+                    workoutHistory={target.workoutLogs.map((l) => ({
+                        id: l.id,
+                        workoutName: l.workout.name,
+                        date: l.loggedAt.toISOString(),
+                        duration: l.duration || 0,
+                        volume: l.sets.reduce((sum, s) => sum + (s.reps || 0) * (s.weightKg || 0), 0),
+                    }))}
+                    exerciseHistory={exerciseHistory}
+                    exerciseLastDone={exerciseLastDone}
                 />
             </div>
         </>

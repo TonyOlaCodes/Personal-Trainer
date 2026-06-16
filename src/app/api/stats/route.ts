@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { format, startOfWeek, endOfWeek, subWeeks, isWithinInterval, startOfMonth, startOfYear } from "date-fns";
 import { ensureDailyMetricsTable, getDailyMetricTargets } from "@/lib/dailyMetrics";
+import { calculateOneRM } from "@/lib/utils";
 
 export async function GET() {
     const { userId } = await auth();
@@ -151,7 +152,7 @@ export async function GET() {
 
             if (!exerciseHistory[exName]) exerciseHistory[exName] = [];
             const existingSession = exerciseHistory[exName].find((h: any) => h.date === dateStr);
-            const currentOneRM = sWeight > 0 ? Math.round(sWeight * (1 + sReps / 30)) : 0;
+            const currentOneRM = calculateOneRM(sWeight, sReps);
 
             if (existingSession) {
                 if (sWeight > existingSession.weight) { 
