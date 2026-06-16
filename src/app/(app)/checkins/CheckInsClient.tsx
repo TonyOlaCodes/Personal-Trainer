@@ -379,7 +379,18 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highl
             c.status === "REVIEWED" ? "border-success/25 bg-success/5" : "border-surface-border bg-surface-card/60",
             highlighted && "ring-2 ring-brand-400 shadow-glow-brand-sm"
         )}>
-            <button onClick={() => setOpen(o => !o)} className="w-full flex items-center justify-between p-4 text-left gap-3">
+            <div 
+                role="button" 
+                tabIndex={0} 
+                onClick={() => setOpen(o => !o)} 
+                onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setOpen(o => !o);
+                    }
+                }}
+                className="w-full flex items-center justify-between p-4 text-left gap-3 cursor-pointer select-none"
+            >
                 <div className="flex items-center gap-3">
                     <div className={cn(
                         "w-11 h-11 rounded-xl flex flex-col items-center justify-center shrink-0 text-center",
@@ -428,7 +439,7 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highl
                     </button>
                     <ChevronDown className={cn("w-4 h-4 text-fg-subtle transition-transform", open && "rotate-180")} />
                 </div>
-            </button>
+            </div>
 
             {open && (
                 <div className="px-4 pb-5 border-t border-surface-border/40 pt-4 space-y-4 animate-fade-in text-sm">
