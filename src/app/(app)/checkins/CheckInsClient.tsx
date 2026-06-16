@@ -648,6 +648,12 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
     const [saving,   setSaving]   = useState(false);
     const [viewerMedia, setViewerMedia] = useState<string | null>(null);
     const [isLogging, setIsLogging] = useState(false);
+    const [statusFilter, setStatusFilter] = useState<"ALL" | "PENDING" | "REVIEWED">("ALL");
+    const filteredCheckIns = checkIns.filter(c => {
+        if (statusFilter === "PENDING") return c.status === "PENDING";
+        if (statusFilter === "REVIEWED") return c.status === "REVIEWED";
+        return true;
+    });
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
 
     useEffect(() => {
@@ -878,12 +884,50 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                         {checkIns.filter(c => c.status === "PENDING").length} pending · {checkIns.length} total
                     </p>
                 </div>
-                {checkIns.length === 0 ? (
+
+                <div className="flex flex-wrap items-center gap-2 pb-2">
+                    {(["ALL", "PENDING", "REVIEWED"] as const).map((filter) => {
+                        const count = filter === "ALL" 
+                            ? checkIns.length 
+                            : filter === "PENDING" 
+                            ? checkIns.filter(c => c.status === "PENDING").length 
+                            : checkIns.filter(c => c.status === "REVIEWED").length;
+                        
+                        const labels = {
+                            ALL: "All",
+                            PENDING: "Pending",
+                            REVIEWED: "Reviewed"
+                        };
+
+                        return (
+                            <button
+                                key={filter}
+                                onClick={() => setStatusFilter(filter)}
+                                className={cn(
+                                    "px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all flex items-center gap-1.5 select-none",
+                                    statusFilter === filter
+                                        ? "bg-brand-500/15 border-brand-500/30 text-brand-300 shadow-sm"
+                                        : "bg-surface-muted/30 border-surface-border text-fg-muted hover:text-fg hover:bg-surface-muted/50"
+                                )}
+                            >
+                                <span>{labels[filter]}</span>
+                                <span className={cn(
+                                    "px-1.5 py-0.5 rounded-md text-[10px] font-bold transition-colors",
+                                    statusFilter === filter ? "bg-brand-500/20 text-brand-200" : "bg-surface-muted text-fg-subtle"
+                                )}>{count}</span>
+                            </button>
+                        );
+                    })}
+                </div>
+
+                {filteredCheckIns.length === 0 ? (
                     <div className="card p-12 text-center border-dashed">
                         <MessageSquare className="w-8 h-8 text-fg-subtle mx-auto mb-3 opacity-30" />
-                        <p className="font-bold text-fg text-sm">No check-ins yet</p>
+                        <p className="font-bold text-fg text-sm">
+                            {checkIns.length === 0 ? "No check-ins yet" : `No ${statusFilter.toLowerCase()} check-ins`}
+                        </p>
                     </div>
-                ) : checkIns.sort((a,b) => b.weekNumber - a.weekNumber).map(c => (
+                ) : filteredCheckIns.sort((a,b) => b.weekNumber - a.weekNumber).map(c => (
                     <HistoryItem key={c.id} c={c} isCoach onCoachRespond={handleCoachRespond} setViewerMedia={setViewerMedia} highlighted={highlightedCheckInId === c.id} />
                 ))}
                 {viewerMedia && (
@@ -1063,7 +1107,47 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                         <p className="text-[10px] font-black uppercase tracking-[0.2em] text-fg-subtle">Check-in History</p>
                         <p className="text-[10px] font-bold text-fg-muted">{checkIns.length} submissions</p>
                     </div>
-                    {checkIns.sort((a,b) => b.weekNumber - a.weekNumber).map(c => (
+
+                    <div className="flex flex-wrap items-center gap-2 pb-1 px-1">
+                        {(["ALL", "PENDING", "REVIEWED"] as const).map((filter) => {
+                            const count = filter === "ALL" 
+                                ? checkIns.length 
+                                : filter === "PENDING" 
+                                ? checkIns.filter(c => c.status === "PENDING").length 
+                                : checkIns.filter(c => c.status === "REVIEWED").length;
+                            
+                            const labels = {
+                                ALL: "All",
+                                PENDING: "Pending",
+                                REVIEWED: "Reviewed"
+                            };
+
+                            return (
+                                <button
+                                    key={filter}
+                                    onClick={() => setStatusFilter(filter)}
+                                    className={cn(
+                                        "px-2.5 py-1 rounded-xl text-[10px] font-bold border transition-all flex items-center gap-1.5 select-none",
+                                        statusFilter === filter
+                                            ? "bg-brand-500/15 border-brand-500/30 text-brand-300 shadow-sm"
+                                            : "bg-surface-muted/30 border-surface-border text-fg-muted hover:text-fg hover:bg-surface-muted/50"
+                                    )}
+                                >
+                                    <span>{labels[filter]}</span>
+                                    <span className={cn(
+                                        "px-1.5 py-0.2 rounded-md text-[9px] font-bold transition-colors",
+                                        statusFilter === filter ? "bg-brand-500/20 text-brand-200" : "bg-surface-muted text-fg-subtle"
+                                    )}>{count}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    {filteredCheckIns.length === 0 ? (
+                        <div className="text-center py-8 text-xs text-fg-subtle bg-surface-muted/10 border border-surface-border/40 rounded-2xl border-dashed">
+                            {checkIns.length === 0 ? "No check-in history yet" : `No ${statusFilter.toLowerCase()} check-ins`}
+                        </div>
+                    ) : filteredCheckIns.sort((a,b) => b.weekNumber - a.weekNumber).map(c => (
                         <HistoryItem key={c.id} c={c} isCoach={false} onEdit={editCheckIn} setViewerMedia={setViewerMedia} highlighted={highlightedCheckInId === c.id} targetWeightKg={targetWeightKg} />
                     ))}
                 </div>
