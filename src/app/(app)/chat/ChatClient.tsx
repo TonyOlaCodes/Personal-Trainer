@@ -662,7 +662,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations }: Pr
                                             ) : msg.type === "TEXT" ? (
                                                 <div className={cn(
                                                      isMine ? "bubble-sent" : "bubble-received",
-                                                     (!isMine && msg.mentions?.includes(currentUserId)) && "bg-brand-500/10 border-brand-500/30 shadow-glow-brand-sm ring-1 ring-brand-500/20",
+                                                     (!isMine && msg.mentions?.includes(currentUserId)) && "border-l-4 border-l-warning bg-warning/5 border-y-warning/20 border-r-warning/20 shadow-[0_0_12px_rgba(245,158,11,0.15)] text-fg",
                                                      msg.isPinned && "ring-1 ring-brand-400/30"
                                                  )}>
                                                     {renderContent(msg.content || "")}
