@@ -133,7 +133,6 @@ export default async function CheckInsPage() {
                     isCoach={isCoach}
                     userRole={user.role}
                     targetWeightKg={user.targetWeightKg}
-                    initialWeightKg={user.weightKg}
                     workoutsThisWeek={workoutsThisWeek}
                     workoutsTarget={workoutsTarget}
                     bodyweightWeeklyAverage={bodyweightWeeklyAverage}

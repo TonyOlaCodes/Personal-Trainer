@@ -30,7 +30,6 @@ interface CheckIn {
 interface Props {
     checkIns: CheckIn[]; isCoach: boolean; userRole: string;
     targetWeightKg?: number | null;
-    initialWeightKg?: number | null;
     workoutsThisWeek: number; workoutsTarget: number;
     bodyweightWeeklyAverage: {
         averageWeightKg: number | null;
@@ -217,30 +216,11 @@ function getWeightGoalFeedback(current: number | null, previous: number | null, 
     }
 
     if (movedTowardGoal) {
-        if (progressPct !== null && progressPct >= 25) {
-            return {
-                tone: "good",
-                label: "Strong progress",
-                detail: `${progressPct}% closer to goal this week. Great direction.`,
-                icon,
-                chipClass: "bg-success/10 border-success/30 text-success shadow-glow-success-sm",
-                textClass: "text-success",
-            };
-        }
-        if (distancePct <= 3) {
-            return {
-                tone: "good",
-                label: "Closing in",
-                detail: `${distancePct.toFixed(1)}% away. You are moving the right way.`,
-                icon,
-                chipClass: "bg-success/10 border-success/30 text-success shadow-glow-success-sm",
-                textClass: "text-success",
-            };
-        }
+        const kgAway = Math.abs(current - target).toFixed(1);
         return {
             tone: "good",
             label: "On track",
-            detail: "Good direction. Repeat the basics next week.",
+            detail: `Moving closer to goal! You are ${kgAway}kg away from your target of ${target}kg.`,
             icon,
             chipClass: "bg-success/10 border-success/30 text-success shadow-glow-success-sm",
             textClass: "text-success",
@@ -248,32 +228,13 @@ function getWeightGoalFeedback(current: number | null, previous: number | null, 
     }
 
     if (movedAwayFromGoal) {
-        if (distancePct <= 3) {
-            return {
-                tone: "warning",
-                label: "Slight deviation",
-                detail: "Small drift from target. You can pull this back next week.",
-                icon,
-                chipClass: "bg-warning/10 border-warning/30 text-warning",
-                textClass: "text-warning",
-            };
-        }
-        if (distancePct <= 6) {
-            return {
-                tone: "warning",
-                label: "Off pace",
-                detail: "Not a disaster, but tighten food, steps, or consistency next week.",
-                icon,
-                chipClass: "bg-warning/10 border-warning/30 text-warning",
-                textClass: "text-warning",
-            };
-        }
+        const kgAway = Math.abs(current - target).toFixed(1);
         return {
             tone: "bad",
-            label: "Needs attention",
-            detail: "Moving away from goal. Adjust the plan before it becomes a trend.",
+            label: "Off track",
+            detail: `Moving away from target. You are currently ${kgAway}kg away from your goal of ${target}kg.`,
             icon,
-            chipClass: "bg-danger/10 border-danger/30 text-danger",
+            chipClass: "bg-danger/10 border-danger/30 text-danger shadow-glow-danger-sm",
             textClass: "text-danger",
         };
     }
@@ -651,7 +612,7 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highl
 /* ═══════════════════════════════════════════════════════════════
    Main Component
    ═══════════════════════════════════════════════════════════════ */
-export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWeightKg, initialWeightKg, workoutsThisWeek, workoutsTarget, bodyweightWeeklyAverage, checkInDueState }: Props) {
+export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWeightKg, workoutsThisWeek, workoutsTarget, bodyweightWeeklyAverage, checkInDueState }: Props) {
     const searchParams = useSearchParams();
     const highlightedCheckInId = searchParams.get("highlight");
     const isPremium = ["PREMIUM", "COACH", "SUPER_ADMIN"].includes(userRole);
@@ -660,7 +621,6 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
     // Form
     const [editMode, setEditMode] = useState(false);
     const [checkInId, setCheckInId] = useState<string | null>(null);
-    const [manualWeight, setManualWeight] = useState<string>("");
     const [weeklyAverageWeight, setWeeklyAverageWeight] = useState(bodyweightWeeklyAverage.averageWeightKg);
     const [weeklyAverageEntries, setWeeklyAverageEntries] = useState(bodyweightWeeklyAverage.entries);
     const [previousWeeklyAverageWeight, setPreviousWeeklyAverageWeight] = useState(bodyweightWeeklyAverage.previousAverageWeightKg);
@@ -770,7 +730,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
     // Stats based on selection or defaults
     const prevCheckIn  = checkIns.find(c => c.weekNumber < (editMode ? selectedWeek : currentWeekReal));
     const prevWeight   = previousWeeklyAverageWeight ?? prevCheckIn?.bodyweightKg;
-    const currentBw    = (manualWeight && !isNaN(parseFloat(manualWeight))) ? parseFloat(manualWeight) : (weeklyAverageWeight ?? existingEntry?.bodyweightKg ?? (selectedWeek === currentWeekReal ? currentWeekEntry?.bodyweightKg : null) ?? null);
+    const currentBw    = weeklyAverageWeight ?? existingEntry?.bodyweightKg ?? (selectedWeek === currentWeekReal ? currentWeekEntry?.bodyweightKg : null) ?? null;
     const weightDelta  = currentBw && prevWeight ? Math.round((currentBw - prevWeight) * 100) / 100 : null;
     const weightPctChange = currentBw && prevWeight ? Math.round(((currentBw - prevWeight) / prevWeight) * 100 * 100) / 100 : null;
     const weightGoalFeedback = getWeightGoalFeedback(currentBw, prevWeight ?? null, targetWeightKg);
@@ -802,7 +762,6 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
         setNotes("");
         setFrontImg("");
         setSideImg("");
-        setManualWeight("");
         setEditMode(false);
         setIsLogging(true);
     };
@@ -823,7 +782,6 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
         setNotes(c.feedback || "");
         setFrontImg(c.frontImageUrl || "");
         setSideImg(c.sideImageUrl || "");
-        setManualWeight(c.bodyweightKg ? String(c.bodyweightKg) : "");
         setEditMode(true);
         setIsLogging(false);
     };
@@ -1208,41 +1166,12 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                         {weightDelta !== null && weightDelta > 0 ? "+" : ""}{weightDelta || "0"}kg ({weightPctChange !== null && weightPctChange > 0 ? '+' : ''}{weightPctChange || "0"}%)
                     </div>
                 </div>
-                <div className="flex flex-col gap-2 pt-2 border-t border-surface-border/20">
-                    <label className="text-[10px] font-black text-fg-subtle uppercase tracking-widest px-1">Actual Weight for Check-in (kg)</label>
-                    <input
-                        type="number" step="0.01"
-                        className="input h-11 text-xs font-bold bg-surface-muted/20 border-surface-border/40 focus:border-brand-500/30"
-                        placeholder={weeklyAverageWeight ? `${weeklyAverageWeight.toFixed(2)} (weekly average)` : "Enter weight in kg"}
-                        value={manualWeight}
-                        onChange={e => setManualWeight(e.target.value)}
-                    />
-                </div>
-                {targetWeightKg && targetWeightKg > 0 && currentBw && (
-                    <div className="bg-surface-card/40 rounded-2xl border border-surface-border/50 p-4 space-y-3">
-                        <div className="flex justify-between items-center text-xs">
-                            <span className="text-fg-subtle font-bold uppercase tracking-wider">Weight Goal Progress</span>
-                            <span className="font-black text-brand-400">{Math.abs(((currentBw - targetWeightKg) / targetWeightKg) * 100).toFixed(1)}% away</span>
-                        </div>
-                        <div className="flex justify-between items-end">
-                            <div>
-                                <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest leading-none mb-1">Target Goal</p>
-                                <p className="text-lg font-black text-fg tracking-tight">{targetWeightKg.toFixed(1)}<span className="text-xs text-fg-muted ml-0.5">kg</span></p>
-                            </div>
-                            <div className="text-right">
-                                <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest leading-none mb-1">Actual Weight</p>
-                                <p className="text-lg font-black text-fg tracking-tight">{currentBw.toFixed(1)}<span className="text-xs text-fg-muted ml-0.5">kg</span></p>
-                            </div>
-                        </div>
-                        <div className="h-2 rounded-full bg-surface-muted/50 overflow-hidden relative border border-surface-border/20">
-                            <div 
-                                className="h-full bg-brand-500 rounded-full transition-all duration-500" 
-                                style={{ width: `${Math.max(5, Math.min(100, (1 - Math.abs((currentBw - targetWeightKg) / targetWeightKg)) * 100))}%` }}
-                            />
-                        </div>
-                        <p className="text-[10px] font-bold text-fg-muted text-center uppercase tracking-wider">
-                            You are {Math.abs(currentBw - targetWeightKg).toFixed(1)}kg {currentBw > targetWeightKg ? "above" : "below"} your goal weight
-                        </p>
+                {targetWeightKg && targetWeightKg > 0 && weeklyAverageWeight && (
+                    <div className="flex items-center justify-between text-xs font-bold text-fg-muted bg-surface-muted/10 border border-surface-border/40 rounded-xl px-4 py-2.5">
+                        <span className="uppercase tracking-widest text-[9px] font-black">Weight Goal Info</span>
+                        <span className="text-fg font-black">
+                            {targetWeightKg.toFixed(1)}kg ({Math.abs(weeklyAverageWeight - targetWeightKg).toFixed(1)}kg away)
+                        </span>
                     </div>
                 )}
                 <div className={cn("rounded-2xl border px-4 py-3 text-xs font-bold leading-relaxed", weightGoalFeedback.chipClass)}>
