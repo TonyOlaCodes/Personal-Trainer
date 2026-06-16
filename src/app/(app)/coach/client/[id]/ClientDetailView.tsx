@@ -80,6 +80,7 @@ export function ClientDetailView({ client, availablePlans, logs, checkIns, bodyw
     const [checkInDay, setCheckInDay] = useState(client.checkInSchedule.day ?? 6);
     const [checkInFrequency, setCheckInFrequency] = useState(client.checkInSchedule.frequencyWeeks ?? 1);
     const [savingSchedule, setSavingSchedule] = useState(false);
+    const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; date: string; weightKg: number } | null>(null);
     const router = useRouter();
 
     const updatePlan = async (planId: string) => {
@@ -251,7 +252,7 @@ export function ClientDetailView({ client, availablePlans, logs, checkIns, bodyw
                         </div>
                     </div>
                     {bodyweightHistory.length > 0 ? (
-                        <div className="h-64 overflow-hidden">
+                        <div className="h-64 overflow-hidden relative">
                             <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="h-full w-full" role="img" aria-label="Bodyweight trend chart">
                                 <defs>
                                     <linearGradient id="clientBodyweightFill" x1="0" x2="0" y1="0" y2="1">
@@ -279,8 +280,24 @@ export function ClientDetailView({ client, availablePlans, logs, checkIns, bodyw
                                 <path d={linePath} fill="none" stroke="#38bdf8" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
                                 {chartPoints.map((point) => (
                                     <g key={`${point.date}-${point.weightKg}`}>
-                                        <circle cx={point.x} cy={point.y} r="4" fill="#0f172a" stroke="#38bdf8" strokeWidth="3" />
-                                        <title>{point.date}: {point.weightKg.toFixed(1)}kg</title>
+                                        <circle 
+                                            cx={point.x} 
+                                            cy={point.y} 
+                                            r={hoveredPoint?.date === point.date ? "6" : "4"} 
+                                            fill={hoveredPoint?.date === point.date ? "#38bdf8" : "#0f172a"} 
+                                            stroke="#38bdf8" 
+                                            strokeWidth="3"
+                                            className="transition-all duration-150"
+                                        />
+                                        <circle
+                                            cx={point.x}
+                                            cy={point.y}
+                                            r="12"
+                                            fill="transparent"
+                                            className="cursor-pointer"
+                                            onMouseEnter={() => setHoveredPoint(point)}
+                                            onMouseLeave={() => setHoveredPoint(null)}
+                                        />
                                     </g>
                                 ))}
                                 {chartPoints[0] && (
@@ -290,6 +307,22 @@ export function ClientDetailView({ client, availablePlans, logs, checkIns, bodyw
                                     <text x={chartPoints[chartPoints.length - 1].x} y={chartHeight - 10} textAnchor="middle" fill="#94a3b8" fontSize="11" fontWeight="700">{chartPoints[chartPoints.length - 1].date}</text>
                                 )}
                             </svg>
+                            {hoveredPoint && (
+                                <div 
+                                    className="absolute z-10 pointer-events-none bg-surface-elevated/95 backdrop-blur-md border border-brand-500/30 px-3 py-1.5 rounded-xl text-center shadow-glow-brand-sm -translate-x-1/2 -translate-y-full transition-all duration-150 animate-scale-in"
+                                    style={{
+                                        left: `${(hoveredPoint.x / chartWidth) * 100}%`,
+                                        top: `${(hoveredPoint.y / chartHeight) * 100 - 4}%`,
+                                    }}
+                                >
+                                    <p className="text-[9px] font-black text-brand-400 uppercase tracking-widest leading-none mb-1">
+                                        {formatDate(hoveredPoint.date)}
+                                    </p>
+                                    <p className="text-xs font-black text-fg leading-none font-mono">
+                                        {hoveredPoint.weightKg.toFixed(1)}<span className="text-[9px] text-fg-muted ml-0.5">kg</span>
+                                    </p>
+                                </div>
+                            )}
                         </div>
                     ) : (
                         <div className="h-64 rounded-2xl border border-dashed border-surface-border flex items-center justify-center text-sm text-fg-muted">
