@@ -111,12 +111,46 @@ function scoreMatch(query: string, target: string): number {
     return 999; // no match
 }
 
+let globalExercisesCache: string[] | null = null;
+let globalExercisesPromise: Promise<string[]> | null = null;
+
+async function fetchGlobalExercises(): Promise<string[]> {
+    if (globalExercisesCache) return globalExercisesCache;
+    if (globalExercisesPromise) return globalExercisesPromise;
+
+    globalExercisesPromise = fetch("/api/exercises")
+        .then(res => {
+            if (!res.ok) throw new Error("Failed to fetch");
+            return res.json();
+        })
+        .then((data: { name: string }[]) => {
+            const list = data.map(d => d.name);
+            globalExercisesCache = list;
+            return list;
+        })
+        .catch(err => {
+            console.error("Failed to load exercises from API", err);
+            return [];
+        });
+
+    return globalExercisesPromise;
+}
+
 export function ExerciseAutocomplete({ value, onChange, placeholder, className, autoFocus }: Props) {
     const [open, setOpen] = useState(false);
     const [suggestions, setSuggestions] = useState<string[]>([]);
     const [activeIndex, setActiveIndex] = useState(-1);
+    const [dbExercises, setDbExercises] = useState<string[]>([]);
     const containerRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        fetchGlobalExercises().then(list => {
+            if (list.length > 0) {
+                setDbExercises(list);
+            }
+        });
+    }, []);
 
     useEffect(() => {
         if (autoFocus && inputRef.current) {
@@ -133,7 +167,8 @@ export function ExerciseAutocomplete({ value, onChange, placeholder, className, 
             return;
         }
 
-        const matches = EXERCISES
+        const combinedList = Array.from(new Set([...dbExercises, ...EXERCISES]));
+        const matches = combinedList
             .map(ex => ({ name: ex, score: scoreMatch(q, ex) }))
             .filter(item => item.score < 999)
             .sort((a, b) => a.score - b.score || a.name.length - b.name.length)
@@ -148,7 +183,7 @@ export function ExerciseAutocomplete({ value, onChange, placeholder, className, 
         if (document.activeElement === inputRef.current && matches.length > 0) {
             setOpen(true);
         }
-    }, [value]);
+    }, [value, dbExercises]);
 
     // Close on outside click
     useEffect(() => {
