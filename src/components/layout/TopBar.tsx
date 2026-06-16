@@ -170,7 +170,7 @@ export function TopBar({ title, subtitle, streak }: TopBarProps) {
                     </div>
 
                     <div className="md:hidden ml-1">
-                        <UserButton />
+                        <UserButton userProfileMode="navigation" userProfileUrl="/settings" />
                     </div>
                 </div>
             </div>

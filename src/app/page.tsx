@@ -148,7 +148,7 @@ export default function LandingPage() {
             ) : (
               <>
                 <Link href="/dashboard" className="btn-secondary btn-sm">Dashboard</Link>
-                <UserButton />
+                <UserButton userProfileMode="navigation" userProfileUrl="/settings" />
               </>
             )}
           </div>

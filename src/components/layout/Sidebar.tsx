@@ -101,10 +101,13 @@ export function Sidebar({ userRole = "FREE", realRole = "FREE", isClientMode = f
                     <Settings className="w-4.5 h-4.5 flex-shrink-0" style={{ width: "1.125rem", height: "1.125rem" }} />
                     <span>Settings</span>
                 </Link>
-                <div className="flex items-center gap-3 px-3 py-2.5">
-                    <UserButton />
-                    <span className="text-xs text-fg-muted">Account</span>
-                </div>
+                <Link
+                    href="/settings"
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-fg-muted hover:bg-surface-muted hover:text-fg transition-all"
+                >
+                    <UserButton userProfileMode="navigation" userProfileUrl="/settings" />
+                    <span className="text-xs font-semibold">Account</span>
+                </Link>
             </div>
         </aside>
     );
