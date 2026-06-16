@@ -461,71 +461,76 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                 )}
             </div>
              
-            {/* Daily Metrics & Quick Updates */}
+            {/* Daily Metrics Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+                <div className="flex items-center gap-2">
+                    <Activity className="w-5 h-5 text-brand-400" />
+                    <h3 className="heading-3">Daily Metrics & Quick Updates</h3>
+                </div>
+                <div className="flex items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={() => setWeightDate(todayDate)}
+                        className={cn(
+                            "h-9 px-3.5 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all",
+                            isWeightDateToday
+                                ? "border-success/30 bg-success/10 text-success shadow-glow-success-sm"
+                                : "border-surface-border bg-surface-muted/40 text-fg-muted hover:text-fg"
+                        )}
+                    >
+                        Today
+                    </button>
+                    <label className="flex items-center gap-2 rounded-xl border border-surface-border bg-surface-muted/40 px-3 py-1.5 text-xs font-bold text-fg-muted cursor-pointer hover:border-brand-500/20 transition-all">
+                        <Calendar className="w-3.5 h-3.5 text-brand-400" />
+                        <input
+                            type="date"
+                            value={weightDate}
+                            onChange={(e) => setWeightDate(e.target.value)}
+                            className="bg-transparent text-fg focus:outline-none cursor-pointer"
+                        />
+                    </label>
+                </div>
+            </div>
+
             <div id="weekly-metrics" className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                 {/* Daily Weight Update */}
                 <div className={cn(
-                    "card p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all group relative overflow-hidden",
+                    "card p-4 flex items-center gap-3 transition-all relative overflow-hidden group",
                     weightLogged
                         ? "bg-success/10 border-success/30 shadow-glow-success-sm"
                         : "bg-surface-muted/10 border-brand-500/10 hover:border-brand-500/30"
                 )}>
-                    <div className="flex items-center gap-3">
-                        <div className={cn(
-                            "w-10 h-10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform",
-                            weightLogged ? "bg-success/15" : "bg-brand-500/5"
-                        )}>
-                            {weightLogged ? <Check className="w-4.5 h-4.5 text-success" /> : <Scale className="w-4.5 h-4.5 text-brand-400" />}
-                        </div>
-                        <div>
-                            <p className={cn(
-                                "text-[9px] font-black tracking-widest uppercase mb-0.5",
-                                weightLogged ? "text-success" : "text-fg-subtle"
-                            )}>
-                                Daily Bodyweight
-                            </p>
-                            <div className="flex items-baseline gap-1">
-                                <input 
-                                    type="number" 
-                                    step="0.01"
-                                    value={weight}
-                                    onChange={(e) => setWeight(e.target.value)}
-                                    onBlur={(e) => handleUpdateWeight(e.target.value)}
-                                    className="w-16 bg-transparent text-2xl font-black text-fg focus:outline-none focus:text-brand-400 transition-colors"
-                                    placeholder={latestWeight ? latestWeight.toFixed(2) : "--"}
-                                />
-                                <span className="text-sm font-semibold text-fg-muted uppercase">kg</span>
-                            </div>
-                            <p className={cn(
-                                "text-[10px] font-bold mt-1",
-                                weightLogged ? "text-success" : "text-fg-subtle"
-                            )}>
-                                {bodyweightStatus()}
-                            </p>
-                        </div>
+                    <div className={cn(
+                        "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform",
+                        weightLogged ? "bg-success/15" : "bg-brand-500/5"
+                    )}>
+                        {weightLogged ? <Check className="w-4.5 h-4.5 text-success" /> : <Scale className="w-4.5 h-4.5 text-brand-400" />}
                     </div>
-                    <div className="flex items-center gap-2">
-                        <button
-                            type="button"
-                            onClick={() => setWeightDate(todayDate)}
-                            className={cn(
-                                "h-9 px-3 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all",
-                                isWeightDateToday
-                                    ? "border-success/30 bg-success/10 text-success"
-                                    : "border-surface-border bg-surface-muted/40 text-fg-muted hover:text-fg"
-                            )}
-                        >
-                            Today
-                        </button>
-                        <label className="flex items-center gap-2 rounded-xl border border-surface-border bg-surface-muted/40 px-3 py-2 text-xs font-bold text-fg-muted">
-                            <Calendar className="w-3.5 h-3.5 text-brand-400" />
-                            <input
-                                type="date"
-                                value={weightDate}
-                                onChange={(e) => setWeightDate(e.target.value)}
-                                className="bg-transparent text-fg focus:outline-none"
+                    <div className="min-w-0 flex-1">
+                        <p className={cn(
+                            "text-[9px] font-black tracking-widest uppercase mb-0.5",
+                            weightLogged ? "text-success" : "text-fg-subtle"
+                        )}>
+                            Weight
+                        </p>
+                        <div className="flex items-baseline gap-1">
+                            <input 
+                                type="number" 
+                                step="0.01"
+                                value={weight}
+                                onChange={(e) => setWeight(e.target.value)}
+                                onBlur={(e) => handleUpdateWeight(e.target.value)}
+                                className="w-20 bg-transparent text-2xl font-black text-fg focus:outline-none focus:text-brand-400 transition-colors"
+                                placeholder={latestWeight ? latestWeight.toFixed(2) : "--"}
                             />
-                        </label>
+                            <span className="text-[10px] font-semibold text-fg-muted uppercase">kg</span>
+                        </div>
+                        <p className={cn(
+                            "text-[10px] font-bold mt-1 truncate",
+                            weightLogged ? "text-success" : "text-fg-subtle"
+                        )}>
+                            {bodyweightStatus()}
+                        </p>
                     </div>
                     {savingWeight && (
                         <div className="absolute top-2 right-2">

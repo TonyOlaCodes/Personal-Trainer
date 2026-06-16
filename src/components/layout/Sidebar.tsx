@@ -57,7 +57,7 @@ export function Sidebar({ userRole = "FREE", realRole = "FREE", isClientMode = f
     });
 
     return (
-        <aside className="hidden lg:flex flex-col fixed left-0 top-0 h-full w-[var(--sidebar-width)] bg-surface-card border-r border-surface-border z-40">
+        <aside className="hidden md:flex flex-col fixed left-0 top-0 h-full w-[var(--sidebar-width)] bg-surface-card border-r border-surface-border z-40">
             {/* Logo */}
             <div className="h-16 flex items-center px-5 border-b border-surface-border">
                 <Link href={userRole === "COACH" || userRole === "SUPER_ADMIN" ? "/coach" : "/dashboard"} className="flex items-center gap-2.5">

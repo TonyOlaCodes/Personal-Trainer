@@ -499,7 +499,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate }: Props
     return (
         <div className="min-h-screen bg-surface flex flex-col pt-safe-area">
             {/* Header */}
-            <div className="flex items-center justify-between px-4 h-16 border-b border-surface-border glass fixed top-0 inset-x-0 z-40 lg:pl-[var(--sidebar-width)]">
+            <div className="flex items-center justify-between px-4 h-16 border-b border-surface-border glass fixed top-0 inset-x-0 z-40 md:pl-[var(--sidebar-width)]">
                 <button 
                     onClick={handleDiscard} 
                     disabled={isDiscarding}
@@ -520,7 +520,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate }: Props
                 </button>
             </div>
 
-            <div className="flex-1 p-4 pt-20 pb-24 overflow-y-auto no-scrollbar lg:pl-[var(--sidebar-width) + 1rem]">
+            <div className="flex-1 p-4 pt-20 pb-24 overflow-y-auto no-scrollbar md:pl-[var(--sidebar-width) + 1rem]">
                 <div className="max-w-2xl mx-auto space-y-6">
                     {activeExercises.map((ex) => {
                         const media = exerciseMedia[ex.name];
@@ -818,7 +818,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate }: Props
                 </div>
             )}
 
-            <div className="fixed bottom-0 inset-x-0 p-4 bg-surface p-safe-area lg:hidden border-t border-surface-border glass">
+            <div className="fixed bottom-0 inset-x-0 p-4 bg-surface p-safe-area md:hidden border-t border-surface-border glass">
                 <button
                     onClick={handleInitiateFinish}
                     className="btn-primary w-full h-12 text-base shadow-glow-brand"

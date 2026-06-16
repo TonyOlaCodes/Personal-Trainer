@@ -169,7 +169,7 @@ export function TopBar({ title, subtitle, streak }: TopBarProps) {
                         )}
                     </div>
 
-                    <div className="lg:hidden ml-1">
+                    <div className="md:hidden ml-1">
                         <UserButton />
                     </div>
                 </div>

@@ -50,8 +50,8 @@ export default async function AppLayout({
             <div className="min-h-screen bg-surface">
                 <Sidebar userRole={effectiveRole} realRole={realRole} isClientMode={isClientMode} />
 
-                <div className="lg:pl-[var(--sidebar-width)]">
-                    <main className="min-h-screen pb-20 lg:pb-0">
+                <div className="md:pl-[var(--sidebar-width)]">
+                    <main className="min-h-screen pb-20 md:pb-0">
                         {children}
                     </main>
                 </div>
