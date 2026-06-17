@@ -82,7 +82,8 @@ export default async function CheckInsPage() {
     }
 
     const workoutsThisWeek = user.workoutLogs?.length ?? 0;
-    const todayDate = new Date().toISOString().slice(0, 10);
+    const now = new Date();
+    const todayDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     const bodyweightWeeklyAverage = isCoach
         ? { averageWeightKg: null, entries: 0, previousAverageWeightKg: null, previousEntries: 0 }
         : await getBodyweightWeeklyAverage(user.id, todayDate);

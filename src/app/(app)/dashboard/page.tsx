@@ -77,8 +77,12 @@ export default async function DashboardPage() {
     });
 
     const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    const todayDate = `${year}-${month}-${day}`;
+
     now.setHours(0, 0, 0, 0);
-    const todayDate = now.toISOString().slice(0, 10);
 
     const currentIsoWeek = getWeekNumber(now);
 

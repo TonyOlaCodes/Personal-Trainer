@@ -38,6 +38,8 @@ export default async function AppLayout({
     const cookieStore = await cookies();
     const isClientMode = cookieStore.get("viewMode")?.value === "CLIENT";
 
+    const isSidebarCollapsed = cookieStore.get("sidebarCollapsed")?.value === "true";
+
     const realRole = (user?.role as "FREE" | "PREMIUM" | "COACH" | "SUPER_ADMIN") ?? "FREE";
     let effectiveRole = realRole;
 
@@ -48,7 +50,9 @@ export default async function AppLayout({
     return (
         <RoleProvider role={effectiveRole}>
             <div className="min-h-screen bg-surface">
-                <Sidebar userRole={effectiveRole} realRole={realRole} isClientMode={isClientMode} />
+                {/* Prevent layout shifts by injecting sidebar width before browser renders */}
+                <style dangerouslySetInnerHTML={{ __html: `:root { --sidebar-width: ${isSidebarCollapsed ? '72px' : '260px'}; }` }} />
+                <Sidebar userRole={effectiveRole} realRole={realRole} isClientMode={isClientMode} initialCollapsed={isSidebarCollapsed} />
 
                 <div className="md:pl-[var(--sidebar-width)]">
                     <main className="min-h-screen pb-20 md:pb-0">

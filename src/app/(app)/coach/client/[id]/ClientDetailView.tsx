@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import {
     Users, Activity, Calendar, MessageSquare,
     MapPin, Info, Dumbbell, Award, Scale, MoreHorizontal, ChevronRight, CheckCircle2, Edit3, Zap, Settings,
-    Trash2, AlertTriangle, Clock, Search
+    Trash2, AlertTriangle, Clock, Search, X, Send
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
@@ -39,6 +39,9 @@ interface Client {
     };
     targetWeightKg?: number | null;
     currentWeightKg?: number | null;
+    adherencePercentage?: number;
+    adherenceTrend?: "UP" | "DOWN" | "STABLE";
+    lastActiveAt?: string | null;
 }
 
 interface ClientLog {
@@ -73,6 +76,7 @@ interface WorkoutHistoryEntry {
 
 interface Props {
     client: Client;
+    currentUserId: string;
     availablePlans: { id: string; name: string; type: string }[];
     logs: ClientLog[];
     checkIns: ClientCheckIn[];
@@ -83,7 +87,7 @@ interface Props {
     exerciseLastDone: Record<string, number>;
 }
 
-export function ClientDetailView({ client, availablePlans, logs, checkIns, bodyweightHistory, workoutNotes, workoutHistory, exerciseHistory, exerciseLastDone }: Props) {
+export function ClientDetailView({ client, currentUserId, availablePlans, logs, checkIns, bodyweightHistory, workoutNotes, workoutHistory, exerciseHistory, exerciseLastDone }: Props) {
     const [assigning, setAssigning] = useState(false);
     const [assignMode, setAssignMode] = useState<"MENU" | "LIST" | "IMPORT">("MENU");
     const [updating, setUpdating] = useState(false);
@@ -100,6 +104,14 @@ export function ClientDetailView({ client, availablePlans, logs, checkIns, bodyw
     const [selectedExercise, setSelectedExercise] = useState<string>("");
     const [exerciseSearchQuery, setExerciseSearchQuery] = useState("");
     const [weightTimeframe, setWeightTimeframe] = useState<"week" | "month" | "year" | "all">("all");
+    
+    // Quick Chat and Real-time Presence state hooks
+    const [showQuickChat, setShowQuickChat] = useState(false);
+    const [chatMessages, setChatMessages] = useState<any[]>([]);
+    const [chatInput, setChatInput] = useState("");
+    const [sendingChat, setSendingChat] = useState(false);
+    const chatBottomRef = useRef<HTMLDivElement>(null);
+
     const router = useRouter();
 
     const updatePlan = async (planId: string) => {
@@ -200,6 +212,93 @@ export function ClientDetailView({ client, availablePlans, logs, checkIns, bodyw
             setSavingSchedule(false);
         }
     };
+
+    // Presence state selector
+    const presence = useMemo(() => {
+        if (!client.lastActiveAt) return { color: "bg-fg-muted/40", text: "Away" };
+        const lastActive = new Date(client.lastActiveAt);
+        const diffMs = Date.now() - lastActive.getTime();
+        const diffMins = diffMs / (1000 * 60);
+        const diffHours = diffMs / (1000 * 60 * 60);
+        
+        if (diffMins < 15) {
+            return { color: "bg-success shadow-glow-success animate-pulse", text: "Active Now" };
+        } else if (diffHours < 24) {
+            return { color: "bg-warning", text: "Active today" };
+        } else {
+            const days = Math.max(1, Math.floor(diffHours / 24));
+            return { color: "bg-fg-muted/30", text: days === 1 ? "Away 1d" : `Away ${days}d` };
+        }
+    }, [client.lastActiveAt]);
+
+    // Quick Chat Fetch & Polling
+    useEffect(() => {
+        if (!showQuickChat) return;
+
+        const fetchChat = async () => {
+            try {
+                const res = await fetch(`/api/messages?with=${client.id}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setChatMessages(data);
+                }
+            } catch (e) {
+                console.error("Failed to load chat in detail view", e);
+            }
+        };
+
+        fetchChat();
+        const interval = setInterval(fetchChat, 3000);
+        return () => clearInterval(interval);
+    }, [showQuickChat, client.id]);
+
+    useEffect(() => {
+        if (showQuickChat) {
+            chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+        }
+    }, [chatMessages, showQuickChat]);
+
+    const sendChatMessage = async () => {
+        if (!chatInput.trim() || sendingChat) return;
+        setSendingChat(true);
+
+        const text = chatInput.trim();
+        setChatInput("");
+
+        // Optimistic UI update
+        const tempId = `temp-${Date.now()}`;
+        const optimisticMsg = {
+            id: tempId,
+            content: text,
+            createdAt: new Date().toISOString(),
+            sender: { id: currentUserId, role: "COACH" },
+        };
+        setChatMessages(prev => [...prev, optimisticMsg]);
+
+        try {
+            const res = await fetch("/api/messages", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    content: text,
+                    isGeneral: false,
+                    receiverId: client.id,
+                    type: "TEXT",
+                }),
+            });
+            if (res.ok) {
+                const newRealMsg = await res.json();
+                setChatMessages(prev => prev.map(m => m.id === tempId ? newRealMsg : m));
+            } else {
+                setChatMessages(prev => prev.filter(m => m.id !== tempId));
+            }
+        } catch (e) {
+            setChatMessages(prev => prev.filter(m => m.id !== tempId));
+        } finally {
+            setSendingChat(false);
+        }
+    };
+
     const filteredBodyweightHistory = useMemo(() => {
         if (weightTimeframe === "all") return bodyweightHistory;
         const now = new Date();
@@ -308,8 +407,14 @@ export function ClientDetailView({ client, availablePlans, logs, checkIns, bodyw
                         {client.avatarUrl ? <img src={client.avatarUrl} alt="avatar" className="w-full h-full object-cover rounded-3xl" /> : getInitials(client.name)}
                     </div>
                     <div>
-                        <h2 className="text-2xl font-bold text-fg tracking-tight">{client.name || "Strength Athlete"}</h2>
-                        <p className="text-sm text-fg-muted mb-1">{client.email}</p>
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 justify-center sm:justify-start">
+                            <h2 className="text-2xl font-bold text-fg tracking-tight">{client.name || "Strength Athlete"}</h2>
+                            <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface-muted/50 border border-surface-border w-fit h-fit mx-auto sm:mx-0">
+                                <span className={cn("w-1.5 h-1.5 rounded-full", presence.color)} />
+                                <span className="text-[9px] text-fg-subtle font-black uppercase tracking-wider">{presence.text}</span>
+                            </div>
+                        </div>
+                        <p className="text-sm text-fg-muted mb-1 mt-1 sm:mt-0">{client.email}</p>
                         <div className="flex flex-wrap gap-2 mt-3 justify-center sm:justify-start">
                             <span className="badge-brand text-[9px] uppercase font-bold tracking-widest">{client.role} Member</span>
                             {client.assignedCoachName && (
@@ -325,11 +430,11 @@ export function ClientDetailView({ client, availablePlans, logs, checkIns, bodyw
                     </div>
                 </div>
                 <div className="flex gap-3">
-                    <Link href={`/chat?with=${client.id}`} className="btn-secondary px-6 h-11">
+                    <button 
+                        onClick={() => setShowQuickChat(true)} 
+                        className={cn("btn-secondary px-6 h-11 transition-all", showQuickChat && "bg-brand-500/20 text-brand-400 border-brand-500/30")}
+                    >
                         <MessageSquare className="w-4 h-4" /> Message
-                    </Link>
-                    <button className="btn-icon bg-surface-elevated w-11 h-11 rounded-xl">
-                        <MoreHorizontal className="w-5 h-5 text-fg-muted" />
                     </button>
                 </div>
             </div>
@@ -342,8 +447,8 @@ export function ClientDetailView({ client, availablePlans, logs, checkIns, bodyw
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                     <div className="space-y-1">
-                        <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Adherence</p>
-                        <p className="text-2xl font-black text-fg leading-none italic">94<span className="text-brand-400">%</span></p>
+                        <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Adherence (30d)</p>
+                        <p className="text-2xl font-black text-fg leading-none italic">{client.adherencePercentage ?? 0}<span className="text-brand-400">%</span></p>
                     </div>
                     <div className="space-y-1">
                         <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Workouts</p>
@@ -357,7 +462,12 @@ export function ClientDetailView({ client, availablePlans, logs, checkIns, bodyw
                     </div>
                     <div className="space-y-1 text-right">
                         <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Trend</p>
-                        <p className="text-2xl font-black text-brand-400 leading-none italic font-mono">↗</p>
+                        <p className={cn(
+                            "text-2xl font-black leading-none italic font-mono",
+                            client.adherenceTrend === "UP" ? "text-success" : client.adherenceTrend === "DOWN" ? "text-danger" : "text-fg-muted"
+                        )}>
+                            {client.adherenceTrend === "UP" ? "↗" : client.adherenceTrend === "DOWN" ? "↘" : "→"}
+                        </p>
                     </div>
                 </div>
             </div>
@@ -598,7 +708,7 @@ export function ClientDetailView({ client, availablePlans, logs, checkIns, bodyw
                         {checkIns.length === 0 ? (
                             <div className="card p-12 text-center border-dashed opacity-50 flex flex-col items-center">
                                 <Calendar className="w-8 h-8 text-fg-subtle mb-3" />
-                                <p className="text-xs text-fg-muted font-black uppercase tracking-widest italic">No deployments found.</p>
+                                <p className="text-xs text-fg-muted font-black uppercase tracking-widest italic">No check-ins yet.</p>
                             </div>
                         ) : (
                             checkIns.map((ci) => (
@@ -1188,6 +1298,97 @@ export function ClientDetailView({ client, availablePlans, logs, checkIns, bodyw
                     </div>
                 </div>
             </div>
+
+            {/* Quick Chat Slide-over Sheet */}
+            {showQuickChat && (
+                <div className="fixed inset-0 z-50 overflow-hidden flex justify-end">
+                    {/* Backdrop */}
+                    <div 
+                        className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity animate-fade-in"
+                        onClick={() => setShowQuickChat(false)}
+                    />
+                    
+                    {/* Drawer Content */}
+                    <div className="relative w-full max-w-md h-full bg-surface-card border-l border-surface-border shadow-modal flex flex-col z-10 animate-slide-left">
+                        {/* Header */}
+                        <div className="p-4 border-b border-surface-border flex items-center justify-between bg-surface-muted/30">
+                            <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-xl bg-gradient-brand flex items-center justify-center text-sm font-bold text-white shadow-glow-brand-sm shrink-0">
+                                    {client.avatarUrl ? <img src={client.avatarUrl} alt="avatar" className="w-full h-full object-cover rounded-xl" /> : getInitials(client.name)}
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="font-bold text-sm text-fg truncate">{client.name}</p>
+                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                        <span className={cn("w-1.5 h-1.5 rounded-full", presence.color)} />
+                                        <span className="text-[8px] text-fg-subtle font-black uppercase tracking-wider">{presence.text}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <button 
+                                onClick={() => setShowQuickChat(false)}
+                                className="btn-icon w-8 h-8 rounded-lg bg-surface hover:bg-surface-elevated text-fg-muted hover:text-fg transition-all"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+                        
+                        {/* Messages Log */}
+                        <div className="flex-1 overflow-y-auto p-4 space-y-3 no-scrollbar bg-surface/10">
+                            {chatMessages.length === 0 ? (
+                                <div className="h-full flex flex-col items-center justify-center text-center p-6 opacity-60">
+                                    <MessageSquare className="w-10 h-10 text-brand-400/50 mb-3" />
+                                    <p className="text-xs font-black uppercase tracking-widest text-fg-subtle">No messages yet</p>
+                                    <p className="text-[10px] text-fg-muted mt-1 max-w-[200px]">Send a note to keep your athlete on track.</p>
+                                </div>
+                            ) : (
+                                chatMessages.map((msg) => {
+                                    const isSelf = msg.sender.id === currentUserId;
+                                    return (
+                                        <div 
+                                            key={msg.id} 
+                                            className={cn("flex flex-col max-w-[80%] space-y-1", isSelf ? "ml-auto items-end" : "mr-auto items-start")}
+                                        >
+                                            <div className={cn(
+                                                "p-3 rounded-2xl text-xs font-medium leading-relaxed shadow-sm",
+                                                isSelf 
+                                                    ? "bg-brand-500 text-white rounded-tr-none shadow-glow-brand-sm" 
+                                                    : "bg-surface-elevated text-fg border border-surface-border rounded-tl-none"
+                                            )}>
+                                                {msg.content}
+                                            </div>
+                                            <span className="text-[8px] text-fg-subtle px-1">
+                                                {formatDate(msg.createdAt)}
+                                            </span>
+                                        </div>
+                                    );
+                                })
+                            )}
+                            <div ref={chatBottomRef} />
+                        </div>
+                        
+                        {/* Input Footer */}
+                        <div className="p-4 border-t border-surface-border bg-surface-card flex gap-2 items-center">
+                            <input 
+                                type="text"
+                                className="input flex-1 h-10 text-xs bg-surface-muted/50 focus:border-brand-500/40 rounded-xl"
+                                placeholder="Write instructions..."
+                                value={chatInput}
+                                onChange={(e) => setChatInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter") sendChatMessage();
+                                }}
+                            />
+                            <button 
+                                onClick={sendChatMessage}
+                                disabled={sendingChat || !chatInput.trim()}
+                                className="btn-primary h-10 w-10 p-0 flex items-center justify-center rounded-xl shadow-glow-brand shrink-0"
+                            >
+                                <Send className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

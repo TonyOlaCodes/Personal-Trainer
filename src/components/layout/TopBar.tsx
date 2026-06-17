@@ -12,6 +12,7 @@ interface TopBarProps {
     title?: string;
     subtitle?: string;
     streak?: number;
+    hideSearch?: boolean;
 }
 
 interface NotificationItem {
@@ -25,7 +26,7 @@ interface NotificationItem {
     route: string;
 }
 
-export function TopBar({ title, subtitle, streak }: TopBarProps) {
+export function TopBar({ title, subtitle, streak, hideSearch = false }: TopBarProps) {
     const router = useRouter();
     const role = useRole();
     const [showNotifications, setShowNotifications] = useState(false);
@@ -115,9 +116,11 @@ export function TopBar({ title, subtitle, streak }: TopBarProps) {
                 </div>
 
                 <div className="flex items-center gap-1 sm:pl-3 sm:border-l sm:border-surface-border">
-                    <button className="btn-icon" aria-label="Search">
-                        <Search className="w-4 h-4" />
-                    </button>
+                    {!hideSearch && (
+                        <button className="btn-icon" aria-label="Search">
+                            <Search className="w-4 h-4" />
+                        </button>
+                    )}
                     
                     <div className="relative" ref={notifRef}>
                         <button 

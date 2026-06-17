@@ -1,25 +1,50 @@
 import type { Prisma, PrismaClient, Role } from "@prisma/client";
-import { getAccessCodePrefix } from "@/lib/utils";
 
 export async function generateCoachAccessCode(
     prisma: PrismaClient,
     coach: { name?: string | null; email?: string | null }
 ) {
-    const prefix = getAccessCodePrefix(coach.name, coach.email);
-    const numberDigits = Math.max(3, 6 - prefix.length);
-    const min = 10 ** (numberDigits - 1);
-    const range = 9 * min;
+    // Get first 4 letters of coach's name (case-insensitive uppercase).
+    // Strip non-alphabetic characters. Fall back to email name if name is too short.
+    let letters = (coach.name || "").replace(/[^a-zA-Z]/g, "").toUpperCase();
+    if (letters.length < 4) {
+        const emailLetters = (coach.email || "").split("@")[0].replace(/[^a-zA-Z]/g, "").toUpperCase();
+        letters = (letters + emailLetters).toUpperCase();
+    }
+    if (letters.length < 4) {
+        letters = (letters + "COACH").toUpperCase();
+    }
+    const prefix = letters.slice(0, 4);
 
-    for (let i = 0; i < 8; i++) {
-        const number = Math.floor(min + Math.random() * range);
-        const code = `${prefix}${number}`;
-        const existing = await prisma.accessCode.findUnique({ where: { code } });
-        if (!existing) return code;
+    // Retrieve all existing codes starting with prefix to avoid multiple DB calls
+    const existingCodes = await prisma.accessCode.findMany({
+        where: {
+            code: {
+                startsWith: prefix,
+            },
+        },
+        select: { code: true },
+    });
+
+    const existingSet = new Set(existingCodes.map((c) => c.code.toUpperCase()));
+
+    // Generate unique code: prefix + 3 digits (000 to 999)
+    const possibleNumbers = Array.from({ length: 1000 }, (_, i) => i);
+
+    while (possibleNumbers.length > 0) {
+        const randomIndex = Math.floor(Math.random() * possibleNumbers.length);
+        const num = possibleNumbers[randomIndex];
+        const candidate = `${prefix}${num.toString().padStart(3, "0")}`;
+
+        if (!existingSet.has(candidate)) {
+            return candidate;
+        }
+
+        // Remove the tried option
+        possibleNumbers.splice(randomIndex, 1);
     }
 
-    const fallback = `${prefix}${Date.now().toString().slice(-6)}`;
-    const existing = await prisma.accessCode.findUnique({ where: { code: fallback } });
-    return existing ? `${prefix}${Date.now()}` : fallback;
+    throw new Error(`All unique access codes for prefix '${prefix}' have been exhausted.`);
 }
 
 export async function redeemAccessCodeForUser(

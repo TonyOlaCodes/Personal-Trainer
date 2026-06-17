@@ -117,11 +117,28 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         });
     });
 
+    // Dynamic Adherence and Trend Calculation
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const fifteenDaysAgo = new Date();
+    fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
+
+    const completedLast30Days = completedLogs.filter(log => log.loggedAt >= thirtyDaysAgo).length;
+    const expectedLast30Days = Math.round(((target.trainingDaysPerWeek ?? 3) * 30) / 7);
+    const adherencePercentage = expectedLast30Days > 0 
+        ? Math.min(100, Math.round((completedLast30Days / expectedLast30Days) * 100))
+        : 100;
+
+    const w1 = completedLogs.filter(log => log.loggedAt >= fifteenDaysAgo).length;
+    const w2 = completedLogs.filter(log => log.loggedAt >= thirtyDaysAgo && log.loggedAt < fifteenDaysAgo).length;
+    const adherenceTrend = w1 > w2 ? "UP" : w1 < w2 ? "DOWN" : "STABLE";
+
     return (
         <>
             <TopBar
                 title={isDeletedClient ? "Deleted account" : target.name || "Client Details"}
                 subtitle={isDeletedClient ? "This client account is inactive and its data has been removed." : target.email}
+                hideSearch={true}
             />
             <div className="p-6 max-w-5xl mx-auto">
                 <ClientDetailView
@@ -140,7 +157,11 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                         checkInSchedule,
                         targetWeightKg: target.targetWeightKg,
                         currentWeightKg: target.weightKg,
+                        adherencePercentage,
+                        adherenceTrend,
+                        lastActiveAt: target.lastActiveAt?.toISOString() || null,
                     }}
+                    currentUserId={actor.id}
                     availablePlans={availablePlans}
                     logs={(() => {
                         const seenNames = new Set();

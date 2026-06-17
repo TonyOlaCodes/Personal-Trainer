@@ -107,6 +107,15 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate }: Props
         const load = async () => {
             setLoading(true);
             try {
+                // Read from localStorage to keep timer on track across reloads/backgrounding
+                const savedStart = localStorage.getItem(`workout_start_time_${workout.id}`);
+                let initialStartTime = savedStart ? parseInt(savedStart) : Date.now();
+                if (isNaN(initialStartTime)) {
+                    initialStartTime = Date.now();
+                }
+                setStartTime(initialStartTime);
+                localStorage.setItem(`workout_start_time_${workout.id}`, initialStartTime.toString());
+
                 const res = await fetch("/api/logs?active=true");
                 const active = await res.json();
                 
@@ -115,11 +124,15 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate }: Props
                     const restored: Record<string, SetLog[]> = {};
                     const reconstructedExercises = [...workout.exercises];
 
+                    let dbStartTime = initialStartTime;
                     if (active.duration) {
-                        setStartTime(Date.now() - (active.duration * 60000));
+                        dbStartTime = Date.now() - (active.duration * 60000);
                     } else if (active.loggedAt) {
-                        setStartTime(new Date(active.loggedAt).getTime());
+                        dbStartTime = new Date(active.loggedAt).getTime();
                     }
+
+                    setStartTime(dbStartTime);
+                    localStorage.setItem(`workout_start_time_${workout.id}`, dbStartTime.toString());
 
                     active.sets.forEach((s: ActiveLogSet) => {
                         const ex = s.exercise;
@@ -169,7 +182,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate }: Props
                     setLogs(initialLogs);
                     // Crucial: Save immediately to lock in the start time (loggedAt) in the DB
                     // This prevents the timer from resetting if the user navigates away and back
-                    saveProgress(initialLogs, workout.exercises);
+                    saveProgress(initialLogs, workout.exercises, initialStartTime);
                 }
             } catch (e) {
                 console.error("Failed to load active log:", e);
@@ -182,10 +195,25 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate }: Props
 
     // Timer
     useEffect(() => {
-        const timer = setInterval(() => {
-            setElapsed(Math.floor((Date.now() - startTime) / 1000));
-        }, 1000);
-        return () => clearInterval(timer);
+        const updateElapsed = () => {
+            setElapsed(Math.max(0, Math.floor((Date.now() - startTime) / 1000)));
+        };
+
+        updateElapsed();
+        const timer = setInterval(updateElapsed, 1000);
+
+        // Instantly catch up when returning to the tab or app
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === "visible") {
+                updateElapsed();
+            }
+        };
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+
+        return () => {
+            clearInterval(timer);
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+        };
     }, [startTime]);
 
     const formatTime = (s: number) => {
@@ -194,7 +222,11 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate }: Props
         return `${mins}:${secs.toString().padStart(2, "0")}`;
     };
 
-    const saveProgress = async (currentLogs: Record<string, SetLog[]>, currentExercises?: Exercise[]) => {
+    const saveProgress = async (
+        currentLogs: Record<string, SetLog[]>,
+        currentExercises?: Exercise[],
+        startTimeOverride?: number
+    ) => {
         const exList = currentExercises || activeExercises;
         const flattenedSets = Object.entries(currentLogs).flatMap(([exId, sets]) => {
             const exInfo = exList.find(e => e.id === exId);
@@ -212,13 +244,14 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate }: Props
         });
 
         try {
+            const finalStartTime = startTimeOverride ?? startTime;
             const res = await fetch("/api/logs", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     workoutId: workout.id,
                     status: "IN_PROGRESS",
-                    ...(logDate ? { loggedAt: new Date(logDate).toISOString() } : {}),
+                    loggedAt: logDate ? new Date(logDate).toISOString() : new Date(finalStartTime).toISOString(),
                     sets: flattenedSets,
                 }),
             });
@@ -434,6 +467,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate }: Props
             
             if (res.ok) {
                 const saved = await res.json();
+                localStorage.removeItem(`workout_start_time_${workout.id}`);
                 setShowFinishModal(false);
                 router.push(`/plans/log/view/${saved.id}`);
                 router.refresh();
@@ -451,6 +485,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate }: Props
     };
 
     const handleDiscard = async () => {
+        localStorage.removeItem(`workout_start_time_${workout.id}`);
         if (!activeLogId) {
             router.back();
             return;

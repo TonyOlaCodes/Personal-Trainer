@@ -303,7 +303,8 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
         }
     }
 
-    const todayDate = new Date().toISOString().slice(0, 10);
+    const nowLocal = new Date();
+    const todayDate = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, "0")}-${String(nowLocal.getDate()).padStart(2, "0")}`;
     const isWeightDateToday = weightDate === todayDate;
 
     const formatWeightTrend = (current?: number | null, previous?: number | null) => {
@@ -320,8 +321,10 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
             const trend = formatWeightTrend(currentWeight, selectedPreviousWeight);
             return `${isWeightDateToday ? "Logged today" : "Logged for this day"}${trend ? ` - ${trend}` : ""}`;
         }
-        const trend = formatWeightTrend(latestWeight, latestPreviousWeight);
-        return trend || (latestWeight ? "Use placeholder from latest log" : "No weight logged yet");
+        if (user.targetWeightKg) {
+            return `Target ${user.targetWeightKg}kg`;
+        }
+        return "Blank until logged";
     };
 
     const dailyMetricStatus = (logged: boolean, target?: number | null) => {
@@ -705,7 +708,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                 <div className="flex items-center justify-between mb-3">
                     <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
                         <h3 className="heading-3">Today&apos;s Workout</h3>
-                        {nextTrainingDay && (
+                        {(nextTrainingDay && (!todayWorkout || todayCompleted)) && (
                             <Link
                                 href={`/plans/log/${nextTrainingDay.id}`}
                                 className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-brand-300 hover:text-brand-200 transition-colors"
