@@ -42,6 +42,7 @@ interface Client {
     adherencePercentage?: number;
     adherenceTrend?: "UP" | "DOWN" | "STABLE";
     lastActiveAt?: string | null;
+    hiddenGoals?: string[];
 }
 
 interface ClientLog {
@@ -100,7 +101,15 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
     const [savingSchedule, setSavingSchedule] = useState(false);
     const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; date: string; weightKg: number } | null>(null);
     const [hoveredVolPoint, setHoveredVolPoint] = useState<{ id: string; workoutName: string; date: string; formattedDate: string; volume: number; x: number; y: number } | null>(null);
-    const [activeChartTab, setActiveChartTab] = useState<"weight" | "volume">("weight");
+    const isWeightHidden = client.hiddenGoals?.includes("weight");
+    const [activeChartTab, setActiveChartTab] = useState<"weight" | "volume">(isWeightHidden ? "volume" : "weight");
+    
+    useEffect(() => {
+        if (isWeightHidden && activeChartTab === "weight") {
+            setActiveChartTab("volume");
+        }
+    }, [isWeightHidden, activeChartTab]);
+
     const [selectedExercise, setSelectedExercise] = useState<string>("");
     const [exerciseSearchQuery, setExerciseSearchQuery] = useState("");
     const [weightTimeframe, setWeightTimeframe] = useState<"week" | "month" | "year" | "all">("all");
@@ -479,17 +488,19 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-surface-border/50">
                         <div className="flex flex-wrap items-center gap-6">
                             <div className="flex items-center gap-4">
-                                <button
-                                    onClick={() => setActiveChartTab("weight")}
-                                    className={cn(
-                                        "text-sm font-black uppercase tracking-wider pb-2 border-b-2 transition-all",
-                                        activeChartTab === "weight" 
-                                            ? "border-brand-500 text-fg" 
-                                            : "border-transparent text-fg-muted hover:text-fg"
-                                    )}
-                                >
-                                    Bodyweight Trend
-                                </button>
+                                {!isWeightHidden && (
+                                    <button
+                                        onClick={() => setActiveChartTab("weight")}
+                                        className={cn(
+                                            "text-sm font-black uppercase tracking-wider pb-2 border-b-2 transition-all",
+                                            activeChartTab === "weight" 
+                                                ? "border-brand-500 text-fg" 
+                                                : "border-transparent text-fg-muted hover:text-fg"
+                                        )}
+                                    >
+                                        Bodyweight Trend
+                                    </button>
+                                )}
                                 <button
                                     onClick={() => setActiveChartTab("volume")}
                                     className={cn(
@@ -542,7 +553,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                     </div>
                     {activeChartTab === "weight" ? (
                         filteredBodyweightHistory.length > 0 ? (
-                            <div className="h-64 overflow-hidden relative">
+                            <div className="h-64 relative">
                                 <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="h-full w-full" role="img" aria-label="Bodyweight trend chart">
                                     <defs>
                                         <linearGradient id="clientBodyweightFill" x1="0" x2="0" y1="0" y2="1">
@@ -621,7 +632,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                         )
                     ) : (
                         volumeHistory.length > 0 ? (
-                            <div className="h-64 overflow-hidden relative">
+                            <div className="h-64 relative">
                                 <svg viewBox={`0 0 ${volChartWidth} ${volChartHeight}`} className="h-full w-full" role="img" aria-label="Training volume progression chart">
                                     <defs>
                                         <linearGradient id="clientVolumeFill" x1="0" x2="0" y1="0" y2="1">

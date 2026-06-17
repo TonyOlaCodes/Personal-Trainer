@@ -160,6 +160,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                         adherencePercentage,
                         adherenceTrend,
                         lastActiveAt: target.lastActiveAt?.toISOString() || null,
+                        hiddenGoals: target.hiddenGoals,
                     }}
                     currentUserId={actor.id}
                     availablePlans={availablePlans}

@@ -15,7 +15,7 @@ export default async function ProgressPage() {
 
     const user = await prisma.user.findUnique({ 
         where: { clerkId: userId },
-        select: { role: true }
+        select: { role: true, hiddenGoals: true }
     });
     
     if (!user) redirect("/sign-in");
@@ -31,7 +31,7 @@ export default async function ProgressPage() {
                 subtitle="Am I improving?" 
             />
             <main className="animate-fade-in">
-                <ProgressClient userRole={user.role} />
+                <ProgressClient userRole={user.role} hiddenGoals={user.hiddenGoals} />
             </main>
         </div>
     );

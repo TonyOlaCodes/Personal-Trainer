@@ -17,6 +17,7 @@ const profileSchema = z.object({
     targetCalories: z.number().nullable().optional(),
     targetSteps: z.number().nullable().optional(),
     targetSleepHours: z.number().nullable().optional(),
+    hiddenGoals: z.array(z.string()).optional(),
 });
 
 export async function PATCH(req: Request) {
@@ -38,6 +39,7 @@ export async function PATCH(req: Request) {
                 ...(parsed.trainingLocation !== undefined && { trainingLocation: parsed.trainingLocation }),
                 ...(parsed.targetWeightKg !== undefined && { targetWeightKg: Math.round(parsed.targetWeightKg * 100) / 100 }),
                 ...(parsed.weightKg !== undefined && { weightKg: Math.round(parsed.weightKg * 100) / 100 }),
+                ...(parsed.hiddenGoals !== undefined && { hiddenGoals: parsed.hiddenGoals }),
             },
         });
 

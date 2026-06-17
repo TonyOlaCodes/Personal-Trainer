@@ -125,6 +125,7 @@ model User {
   notifications     Notification[]
   workoutNotes      WorkoutNote[] @relation("CoachWorkoutNotes")
   clientGoals       ClientGoals?
+  hiddenGoals       String[] @default([])
 
   @@map("users")
 }

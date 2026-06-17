@@ -57,6 +57,7 @@ interface PlanPayload {
     name: string;
     description?: string | null;
     weeks?: PlanWeekPayload[];
+    creator?: { name: string } | null;
     error?: string;
 }
 
@@ -70,6 +71,7 @@ export function PlanCreateClient() {
 
     const [name, setName] = useState("");
     const [desc, setDesc] = useState("");
+    const [creatorName, setCreatorName] = useState<string | null>(null);
     
     // Changing state to support multiple weeks
     const [weeks, setWeeks] = useState<LocalWeek[]>([]);
@@ -106,6 +108,9 @@ export function PlanCreateClient() {
                     if (res.ok) {
                         setName(data.name);
                         setDesc(data.description || "");
+                        if (data.creator?.name) {
+                            setCreatorName(data.creator.name);
+                        }
                         
                         const mappedWeeks = data.weeks?.map((week) => ({
                             weekNumber: week.weekNumber,
@@ -514,6 +519,11 @@ export function PlanCreateClient() {
                                     onChange={(e) => setDesc(e.target.value)}
                                     readOnly={isViewOnly}
                                 />
+                                {creatorName && (
+                                    <p className="text-[10px] text-fg-subtle font-medium mt-1">
+                                        Created by {creatorName}
+                                    </p>
+                                )}
                             </div>
                         </div>
                     </div>

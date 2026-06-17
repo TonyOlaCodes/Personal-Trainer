@@ -42,7 +42,7 @@ export async function GET(req: Request) {
     const messages = await prisma.message.findMany({
         where,
         include: {
-            sender: { select: { id: true, name: true, avatarUrl: true, role: true } },
+            sender: { select: { id: true, name: true, avatarUrl: true, role: true, isDeleted: true, deletedName: true } },
             replyTo: {
                 select: {
                     id: true, content: true, type: true,
@@ -72,7 +72,17 @@ export async function GET(req: Request) {
         });
     }
 
-    return NextResponse.json(messages);
+    const mappedMessages = messages.map(m => ({
+        ...m,
+        sender: {
+            id: m.sender.id,
+            name: (m.sender as any).isDeleted ? ((m.sender as any).deletedName ?? "Deleted User") : (m.sender.name ?? "User"),
+            avatarUrl: (m.sender as any).isDeleted ? null : m.sender.avatarUrl,
+            role: m.sender.role
+        }
+    }));
+
+    return NextResponse.json(mappedMessages);
 }
 
 const msgSchema = z.object({
@@ -112,7 +122,7 @@ export async function POST(req: Request) {
             status: "SENT",
         },
         include: {
-            sender: { select: { id: true, name: true, avatarUrl: true, role: true } },
+            sender: { select: { id: true, name: true, avatarUrl: true, role: true, isDeleted: true, deletedName: true } },
             replyTo: {
                 select: {
                     id: true, content: true, type: true,
@@ -122,6 +132,16 @@ export async function POST(req: Request) {
             reactions: true,
         },
     });
+
+    const mappedMessage = {
+        ...message,
+        sender: {
+            id: message.sender.id,
+            name: (message.sender as any).isDeleted ? ((message.sender as any).deletedName ?? "Deleted User") : (message.sender.name ?? "User"),
+            avatarUrl: (message.sender as any).isDeleted ? null : message.sender.avatarUrl,
+            role: message.sender.role
+        }
+    };
 
     if (!isGeneral && receiverId && ["COACH", "SUPER_ADMIN"].includes(user.role)) {
         const receiver = await prisma.user.findUnique({
@@ -140,7 +160,7 @@ export async function POST(req: Request) {
         }
     }
 
-    return NextResponse.json(message, { status: 201 });
+    return NextResponse.json(mappedMessage, { status: 201 });
 }
 
 // PATCH edit or update message

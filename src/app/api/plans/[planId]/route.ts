@@ -48,6 +48,7 @@ export async function GET(
     const plan = await prisma.plan.findUnique({
         where: { id: planId },
         include: {
+            creator: { select: { name: true } },
             weeks: {
                 orderBy: { weekNumber: "asc" },
                 include: {

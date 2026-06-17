@@ -45,6 +45,7 @@ interface Conversation {
     name: string;
     role: string;
     avatarUrl?: string | null;
+    isDeleted?: boolean;
 }
 
 interface Props {
@@ -200,6 +201,14 @@ export function ChatClient({ currentUserId, currentUserRole, conversations }: Pr
         if (!mentionQuery) return mentionableUsers;
         return mentionableUsers.filter(u => u.name.toLowerCase().includes(mentionQuery.toLowerCase()));
     }, [mentionableUsers, mentionQuery]);
+
+    const sortedConversations = useMemo(() => {
+        return [...conversations].sort((a, b) => {
+            if (a.isDeleted && !b.isDeleted) return 1;
+            if (!a.isDeleted && b.isDeleted) return -1;
+            return 0;
+        });
+    }, [conversations]);
 
     /* ─── Input Handling ────────────────────────────── */
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -437,17 +446,19 @@ export function ChatClient({ currentUserId, currentUserRole, conversations }: Pr
             {/* Conversation List */}
             {tab === "direct" && (
                 <div className="flex-1 overflow-y-auto p-2 space-y-0.5 no-scrollbar">
-                    {conversations.length === 0 ? (
+                    {sortedConversations.length === 0 ? (
                         <p className="text-xs text-fg-muted text-center p-6">No conversations yet</p>
                     ) : (
-                        conversations.map((conv) => (
+                        sortedConversations.map((conv) => (
                             <button
                                 key={conv.userId}
                                 onClick={() => { setSelectedConv(conv); setMobileShowChat(true); }}
-                                className={cn("w-full text-left flex items-center gap-3 p-3 rounded-xl transition-all",
+                                className={cn("w-full text-left flex items-center gap-3 p-3 rounded-xl transition-all relative",
                                     selectedConv?.userId === conv.userId
                                         ? "bg-brand-500/10 border border-brand-500/20"
-                                        : "hover:bg-surface-muted border border-transparent")}
+                                        : "hover:bg-surface-muted border border-transparent",
+                                    conv.isDeleted && "opacity-50 grayscale bg-surface-muted/5 border-dashed border-surface-border/50"
+                                )}
                             >
                                 <div className="w-10 h-10 rounded-full bg-gradient-brand flex items-center justify-center text-xs font-bold text-white flex-shrink-0 overflow-hidden">
                                     {conv.avatarUrl
@@ -456,12 +467,17 @@ export function ChatClient({ currentUserId, currentUserRole, conversations }: Pr
                                 </div>
                                 <div className="min-w-0 flex-1">
                                     <div className="flex items-center justify-between gap-1">
-                                        <p className="text-sm font-bold text-fg truncate">{conv.name}</p>
+                                        <p className="text-sm font-bold text-fg truncate">
+                                            {conv.name}
+                                            {conv.isDeleted && <span className="text-[9px] text-danger/80 ml-1.5 font-bold uppercase tracking-wider">(Deleted)</span>}
+                                        </p>
                                         {["COACH", "SUPER_ADMIN"].includes(conv.role) && (
                                             <Star className="w-3 h-3 text-brand-400 fill-brand-400 shrink-0" />
                                         )}
                                     </div>
-                                    <p className="text-[10px] uppercase font-bold tracking-widest text-fg-subtle">{roleLabels[conv.role] ?? conv.role}</p>
+                                    <p className="text-[10px] uppercase font-bold tracking-widest text-fg-subtle">
+                                        {conv.isDeleted ? "Inactive" : (roleLabels[conv.role] ?? conv.role)}
+                                    </p>
                                 </div>
                             </button>
                         ))
@@ -823,76 +839,83 @@ export function ChatClient({ currentUserId, currentUserRole, conversations }: Pr
                 </div>
 
                 {/* ── Input Area ── */}
-                <div className="px-5 py-3 border-t border-surface-border bg-surface-card shrink-0">
-                    {/* Reply preview */}
-                    {replyTo && (
-                        <div className="flex items-center justify-between gap-3 mb-2 px-3 py-2 bg-surface-muted/50 rounded-xl border-l-2 border-l-brand-500 animate-slide-up">
-                            <div className="min-w-0">
-                                <p className="text-[10px] font-bold text-brand-400">Replying to {replyTo.sender.name}</p>
-                                <p className="text-xs text-fg-muted truncate">{replyTo.content || "[media]"}</p>
-                            </div>
-                            <button onClick={() => setReplyTo(null)} className="btn-icon w-6 h-6 shrink-0">
-                                <X className="w-3 h-3" />
-                            </button>
-                        </div>
-                    )}
-
-                    {/* Staged media */}
-                    {stagedMedia && (
-                        <div className="mb-3 relative inline-block animate-slide-up">
-                            <div className="relative rounded-2xl overflow-hidden border border-brand-500/30 max-w-[200px]">
-                                {stagedMedia.type === "IMAGE" ? (
-                                    <img src={stagedMedia.url} alt="Staged" className="w-full h-auto object-cover max-h-32" />
-                                ) : (
-                                    <video src={stagedMedia.url} className="w-full h-auto max-h-32" muted />
-                                )}
-                            </div>
-                            <button onClick={() => setStagedMedia(null)} className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-danger rounded-full flex items-center justify-center text-white shadow-lg hover:bg-danger-600 transition-colors">
-                                <X className="w-3 h-3" strokeWidth={3} />
-                            </button>
-                        </div>
-                    )}
-
-                    {/* Mention dropdown */}
-                    {showMentionDropdown && filteredMentions.length > 0 && (
-                        <div className="mb-2 bg-surface-elevated border border-surface-border rounded-xl shadow-2xl max-h-[150px] overflow-y-auto no-scrollbar animate-slide-up">
-                            {filteredMentions.map(u => (
-                                <button
-                                    key={u.id}
-                                    onClick={() => insertMention(u)}
-                                    className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-bold text-fg hover:bg-brand-500/10 hover:text-brand-400 transition-colors border-b last:border-0 border-surface-border/50"
-                                >
-                                    <AtSign className="w-3 h-3 text-brand-400" />
-                                    {u.name}
-                                </button>
-                            ))}
-                        </div>
-                    )}
-
-                    <div className="flex items-center gap-2">
-                        <input type="file" className="hidden" ref={fileRef} onChange={handleUpload} accept="image/*,video/*" />
-                        <button className="btn-icon shrink-0" onClick={() => fileRef.current?.click()} disabled={uploading}>
-                            <ImageIcon className={cn("w-4 h-4", stagedMedia ? "text-brand-400" : "text-fg-subtle")} />
-                        </button>
-                        <input
-                            ref={inputRef}
-                            type="text"
-                            className="input flex-1 h-10 py-0 text-[16px] sm:text-sm"
-                            placeholder={replyTo ? "Write a reply..." : stagedMedia ? "Add caption..." : "Message..."}
-                            value={input}
-                            onChange={handleInputChange}
-                            onKeyDown={(e) => e.key === "Enter" && send()}
-                        />
-                        <button
-                            onClick={send}
-                            disabled={(!input.trim() && !stagedMedia) || sending}
-                            className={cn("w-10 h-10 p-0 rounded-xl transition-all shadow-sm flex items-center justify-center shrink-0",
-                                (input.trim() || stagedMedia) ? "btn-primary" : "bg-surface-muted text-fg-subtle")}
-                        >
-                            <Send className="w-4 h-4" />
-                        </button>
+                {tab === "direct" && selectedConv?.isDeleted ? (
+                    <div className="px-5 py-4 border-t border-surface-border bg-surface-muted/30 shrink-0 text-center flex flex-col items-center justify-center">
+                        <p className="text-xs font-black uppercase tracking-widest text-danger/70">Account Deleted</p>
+                        <p className="text-[10px] text-fg-subtle mt-0.5">This user&apos;s account has been deleted. You cannot send new messages.</p>
                     </div>
-                </div>
+                ) : (
+                    <div className="px-5 py-3 border-t border-surface-border bg-surface-card shrink-0">
+                        {/* Reply preview */}
+                        {replyTo && (
+                            <div className="flex items-center justify-between gap-3 mb-2 px-3 py-2 bg-surface-muted/50 rounded-xl border-l-2 border-l-brand-500 animate-slide-up">
+                                <div className="min-w-0">
+                                    <p className="text-[10px] font-bold text-brand-400">Replying to {replyTo.sender.name}</p>
+                                    <p className="text-xs text-fg-muted truncate">{replyTo.content || "[media]"}</p>
+                                </div>
+                                <button onClick={() => setReplyTo(null)} className="btn-icon w-6 h-6 shrink-0">
+                                    <X className="w-3 h-3" />
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Staged media */}
+                        {stagedMedia && (
+                            <div className="mb-3 relative inline-block animate-slide-up">
+                                <div className="relative rounded-2xl overflow-hidden border border-brand-500/30 max-w-[200px]">
+                                    {stagedMedia.type === "IMAGE" ? (
+                                        <img src={stagedMedia.url} alt="Staged" className="w-full h-auto object-cover max-h-32" />
+                                    ) : (
+                                        <video src={stagedMedia.url} className="w-full h-auto max-h-32" muted />
+                                    )}
+                                </div>
+                                <button onClick={() => setStagedMedia(null)} className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-danger rounded-full flex items-center justify-center text-white shadow-lg hover:bg-danger-600 transition-colors">
+                                    <X className="w-3 h-3" strokeWidth={3} />
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Mention dropdown */}
+                        {showMentionDropdown && filteredMentions.length > 0 && (
+                            <div className="mb-2 bg-surface-elevated border border-surface-border rounded-xl shadow-2xl max-h-[150px] overflow-y-auto no-scrollbar animate-slide-up">
+                                {filteredMentions.map(u => (
+                                    <button
+                                        key={u.id}
+                                        onClick={() => insertMention(u)}
+                                        className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-bold text-fg hover:bg-brand-500/10 hover:text-brand-400 transition-colors border-b last:border-0 border-surface-border/50"
+                                    >
+                                        <AtSign className="w-3 h-3 text-brand-400" />
+                                        {u.name}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+
+                        <div className="flex items-center gap-2">
+                            <input type="file" className="hidden" ref={fileRef} onChange={handleUpload} accept="image/*,video/*" />
+                            <button className="btn-icon shrink-0" onClick={() => fileRef.current?.click()} disabled={uploading}>
+                                <ImageIcon className={cn("w-4 h-4", stagedMedia ? "text-brand-400" : "text-fg-subtle")} />
+                            </button>
+                            <input
+                                ref={inputRef}
+                                type="text"
+                                className="input flex-1 h-10 py-0 text-[16px] sm:text-sm"
+                                placeholder={replyTo ? "Write a reply..." : stagedMedia ? "Add caption..." : "Message..."}
+                                value={input}
+                                onChange={handleInputChange}
+                                onKeyDown={(e) => e.key === "Enter" && send()}
+                            />
+                            <button
+                                onClick={send}
+                                disabled={(!input.trim() && !stagedMedia) || sending}
+                                className={cn("w-10 h-10 p-0 rounded-xl transition-all shadow-sm flex items-center justify-center shrink-0",
+                                    (input.trim() || stagedMedia) ? "btn-primary" : "bg-surface-muted text-fg-subtle")}
+                            >
+                                <Send className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

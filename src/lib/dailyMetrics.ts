@@ -53,75 +53,100 @@ export async function ensureDailyMetricTargetColumns() {
     dailyMetricTargetColumnsReady = true;
 }
 
+async function runWithRetry<T>(fn: () => Promise<T>): Promise<T> {
+    try {
+        return await fn();
+    } catch (err: any) {
+        const msg = String(err.message || err);
+        if (msg.includes("does not exist") || msg.includes("P2010") || msg.includes("relation") || msg.includes("column")) {
+            console.warn("[DailyMetrics] Table or column missing, resetting ready state and retrying...", err);
+            dailyMetricsReady = false;
+            dailyMetricTargetColumnsReady = false;
+            await ensureDailyMetricsTable();
+            await ensureDailyMetricTargetColumns();
+            return await fn();
+        }
+        throw err;
+    }
+}
+
 export async function getDailyMetricTargets(userId: string): Promise<DailyMetricTargets> {
-    await ensureDailyMetricTargetColumns();
+    return runWithRetry(async () => {
+        await ensureDailyMetricTargetColumns();
 
-    const rows = await prisma.$queryRaw<DailyMetricTargets[]>`
-        SELECT "targetCalories", "targetSteps", "targetSleepHours"
-        FROM "users"
-        WHERE "id" = ${userId}
-        LIMIT 1
-    `;
+        const rows = await prisma.$queryRaw<DailyMetricTargets[]>`
+            SELECT "targetCalories", "targetSteps", "targetSleepHours"
+            FROM "users"
+            WHERE "id" = ${userId}
+            LIMIT 1
+        `;
 
-    return rows[0] ?? { targetCalories: null, targetSteps: null, targetSleepHours: null };
+        return rows[0] ?? { targetCalories: null, targetSteps: null, targetSleepHours: null };
+    });
 }
 
 export async function updateDailyMetricTargets(userId: string, targets: DailyMetricTargets) {
-    await ensureDailyMetricTargetColumns();
+    return runWithRetry(async () => {
+        await ensureDailyMetricTargetColumns();
 
-    await prisma.$executeRaw`
-        UPDATE "users"
-        SET
-            "targetCalories" = ${targets.targetCalories},
-            "targetSteps" = ${targets.targetSteps},
-            "targetSleepHours" = ${targets.targetSleepHours},
-            "updatedAt" = CURRENT_TIMESTAMP
-        WHERE "id" = ${userId}
-    `;
+        await prisma.$executeRaw`
+            UPDATE "users"
+            SET
+                "targetCalories" = ${targets.targetCalories},
+                "targetSteps" = ${targets.targetSteps},
+                "targetSleepHours" = ${targets.targetSleepHours},
+                "updatedAt" = CURRENT_TIMESTAMP
+            WHERE "id" = ${userId}
+        `;
+    });
 }
 
 export async function getDailyMetricsSummary(userId: string, date: string) {
-    await ensureDailyMetricsTable();
+    return runWithRetry(async () => {
+        await ensureDailyMetricsTable();
 
-    const [selected, latest, targets] = await Promise.all([
-        prisma.$queryRaw<DailyMetricsEntry[]>`
-            SELECT "loggedDate"::text AS "date", "calories", "steps", "sleepHours"
-            FROM "daily_metric_logs"
-            WHERE "userId" = ${userId} AND "loggedDate" = ${date}::date
-            LIMIT 1
-        `,
-        prisma.$queryRaw<DailyMetricsEntry[]>`
-            SELECT "loggedDate"::text AS "date", "calories", "steps", "sleepHours"
-            FROM "daily_metric_logs"
-            WHERE "userId" = ${userId}
-            ORDER BY "loggedDate" DESC
-            LIMIT 1
-        `,
-        getDailyMetricTargets(userId),
-    ]);
+        const [selected, latest, targets] = await Promise.all([
+            prisma.$queryRaw<DailyMetricsEntry[]>`
+                SELECT "loggedDate"::text AS "date", "calories", "steps", "sleepHours"
+                FROM "daily_metric_logs"
+                WHERE "userId" = ${userId} AND "loggedDate" = ${date}::date
+                LIMIT 1
+            `,
+            prisma.$queryRaw<DailyMetricsEntry[]>`
+                SELECT "loggedDate"::text AS "date", "calories", "steps", "sleepHours"
+                FROM "daily_metric_logs"
+                WHERE "userId" = ${userId}
+                ORDER BY "loggedDate" DESC
+                LIMIT 1
+            `,
+            getDailyMetricTargets(userId),
+        ]);
 
-    return {
-        selected: selected[0] ?? null,
-        latest: latest[0] ?? null,
-        targets,
-    };
+        return {
+            selected: selected[0] ?? null,
+            latest: latest[0] ?? null,
+            targets,
+        };
+    });
 }
 
 export async function saveDailyMetricsEntry(userId: string, date: string, entry: Omit<DailyMetricsEntry, "date">) {
-    await ensureDailyMetricsTable();
+    return runWithRetry(async () => {
+        await ensureDailyMetricsTable();
 
-    await prisma.$executeRaw`
-        INSERT INTO "daily_metric_logs" ("id", "userId", "loggedDate", "calories", "steps", "sleepHours", "updatedAt")
-        VALUES (${randomUUID()}, ${userId}, ${date}::date, ${entry.calories}, ${entry.steps}, ${entry.sleepHours}, CURRENT_TIMESTAMP)
-        ON CONFLICT ("userId", "loggedDate")
-        DO UPDATE SET
-            "calories" = ${entry.calories},
-            "steps" = ${entry.steps},
-            "sleepHours" = ${entry.sleepHours},
-            "updatedAt" = CURRENT_TIMESTAMP
-    `;
+        await prisma.$executeRaw`
+            INSERT INTO "daily_metric_logs" ("id", "userId", "loggedDate", "calories", "steps", "sleepHours", "updatedAt")
+            VALUES (${randomUUID()}, ${userId}, ${date}::date, ${entry.calories}, ${entry.steps}, ${entry.sleepHours}, CURRENT_TIMESTAMP)
+            ON CONFLICT ("userId", "loggedDate")
+            DO UPDATE SET
+                "calories" = ${entry.calories},
+                "steps" = ${entry.steps},
+                "sleepHours" = ${entry.sleepHours},
+                "updatedAt" = CURRENT_TIMESTAMP
+        `;
 
-    return getDailyMetricsSummary(userId, date);
+        return getDailyMetricsSummary(userId, date);
+    });
 }
 
 export function normalizeDailyMetricDate(date: string) {

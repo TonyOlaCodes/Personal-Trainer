@@ -69,7 +69,7 @@ export default async function CheckInsPage() {
         checkIns = isCoach
             ? await prisma.checkIn.findMany({
                 where: { user: { coachId: user.id } },
-                include: { user: { select: { name: true, email: true, targetWeightKg: true } } },
+                include: { user: { select: { name: true, email: true, targetWeightKg: true, hiddenGoals: true } } },
                 orderBy: { createdAt: "desc" },
             })
             : await prisma.checkIn.findMany({
@@ -129,7 +129,7 @@ export default async function CheckInsPage() {
                         sideImageUrl: c.sideImageUrl,
                         videoUrl: c.videoUrl,
                         coachVideoUrl: c.coachVideoUrl,
-                        user: c.user ? { name: c.user.name, email: c.user.email, targetWeightKg: c.user.targetWeightKg } : undefined,
+                        user: c.user ? { name: c.user.name, email: c.user.email, targetWeightKg: c.user.targetWeightKg, hiddenGoals: c.user.hiddenGoals } : undefined,
                     }))}
                     isCoach={isCoach}
                     userRole={user.role}
@@ -138,6 +138,7 @@ export default async function CheckInsPage() {
                     workoutsTarget={workoutsTarget}
                     bodyweightWeeklyAverage={bodyweightWeeklyAverage}
                     checkInDueState={checkInDueState}
+                    hiddenGoals={user.hiddenGoals}
                 />
             </div>
         </>

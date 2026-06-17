@@ -26,6 +26,7 @@ interface Props {
         targetCalories?: number | null;
         targetSteps?: number | null;
         targetSleepHours?: number | null;
+        hiddenGoals: string[];
     };
 }
 
@@ -66,6 +67,7 @@ export function SettingsClient({ user }: Props) {
     const [targetCalories, setTargetCalories] = useState(user.targetCalories ? String(user.targetCalories) : "");
     const [targetSteps, setTargetSteps] = useState(user.targetSteps ? String(user.targetSteps) : "");
     const [targetSleepHours, setTargetSleepHours] = useState(user.targetSleepHours ? user.targetSleepHours.toString() : "");
+    const [hiddenGoals, setHiddenGoals] = useState<string[]>(user.hiddenGoals || []);
     const [goalSaving, setGoalSaving] = useState(false);
     const [goalSaved, setGoalSaved] = useState(false);
 
@@ -140,6 +142,7 @@ export function SettingsClient({ user }: Props) {
                     targetCalories: targetCalories !== "" ? Math.round(Number(targetCalories)) : null,
                     targetSteps: targetSteps !== "" ? Math.round(Number(targetSteps)) : null,
                     targetSleepHours: targetSleepHours !== "" ? Math.round(Number(targetSleepHours) * 10) / 10 : null,
+                    hiddenGoals: hiddenGoals,
                 })
             });
             if (res.ok) {
@@ -393,6 +396,60 @@ export function SettingsClient({ user }: Props) {
                                     value={targetSleepHours}
                                     onChange={(e) => setTargetSleepHours(e.target.value)}
                                 />
+                            </div>
+
+                            {/* Goal Visibility settings */}
+                            <div className="col-span-full border-t border-surface-border/50 pt-6 space-y-4">
+                                <div>
+                                    <h4 className="text-xs font-black text-fg uppercase tracking-widest">Dashboard & Progress Visibility</h4>
+                                    <p className="text-[11px] text-fg-muted mt-0.5">Toggle which targets are visible on your dashboard and progress analytics. Hiding a target also hides it from your coach.</p>
+                                </div>
+                                
+                                <div className="grid sm:grid-cols-2 gap-4">
+                                    {[
+                                        { key: "weight", label: "Bodyweight Goal & Trend", desc: "Show weight card and weight charts." },
+                                        { key: "calories", label: "Calorie Intake Goal", desc: "Show calorie tracking card and logs." },
+                                        { key: "steps", label: "Daily Steps Goal", desc: "Show steps target card and log inputs." },
+                                        { key: "sleep", label: "Nightly Sleep Goal", desc: "Show sleep duration card and logs." },
+                                    ].map((goalOpt) => {
+                                        const isHidden = hiddenGoals.includes(goalOpt.key);
+                                        return (
+                                            <button
+                                                key={goalOpt.key}
+                                                type="button"
+                                                onClick={() => {
+                                                    if (isHidden) {
+                                                        setHiddenGoals(hiddenGoals.filter(k => k !== goalOpt.key));
+                                                    } else {
+                                                        setHiddenGoals([...hiddenGoals, goalOpt.key]);
+                                                    }
+                                                }}
+                                                className={cn(
+                                                    "flex items-center justify-between p-4 rounded-2xl border text-left transition-all",
+                                                    isHidden
+                                                        ? "bg-surface-muted/30 border-surface-border hover:border-surface-border/80"
+                                                        : "bg-brand-500/5 border-brand-500/30 hover:border-brand-500/50 shadow-glow-brand-sm"
+                                                )}
+                                            >
+                                                <div className="min-w-0 pr-4">
+                                                    <p className={cn("text-xs font-black uppercase tracking-wider", isHidden ? "text-fg-subtle" : "text-brand-400")}>
+                                                        {goalOpt.label}
+                                                    </p>
+                                                    <p className="text-[10px] text-fg-muted mt-0.5">{goalOpt.desc}</p>
+                                                </div>
+                                                <div className={cn(
+                                                    "w-10 h-6 p-0.5 rounded-full transition-colors relative shrink-0",
+                                                    isHidden ? "bg-surface-muted border border-surface-border" : "bg-brand-500"
+                                                )}>
+                                                    <div className={cn(
+                                                        "w-4 h-4 rounded-full bg-white transition-all shadow-sm absolute top-0.5",
+                                                        isHidden ? "left-0.5" : "right-0.5"
+                                                    )} />
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
                             </div>
                         </div>
 

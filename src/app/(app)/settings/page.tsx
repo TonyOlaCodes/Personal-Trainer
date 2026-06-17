@@ -5,6 +5,7 @@ import { TopBar } from "@/components/layout/TopBar";
 import { SettingsClient } from "./SettingsClient";
 import { getDailyMetricTargets } from "@/lib/dailyMetrics";
 
+
 export const metadata = { title: "Settings" };
 
 export default async function SettingsPage() {
@@ -18,6 +19,7 @@ export default async function SettingsPage() {
             name: true, email: true, role: true, onboardingDone: true, avatarUrl: true,
             goal: true, trainingDaysPerWeek: true, experienceLevel: true, trainingLocation: true,
             targetWeightKg: true, weightKg: true,
+            hiddenGoals: true,
         },
     });
 

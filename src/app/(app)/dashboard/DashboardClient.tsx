@@ -38,6 +38,7 @@ interface Props {
         role: string; 
         weightKg?: number | null; 
         targetWeightKg?: number | null; 
+        hiddenGoals?: string[];
     };
     activePlan: { name: string } | null;
     todayWorkout: Workout | null;
@@ -497,12 +498,13 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
 
             <div id="weekly-metrics" className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                 {/* Daily Weight Update */}
-                <div className={cn(
-                    "card p-4 flex items-center gap-3 transition-all relative overflow-hidden group",
-                    weightLogged
-                        ? "bg-success/10 border-success/30 shadow-glow-success-sm"
-                        : "bg-surface-muted/10 border-brand-500/10 hover:border-brand-500/30"
-                )}>
+                {!user.hiddenGoals?.includes("weight") && (
+                    <div className={cn(
+                        "card p-4 flex items-center gap-3 transition-all relative overflow-hidden group",
+                        weightLogged
+                            ? "bg-success/10 border-success/30 shadow-glow-success-sm"
+                            : "bg-surface-muted/10 border-brand-500/10 hover:border-brand-500/30"
+                    )}>
                     <div className={cn(
                         "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform",
                         weightLogged ? "bg-success/15" : "bg-brand-500/5"
@@ -540,7 +542,8 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                             <div className="w-3 h-3 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
                         </div>
                     )}
-                </div>
+                    </div>
+                )}
 
                 {[
                     {
@@ -579,7 +582,12 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                         target: dailyMetrics.targets.targetSleepHours,
                         step: "0.1",
                     },
-                ].map((metric) => {
+                ]
+                .filter(m => {
+                    const matchKey = m.key === "sleepHours" ? "sleep" : m.key;
+                    return !user.hiddenGoals?.includes(matchKey);
+                })
+                .map((metric) => {
                     const Icon = metric.icon;
                     return (
                         <div

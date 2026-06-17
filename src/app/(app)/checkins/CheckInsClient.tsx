@@ -25,7 +25,7 @@ interface CheckIn {
     sideImageUrl?: string | null;
     videoUrl?: string | null;
     coachVideoUrl?: string | null;
-    user?: { name: string; email: string };
+    user?: { name: string; email: string; targetWeightKg?: number | null; hiddenGoals?: any };
 }
 interface Props {
     checkIns: CheckIn[]; isCoach: boolean; userRole: string;
@@ -45,6 +45,7 @@ interface Props {
         dueDayLabel: string | null;
         frequencyWeeks: number | null;
     };
+    hiddenGoals?: string[] | null;
 }
 
 /* ─────────────────── Rating bar component ───────────────────── */
@@ -258,7 +259,12 @@ function getDateFromWeek(week: number, year: number) {
 }
 
 /* ─────────────────── Previous check-in summary ─────────────── */
-function PrevCheckInCard({ prev, setViewerMedia }: { prev: CheckIn, setViewerMedia: (url: string | null) => void }) {
+function PrevCheckInCard({ prev, setViewerMedia, isWeightHidden, isSleepHidden }: {
+    prev: CheckIn;
+    setViewerMedia: (url: string | null) => void;
+    isWeightHidden?: boolean;
+    isSleepHidden?: boolean;
+}) {
     const [open, setOpen] = useState(false);
     return (
         <div className="rounded-2xl border border-surface-border bg-surface-muted/30 overflow-hidden">
@@ -269,7 +275,7 @@ function PrevCheckInCard({ prev, setViewerMedia }: { prev: CheckIn, setViewerMed
                 <div className="flex items-center gap-3">
                     <Calendar className="w-4 h-4 text-fg-subtle" />
                     <span className="text-xs font-bold text-fg-muted">Week {prev.weekNumber} check-in</span>
-                    {prev.bodyweightKg && (
+                    {!isWeightHidden && prev.bodyweightKg && (
                         <span className="text-xs font-black text-fg">{prev.bodyweightKg.toFixed(2)}kg</span>
                     )}
                 </div>
@@ -281,7 +287,7 @@ function PrevCheckInCard({ prev, setViewerMedia }: { prev: CheckIn, setViewerMed
                     <div className="flex flex-wrap gap-2">
                         {[
                             { l: "Energy", v: prev.energyRating },
-                            { l: "Sleep", v: prev.sleepRating },
+                            { l: "Sleep", v: isSleepHidden ? null : prev.sleepRating },
                             { l: "Stress", v: prev.stressRating },
                             { l: "Training", v: prev.intensityRating },
                         ].filter(r => r.v).map(r => (
@@ -348,13 +354,15 @@ function PrevCheckInCard({ prev, setViewerMedia }: { prev: CheckIn, setViewerMed
     );
 }
 
-function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highlighted, targetWeightKg }: {
+function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highlighted, targetWeightKg, isWeightHidden, isSleepHidden }: {
     c: CheckIn; isCoach: boolean;
     onCoachRespond?: (id: string, resp: string) => Promise<void>;
     onEdit?: (c: CheckIn) => void;
     setViewerMedia: (url: string | null) => void;
     highlighted?: boolean;
     targetWeightKg?: number | null;
+    isWeightHidden?: boolean;
+    isSleepHidden?: boolean;
 }) {
     const [open, setOpen] = useState(Boolean(highlighted));
     const itemTargetWeight = isCoach ? (c.user as any)?.targetWeightKg : targetWeightKg;
@@ -413,8 +421,8 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highl
                         </div>
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5 text-[10px] text-fg-muted font-medium">
                             <span>{formatDate(c.createdAt)}</span>
-                            {c.bodyweightKg && <span className="font-black text-fg">{c.bodyweightKg.toFixed(2)}kg</span>}
-                            {itemTargetWeight && c.bodyweightKg && (
+                            {!isWeightHidden && c.bodyweightKg && <span className="font-black text-fg">{c.bodyweightKg.toFixed(2)}kg</span>}
+                            {!isWeightHidden && itemTargetWeight && c.bodyweightKg && (
                                 <span className="text-brand-400 font-bold uppercase tracking-wider">
                                     • Goal: {itemTargetWeight}kg ({Math.abs(((c.bodyweightKg - itemTargetWeight) / itemTargetWeight) * 100).toFixed(1)}% away)
                                 </span>
@@ -447,7 +455,7 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highl
                     <div className="flex flex-wrap gap-2">
                         {[
                             { l: "Energy", v: c.energyRating },
-                            { l: "Sleep", v: c.sleepRating },
+                            { l: "Sleep", v: isSleepHidden ? null : c.sleepRating },
                             { l: "Stress", v: c.stressRating },
                             { l: "Training", v: c.intensityRating },
                         ].filter(r => r.v).map(r => (
@@ -623,7 +631,7 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highl
 /* ═══════════════════════════════════════════════════════════════
    Main Component
    ═══════════════════════════════════════════════════════════════ */
-export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWeightKg, workoutsThisWeek, workoutsTarget, bodyweightWeeklyAverage, checkInDueState }: Props) {
+export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWeightKg, workoutsThisWeek, workoutsTarget, bodyweightWeeklyAverage, checkInDueState, hiddenGoals }: Props) {
     const searchParams = useSearchParams();
     const highlightedCheckInId = searchParams.get("highlight");
     const isPremium = ["PREMIUM", "COACH", "SUPER_ADMIN"].includes(userRole);
@@ -750,11 +758,14 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
     const currentBw    = weeklyAverageWeight ?? existingEntry?.bodyweightKg ?? (selectedWeek === currentWeekReal ? currentWeekEntry?.bodyweightKg : null) ?? null;
     const weightDelta  = currentBw && prevWeight ? Math.round((currentBw - prevWeight) * 100) / 100 : null;
     const weightPctChange = currentBw && prevWeight ? Math.round(((currentBw - prevWeight) / prevWeight) * 100 * 100) / 100 : null;
+    const isWeightHidden = Array.isArray(hiddenGoals) && hiddenGoals.includes("weight");
+    const isSleepHidden = Array.isArray(hiddenGoals) && hiddenGoals.includes("sleep");
+
     const weightGoalFeedback = getWeightGoalFeedback(currentBw, prevWeight ?? null, targetWeightKg);
     const WeightTrendIcon = weightGoalFeedback.icon;
     const smartMsg     = getSmartFeedback(
         (editMode ? energy : currentWeekEntry?.energyRating) || 0,
-        (editMode ? sleep : currentWeekEntry?.sleepRating) || 0,
+        isSleepHidden ? 3 : ((editMode ? sleep : currentWeekEntry?.sleepRating) || 0),
         (editMode ? stress : currentWeekEntry?.stressRating) || 0,
         (editMode ? training : currentWeekEntry?.intensityRating) || 0
     );
@@ -927,9 +938,23 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                             {checkIns.length === 0 ? "No check-ins yet" : `No ${statusFilter.toLowerCase()} check-ins`}
                         </p>
                     </div>
-                ) : filteredCheckIns.sort((a,b) => b.weekNumber - a.weekNumber).map(c => (
-                    <HistoryItem key={c.id} c={c} isCoach onCoachRespond={handleCoachRespond} setViewerMedia={setViewerMedia} highlighted={highlightedCheckInId === c.id} />
-                ))}
+                ) : filteredCheckIns.sort((a,b) => b.weekNumber - a.weekNumber).map(c => {
+                    const clientGoals = (c.user as any)?.hiddenGoals;
+                    const isWeightHidden = Array.isArray(clientGoals) && clientGoals.includes("weight");
+                    const isSleepHidden = Array.isArray(clientGoals) && clientGoals.includes("sleep");
+                    return (
+                        <HistoryItem 
+                            key={c.id} 
+                            c={c} 
+                            isCoach 
+                            onCoachRespond={handleCoachRespond} 
+                            setViewerMedia={setViewerMedia} 
+                            highlighted={highlightedCheckInId === c.id} 
+                            isWeightHidden={isWeightHidden}
+                            isSleepHidden={isSleepHidden}
+                        />
+                    );
+                })}
                 {viewerMedia && (
                     <MediaLightbox 
                         src={viewerMedia} 
@@ -992,7 +1017,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                                 <div className="flex-1">
                                     <div className="flex items-center gap-2">
                                         <p className="font-black text-fg">Week {currentWeekReal} Complete</p>
-                                        {weightDelta !== null && (
+                                        {!isWeightHidden && weightDelta !== null && (
                                             <span className={cn(
                                                 "text-[9px] font-black px-1.5 py-0.5 rounded-md border",
                                                 weightGoalFeedback.chipClass
@@ -1024,29 +1049,31 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3 pt-2">
-                            <div className="bg-surface-card/40 p-4 rounded-2xl border border-surface-border/50 flex flex-col justify-between">
-                                <div>
-                                    <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1">Weekly Avg Weight</p>
-                                    <p className="text-xl font-black text-fg tracking-tight">{currentWeekEntry.bodyweightKg?.toFixed(2) ?? '--'}<span className="text-xs text-fg-muted ml-1">kg</span></p>
-                                    {weightDelta !== null && weightPctChange !== null && (
-                                        <p className={cn("text-[10px] font-bold mt-1", weightGoalFeedback.textClass)}>
-                                            {weightDelta > 0 ? "+" : ""}{weightDelta.toFixed(2)}kg ({weightPctChange >= 0 ? "+" : ""}{weightPctChange.toFixed(2)}%) since last
-                                        </p>
+                        <div className={cn("grid gap-3 pt-2", isWeightHidden ? "grid-cols-1" : "grid-cols-2")}>
+                            {!isWeightHidden && (
+                                <div className="bg-surface-card/40 p-4 rounded-2xl border border-surface-border/50 flex flex-col justify-between">
+                                    <div>
+                                        <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1">Weekly Avg Weight</p>
+                                        <p className="text-xl font-black text-fg tracking-tight">{currentWeekEntry.bodyweightKg?.toFixed(2) ?? '--'}<span className="text-xs text-fg-muted ml-1">kg</span></p>
+                                        {weightDelta !== null && weightPctChange !== null && (
+                                            <p className={cn("text-[10px] font-bold mt-1", weightGoalFeedback.textClass)}>
+                                                {weightDelta > 0 ? "+" : ""}{weightDelta.toFixed(2)}kg ({weightPctChange >= 0 ? "+" : ""}{weightPctChange.toFixed(2)}%) since last
+                                            </p>
+                                        )}
+                                    </div>
+                                    {targetWeightKg && targetWeightKg > 0 && currentWeekEntry.bodyweightKg && (
+                                        <div className="mt-2 pt-2 border-t border-surface-border/30 text-[10px] font-bold text-fg-muted uppercase tracking-wider space-y-0.5">
+                                            <div className="flex justify-between">
+                                                <span>Goal: {targetWeightKg.toFixed(1)}kg</span>
+                                                <span className="text-brand-400">{Math.abs(((currentWeekEntry.bodyweightKg - targetWeightKg) / targetWeightKg) * 100).toFixed(1)}% away</span>
+                                            </div>
+                                            <div className="text-[9px] lowercase opacity-85">
+                                                {Math.abs(currentWeekEntry.bodyweightKg - targetWeightKg).toFixed(1)}kg {currentWeekEntry.bodyweightKg > targetWeightKg ? "above" : "below"} goal
+                                            </div>
+                                        </div>
                                     )}
                                 </div>
-                                {targetWeightKg && targetWeightKg > 0 && currentWeekEntry.bodyweightKg && (
-                                    <div className="mt-2 pt-2 border-t border-surface-border/30 text-[10px] font-bold text-fg-muted uppercase tracking-wider space-y-0.5">
-                                        <div className="flex justify-between">
-                                            <span>Goal: {targetWeightKg.toFixed(1)}kg</span>
-                                            <span className="text-brand-400">{Math.abs(((currentWeekEntry.bodyweightKg - targetWeightKg) / targetWeightKg) * 100).toFixed(1)}% away</span>
-                                        </div>
-                                        <div className="text-[9px] lowercase opacity-85">
-                                            {Math.abs(currentWeekEntry.bodyweightKg - targetWeightKg).toFixed(1)}kg {currentWeekEntry.bodyweightKg > targetWeightKg ? "above" : "below"} goal
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
+                            )}
                             <div className="bg-surface-card/40 p-4 rounded-2xl border border-surface-border/50">
                                 <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1">Consistency</p>
                                 <p className="text-xl font-black text-fg tracking-tight">{workoutsThisWeek}<span className="text-xs text-fg-muted ml-0.5">/{workoutsTarget}</span></p>
@@ -1148,7 +1175,17 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                             {checkIns.length === 0 ? "No check-in history yet" : `No ${statusFilter.toLowerCase()} check-ins`}
                         </div>
                     ) : filteredCheckIns.sort((a,b) => b.weekNumber - a.weekNumber).map(c => (
-                        <HistoryItem key={c.id} c={c} isCoach={false} onEdit={editCheckIn} setViewerMedia={setViewerMedia} highlighted={highlightedCheckInId === c.id} targetWeightKg={targetWeightKg} />
+                        <HistoryItem 
+                            key={c.id} 
+                            c={c} 
+                            isCoach={false} 
+                            onEdit={editCheckIn} 
+                            setViewerMedia={setViewerMedia} 
+                            highlighted={highlightedCheckInId === c.id} 
+                            targetWeightKg={targetWeightKg} 
+                            isWeightHidden={isWeightHidden}
+                            isSleepHidden={isSleepHidden}
+                        />
                     ))}
                 </div>
             </div>
@@ -1229,12 +1266,13 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
             </div>
 
             {/* 1. Weekly average bodyweight */}
-            <div className="card p-5 space-y-4 border-surface-border hover:border-brand-500/20 transition-all group">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <Scale className="w-4 h-4 text-brand-400 group-hover:scale-110 transition-transform" />
-                        <span className="text-sm font-black text-fg uppercase tracking-wide">Weekly Average Weight</span>
-                    </div>
+            {!isWeightHidden && (
+                <div className="card p-5 space-y-4 border-surface-border hover:border-brand-500/20 transition-all group">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <Scale className="w-4 h-4 text-brand-400 group-hover:scale-110 transition-transform" />
+                            <span className="text-sm font-black text-fg uppercase tracking-wide">Weekly Average Weight</span>
+                        </div>
                     {prevWeight && (
                         <span className="text-[10px] text-fg-subtle font-black uppercase tracking-widest">
                             Last week avg: {prevWeight.toFixed(2)}kg
@@ -1279,6 +1317,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                     </div>
                 </div>
             </div>
+            )}
 
             {/* 2. Ratings */}
             <div className="card p-5 space-y-5">
@@ -1287,7 +1326,9 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                     <span className="text-sm font-black text-fg uppercase tracking-wide">Performance Metrics</span>
                 </div>
                 <RatingBar icon={Zap}      label="Energy"   sublabels={ENERGY_LABELS} value={energy}   onChange={setEnergy}   prevValue={prevCheckIn?.energyRating} />
-                <RatingBar icon={Moon}     label="Sleep"    sublabels={SLEEP_LABELS}  value={sleep}    onChange={setSleep}    prevValue={prevCheckIn?.sleepRating} />
+                {!isSleepHidden && (
+                    <RatingBar icon={Moon}     label="Sleep"    sublabels={SLEEP_LABELS}  value={sleep}    onChange={setSleep}    prevValue={prevCheckIn?.sleepRating} />
+                )}
                 <RatingBar icon={Brain}    label="Stress"   sublabels={STRESS_LABELS} value={stress}   onChange={setStress}   prevValue={prevCheckIn?.stressRating} inverse />
                 <RatingBar icon={Activity} label="Training" sublabels={TRAIN_LABELS}  value={training} onChange={setTraining} prevValue={prevCheckIn?.intensityRating} />
 
@@ -1372,7 +1413,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
             {prevCheckIn && !editMode && (
                 <div className="space-y-2 pt-2">
                     <p className="text-[10px] font-black uppercase tracking-[0.2em] text-fg-subtle px-1">Retrospective</p>
-                    <PrevCheckInCard prev={prevCheckIn} setViewerMedia={setViewerMedia} />
+                    <PrevCheckInCard prev={prevCheckIn} setViewerMedia={setViewerMedia} isWeightHidden={isWeightHidden} isSleepHidden={isSleepHidden} />
                 </div>
             )}
 

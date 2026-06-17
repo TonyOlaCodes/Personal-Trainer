@@ -16,27 +16,36 @@ export default async function ChatPage() {
     // For clients → their coach
     // For coaches → their clients
     // For admin → all coaches + clients
-    let conversations: { userId: string; name: string; role: string; avatarUrl: string | null }[] = [];
+    let conversations: { userId: string; name: string; role: string; avatarUrl: string | null; isDeleted?: boolean }[] = [];
 
     if (user.role === "PREMIUM") {
         // Show coach if assigned
         if (user.coachId) {
             const coach = await prisma.user.findUnique({
                 where: { id: user.coachId },
-                select: { id: true, name: true, role: true, avatarUrl: true },
+                select: { id: true, name: true, role: true, avatarUrl: true, isDeleted: true, deletedName: true },
             });
-            if (coach) conversations = [{ userId: coach.id, name: coach.name ?? "Coach", role: coach.role, avatarUrl: coach.avatarUrl }];
+            if (coach) {
+                conversations = [{
+                    userId: coach.id,
+                    name: coach.isDeleted ? (coach.deletedName ?? "Deleted Coach") : (coach.name ?? "Coach"),
+                    role: coach.role,
+                    avatarUrl: coach.isDeleted ? null : coach.avatarUrl,
+                    isDeleted: coach.isDeleted,
+                }];
+            }
         }
     } else if (["COACH", "SUPER_ADMIN"].includes(user.role)) {
         const clients = await prisma.user.findMany({
             where: { coachId: user.id },
-            select: { id: true, name: true, role: true, avatarUrl: true },
+            select: { id: true, name: true, role: true, avatarUrl: true, isDeleted: true, deletedName: true },
         });
         conversations = clients.map((c) => ({
             userId: c.id,
-            name: c.name ?? "Client",
+            name: c.isDeleted ? (c.deletedName ?? "Deleted Athlete") : (c.name ?? "Client"),
             role: c.role,
-            avatarUrl: c.avatarUrl,
+            avatarUrl: c.isDeleted ? null : c.avatarUrl,
+            isDeleted: c.isDeleted,
         }));
     }
 

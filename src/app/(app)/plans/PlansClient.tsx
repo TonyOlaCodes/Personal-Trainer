@@ -180,59 +180,34 @@ export function PlansClient({ plans }: Props) {
                     ) : (
                         plans.map((plan) => (
                             <div key={plan.id} className={cn(
-                                "card-hover p-5",
+                                "card-hover p-0 overflow-hidden",
                                 plan.isActive && "border-brand-600/40",
                                 highlightedPlanId === plan.id && "ring-2 ring-brand-400 shadow-glow-brand-sm"
                             )}>
-                                <div className="flex items-start gap-4">
-                                    <div className="w-10 h-10 rounded-xl bg-surface-muted flex items-center justify-center flex-shrink-0">
-                                        <Dumbbell className="w-5 h-5 text-brand-400" />
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <p className="font-semibold text-fg truncate">{plan.name}</p>
-                                            {plan.isActive && <span className="badge-brand text-[10px]">Active</span>}
-                                            {plan.type === "COACH_ASSIGNED" && <span className="badge-success text-[10px]">Coach</span>}
-                                            {plan.authorName && <span className="badge-success text-[10px]">By {plan.authorName}</span>}
+                                <div className="flex items-start justify-between p-5 gap-4">
+                                    <Link href={`/plans/create?id=${plan.id}`} className="flex-1 min-w-0 flex items-start gap-4 hover:opacity-90">
+                                        <div className="w-10 h-10 rounded-xl bg-surface-muted flex items-center justify-center flex-shrink-0">
+                                            <Dumbbell className="w-5 h-5 text-brand-400" />
                                         </div>
-                                        {plan.description && (
-                                            <p className="text-sm text-fg-muted truncate">{plan.description}</p>
-                                        )}
-                                        <div className="flex items-center gap-3 mt-2 text-xs text-fg-subtle">
-                                            <span className="flex items-center gap-1">
-                                                <Calendar className="w-3 h-3" />
-                                                {plan.weekCount} weeks
-                                            </span>
-                                            <span>Started {formatDate(plan.startedAt)}</span>
-                                        </div>
-                                        {/* Share code row */}
-                                        {plan.shareCode && (
-                                            <div className="mt-3 flex items-center gap-2">
-                                                <div className="flex items-center gap-2 bg-surface-muted border border-surface-border rounded-xl px-3 py-2 flex-1 min-w-0">
-                                                    <Share2 className="w-3.5 h-3.5 text-brand-400 shrink-0" />
-                                                    <span className="font-mono font-black text-brand-300 text-xs tracking-widest uppercase">{plan.shareCode}</span>
-                                                    <span className="text-[10px] text-fg-subtle ml-1">— Share this code</span>
-                                                </div>
-                                                <button
-                                                    onClick={() => {
-                                                        navigator.clipboard.writeText(plan.shareCode!);
-                                                        setCopiedId(plan.id);
-                                                        setTimeout(() => setCopiedId(null), 2000);
-                                                    }}
-                                                    className={cn(
-                                                        "btn-sm flex items-center gap-1.5 transition-all shrink-0",
-                                                        copiedId === plan.id
-                                                            ? "bg-success/10 text-success border border-success/30"
-                                                            : "btn-secondary"
-                                                    )}
-                                                >
-                                                    {copiedId === plan.id ? <Check className="w-3 h-3" /> : <Share2 className="w-3 h-3" />}
-                                                    {copiedId === plan.id ? "Copied!" : "Copy"}
-                                                </button>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <p className="font-semibold text-fg truncate">{plan.name}</p>
+                                                {plan.isActive && <span className="badge-brand text-[10px]">Active</span>}
+                                                {plan.type === "COACH_ASSIGNED" && <span className="badge-success text-[10px]">Coach</span>}
                                             </div>
-                                        )}
-                                    </div>
-                                    <div className="flex items-center gap-2">
+                                            {plan.description && (
+                                                <p className="text-sm text-fg-muted truncate">{plan.description}</p>
+                                            )}
+                                            <div className="flex items-center gap-3 mt-2 text-xs text-fg-subtle">
+                                                <span className="flex items-center gap-1">
+                                                    <Calendar className="w-3 h-3" />
+                                                    {plan.weekCount} weeks
+                                                </span>
+                                                <span>Started {formatDate(plan.startedAt)}</span>
+                                            </div>
+                                        </div>
+                                    </Link>
+                                    <div className="flex items-center gap-2 shrink-0 self-center">
                                         {plan.isActive ? (
                                             <button
                                                 onClick={() => setActive(null)}
@@ -261,11 +236,34 @@ export function PlansClient({ plans }: Props) {
                                         >
                                             <Trash2 className="w-4 h-4" />
                                         </button>
-                                        <Link href={`/plans/create?id=${plan.id}`} className="btn-ghost btn-sm">
-                                            <ChevronRight className="w-4 h-4" />
-                                        </Link>
                                     </div>
                                 </div>
+
+                                {plan.shareCode && (
+                                    <div className="px-5 pb-5 border-t border-surface-border/20 pt-3 flex items-center gap-2">
+                                        <div className="flex items-center gap-2 bg-surface-muted border border-surface-border rounded-xl px-3 py-2 flex-1 min-w-0">
+                                            <Share2 className="w-3.5 h-3.5 text-brand-400 shrink-0" />
+                                            <span className="font-mono font-black text-brand-300 text-xs tracking-widest uppercase">{plan.shareCode}</span>
+                                            <span className="text-[10px] text-fg-subtle ml-1">— Share this code</span>
+                                        </div>
+                                        <button
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(plan.shareCode!);
+                                                setCopiedId(plan.id);
+                                                setTimeout(() => setCopiedId(null), 2000);
+                                            }}
+                                            className={cn(
+                                                "btn-sm flex items-center gap-1.5 transition-all shrink-0",
+                                                copiedId === plan.id
+                                                    ? "bg-success/10 text-success border border-success/30"
+                                                    : "btn-secondary"
+                                            )}
+                                        >
+                                            {copiedId === plan.id ? <Check className="w-3 h-3" /> : <Share2 className="w-3 h-3" />}
+                                            {copiedId === plan.id ? "Copied!" : "Copy"}
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         ))
                     )}

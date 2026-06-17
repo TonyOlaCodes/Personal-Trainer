@@ -18,9 +18,10 @@ import Link from "next/link";
 
 interface Props {
     userRole: string;
+    hiddenGoals: string[];
 }
 
-export function ProgressClient({ userRole }: Props) {
+export function ProgressClient({ userRole, hiddenGoals }: Props) {
     const isPremium = ["PREMIUM", "COACH", "SUPER_ADMIN"].includes(userRole);
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
@@ -141,7 +142,7 @@ export function ProgressClient({ userRole }: Props) {
             border: "border-brand-500/20",
             metric: data.dailyMetrics?.sleep,
         },
-    ];
+    ].filter(card => !hiddenGoals?.includes(card.key));
 
     return (
         <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8 animate-fade-in mb-24 lg:mb-12">
@@ -259,8 +260,8 @@ export function ProgressClient({ userRole }: Props) {
             )}
 
             {/* ── BODYWEIGHT TREND ── */}
-            {bodyweightData.length > 0 && (
-                <section className="card p-5 sm:p-6 overflow-hidden">
+            {bodyweightData.length > 0 && !hiddenGoals?.includes("weight") ? (
+                <section className="card p-5 sm:p-6">
                     {/* Top bar: title + timeframe toggle */}
                     <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-5">
                         <div className="flex items-center gap-3">
@@ -429,6 +430,72 @@ export function ProgressClient({ userRole }: Props) {
                         })}
                     </div>
                 </section>
+            ) : (
+                habitCards.length > 0 && (
+                    <section className="card p-5 sm:p-6">
+                        <div className="flex items-center gap-3 mb-5 pb-4 border-b border-surface-border/50">
+                            <Activity className="w-5 h-5 text-brand-400" />
+                            <div>
+                                <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-0.5">Daily Metrics Trend</p>
+                                <h3 className="text-lg font-black text-fg tracking-tight">Habit Targets</h3>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            {habitCards.map(({ key, label, icon: Icon, unit, color, bg, border, metric }) => {
+                                const current = metric?.current ?? null;
+                                const target = metric?.target ?? null;
+                                const weeklyAverage = metric?.weeklyAverage ?? null;
+                                const previousAverage = metric?.previousWeeklyAverage ?? null;
+                                const change = weeklyAverage !== null && previousAverage !== null
+                                    ? Math.round((weeklyAverage - previousAverage) * 10) / 10
+                                    : null;
+                                const isUp = (change ?? 0) >= 0;
+
+                                return (
+                                    <div key={key} className={cn("rounded-2xl border p-4 bg-surface-muted/30", border)}>
+                                        <div className="flex items-center justify-between gap-3 mb-3">
+                                            <div className="flex items-center gap-2">
+                                                <div className={cn("w-8 h-8 rounded-xl flex items-center justify-center", bg)}>
+                                                    <Icon className={cn("w-4 h-4", color)} />
+                                                </div>
+                                                <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest">{label}</p>
+                                            </div>
+                                            {change !== null && (
+                                                <span className={cn(
+                                                    "inline-flex items-center gap-1 text-[10px] font-black",
+                                                    isUp ? "text-success" : "text-danger"
+                                                )}>
+                                                    {isUp ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+                                                    {change > 0 ? "+" : ""}{unit === "hrs" ? change.toFixed(1) : Math.round(change).toLocaleString()}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="flex items-end justify-between gap-3">
+                                            <div>
+                                                <p className="text-2xl font-black text-fg leading-none">
+                                                    {formatHabitValue(current, unit)}
+                                                    {unit !== "hrs" && unit !== "steps" && <span className="text-[10px] font-bold text-fg-muted ml-1">{unit}</span>}
+                                                </p>
+                                                <p className="text-[10px] font-bold text-fg-muted mt-1">Latest log</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-[9px] font-black text-fg-subtle uppercase tracking-widest">Avg</p>
+                                                <p className="text-xs font-black text-fg">{formatHabitValue(weeklyAverage, unit)}</p>
+                                            </div>
+                                        </div>
+                                        <div className="mt-3 pt-3 border-t border-surface-border/60 flex items-center justify-between">
+                                            <span className="text-[9px] font-black text-fg-subtle uppercase tracking-widest">Goal</span>
+                                            <span className={cn("text-xs font-black", target ? color : "text-fg-muted")}>
+                                                {formatHabitValue(target, unit)}
+                                                {target && unit === "kcal" ? " kcal" : target && unit === "steps" ? " steps" : ""}
+                                            </span>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </section>
+                )
             )}
 
             {/* ── SBD COMBINED CHART ── */}
