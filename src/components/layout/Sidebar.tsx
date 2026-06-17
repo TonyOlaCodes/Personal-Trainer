@@ -29,10 +29,11 @@ interface NavItem {
     roles?: string[];
     hideRoles?: string[];
     badge?: string;
+    exact?: boolean;
 }
 
 const navItems: NavItem[] = [
-    { href: "/admin", label: "Admin", icon: ShieldCheck, roles: ["COACH", "SUPER_ADMIN"] },
+    { href: "/admin", label: "Admin", icon: ShieldCheck, roles: ["COACH", "SUPER_ADMIN"], exact: true },
     { href: "/admin/exercises", label: "Exercises", icon: Video, roles: ["COACH", "SUPER_ADMIN"] },
     { href: "/coach", label: "Coach Panel", icon: Users, roles: ["COACH", "SUPER_ADMIN"] },
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, hideRoles: ["COACH", "SUPER_ADMIN"] },
@@ -99,7 +100,7 @@ export function Sidebar({ userRole = "FREE", realRole = "FREE", isClientMode = f
             {/* Navigation */}
             <nav className={cn("flex-1 py-4 space-y-1 overflow-y-auto no-scrollbar", collapsed ? "px-1.5" : "px-3")}>
                 {filteredItems.map((item) => {
-                    const active = pathname.startsWith(item.href);
+                    const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);
                     return (
                         <Link
                             key={item.href}
