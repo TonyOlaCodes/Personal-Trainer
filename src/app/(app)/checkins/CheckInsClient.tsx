@@ -6,7 +6,7 @@ import {
     Scale, Send, Check, Camera, TrendingUp, TrendingDown,
     Plus, Minus, Calendar, MessageSquare, CheckCircle2,
     Zap, Moon, Brain, Activity, ChevronDown, AlertCircle,
-    Dumbbell, Flame, Edit2, Clock, Trash2, X, Loader2
+    Dumbbell, Flame, Edit2, Clock, Trash2, Loader2
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { formatDate, getWeekNumber, cn } from "@/lib/utils";

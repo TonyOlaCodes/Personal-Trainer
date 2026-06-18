@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
     Send, Image as ImageIcon, Globe, MessageSquare, Star, X, Pencil, Trash2,
-    Check, MoreVertical, Reply, Pin, SmilePlus, CheckCheck, ChevronDown, Search, AtSign
+    Check, MoreVertical, Reply, Pin, SmilePlus, CheckCheck, ChevronDown, AtSign
 } from "lucide-react";
 import { getInitials, formatRelative, cn, roleLabels } from "@/lib/utils";
 import { MediaLightbox } from "@/components/shared/MediaLightbox";
@@ -80,8 +80,6 @@ export function ChatClient({ currentUserId, currentUserRole, conversations }: Pr
     const [showMentionDropdown, setShowMentionDropdown] = useState(false);
     const [mentionQuery, setMentionQuery] = useState("");
     const [showPinned, setShowPinned] = useState(false);
-    const [isTyping, setIsTyping] = useState(false);
-    const [typingUsers, setTypingUsers] = useState<string[]>([]);
     const [mobileShowChat, setMobileShowChat] = useState(true);
 
     const bottomRef = useRef<HTMLDivElement>(null);
@@ -89,7 +87,6 @@ export function ChatClient({ currentUserId, currentUserRole, conversations }: Pr
     const inputRef = useRef<HTMLInputElement>(null);
     const isFetchingRef = useRef(false);
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-    const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Tab persistence
     useEffect(() => {

@@ -1,13 +1,12 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
-    User, Bell, Shield, CreditCard, Palette,
+    User, Bell, Palette,
     HelpCircle, LogOut, ChevronRight, Check,
-    Camera, Loader2, Save, Heart, Copy, Target, Edit3, Zap
+    Camera, Loader2, Save, Target
 } from "lucide-react";
 import { useClerk } from "@clerk/nextjs";
-import { useEffect } from "react";
 import { cn, getInitials } from "@/lib/utils";
 
 interface Props {

@@ -5,7 +5,7 @@ import { cookies } from "next/headers";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { MobileTabBar } from "@/components/layout/MobileTabBar";
 import { RoleProvider } from "@/lib/RoleContext";
-import { getUserDeactivationStatusByClerkId } from "@/lib/userDeactivation";
+import { getUserDeactivationStatusByClerkId, ensureUserAccountStatusColumns } from "@/lib/userDeactivation";
 
 export default async function AppLayout({
     children,
@@ -23,6 +23,7 @@ export default async function AppLayout({
             select: { role: true, onboardingDone: true, id: true },
         });
         isDeactivated = await getUserDeactivationStatusByClerkId(userId);
+        await ensureUserAccountStatusColumns();
     } catch (e) {
         console.warn("[AppLayout] DB unreachable, treating as new user:", e);
     }

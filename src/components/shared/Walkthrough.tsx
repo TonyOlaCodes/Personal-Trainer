@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useLayoutEffect } from "react";
-import { X, ChevronRight, Check, Zap } from "lucide-react";
+import { useState, useLayoutEffect } from "react";
+import { X, ChevronRight, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Step {

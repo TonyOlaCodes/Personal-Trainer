@@ -95,7 +95,6 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
     const [weight, setWeight] = useState(bodyweight.selectedWeightKg ? bodyweight.selectedWeightKg.toFixed(2) : "");
     const [latestWeight, setLatestWeight] = useState(bodyweight.latestWeightKg);
     const [selectedPreviousWeight, setSelectedPreviousWeight] = useState(bodyweight.selectedPreviousWeightKg);
-    const [latestPreviousWeight, setLatestPreviousWeight] = useState(bodyweight.latestPreviousWeightKg);
     const [weightLogged, setWeightLogged] = useState(Boolean(bodyweight.selectedWeightKg));
     const [weightMsg, setWeightMsg] = useState("");
     const [savingWeight, setSavingWeight] = useState(false);
@@ -176,7 +175,6 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                 setWeightLogged(Boolean(data.selected));
                 setSelectedPreviousWeight(data.selectedPrevious?.weightKg ?? null);
                 setLatestWeight(data.latest?.weightKg ?? null);
-                setLatestPreviousWeight(data.latestPrevious?.weightKg ?? null);
             } catch (e) {
                 console.error(e);
                 if (!cancelled) setWeightMsg("Could not load weight");
@@ -244,7 +242,6 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                 setWeightLogged(true);
                 setSelectedPreviousWeight(data.selectedPrevious?.weightKg ?? null);
                 setLatestWeight(data.latest?.weightKg ?? parsedWeight);
-                setLatestPreviousWeight(data.latestPrevious?.weightKg ?? null);
                 setWeightMsg("");
                 router.refresh();
             } else {

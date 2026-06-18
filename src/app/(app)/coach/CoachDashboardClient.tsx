@@ -1,13 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
-    Users, Activity, Calendar, MessageSquare,
-    ChevronRight, TrendingUp, HelpCircle, CheckCircle2, Target
+    Users, Activity, Calendar,
+    ChevronRight, TrendingUp, HelpCircle, CheckCircle2
 } from "lucide-react";
 import Link from "next/link";
 import { cn, formatDate, getInitials } from "@/lib/utils";
-import { WorkoutSessionModal } from "@/components/shared/WorkoutSessionModal";
 
 interface Client {
     id: string;
@@ -33,32 +32,12 @@ interface RecentCheckIn {
     status: string;
 }
 
-interface ActivePlan {
-    id: string;
-    clientId: string;
-    clientName: string;
-    planId: string;
-    planName: string;
-    currentWeek: number;
-}
-
-interface RecentWorkoutNote {
-    id: string;
-    workoutLogId: string;
-    text: string;
-    createdAt: string;
-    clientName: string;
-    workoutName: string;
-}
-
 interface Props {
     clients: Client[];
     recentCheckIns: RecentCheckIn[];
-    activePlans: ActivePlan[];
-    recentWorkoutNotes: RecentWorkoutNote[];
 }
 
-export function CoachDashboardClient({ clients, recentCheckIns, activePlans, recentWorkoutNotes }: Props) {
+export function CoachDashboardClient({ clients, recentCheckIns }: Props) {
     const pendingCheckIns = recentCheckIns.filter(ci => ci.status === "Pending").length;
     const activeClients = clients.filter(c => !c.isDeleted);
     const deletedClients = clients.filter(c => c.isDeleted);

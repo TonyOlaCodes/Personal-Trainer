@@ -19,19 +19,27 @@ type AccountStatusRow = {
 
 export type UserAccountStatus = Omit<AccountStatusRow, "id">;
 
+let userDeactivationColumnReady = false;
+let userAccountStatusColumnsReady = false;
+
 export async function ensureUserDeactivationColumn(db: DeactivationDb = prisma) {
+    if (userDeactivationColumnReady) return;
     await db.$executeRawUnsafe(
         'ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "isDeactivated" BOOLEAN NOT NULL DEFAULT false'
     );
+    userDeactivationColumnReady = true;
 }
 
 export async function ensureUserAccountStatusColumns(db: DeactivationDb = prisma) {
+    if (userAccountStatusColumnsReady) return;
     await ensureUserDeactivationColumn(db);
     await db.$executeRawUnsafe('ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "isDeleted" BOOLEAN NOT NULL DEFAULT false');
     await db.$executeRawUnsafe('ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "deletedAt" TIMESTAMP(3)');
     await db.$executeRawUnsafe('ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "deletedName" TEXT');
     await db.$executeRawUnsafe('ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "deletedEmail" TEXT');
+    userAccountStatusColumnsReady = true;
 }
+
 
 export async function getUserDeactivationStatusByClerkId(clerkId: string, db: DeactivationDb = prisma) {
     await ensureUserDeactivationColumn(db);

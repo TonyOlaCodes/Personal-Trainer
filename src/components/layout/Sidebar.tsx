@@ -20,7 +20,6 @@ import {
     ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { RoleSwitcher } from "@/components/shared/RoleSwitcher";
 
 interface NavItem {
     href: string;

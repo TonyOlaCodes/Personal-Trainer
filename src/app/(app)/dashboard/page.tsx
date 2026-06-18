@@ -190,7 +190,7 @@ export default async function DashboardPage() {
     )].map(d => new Date(d).getTime()).sort((a, b) => b - a);
 
     let streak = 0;
-    let checkDay = new Date();
+    const checkDay = new Date();
     checkDay.setHours(0, 0, 0, 0);
     for (const dayTime of allLogDates) {
         if (dayTime === checkDay.getTime()) {
