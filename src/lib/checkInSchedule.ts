@@ -33,42 +33,62 @@ export async function ensureCheckInScheduleColumns() {
     checkInScheduleReady = true;
 }
 
+async function runWithRetry<T>(fn: () => Promise<T>): Promise<T> {
+    try {
+        return await fn();
+    } catch (err: any) {
+        const msg = String(err.message || err);
+        if (msg.includes("does not exist") || msg.includes("P2010") || msg.includes("relation") || msg.includes("column")) {
+            console.warn("[CheckInSchedule] Column missing, resetting ready state and retrying...", err);
+            checkInScheduleReady = false;
+            await ensureCheckInScheduleColumns();
+            return await fn();
+        }
+        throw err;
+    }
+}
+
 export async function getUserCheckInSchedule(userId: string): Promise<CheckInSchedule> {
-    await ensureCheckInScheduleColumns();
+    return runWithRetry(async () => {
+        await ensureCheckInScheduleColumns();
 
-    const rows = await prisma.$queryRaw<Array<{
-        checkInDay: number | null;
-        checkInFrequencyWeeks: number | null;
-        checkInStartDate: Date | null;
-    }>>`
-        SELECT "checkInDay", "checkInFrequencyWeeks", "checkInStartDate"
-        FROM "users"
-        WHERE "id" = ${userId}
-        LIMIT 1
-    `;
+        const rows = await prisma.$queryRaw<Array<{
+            checkInDay: number | null;
+            checkInFrequencyWeeks: number | null;
+            checkInStartDate: Date | null;
+        }>>`
+            SELECT "checkInDay", "checkInFrequencyWeeks", "checkInStartDate"
+            FROM "users"
+            WHERE "id" = ${userId}
+            LIMIT 1
+        `;
 
-    const row = rows[0];
-    return {
-        day: row?.checkInDay ?? null,
-        frequencyWeeks: row?.checkInFrequencyWeeks ?? null,
-        startDate: row?.checkInStartDate ? row.checkInStartDate.toISOString() : null,
-    };
+        const row = rows[0];
+        return {
+            day: row?.checkInDay ?? null,
+            frequencyWeeks: row?.checkInFrequencyWeeks ?? null,
+            startDate: row?.checkInStartDate ? row.checkInStartDate.toISOString() : null,
+        };
+    });
 }
 
 export async function updateUserCheckInSchedule(userId: string, day: number, frequencyWeeks: number) {
-    await ensureCheckInScheduleColumns();
+    return runWithRetry(async () => {
+        await ensureCheckInScheduleColumns();
 
-    await prisma.$executeRaw`
-        UPDATE "users"
-        SET "checkInDay" = ${day},
-            "checkInFrequencyWeeks" = ${frequencyWeeks},
-            "checkInStartDate" = COALESCE("checkInStartDate", CURRENT_TIMESTAMP),
-            "updatedAt" = CURRENT_TIMESTAMP
-        WHERE "id" = ${userId}
-    `;
+        await prisma.$executeRaw`
+            UPDATE "users"
+            SET "checkInDay" = ${day},
+                "checkInFrequencyWeeks" = ${frequencyWeeks},
+                "checkInStartDate" = COALESCE("checkInStartDate", CURRENT_TIMESTAMP),
+                "updatedAt" = CURRENT_TIMESTAMP
+            WHERE "id" = ${userId}
+        `;
 
-    return getUserCheckInSchedule(userId);
+        return getUserCheckInSchedule(userId);
+    });
 }
+
 
 function startOfIsoWeek(date: Date) {
     const d = new Date(date);
