@@ -31,6 +31,11 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
     const [showExerciseModal, setShowExerciseModal] = useState(false);
     const [sbdDays, setSbdDays] = useState<30 | 90 | 365>(90);
     const [volTimeframe, setVolTimeframe] = useState<"daily" | "weekly" | "monthly" | "yearly">("weekly");
+    const [isHydrated, setIsHydrated] = useState(false);
+
+    useEffect(() => {
+        setIsHydrated(true);
+    }, []);
 
     useEffect(() => {
         if (!isPremium) { setLoading(false); return; }
@@ -65,6 +70,8 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
         const estimatedMax = Math.max(...history.map((h: any) => h.oneRM || 0));
         return { currentMax, estimatedMax };
     }, [data, selectedExercise]);
+
+    if (!isHydrated) return null;
 
     if (!isPremium) {
         return (

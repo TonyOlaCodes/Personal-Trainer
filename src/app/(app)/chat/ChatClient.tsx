@@ -495,6 +495,8 @@ export function ChatClient({ currentUserId, currentUserRole, conversations }: Pr
     );
 
     /* ─── Main Render ────────────────────────────────── */
+    if (!isHydrated) return null;
+
     return (
         <div className="flex h-[calc(100dvh-5rem)] lg:h-[calc(100dvh-4rem)] animate-fade-in" onClick={() => { setMenuOpenId(null); setReactionPickerId(null); }}>
             
