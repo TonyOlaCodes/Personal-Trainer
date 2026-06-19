@@ -310,16 +310,32 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
         if (weightLogged) {
             return isWeightDateToday ? "Logged today" : "Logged";
         }
-        if (user.targetWeightKg) {
-            return `Target ${user.targetWeightKg}kg`;
-        }
-        return "Blank until logged";
+        return "Tap to log weight";
     };
 
-    const dailyMetricStatus = (logged: boolean, target?: number | null) => {
+    const dailyMetricStatus = (key: string, logged: boolean) => {
         if (metricsMsg) return metricsMsg;
         if (logged) return isWeightDateToday ? "Logged today" : "Logged";
-        return target ? `Target ${target.toLocaleString()}` : "Blank until logged";
+        if (key === "calories") return "Tap to log calories";
+        if (key === "steps") return "Add daily steps";
+        if (key === "sleepHours") return "Track your sleep";
+        return "Tap to log";
+    };
+
+    const getMetricInsight = (key: string, logged: boolean) => {
+        if (key === "weight") {
+            return logged ? "Weight stable this week" : "Log today for trends";
+        }
+        if (key === "calories") {
+            return logged ? "Fueling recovery" : "Log to check limit";
+        }
+        if (key === "steps") {
+            return logged ? "Active moving streak" : "Steps lower than usual";
+        }
+        if (key === "sleepHours") {
+            return logged ? "Sleep improving" : "Track rest quality";
+        }
+        return "";
     };
 
     const greeting = () => {
@@ -396,7 +412,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
     ];
 
     return (
-        <div className={cn("space-y-6 animate-fade-in pb-10", (todayWorkout && !todayCompleted) && "pb-28")}>
+        <div className="space-y-6 animate-fade-in pb-10">
             <WorkoutSessionModal sessionId={selectedSessionId} onClose={() => setSelectedSessionId(null)} />
             {showTour && <Walkthrough steps={tourSteps} onComplete={() => setShowTour(false)} />}
 
@@ -524,6 +540,9 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                         )}>
                             {bodyweightStatus()}
                         </p>
+                        <p className="text-[8px] sm:text-[9px] text-brand-400 font-semibold mt-0.5 opacity-80 leading-none truncate">
+                            {getMetricInsight("weight", weightLogged)}
+                        </p>
                     </div>
                     {savingWeight && (
                         <div className="absolute top-2 right-2">
@@ -616,7 +635,10 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                                     "text-[10px] font-bold mt-1 truncate",
                                     metric.logged ? "text-success" : "text-fg-subtle"
                                 )}>
-                                    {dailyMetricStatus(metric.logged, metric.target)}
+                                    {dailyMetricStatus(metric.key, metric.logged)}
+                                </p>
+                                <p className="text-[8px] sm:text-[9px] text-brand-400 font-semibold mt-0.5 opacity-80 leading-none truncate">
+                                    {getMetricInsight(metric.key, metric.logged)}
                                 </p>
                             </div>
                         </div>
@@ -885,23 +907,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                 </div>
             )}
 
-            {/* Sticky Start/Resume Workout CTA for Mobile */}
-            {(todayWorkout && !todayCompleted) && (
-                <div className="fixed bottom-6 left-4 right-4 z-40 md:hidden animate-slide-up">
-                    <Link
-                        href={`/plans/log/${todayWorkout.id}`}
-                        className={cn(
-                            "btn-primary w-full py-4 shadow-2xl text-sm font-black uppercase tracking-widest flex items-center justify-center gap-2 rounded-2xl border",
-                            localActiveSession?.workoutId === todayWorkout.id 
-                                ? "bg-success border-success text-white shadow-glow-success" 
-                                : "bg-brand-500 border-brand-400 text-white shadow-glow-brand"
-                        )}
-                    >
-                        <Flame className={cn("w-4 h-4", localActiveSession?.workoutId === todayWorkout.id && "animate-pulse")} />
-                        {localActiveSession?.workoutId === todayWorkout.id ? "Resume Active Workout" : "Start Workout"}
-                    </Link>
-                </div>
-            )}
+
         </div>
     );
 }
