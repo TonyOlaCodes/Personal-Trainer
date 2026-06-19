@@ -19,12 +19,41 @@ export default async function WorkoutLogPage({
     const { workoutId } = await params;
     const { date } = await searchParams;
 
+    const user = await prisma.user.findUnique({
+        where: { clerkId: userId },
+        select: { id: true }
+    });
+    if (!user) redirect("/sign-in");
+
     const workout = await prisma.workout.findUnique({
         where: { id: workoutId },
         include: { exercises: { orderBy: { order: "asc" } } },
     });
 
     if (!workout) notFound();
+
+    const lastLog = await prisma.workoutLog.findFirst({
+        where: {
+            userId: user.id,
+            workoutId: workout.id,
+            status: "COMPLETED",
+        },
+        orderBy: { loggedAt: "desc" },
+        include: {
+            sets: {
+                orderBy: { setNumber: "asc" },
+                include: {
+                    exercise: { select: { name: true } }
+                }
+            }
+        }
+    });
+
+    const lastWorkoutLogSets = lastLog ? lastLog.sets.map((s) => ({
+        exerciseName: s.exercise?.name || "",
+        setNumber: s.setNumber,
+        weightKg: s.weightKg,
+    })) : [];
 
     const mediaByName = await getExerciseMediaByNames(workout.exercises.map((exercise) => exercise.name));
     const exerciseMedia = Object.fromEntries(mediaByName.entries());
@@ -46,6 +75,7 @@ export default async function WorkoutLogPage({
                 }}
                 exerciseMedia={exerciseMedia}
                 logDate={date}
+                lastWorkoutLogSets={lastWorkoutLogSets}
             />
         </div>
     );

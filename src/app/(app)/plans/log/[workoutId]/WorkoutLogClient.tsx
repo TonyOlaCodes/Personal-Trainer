@@ -51,6 +51,7 @@ interface Props {
     workout: Workout;
     exerciseMedia?: Record<string, ExercisePreviewMedia>;
     logDate?: string; // ISO date string for retroactive logging (e.g. "2026-03-25")
+    lastWorkoutLogSets?: Array<{ exerciseName: string; setNumber: number; weightKg: number | null }>;
 }
 
 type ExercisePreviewMedia = {
@@ -80,7 +81,7 @@ function isDirectVideo(url: string) {
     return /\.(mp4|webm|ogg)(\?.*)?$/i.test(url);
 }
 
-export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate }: Props) {
+export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWorkoutLogSets = [] }: Props) {
     const router = useRouter();
     const [logs, setLogs] = useState<Record<string, SetLog[]>>({});
     const [startTime, setStartTime] = useState(Date.now());
@@ -101,6 +102,19 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate }: Props
     const [isDiscarding, setIsDiscarding] = useState(false);
     const [previewExercise, setPreviewExercise] = useState<{ name: string; media: ExercisePreviewMedia } | null>(null);
     const [modalTouchStart, setModalTouchStart] = useState<number | null>(null);
+
+    const getWeightPlaceholder = (exerciseName: string, setNumber: number, weightTargetKg?: number | null) => {
+        const lastSet = lastWorkoutLogSets.find(
+            (s) => s.exerciseName.toLowerCase() === exerciseName.toLowerCase() && s.setNumber === setNumber
+        );
+        if (lastSet && lastSet.weightKg !== null && lastSet.weightKg !== undefined) {
+            return lastSet.weightKg.toString();
+        }
+        if (weightTargetKg !== undefined && weightTargetKg !== null) {
+            return weightTargetKg.toString();
+        }
+        return "";
+    };
 
     // Initialize logs from workout data or fetch existing IN_PROGRESS log
     useEffect(() => {
@@ -173,7 +187,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate }: Props
                         initialLogs[ex.id] = Array.from({ length: ex.sets }, (_, i) => ({
                             setNumber: i + 1,
                             reps: parseInt(ex.reps) || 10,
-                            weightKg: ex.weightTargetKg?.toString() || "",
+                            weightKg: "",
                             rpe: "",
                             isCompleted: false,
                             isWarmup: false,
@@ -267,11 +281,20 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate }: Props
     const updateSet = (exId: string, setIdx: number, updates: Partial<SetLog>) => {
         setLogs((prev) => {
             const currentSet = prev[exId][setIdx];
+            const finalUpdates = { ...updates };
             
             // Auto-check logic: if weight is entered and it's not currently completed, check it
-            const finalUpdates = { ...updates };
             if (updates.weightKg && updates.weightKg.trim() !== "" && !currentSet.isCompleted && updates.isCompleted === undefined) {
                 finalUpdates.isCompleted = true;
+            }
+
+            // Auto-fill logic: if completing set and weight is empty, fill with placeholder
+            if (updates.isCompleted === true && currentSet.weightKg === "") {
+                const exInfo = activeExercises.find(e => e.id === exId);
+                const placeholderWeight = getWeightPlaceholder(exInfo?.name || "", currentSet.setNumber, exInfo?.weightTargetKg);
+                if (placeholderWeight) {
+                    finalUpdates.weightKg = placeholderWeight;
+                }
             }
 
             const next = {
@@ -624,9 +647,10 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate }: Props
                                                     type="number"
                                                     className="input-sm w-full bg-surface-elevated border-none focus:ring-1 focus:ring-brand-500 text-center text-sm font-semibold rounded-lg h-10 px-1"
                                                     value={set.weightKg}
+                                                    placeholder={getWeightPlaceholder(ex.name, set.setNumber, ex.weightTargetKg) || "0"}
                                                     onChange={(e) => updateSet(ex.id, sIdx, { weightKg: e.target.value })}
                                                 />
-                                                {!isCardio(ex.name) && set.weightKg && (
+                                                {!isCardio(ex.name) && (set.weightKg || getWeightPlaceholder(ex.name, set.setNumber, ex.weightTargetKg)) && (
                                                     <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[9px] text-fg-subtle pointer-events-none">kg</span>
                                                 )}
                                             </div>
