@@ -23,185 +23,200 @@ const checkInSchema = z.object({
 
 // POST submit a check-in
 export async function POST(req: Request) {
-    const { userId: clerkId } = await auth();
-    if (!clerkId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    try {
+        const { userId: clerkId } = await auth();
+        if (!clerkId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const user = await prisma.user.findUnique({ where: { clerkId } });
-    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+        const user = await prisma.user.findUnique({ where: { clerkId } });
+        if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-    // Coaches do not submit client check-ins — they review them
-    if (user.role === "COACH") {
-        return NextResponse.json({ error: "Coaches cannot submit check-ins" }, { status: 403 });
-    }
-
-    if (user.role === "FREE") {
-        return NextResponse.json({ error: "Check-ins require Premium" }, { status: 403 });
-    }
-
-    const body = await req.json();
-    const parsed = checkInSchema.safeParse(body);
-    if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-
-    const existingWeek = await prisma.checkIn.findFirst({
-        where: { userId: user.id, weekNumber: parsed.data.weekNumber },
-    });
-    if (existingWeek) return NextResponse.json({ error: "Check-in for this week already exists." }, { status: 400 });
-
-    const checkIn = await prisma.checkIn.create({
-        data: {
-            userId: user.id,
-            ...parsed.data,
-            bodyweightKg: parsed.data.bodyweightKg ? Math.round(parsed.data.bodyweightKg * 100) / 100 : undefined,
-            feedback: parsed.data.feedback || "Check-in completed.",
-            status: "PENDING",
-        },
-    });
-
-    // Notify coach if they have a coach and notifications enabled
-    if (user.coachId) {
-        const coach = await prisma.user.findUnique({
-            where: { id: user.coachId },
-            select: { notifyOnCheckIn: true },
-        });
-        if (coach?.notifyOnCheckIn) {
-            await createNotification({
-                userId: user.coachId,
-                type: "CLIENT_CHECKIN",
-                message: `${user.name ?? user.email} submitted a check-in`,
-                entityType: "CHECK_IN",
-                entityId: checkIn.id,
-                route: `/coach/client/${user.id}?tab=checkins`,
-            });
+        // Coaches do not submit client check-ins — they review them
+        if (user.role === "COACH") {
+            return NextResponse.json({ error: "Coaches cannot submit check-ins" }, { status: 403 });
         }
-    }
 
-    return NextResponse.json(checkIn, { status: 201 });
+        if (user.role === "FREE") {
+            return NextResponse.json({ error: "Check-ins require Premium" }, { status: 403 });
+        }
+
+        const body = await req.json();
+        const parsed = checkInSchema.safeParse(body);
+        if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+
+        const existingWeek = await prisma.checkIn.findFirst({
+            where: { userId: user.id, weekNumber: parsed.data.weekNumber },
+        });
+        if (existingWeek) return NextResponse.json({ error: "Check-in for this week already exists." }, { status: 400 });
+
+        const checkIn = await prisma.checkIn.create({
+            data: {
+                userId: user.id,
+                ...parsed.data,
+                bodyweightKg: parsed.data.bodyweightKg ? Math.round(parsed.data.bodyweightKg * 100) / 100 : undefined,
+                feedback: parsed.data.feedback || "Check-in completed.",
+                status: "PENDING",
+            },
+        });
+
+        // Notify coach if they have a coach and notifications enabled
+        if (user.coachId) {
+            const coach = await prisma.user.findUnique({
+                where: { id: user.coachId },
+                select: { notifyOnCheckIn: true },
+            });
+            if (coach?.notifyOnCheckIn) {
+                await createNotification({
+                    userId: user.coachId,
+                    type: "CLIENT_CHECKIN",
+                    message: `${user.name ?? user.email} submitted a check-in`,
+                    entityType: "CHECK_IN",
+                    entityId: checkIn.id,
+                    route: `/coach/client/${user.id}?tab=checkins`,
+                });
+            }
+        }
+
+        return NextResponse.json(checkIn, { status: 201 });
+    } catch (error) {
+        console.error("Error in POST /api/checkins:", error);
+        return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    }
 }
 
 // GET check-ins (personal or client dashboard)
 export async function GET(req: Request) {
-    const { userId: clerkId } = await auth();
-    if (!clerkId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    try {
+        const { userId: clerkId } = await auth();
+        if (!clerkId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const user = await prisma.user.findUnique({ where: { clerkId } });
-    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+        const user = await prisma.user.findUnique({ where: { clerkId } });
+        if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-    const url = new URL(req.url);
-    const clientId = url.searchParams.get("clientId");
+        const url = new URL(req.url);
+        const clientId = url.searchParams.get("clientId");
 
-    let where: Prisma.CheckInWhereInput = { userId: user.id };
+        let where: Prisma.CheckInWhereInput = { userId: user.id };
 
-    // Coaches can see all their clients or a specific one
-    if (["COACH", "SUPER_ADMIN"].includes(user.role)) {
-        if (clientId) {
-            where = { userId: clientId, user: { coachId: user.id } };
-        } else {
-            where = { user: { coachId: user.id } };
+        // Coaches can see all their clients or a specific one
+        if (["COACH", "SUPER_ADMIN"].includes(user.role)) {
+            if (clientId) {
+                where = { userId: clientId, user: { coachId: user.id } };
+            } else {
+                where = { user: { coachId: user.id } };
+            }
         }
-    }
 
-    const checkIns = await prisma.checkIn.findMany({
-        where,
-        include: {
-            user: {
-                select: {
-                    name: true,
-                    email: true,
-                    workoutLogs: {
-                        take: 15,
-                        orderBy: { loggedAt: "desc" },
-                        include: {
-                            workout: { select: { name: true } },
-                            sets: {
-                                where: { videoUrl: { not: null } },
-                                include: { exercise: { select: { name: true } } },
+        const checkIns = await prisma.checkIn.findMany({
+            where,
+            include: {
+                user: {
+                    select: {
+                        name: true,
+                        email: true,
+                        workoutLogs: {
+                            take: 15,
+                            orderBy: { loggedAt: "desc" },
+                            include: {
+                                workout: { select: { name: true } },
+                                sets: {
+                                    where: { videoUrl: { not: null } },
+                                    include: { exercise: { select: { name: true } } },
+                                },
                             },
                         },
                     },
                 },
             },
-        },
-        orderBy: { weekNumber: "desc" },
-    });
+            orderBy: { weekNumber: "desc" },
+        });
 
-    return NextResponse.json(checkIns);
+        return NextResponse.json(checkIns);
+    } catch (error) {
+        console.error("Error in GET /api/checkins:", error);
+        return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    }
 }
 
 // PATCH for coach review OR user edit
 export async function PATCH(req: Request) {
-    const { userId: clerkId } = await auth();
-    if (!clerkId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    try {
+        const { userId: clerkId } = await auth();
+        if (!clerkId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const user = await prisma.user.findUnique({ where: { clerkId } });
-    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+        const user = await prisma.user.findUnique({ where: { clerkId } });
+        if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-    const body = await req.json();
-    const { id, coachResponse, status, feedback, notes, videoUrl, bodyweightKg, sleepRating, dietRating, stressRating, injuryRating, energyRating, intensityRating, frontImageUrl, sideImageUrl } = body;
+        const body = await req.json();
+        const { id, coachResponse, status, feedback, notes, videoUrl, bodyweightKg, sleepRating, dietRating, stressRating, injuryRating, energyRating, intensityRating, frontImageUrl, sideImageUrl } = body;
 
-    const existing = await prisma.checkIn.findUnique({
-        where: { id },
-        include: { user: { select: { coachId: true } } },
-    });
-
-    if (!existing) return NextResponse.json({ error: "Check-in not found" }, { status: 404 });
-
-    const isCoach = ["COACH", "SUPER_ADMIN"].includes(user.role);
-    const isOwner = existing.userId === user.id;
-
-    if (!isCoach && !isOwner) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-    if (isCoach && user.role !== "SUPER_ADMIN" && existing.user.coachId !== user.id) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
-    // Determine what to update based on who is editing
-    const parsedStatus = status === "PENDING" || status === "REVIEWED" ? status : "REVIEWED";
-    let data: Prisma.CheckInUpdateInput = {};
-
-    if (isCoach) {
-        data = {
-            coachResponse,
-            coachVideoUrl: body.coachVideoUrl,
-            status: parsedStatus as CheckInStatus,
-            respondedAt: new Date(),
-            coachLastSeenAt: new Date(),
-        };
-    } else {
-        // User edit
-        data = {
-            feedback: feedback || "Check-in updated.",
-            notes,
-            videoUrl,
-            bodyweightKg: bodyweightKg ? Math.round(parseFloat(bodyweightKg) * 100) / 100 : undefined,
-            sleepRating,
-            dietRating,
-            stressRating,
-            injuryRating,
-            energyRating,
-            intensityRating,
-            frontImageUrl,
-            sideImageUrl,
-            lastUpdatedByClientAt: new Date(),
-            status: "PENDING",
-        };
-    }
-
-    const updated = await prisma.checkIn.update({
-        where: { id },
-        data,
-    });
-
-    if (isCoach) {
-        await createNotification({
-            userId: existing.userId,
-            type: "CHECKIN_REVIEWED",
-            message: "Your coach reviewed your check-in",
-            entityType: "CHECK_IN",
-            entityId: existing.id,
-            route: `/checkins?highlight=${existing.id}`,
+        const existing = await prisma.checkIn.findUnique({
+            where: { id },
+            include: { user: { select: { coachId: true } } },
         });
-    }
 
-    return NextResponse.json(updated);
+        if (!existing) return NextResponse.json({ error: "Check-in not found" }, { status: 404 });
+
+        const isCoach = ["COACH", "SUPER_ADMIN"].includes(user.role);
+        const isOwner = existing.userId === user.id;
+
+        if (!isCoach && !isOwner) {
+            return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        }
+        if (isCoach && user.role !== "SUPER_ADMIN" && existing.user.coachId !== user.id) {
+            return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        }
+
+        // Determine what to update based on who is editing
+        const parsedStatus = status === "PENDING" || status === "REVIEWED" ? status : "REVIEWED";
+        let data: Prisma.CheckInUpdateInput = {};
+
+        if (isCoach) {
+            data = {
+                coachResponse,
+                coachVideoUrl: body.coachVideoUrl,
+                status: parsedStatus as CheckInStatus,
+                respondedAt: new Date(),
+                coachLastSeenAt: new Date(),
+            };
+        } else {
+            // User edit
+            data = {
+                feedback: feedback || "Check-in updated.",
+                notes,
+                videoUrl,
+                bodyweightKg: bodyweightKg ? Math.round(parseFloat(bodyweightKg) * 100) / 100 : undefined,
+                sleepRating,
+                dietRating,
+                stressRating,
+                injuryRating,
+                energyRating,
+                intensityRating,
+                frontImageUrl,
+                sideImageUrl,
+                lastUpdatedByClientAt: new Date(),
+                status: "PENDING",
+            };
+        }
+
+        const updated = await prisma.checkIn.update({
+            where: { id },
+            data,
+        });
+
+        if (isCoach) {
+            await createNotification({
+                userId: existing.userId,
+                type: "CHECKIN_REVIEWED",
+                message: "Your coach reviewed your check-in",
+                entityType: "CHECK_IN",
+                entityId: existing.id,
+                route: `/checkins?highlight=${existing.id}`,
+            });
+        }
+
+        return NextResponse.json(updated);
+    } catch (error) {
+        console.error("Error in PATCH /api/checkins:", error);
+        return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    }
 }

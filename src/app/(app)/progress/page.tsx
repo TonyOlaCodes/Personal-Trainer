@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { ProgressClient } from "./ProgressClient";
+import { SafeFallback, isNextInternalError } from "@/components/shared/SafeFallback";
 
 export const metadata = { 
     title: "Progress & Analytics | Performance Tracker",
@@ -10,29 +11,35 @@ export const metadata = {
 };
 
 export default async function ProgressPage() {
-    const { userId } = await auth();
-    if (!userId) redirect("/sign-in");
+    try {
+        const { userId } = await auth();
+        if (!userId) redirect("/sign-in");
 
-    const user = await prisma.user.findUnique({ 
-        where: { clerkId: userId },
-        select: { role: true, hiddenGoals: true }
-    });
-    
-    if (!user) redirect("/sign-in");
+        const user = await prisma.user.findUnique({ 
+            where: { clerkId: userId },
+            select: { role: true, hiddenGoals: true }
+        });
+        
+        if (!user) redirect("/sign-in");
 
-    if (user.role === "COACH" || user.role === "SUPER_ADMIN") {
-        redirect("/coach");
+        if (user.role === "COACH" || user.role === "SUPER_ADMIN") {
+            redirect("/coach");
+        }
+
+        return (
+            <div className="bg-surface-base min-h-screen">
+                <TopBar 
+                    title="Progress" 
+                    subtitle="Am I improving?" 
+                />
+                <main className="animate-fade-in">
+                    <ProgressClient userRole={user.role} hiddenGoals={user.hiddenGoals ?? []} />
+                </main>
+            </div>
+        );
+    } catch (e) {
+        if (isNextInternalError(e)) throw e;
+        console.error("[ProgressPage] Error:", e);
+        return <SafeFallback title="Progress" />;
     }
-
-    return (
-        <div className="bg-surface-base min-h-screen">
-            <TopBar 
-                title="Progress" 
-                subtitle="Am I improving?" 
-            />
-            <main className="animate-fade-in">
-                <ProgressClient userRole={user.role} hiddenGoals={user.hiddenGoals} />
-            </main>
-        </div>
-    );
 }

@@ -43,7 +43,7 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
             .then(res => res.json())
             .then(d => {
                 setData(d);
-                const exercises = Object.keys(d.exerciseHistory);
+                const exercises = Object.keys(d?.exerciseHistory ?? {});
                 if (exercises.length > 0) setSelectedExercise(exercises[0]);
                 setLoading(false);
             })
@@ -58,13 +58,13 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
 
     const exerciseList = useMemo(() => {
         if (!data) return [];
-        const names = Object.keys(data.exerciseHistory);
+        const names = Object.keys(data?.exerciseHistory ?? {});
         return names.filter(ex => exerciseSearchQuery ? getRegex(exerciseSearchQuery).test(ex) : true);
     }, [data, exerciseSearchQuery]);
 
     const selectedExerciseStats = useMemo(() => {
         if (!data || !selectedExercise) return null;
-        const history: any[] = data.exerciseHistory[selectedExercise] || [];
+        const history: any[] = (data?.exerciseHistory ?? {})[selectedExercise] || [];
         if (history.length === 0) return null;
         const currentMax = Math.max(...history.map((h: any) => h.weight || 0));
         const estimatedMax = Math.max(...history.map((h: any) => h.oneRM || 0));
@@ -104,13 +104,13 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
         );
     }
 
-    const bodyweightData = data.bodyweight.history.slice(-bwDays).map((d: any) => ({
+    const bodyweightData = (data?.bodyweight?.history ?? []).slice(-bwDays).map((d: any) => ({
         ...d,
-        target: data.bodyweight.target
+        target: data?.bodyweight?.target ?? null
     }));
 
-    const consistencyPct = data.consistency.target > 0
-        ? Math.min(Math.round((data.consistency.thisWeek / data.consistency.target) * 100), 100) : 0;
+    const consistencyPct = (data?.consistency?.target ?? 0) > 0
+        ? Math.min(Math.round(((data?.consistency?.thisWeek ?? 0) / (data?.consistency?.target ?? 4)) * 100), 100) : 0;
 
     const volumeChangeDir = (data.weeklySummary?.volumeChange || 0) >= 0;
     const formatHabitValue = (value: number | null | undefined, unit: string) => {
@@ -178,13 +178,13 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                                 />
                             </svg>
                             <div className="absolute inset-0 flex items-center justify-center">
-                                <span className="text-xs font-black text-fg">{data.consistency.thisWeek}/{data.consistency.target}</span>
+                                <span className="text-xs font-black text-fg">{data?.consistency?.thisWeek ?? 0}/{data?.consistency?.target ?? 4}</span>
                             </div>
                         </div>
                         <div>
                             <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest">Workouts</p>
                             <p className="text-xs text-fg-muted mt-0.5">
-                                {consistencyPct >= 100 ? "On track! 🔥" : `${data.consistency.target - data.consistency.thisWeek} to go`}
+                                {consistencyPct >= 100 ? "On track! 🔥" : `${(data?.consistency?.target ?? 4) - (data?.consistency?.thisWeek ?? 0)} to go`}
                             </p>
                         </div>
                     </div>
@@ -246,7 +246,7 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                         </div>
                         <div className="bg-surface-muted/50 rounded-xl p-3 text-center">
                             <p className="text-lg font-black text-fg">
-                                {data.lastWorkout.totalVolume.toLocaleString()}
+                                {(data.lastWorkout?.totalVolume ?? 0).toLocaleString()}
                                 <span className="text-[10px] text-fg-muted ml-0.5">kg</span>
                             </p>
                             <p className="text-[9px] font-bold text-fg-subtle uppercase tracking-widest">Volume</p>
@@ -257,7 +257,7 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                         </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                        {data.lastWorkout.exercises.map((ex: string) => (
+                        {(data.lastWorkout?.exercises ?? []).map((ex: string) => (
                             <span key={ex} className="px-2.5 py-1 bg-surface-muted/60 rounded-lg text-[10px] font-bold text-fg-muted uppercase tracking-wider">
                                 {ex}
                             </span>
@@ -278,31 +278,31 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                                 {/* ── BIG current weight ── */}
                                 <div className="flex items-end gap-3">
                                     <h3 className="text-4xl font-black text-fg tracking-tighter leading-none">
-                                        {data.bodyweight.current ? data.bodyweight.current.toFixed(1) : "--"}
+                                        {data?.bodyweight?.current ? data.bodyweight.current.toFixed(1) : "--"}
                                         <span className="text-lg font-bold text-fg-muted ml-1">kg</span>
                                     </h3>
                                     {/* Week delta badge */}
-                                    {data.bodyweight.changeWeek !== 0 && (
+                                    {(data?.bodyweight?.changeWeek ?? 0) !== 0 && (
                                         <span className={cn(
                                             "inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-black mb-1",
-                                            data.bodyweight.changeWeek > 0
+                                            (data?.bodyweight?.changeWeek ?? 0) > 0
                                                 ? "bg-red-500/10 text-red-400"
                                                 : "bg-success/10 text-success"
                                         )}>
-                                            {data.bodyweight.changeWeek > 0
+                                            {(data?.bodyweight?.changeWeek ?? 0) > 0
                                                 ? <TrendingUp className="w-3 h-3" />
                                                 : <TrendingDown className="w-3 h-3" />}
-                                            {data.bodyweight.changeWeek > 0 ? "+" : ""}{data.bodyweight.changeWeek.toFixed(1)} kg this week
+                                            {(data?.bodyweight?.changeWeek ?? 0) > 0 ? "+" : ""}{(data?.bodyweight?.changeWeek ?? 0).toFixed(1)} kg this week
                                         </span>
                                     )}
                                 </div>
                                 {/* Target line */}
-                                {data.bodyweight.target && (
+                                {data?.bodyweight?.target && (
                                     <p className="text-[10px] text-fg-muted mt-1.5">
                                         Goal: <span className="text-red-400 font-bold">{data.bodyweight.target.toFixed(1)} kg</span>
                                         <span className="mx-1 text-fg-subtle">·</span>
-                                        <span className={cn("font-bold", Math.abs(data.bodyweight.current - data.bodyweight.target) < 2 ? "text-success" : "text-fg-muted")}>
-                                            {Math.abs(data.bodyweight.current - data.bodyweight.target).toFixed(1)} kg away
+                                        <span className={cn("font-bold", Math.abs((data?.bodyweight?.current ?? 0) - (data?.bodyweight?.target ?? 0)) < 2 ? "text-success" : "text-fg-muted")}>
+                                            {Math.abs((data?.bodyweight?.current ?? 0) - (data?.bodyweight?.target ?? 0)).toFixed(1)} kg away
                                         </span>
                                     </p>
                                 )}
@@ -326,8 +326,8 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                             {/* Total change pill */}
                             <div className="text-right">
                                 <p className="text-[9px] font-black text-fg-subtle uppercase tracking-widest">Total change</p>
-                                <p className={cn("text-sm font-black", data.bodyweight.totalChange < 0 ? "text-success" : "text-fg")}>
-                                    {data.bodyweight.totalChange > 0 ? "+" : ""}{data.bodyweight.totalChange.toFixed(1)} kg
+                                <p className={cn("text-sm font-black", (data?.bodyweight?.totalChange ?? 0) < 0 ? "text-success" : "text-fg")}>
+                                    {(data?.bodyweight?.totalChange ?? 0) > 0 ? "+" : ""}{(data?.bodyweight?.totalChange ?? 0).toFixed(1)} kg
                                 </p>
                             </div>
                         </div>
@@ -351,8 +351,8 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                                     tickLine={false} 
                                     axisLine={false} 
                                     domain={[
-                                        (min: number) => data.bodyweight.target ? Math.min(min, data.bodyweight.target) - 2 : min - 2,
-                                        (max: number) => data.bodyweight.target ? Math.max(max, data.bodyweight.target) + 2 : max + 2
+                                        (min: number) => data?.bodyweight?.target ? Math.min(min, data.bodyweight.target) - 2 : min - 2,
+                                        (max: number) => data?.bodyweight?.target ? Math.max(max, data.bodyweight.target) + 2 : max + 2
                                     ]} 
                                 />
                                 <Tooltip
@@ -361,7 +361,7 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                                     itemStyle={{ fontWeight: 800 }}
                                     labelStyle={{ color: "#6B7280", fontSize: 10, fontWeight: 800, textTransform: "uppercase" as const, letterSpacing: "0.1em" }}
                                 />
-                                {data.bodyweight.target && (
+                                {data?.bodyweight?.target && (
                                     <ReferenceLine
                                         y={data.bodyweight.target}
                                         stroke="#EF4444"
@@ -754,8 +754,8 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                         </div>
                         <div className="flex-1 overflow-y-auto no-scrollbar p-2 space-y-1">
                             {exerciseList.map(ex => {
-                                const hist = data.exerciseHistory[ex];
-                                const latest = hist[hist.length - 1];
+                                const hist = (data?.exerciseHistory ?? {})[ex] ?? [];
+                                const latest = hist.length > 0 ? hist[hist.length - 1] : null;
                                 const isActive = selectedExercise === ex;
                                 return (
                                     <button
@@ -772,7 +772,7 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                                             </div>
                                             <div className="min-w-0">
                                                 <p className={cn("text-xs font-black truncate", isActive ? "text-brand-400" : "text-fg")}>{ex}</p>
-                                                <p className="text-[10px] text-fg-muted truncate">Best: {latest?.weight}kg · {hist.length} sessions</p>
+                                                <p className="text-[10px] text-fg-muted truncate">Best: {latest?.weight ?? "--"}kg · {hist?.length ?? 0} sessions</p>
                                             </div>
                                         </div>
                                         <ChevronRight className={cn("w-4 h-4 shrink-0 transition-opacity", isActive ? "text-brand-400 opacity-100" : "opacity-0")} />

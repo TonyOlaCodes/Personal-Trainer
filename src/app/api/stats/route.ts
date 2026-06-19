@@ -6,17 +6,18 @@ import { ensureDailyMetricsTable, getDailyMetricTargets } from "@/lib/dailyMetri
 import { calculateOneRM } from "@/lib/utils";
 
 export async function GET() {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    try {
+        const { userId } = await auth();
+        if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const user = await prisma.user.findUnique({
-        where: { clerkId: userId },
-        include: {
-            checkIns: { orderBy: { createdAt: "asc" } }
-        }
-    });
-    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
-    await ensureDailyMetricsTable();
+        const user = await prisma.user.findUnique({
+            where: { clerkId: userId },
+            include: {
+                checkIns: { orderBy: { createdAt: "asc" } }
+            }
+        });
+        if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+        await ensureDailyMetricsTable();
 
     // Fetch completed workout logs
     const logs = await prisma.workoutLog.findMany({
@@ -181,17 +182,17 @@ export async function GET() {
     });
 
     const bodyweightHistory = [
-        ...(user.weightKg ? [{ date: format(user.createdAt, "MMM dd"), dateKey: user.createdAt.toISOString(), weight: user.weightKg }] : []),
-        ...user.checkIns.filter((c: any) => c.bodyweightKg).map((c: any) => ({
-            date: format(c.createdAt, "MMM dd"),
-            dateKey: c.createdAt.toISOString(),
+        ...(user.weightKg ? [{ date: format(user.createdAt ?? new Date(), "MMM dd"), dateKey: (user.createdAt ?? new Date()).toISOString(), weight: user.weightKg }] : []),
+        ...(user.checkIns ?? []).filter((c: any) => c.bodyweightKg).map((c: any) => ({
+            date: format(c.createdAt ?? new Date(), "MMM dd"),
+            dateKey: (c.createdAt ?? new Date()).toISOString(),
             weight: c.bodyweightKg
         }))
     ].sort((a,b) => a.dateKey.localeCompare(b.dateKey));
 
     const currentWeight = bodyweightHistory[bodyweightHistory.length - 1]?.weight || user.weightKg || 0;
     const startWeight = bodyweightHistory[0]?.weight || user.weightKg || 0;
-    const recentCheckins = user.checkIns.filter((c: any) => c.bodyweightKg && c.createdAt >= subWeeks(now, 2));
+    const recentCheckins = (user.checkIns ?? []).filter((c: any) => c.bodyweightKg && c.createdAt >= subWeeks(now, 2));
     const weightChangeWeek = recentCheckins.length > 1
         ? (recentCheckins[recentCheckins.length - 1]?.bodyweightKg || currentWeight) - (recentCheckins[0]?.bodyweightKg || currentWeight)
         : 0;
@@ -327,22 +328,26 @@ export async function GET() {
         yearly: Object.entries(yearlyVolumeMap).map(([label, volume]) => ({ label, volume: Math.round(volume as number) }))
     };
 
-    return NextResponse.json({
-        totalWorkouts: logs.length,
-        consistency: { thisWeek: workoutsThisWeek, lastWeek: workoutsLastWeek, target: user.trainingDaysPerWeek || 4 },
-        bodyweight: {
-            current: currentWeight, target: user.targetWeightKg || null, goal: user.goal || null,
-            changeWeek: weightChangeWeek, totalChange: currentWeight - startWeight, history: bodyweightHistory
-        },
-        dailyMetrics,
-        big3,
-        sbdTimeline: sbdTimelineProgressive,
-        muscleVolume,
-        exerciseHistory,
-        prList,
-        topExercises,
-        lastWorkout: lastWorkoutSummary,
-        weeklySummary,
-        volumes
-    });
+        return NextResponse.json({
+            totalWorkouts: logs.length,
+            consistency: { thisWeek: workoutsThisWeek, lastWeek: workoutsLastWeek, target: user.trainingDaysPerWeek || 4 },
+            bodyweight: {
+                current: currentWeight, target: user.targetWeightKg || null, goal: user.goal || null,
+                changeWeek: weightChangeWeek, totalChange: currentWeight - startWeight, history: bodyweightHistory
+            },
+            dailyMetrics,
+            big3,
+            sbdTimeline: sbdTimelineProgressive,
+            muscleVolume,
+            exerciseHistory,
+            prList,
+            topExercises,
+            lastWorkout: lastWorkoutSummary,
+            weeklySummary,
+            volumes
+        });
+    } catch (error) {
+        console.error("Error in GET /api/stats:", error);
+        return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    }
 }

@@ -4,33 +4,40 @@ import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { SettingsClient } from "./SettingsClient";
 import { getDailyMetricTargets } from "@/lib/dailyMetrics";
+import { SafeFallback, isNextInternalError } from "@/components/shared/SafeFallback";
 
 
 export const metadata = { title: "Settings" };
 
 export default async function SettingsPage() {
-    const { userId } = await auth();
-    if (!userId) redirect("/sign-in");
+    try {
+        const { userId } = await auth();
+        if (!userId) redirect("/sign-in");
 
-    const user = await prisma.user.findUnique({
-        where: { clerkId: userId },
-        select: {
-            id: true,
-            name: true, email: true, role: true, onboardingDone: true, avatarUrl: true,
-            goal: true, trainingDaysPerWeek: true, experienceLevel: true, trainingLocation: true,
-            targetWeightKg: true, weightKg: true,
-            hiddenGoals: true,
-        },
-    });
+        const user = await prisma.user.findUnique({
+            where: { clerkId: userId },
+            select: {
+                id: true,
+                name: true, email: true, role: true, onboardingDone: true, avatarUrl: true,
+                goal: true, trainingDaysPerWeek: true, experienceLevel: true, trainingLocation: true,
+                targetWeightKg: true, weightKg: true,
+                hiddenGoals: true,
+            },
+        });
 
-    if (!user) redirect("/sign-in");
+        if (!user) redirect("/sign-in");
 
-    const dailyMetricTargets = await getDailyMetricTargets(user.id);
+        const dailyMetricTargets = await getDailyMetricTargets(user.id);
 
-    return (
-        <>
-            <TopBar title="Settings" subtitle="Manage your account preferences" />
-            <SettingsClient user={{ ...user, ...dailyMetricTargets }} />
-        </>
-    );
+        return (
+            <>
+                <TopBar title="Settings" subtitle="Manage your account preferences" />
+                <SettingsClient user={{ ...user, hiddenGoals: user.hiddenGoals ?? [], ...dailyMetricTargets }} />
+            </>
+        );
+    } catch (e) {
+        if (isNextInternalError(e)) throw e;
+        console.error("[SettingsPage] Error:", e);
+        return <SafeFallback title="Settings" />;
+    }
 }
