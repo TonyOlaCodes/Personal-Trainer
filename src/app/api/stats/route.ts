@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { format, startOfWeek, endOfWeek, subWeeks, isWithinInterval, startOfMonth, startOfYear } from "date-fns";
 import { ensureDailyMetricsTable, getDailyMetricTargets } from "@/lib/dailyMetrics";
 import { calculateOneRM } from "@/lib/utils";
+import { ensureBodyweightTable } from "@/lib/bodyweight";
 
 export async function GET() {
     try {
@@ -181,20 +182,61 @@ export async function GET() {
         };
     });
 
-    const bodyweightHistory = [
-        ...(user.weightKg ? [{ date: format(user.createdAt ?? new Date(), "MMM dd"), dateKey: (user.createdAt ?? new Date()).toISOString(), weight: user.weightKg }] : []),
-        ...(user.checkIns ?? []).filter((c: any) => c.bodyweightKg).map((c: any) => ({
-            date: format(c.createdAt ?? new Date(), "MMM dd"),
-            dateKey: (c.createdAt ?? new Date()).toISOString(),
-            weight: c.bodyweightKg
-        }))
-    ].sort((a,b) => a.dateKey.localeCompare(b.dateKey));
+    await ensureBodyweightTable();
+    const dbBodyweightLogs = await prisma.$queryRaw<Array<{ date: string; dateKey: string; weight: number }>>`
+        SELECT
+            to_char("loggedDate", 'Mon DD') AS "date",
+            "loggedDate"::text AS "dateKey",
+            "weightKg" AS "weight"
+        FROM "bodyweight_logs"
+        WHERE "userId" = ${user.id}
+        ORDER BY "loggedDate" ASC
+    ` || [];
+
+    const combinedWeightMap = new Map<string, { date: string; dateKey: string; weight: number }>();
+
+    // 1. Initial user.weightKg at user.createdAt (if available)
+    if (user.weightKg) {
+        const uDate = user.createdAt ?? new Date();
+        const dateKey = uDate.toISOString().slice(0, 10);
+        const dateStr = format(uDate, "MMM dd");
+        combinedWeightMap.set(dateKey, { date: dateStr, dateKey, weight: user.weightKg });
+    }
+
+    // 2. Weekly check-ins
+    (user.checkIns ?? []).forEach((c: any) => {
+        if (c.bodyweightKg) {
+            const cDate = c.createdAt ?? new Date();
+            const dateKey = cDate.toISOString().slice(0, 10);
+            const dateStr = format(cDate, "MMM dd");
+            combinedWeightMap.set(dateKey, { date: dateStr, dateKey, weight: c.bodyweightKg });
+        }
+    });
+
+    // 3. Bodyweight logs
+    (dbBodyweightLogs ?? []).forEach((row: any) => {
+        if (row.weight) {
+            const dateKey = row.dateKey ? row.dateKey.slice(0, 10) : "";
+            if (dateKey) {
+                combinedWeightMap.set(dateKey, {
+                    date: row.date,
+                    dateKey: dateKey,
+                    weight: row.weight
+                });
+            }
+        }
+    });
+
+    const bodyweightHistory = Array.from(combinedWeightMap.values())
+        .sort((a, b) => a.dateKey.localeCompare(b.dateKey));
 
     const currentWeight = bodyweightHistory[bodyweightHistory.length - 1]?.weight || user.weightKg || 0;
     const startWeight = bodyweightHistory[0]?.weight || user.weightKg || 0;
-    const recentCheckins = (user.checkIns ?? []).filter((c: any) => c.bodyweightKg && c.createdAt >= subWeeks(now, 2));
-    const weightChangeWeek = recentCheckins.length > 1
-        ? (recentCheckins[recentCheckins.length - 1]?.bodyweightKg || currentWeight) - (recentCheckins[0]?.bodyweightKg || currentWeight)
+
+    const twoWeeksAgo = subWeeks(now, 2);
+    const recentBwLogs = bodyweightHistory.filter(h => new Date(h.dateKey) >= twoWeeksAgo);
+    const weightChangeWeek = recentBwLogs.length > 1
+        ? (recentBwLogs[recentBwLogs.length - 1]?.weight || currentWeight) - (recentBwLogs[0]?.weight || currentWeight)
         : 0;
 
     const [dailyMetricRows, dailyMetricTargets] = await Promise.all([
