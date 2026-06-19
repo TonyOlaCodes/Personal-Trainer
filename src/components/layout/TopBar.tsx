@@ -26,7 +26,7 @@ interface NotificationItem {
     route: string;
 }
 
-export function TopBar({ title, subtitle, streak, hideSearch = false }: TopBarProps) {
+export function TopBar({ title, subtitle, streak, hideSearch = true }: TopBarProps) {
     const router = useRouter();
     const role = useRole();
     const [showNotifications, setShowNotifications] = useState(false);

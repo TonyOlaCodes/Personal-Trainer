@@ -43,11 +43,6 @@ export async function POST(req: Request) {
         const parsed = checkInSchema.safeParse(body);
         if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-        const existingWeek = await prisma.checkIn.findFirst({
-            where: { userId: user.id, weekNumber: parsed.data.weekNumber },
-        });
-        if (existingWeek) return NextResponse.json({ error: "Check-in for this week already exists." }, { status: 400 });
-
         const checkIn = await prisma.checkIn.create({
             data: {
                 userId: user.id,

@@ -16,6 +16,7 @@ interface Exercise {
     reps: string;
     weightTargetKg?: number | null;
     notes?: string | null;
+    order?: number;
 }
 
 interface Workout {
@@ -97,6 +98,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
     const [activeExercises, setActiveExercises] = useState<Exercise[]>(workout.exercises);
     const [isSubstituting, setIsSubstituting] = useState<string | null>(null); // exerciseId
     const [isAddingExercise, setIsAddingExercise] = useState(false);
+    const [editStartedAt, setEditStartedAt] = useState<number | null>(null); // Track when editing started
     const [searchQuery, setSearchQuery] = useState("");
     const [activeLogId, setActiveLogId] = useState<string | null>(null);
     const [isDiscarding, setIsDiscarding] = useState(false);
@@ -136,7 +138,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                 if (active && active.workoutId === workout.id) {
                     setActiveLogId(active.id);
                     const restored: Record<string, SetLog[]> = {};
-                    const reconstructedExercises = [...workout.exercises];
+                    const reconstructedExercises: Exercise[] = [];
 
                     let dbStartTime = initialStartTime;
                     if (active.duration) {
@@ -150,7 +152,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
 
                     active.sets.forEach((s: ActiveLogSet) => {
                         const ex = s.exercise;
-                        // If this exercise is not in our template, add it to reconstructedExercises
+                        // Reconstruct exercises solely from the active log sets
                         if (ex && !reconstructedExercises.some(e => e.id === ex.id)) {
                             reconstructedExercises.push({
                                 id: ex.id,
@@ -159,6 +161,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                                 reps: ex.reps || "10",
                                 weightTargetKg: ex.weightTargetKg,
                                 notes: ex.notes,
+                                order: ex.order ?? 0,
                             });
                         }
 
@@ -174,10 +177,8 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                         });
                     });
 
-                    // Ensure all exercises (including ones from template) have log entries
-                    reconstructedExercises.forEach(ex => {
-                        if (!restored[ex.id]) restored[ex.id] = [];
-                    });
+                    // Sort reconstructed exercises by order to match layout
+                    reconstructedExercises.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
                     setActiveExercises(reconstructedExercises);
                     setLogs(restored);
@@ -207,8 +208,31 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
         load();
     }, [workout]);
 
+    // Track when Swap/Add modal is open and adjust startTime when closed to pause timer
+    useEffect(() => {
+        const isEditing = isSubstituting !== null || isAddingExercise;
+        if (isEditing) {
+            if (!editStartedAt) {
+                setEditStartedAt(Date.now());
+            }
+        } else {
+            if (editStartedAt) {
+                const editDuration = Date.now() - editStartedAt;
+                setStartTime(prev => {
+                    const nextStart = prev + editDuration;
+                    localStorage.setItem(`workout_start_time_${workout.id}`, nextStart.toString());
+                    saveProgress(logs, activeExercises, nextStart);
+                    return nextStart;
+                });
+                setEditStartedAt(null);
+            }
+        }
+    }, [isSubstituting, isAddingExercise]);
+
     // Timer
     useEffect(() => {
+        if (editStartedAt !== null) return;
+
         const updateElapsed = () => {
             setElapsed(Math.max(0, Math.floor((Date.now() - startTime) / 1000)));
         };
@@ -228,7 +252,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
             clearInterval(timer);
             document.removeEventListener("visibilitychange", handleVisibilityChange);
         };
-    }, [startTime]);
+    }, [startTime, editStartedAt]);
 
     const formatTime = (s: number) => {
         const mins = Math.floor(s / 60);
@@ -244,9 +268,11 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
         const exList = currentExercises || activeExercises;
         const flattenedSets = Object.entries(currentLogs).flatMap(([exId, sets]) => {
             const exInfo = exList.find(e => e.id === exId);
+            const exOrder = exList.findIndex(e => e.id === exId);
             return sets.map(s => ({
                 exerciseId: exId,
-                exerciseName: exInfo?.name || "Unknown", // Pass name in case it's a new or substituted exercise
+                exerciseName: exInfo?.name || "Unknown",
+                exerciseOrder: exOrder >= 0 ? exOrder : undefined,
                 setNumber: s.setNumber,
                 reps: s.reps,
                 weightKg: s.weightKg ? parseFloat(s.weightKg) : undefined,
@@ -460,9 +486,13 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
 
     const handleSubmit = async () => {
         setSaving(true);
-        const flattenedSets = Object.entries(logs).flatMap(([exId, sets]) =>
-            sets.map(s => ({
+        const flattenedSets = Object.entries(logs).flatMap(([exId, sets]) => {
+            const exInfo = activeExercises.find(e => e.id === exId);
+            const exOrder = activeExercises.findIndex(e => e.id === exId);
+            return sets.map(s => ({
                 exerciseId: exId,
+                exerciseName: exInfo?.name || "Unknown",
+                exerciseOrder: exOrder >= 0 ? exOrder : undefined,
                 setNumber: s.setNumber,
                 reps: s.reps || undefined,
                 weightKg: s.weightKg ? parseFloat(s.weightKg) : undefined,
@@ -470,8 +500,8 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                 isWarmup: s.isWarmup,
                 isCompleted: s.isCompleted,
                 videoUrl: s.videoUrl || undefined,
-            }))
-        );
+            }));
+        });
 
         try {
             const finalDuration = parseInt(manualDurationMinutes) || Math.floor(elapsed / 60);
@@ -495,13 +525,21 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                 router.push(`/plans/log/view/${saved.id}`);
                 router.refresh();
             } else {
-                const errData = await res.json();
-                console.error("Save failed:", errData);
-                alert(`Failed to save: ${errData.error?.message || JSON.stringify(errData.error) || "Unknown error"}`);
+                let errMsg = "Unknown error";
+                try {
+                    const errData = await res.json();
+                    errMsg = errData.error?.message || JSON.stringify(errData.error) || JSON.stringify(errData) || errMsg;
+                } catch {
+                    try {
+                        errMsg = await res.text();
+                    } catch {}
+                }
+                console.error("Save failed:", errMsg);
+                alert(`Failed to save: ${errMsg}`);
             }
-        } catch (err) {
-            console.error(err);
-            alert("Connection error while saving session.");
+        } catch (err: any) {
+            console.error("Submit error:", err);
+            alert(`Save failed (Connection/JS Error): ${err?.message || err}`);
         } finally {
             setSaving(false);
         }
@@ -574,40 +612,46 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
 
                         return (
                         <div key={ex.id} id={`exercise-${ex.id}`} className="card p-4 space-y-4 animate-slide-up">
-                            <div className="flex items-start justify-between">
-                                <div className="flex-1">
-                                    <div className="flex items-center gap-2">
-                                        <h3 className="font-bold text-fg text-base">{ex.name}</h3>
+                            <div className="flex flex-col gap-2 w-full">
+                                <div className="flex items-start justify-between gap-2">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <h3 className="font-bold text-fg text-base leading-tight">{ex.name}</h3>
                                         {hasPreview && (
                                             <button
                                                 type="button"
                                                 onClick={() => setPreviewExercise({ name: ex.name, media })}
-                                                className="w-6 h-6 rounded-full bg-brand-500/10 text-brand-400 border border-brand-500/20 flex items-center justify-center hover:bg-brand-500 hover:text-white transition-colors"
+                                                className="w-6 h-6 rounded-full bg-brand-500/10 text-brand-400 border border-brand-500/20 flex items-center justify-center hover:bg-brand-500 hover:text-white transition-colors shrink-0"
                                                 title="Exercise preview"
                                             >
                                                 {media?.videoUrl ? <Play className="w-3 h-3 fill-current" /> : <HelpCircle className="w-3.5 h-3.5" />}
                                             </button>
                                         )}
-                                        <button 
-                                            onClick={() => setIsSubstituting(ex.id)}
-                                            className="text-[10px] font-black uppercase text-brand-400/60 hover:text-brand-400 bg-brand-400/5 hover:bg-brand-400/10 px-2 py-0.5 rounded-md transition-all flex items-center gap-1"
-                                        >
-                                            <Flame className="w-2.5 h-2.5" /> Swap
-                                        </button>
-                                        <button 
-                                            onClick={() => removeExercise(ex.id)}
-                                            className="text-[10px] font-black uppercase text-danger/40 hover:text-danger bg-danger/5 hover:bg-danger/10 px-2 py-0.5 rounded-md transition-all flex items-center gap-1"
-                                        >
-                                            <Trash2 className="w-2.5 h-2.5" /> Delete
-                                        </button>
                                     </div>
-                                    {ex.notes && <p className="text-xs text-fg-muted mt-0.5">{ex.notes}</p>}
+                                    {!hasPreview && (
+                                        <span className="text-fg-subtle p-1 shrink-0" title="No preview available">
+                                            <InfoIcon className="w-4 h-4" />
+                                        </span>
+                                    )}
                                 </div>
-                                {!hasPreview && (
-                                    <button className="text-fg-subtle p-1 hover:text-fg transition-colors" title="No preview available">
-                                        <InfoIcon className="w-4 h-4" />
+                                
+                                {ex.notes && <p className="text-xs text-fg-muted -mt-1">{ex.notes}</p>}
+
+                                <div className="flex items-center gap-2 pt-1">
+                                    <button 
+                                        type="button"
+                                        onClick={() => setIsSubstituting(ex.id)}
+                                        className="text-[10px] font-black uppercase text-brand-400/60 hover:text-brand-400 bg-brand-400/5 hover:bg-brand-400/10 px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5"
+                                    >
+                                        <Flame className="w-3 h-3" /> Swap
                                     </button>
-                                )}
+                                    <button 
+                                        type="button"
+                                        onClick={() => removeExercise(ex.id)}
+                                        className="text-[10px] font-black uppercase text-danger/40 hover:text-danger bg-danger/5 hover:bg-danger/10 px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5"
+                                    >
+                                        <Trash2 className="w-3 h-3" /> Delete
+                                    </button>
+                                </div>
                             </div>
 
                             <div className="space-y-2">

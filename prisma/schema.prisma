@@ -210,6 +210,7 @@ model Exercise {
   order          Int     @default(0)
   videoUrl       String?
   muscleGroup    String?
+  isCustom       Boolean @default(false)
 
   workout Workout  @relation(fields: [workoutId], references: [id], onDelete: Cascade)
   logSets LogSet[]

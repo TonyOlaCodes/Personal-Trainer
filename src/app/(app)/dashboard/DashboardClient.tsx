@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Walkthrough } from "@/components/shared/Walkthrough";
 import { WorkoutSessionModal } from "@/components/shared/WorkoutSessionModal";
-import { Dumbbell, ChevronRight, Clock, Flame, Activity, Calendar, Ticket, Check, Edit3, Trash2, Scale, Utensils, Footprints, Moon } from "lucide-react";
+import { Dumbbell, ChevronRight, Clock, Flame, Activity, Calendar, Ticket, Check, Edit3, Trash2, Scale, Utensils, Footprints, Moon, AlertCircle } from "lucide-react";
 import { formatDate, formatRelative, cn } from "@/lib/utils";
 import { isCardio } from "@/components/shared/ExerciseAutocomplete";
 
@@ -677,24 +677,32 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
             )}
 
             {/* Check-in Widget */}
-            {user.role !== "FREE" && (
+            {user.role !== "FREE" && (checkInDueState.isConfigured || !!currentCheckin) && (
                 <Link href="/checkins" className="block group">
                     <div className={cn(
                         "card p-4 flex items-center justify-between transition-all hover:shadow-glow-sm",
                         currentCheckin 
                             ? "border-success/20 bg-success/5 shadow-glow-success-sm" 
-                            : (checkInDueState.isDueToday || checkInDueState.isOverdue)
-                                ? "border-warning/20 bg-warning/5"
-                                : "border-surface-border bg-surface-muted/30"
+                            : checkInDueState.isOverdue
+                                ? "border-danger/20 bg-danger/5 shadow-glow-danger-sm"
+                                : checkInDueState.isDueToday
+                                    ? "border-warning/20 bg-warning/5 shadow-glow-warning-sm"
+                                    : "border-surface-border bg-surface-muted/30"
                     )}>
                         <div className="flex items-center gap-3">
                             <div className={cn(
                                 "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
-                                currentCheckin ? "bg-success/15" : "bg-warning/10"
+                                currentCheckin 
+                                    ? "bg-success/15" 
+                                    : checkInDueState.isOverdue
+                                        ? "bg-danger/10"
+                                        : "bg-warning/10"
                             )}>
                                 {currentCheckin 
                                     ? <Check className="w-5 h-5 text-success" />
-                                    : <Calendar className="w-5 h-5 text-warning" />
+                                    : checkInDueState.isOverdue
+                                        ? <AlertCircle className="w-5 h-5 text-danger animate-pulse-slow" />
+                                        : <Calendar className="w-5 h-5 text-warning animate-pulse-slow" />
                                 }
                             </div>
                             <div>
@@ -706,11 +714,15 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                                         ? currentCheckin.status === "REVIEWED" ? "✅ Coach reviewed" : "⏳ Awaiting coach review"
                                         : !checkInDueState.isConfigured
                                             ? "Tap to submit weekly check-in"
-                                            : checkInDueState.isDueToday
-                                                ? "Due today - tap to record"
-                                                : checkInDueState.isOverdue
-                                                    ? "Overdue - record your week"
-                                                    : `Scheduled for ${checkInDueState.dueDayLabel}${checkInDueState.daysUntilNext !== null ? ` (${checkInDueState.daysUntilNext}d)` : ""}`
+                                            : checkInDueState.isOverdue
+                                                ? "Check-in overdue"
+                                                : checkInDueState.isDueToday
+                                                    ? "Check-in is due today"
+                                                    : checkInDueState.daysUntilNext === 1
+                                                        ? "Next check-in is tomorrow"
+                                                        : checkInDueState.daysUntilNext !== null
+                                                            ? `Next check-in in ${checkInDueState.daysUntilNext} days`
+                                                            : `Scheduled for ${checkInDueState.dueDayLabel}`
                                     }
                                 </p>
                             </div>
@@ -858,11 +870,10 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                 {recentLogs.length > 0 ? (
                     <div className="card divide-y divide-surface-border">
                         {recentLogs.slice(0, 5).map((log) => (
-                            <button
-                                type="button"
+                            <div
                                 onClick={() => setSelectedSessionId(log.id)}
                                 key={log.id}
-                                className="w-full flex items-center justify-between px-4 py-3 hover:bg-surface-muted/30 transition-colors text-left"
+                                className="w-full flex items-center justify-between px-4 py-3 hover:bg-surface-muted/30 transition-colors text-left cursor-pointer"
                             >
                                 <div className="flex items-center gap-3">
                                     <div className="w-8 h-8 rounded-lg bg-success-muted flex items-center justify-center">
@@ -873,6 +884,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                                 <div className="flex items-center gap-3">
                                     <p className="text-xs text-fg-muted">{formatRelative(log.loggedAt)}</p>
                                     <button 
+                                        type="button"
                                         onClick={(e) => {
                                             e.preventDefault();
                                             e.stopPropagation();
@@ -885,7 +897,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                                     </button>
                                     <ChevronRight className="w-4 h-4 text-fg-subtle" />
                                 </div>
-                            </button>
+                            </div>
                         ))}
                     </div>
                 ) : (

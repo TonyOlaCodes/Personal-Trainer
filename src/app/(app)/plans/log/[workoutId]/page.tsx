@@ -27,7 +27,7 @@ export default async function WorkoutLogPage({
 
     const workout = await prisma.workout.findUnique({
         where: { id: workoutId },
-        include: { exercises: { orderBy: { order: "asc" } } },
+        include: { exercises: { where: { isCustom: false }, orderBy: { order: "asc" } } },
     });
 
     if (!workout) notFound();
@@ -71,6 +71,7 @@ export default async function WorkoutLogPage({
                         reps: ex.reps,
                         weightTargetKg: ex.weightTargetKg,
                         notes: ex.notes,
+                        order: ex.order,
                     })),
                 }}
                 exerciseMedia={exerciseMedia}

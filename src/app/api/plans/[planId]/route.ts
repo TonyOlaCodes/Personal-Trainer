@@ -54,7 +54,7 @@ export async function GET(
                 include: {
                     workouts: {
                         orderBy: { dayNumber: "asc" },
-                        include: { exercises: { orderBy: { order: "asc" } } },
+                        include: { exercises: { where: { isCustom: false }, orderBy: { order: "asc" } } },
                     },
                 },
             },

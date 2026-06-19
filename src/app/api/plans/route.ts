@@ -44,7 +44,7 @@ export async function GET() {
             plan: {
                 include: {
                     weeks: {
-                        include: { workouts: { include: { exercises: true } } },
+                        include: { workouts: { include: { exercises: { where: { isCustom: false }, orderBy: { order: "asc" } } } } },
                         orderBy: { weekNumber: "asc" },
                     },
                     _count: { select: { weeks: true } },

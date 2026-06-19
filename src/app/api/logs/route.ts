@@ -3,6 +3,21 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 
+let exerciseSchemaReady = false;
+
+async function ensureExerciseIsCustomColumn() {
+    if (exerciseSchemaReady) return;
+    try {
+        await prisma.$executeRaw`
+            ALTER TABLE "exercises"
+            ADD COLUMN IF NOT EXISTS "isCustom" BOOLEAN DEFAULT false
+        `;
+        exerciseSchemaReady = true;
+    } catch (e) {
+        console.warn("[ensureExerciseIsCustomColumn] Failed to add column:", e);
+    }
+}
+
 const logSchema = z.object({
     workoutId: z.string(),
     duration: z.number().optional(),
@@ -13,6 +28,7 @@ const logSchema = z.object({
     sets: z.array(z.object({
         exerciseId: z.string(),
         exerciseName: z.string().optional(),
+        exerciseOrder: z.number().optional(),
         setNumber: z.number(),
         reps: z.number().optional(),
         weightKg: z.number().optional(),
@@ -25,6 +41,7 @@ const logSchema = z.object({
 
 // POST log a completed or in-progress workout
 export async function POST(req: Request) {
+    await ensureExerciseIsCustomColumn();
     const { userId } = await auth();
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -67,10 +84,12 @@ export async function POST(req: Request) {
         where: { userId: user.id, workoutId, status: "IN_PROGRESS" }
     });
 
-    // Process exercises to get real IDs safely (avoiding race conditions)
+    // Process exercises to get real IDs safely (avoiding race conditions) and sync layout order
     const tempToRealId = new Map<string, string>();
+    const updatedRealIds = new Set<string>();
     
     for (const s of sets) {
+        let realId = s.exerciseId;
         if ((s.exerciseId.startsWith("new-") || s.exerciseId.includes(":sub")) && !tempToRealId.has(s.exerciseId)) {
             const exName = s.exerciseName || "Custom Exercise";
             
@@ -86,10 +105,28 @@ export async function POST(req: Request) {
                         name: exName,
                         sets: 1,
                         reps: "10",
+                        order: s.exerciseOrder ?? 0,
+                        isCustom: true,
                     }
                 });
+            } else if (s.exerciseOrder !== undefined && existingEx.order !== s.exerciseOrder) {
+                existingEx = await prisma.exercise.update({
+                    where: { id: existingEx.id },
+                    data: { order: s.exerciseOrder }
+                });
             }
-            tempToRealId.set(s.exerciseId, existingEx.id);
+            realId = existingEx.id;
+            tempToRealId.set(s.exerciseId, realId);
+            updatedRealIds.add(realId);
+        } else {
+            const resolvedId = tempToRealId.get(s.exerciseId) || s.exerciseId;
+            if (s.exerciseOrder !== undefined && !updatedRealIds.has(resolvedId)) {
+                await prisma.exercise.updateMany({
+                    where: { id: resolvedId },
+                    data: { order: s.exerciseOrder }
+                });
+                updatedRealIds.add(resolvedId);
+            }
         }
     }
 
@@ -159,6 +196,7 @@ export async function GET(req: Request) {
                                 reps: true,
                                 weightTargetKg: true,
                                 notes: true,
+                                order: true,
                             }
                         }
                     },

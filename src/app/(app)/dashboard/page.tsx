@@ -34,7 +34,7 @@ export default async function DashboardPage() {
                                         include: {
                                             workouts: {
                                                 orderBy: { dayNumber: "asc" },
-                                                include: { exercises: { orderBy: { order: "asc" } } },
+                                                include: { exercises: { where: { isCustom: false }, orderBy: { order: "asc" } } },
                                             },
                                         },
                                     },
@@ -91,6 +91,7 @@ export default async function DashboardPage() {
 
         const currentCheckin = await prisma.checkIn.findFirst({
             where: { userId: user.id, weekNumber: currentIsoWeek },
+            orderBy: { createdAt: "desc" },
         });
 
         const activeUserPlan = user.plans[0] ?? null;
@@ -229,7 +230,7 @@ export default async function DashboardPage() {
 
         return (
             <>
-                <TopBar title={getDayName()} subtitle={formatDate(new Date())} streak={streak} />
+                <TopBar title={getDayName()} subtitle={formatDate(new Date())} streak={streak} hideSearch={true} />
                 <div className="p-6 max-w-5xl mx-auto">
                         <DashboardClient
                             user={{ name: user.name, role: user.role, weightKg: user.weightKg, targetWeightKg: user.targetWeightKg, hiddenGoals: user.hiddenGoals ?? [] }}

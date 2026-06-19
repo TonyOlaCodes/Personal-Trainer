@@ -106,6 +106,18 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
     const [targetCalories, setTargetCalories] = useState(client.targetCalories ? String(client.targetCalories) : "");
     const [targetSteps, setTargetSteps] = useState(client.targetSteps ? String(client.targetSteps) : "");
     const [targetSleepHours, setTargetSleepHours] = useState(client.targetSleepHours ? String(client.targetSleepHours) : "");
+    const [isEditingTargets, setIsEditingTargets] = useState(client.checkInSchedule.day === null);
+
+    useEffect(() => {
+        setCheckInDay(client.checkInSchedule.day ?? 6);
+        setCheckInFrequency(client.checkInSchedule.frequencyWeeks ?? 1);
+        setTargetWeightKg(client.targetWeightKg ? String(client.targetWeightKg) : "");
+        setTargetCalories(client.targetCalories ? String(client.targetCalories) : "");
+        setTargetSteps(client.targetSteps ? String(client.targetSteps) : "");
+        setTargetSleepHours(client.targetSleepHours ? String(client.targetSleepHours) : "");
+        setIsEditingTargets(client.checkInSchedule.day === null);
+    }, [client]);
+
     const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; date: string; weightKg: number } | null>(null);
     const [hoveredVolPoint, setHoveredVolPoint] = useState<{ id: string; workoutName: string; date: string; formattedDate: string; volume: number; x: number; y: number } | null>(null);
     const isWeightHidden = client.hiddenGoals?.includes("weight");
@@ -729,8 +741,198 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                     )}
                 </div>
 
-                {/* Check-ins Sidebar (renamed from Accountability Log) */}
-                <div className="space-y-4 lg:col-span-1">
+                {/* Sidebar: Goals/Schedule & Check-ins */}
+                <div className="space-y-6 lg:col-span-1">
+                    {/* Athlete Targets & Schedule Card */}
+                    <div className={cn(
+                        "card p-5 space-y-4 border transition-all",
+                        client.checkInSchedule.day === null 
+                            ? "border-warning/30 bg-warning/5 shadow-glow-warning-sm animate-pulse-slow" 
+                            : "border-brand-500/10 hover:border-brand-500/20 bg-surface-card"
+                    )}>
+                        {/* Header */}
+                        <div className="flex items-center justify-between pb-3 border-b border-surface-border/50">
+                            <div className="flex items-center gap-2">
+                                <Activity className="w-4 h-4 text-brand-400" />
+                                <h3 className="text-xs font-black uppercase tracking-widest text-fg">Goals & Schedule</h3>
+                            </div>
+                            {client.checkInSchedule.day === null ? (
+                                <span className="px-2 py-0.5 rounded-lg bg-warning/10 border border-warning/25 text-warning text-[9px] font-black uppercase tracking-widest">
+                                    Setup Required
+                                </span>
+                            ) : (
+                                <button
+                                    onClick={() => setIsEditingTargets(prev => !prev)}
+                                    className="text-brand-400 hover:text-brand-350 text-[10px] font-black uppercase tracking-wider flex items-center gap-1 transition-colors"
+                                >
+                                    {isEditingTargets ? (
+                                        <>
+                                            <X className="w-3 h-3" /> Cancel
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Edit3 className="w-3 h-3" /> Edit
+                                        </>
+                                    )}
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Content */}
+                        {!isEditingTargets && client.checkInSchedule.day !== null ? (
+                            // VIEW MODE
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="p-3 bg-surface-muted/30 rounded-xl border border-surface-border/50 space-y-1">
+                                        <div className="flex items-center gap-1.5 text-fg-subtle">
+                                            <Scale className="w-3.5 h-3.5" />
+                                            <span className="text-[9px] font-black uppercase tracking-widest">Weight Goal</span>
+                                        </div>
+                                        <p className="text-sm font-black text-fg">
+                                            {client.targetWeightKg ? `${client.targetWeightKg.toFixed(1)} kg` : "--"}
+                                        </p>
+                                    </div>
+                                    <div className="p-3 bg-surface-muted/30 rounded-xl border border-surface-border/50 space-y-1">
+                                        <div className="flex items-center gap-1.5 text-fg-subtle">
+                                            <Zap className="w-3.5 h-3.5" />
+                                            <span className="text-[9px] font-black uppercase tracking-widest">Calories</span>
+                                        </div>
+                                        <p className="text-sm font-black text-fg">
+                                            {client.targetCalories ? `${client.targetCalories.toLocaleString()} kcal` : "--"}
+                                        </p>
+                                    </div>
+                                    <div className="p-3 bg-surface-muted/30 rounded-xl border border-surface-border/50 space-y-1">
+                                        <div className="flex items-center gap-1.5 text-fg-subtle">
+                                            <Activity className="w-3.5 h-3.5" />
+                                            <span className="text-[9px] font-black uppercase tracking-widest">Steps</span>
+                                        </div>
+                                        <p className="text-sm font-black text-fg">
+                                            {client.targetSteps ? `${client.targetSteps.toLocaleString()} steps` : "--"}
+                                        </p>
+                                    </div>
+                                    <div className="p-3 bg-surface-muted/30 rounded-xl border border-surface-border/50 space-y-1">
+                                        <div className="flex items-center gap-1.5 text-fg-subtle">
+                                            <Clock className="w-3.5 h-3.5" />
+                                            <span className="text-[9px] font-black uppercase tracking-widest">Sleep</span>
+                                        </div>
+                                        <p className="text-sm font-black text-fg">
+                                            {client.targetSleepHours ? `${client.targetSleepHours.toFixed(1)} hrs` : "--"}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="p-3 border border-brand-500/10 bg-brand-500/5 rounded-xl flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <Calendar className="w-4 h-4 text-brand-400" />
+                                        <div>
+                                            <p className="text-[8px] font-black uppercase tracking-widest text-fg-subtle">Check-in Day</p>
+                                            <p className="text-xs font-black text-fg">
+                                                {CHECK_IN_DAYS[client.checkInSchedule.day] || "Not Set"}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-[8px] font-black uppercase tracking-widest text-fg-subtle">Frequency</p>
+                                        <p className="text-xs font-black text-brand-400">
+                                            {CHECK_IN_FREQUENCIES.find(f => f.value === client.checkInSchedule.frequencyWeeks)?.label || "Weekly"}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            // EDIT MODE
+                            <div className="space-y-4">
+                                {client.checkInSchedule.day === null && (
+                                    <p className="text-[11px] text-warning font-semibold leading-relaxed">
+                                        Athlete targets and check-in schedule must be set to complete onboarding for this client.
+                                    </p>
+                                )}
+                                <div className="grid grid-cols-2 gap-3">
+                                    <label className="space-y-1 block">
+                                        <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Check-in Day</span>
+                                        <select
+                                            value={checkInDay}
+                                            onChange={(e) => setCheckInDay(Number(e.target.value))}
+                                            className="input h-10 text-xs font-bold bg-surface-muted/30"
+                                        >
+                                            {CHECK_IN_DAYS.map((day, idx) => (
+                                                <option key={day} value={idx}>{day}</option>
+                                            ))}
+                                        </select>
+                                    </label>
+                                    <label className="space-y-1 block">
+                                        <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Frequency</span>
+                                        <select
+                                            value={checkInFrequency}
+                                            onChange={(e) => setCheckInFrequency(Number(e.target.value))}
+                                            className="input h-10 text-xs font-bold bg-surface-muted/30"
+                                        >
+                                            {CHECK_IN_FREQUENCIES.map((freq) => (
+                                                <option key={freq.value} value={freq.value}>{freq.label}</option>
+                                            ))}
+                                        </select>
+                                    </label>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3 pt-2">
+                                    <label className="space-y-1 block">
+                                        <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Calories (kcal)</span>
+                                        <input
+                                            type="number"
+                                            placeholder="e.g. 2500"
+                                            value={targetCalories}
+                                            onChange={(e) => setTargetCalories(e.target.value)}
+                                            className="input h-10 text-xs font-bold bg-surface-muted/30"
+                                        />
+                                    </label>
+                                    <label className="space-y-1 block">
+                                        <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Daily Steps</span>
+                                        <input
+                                            type="number"
+                                            placeholder="e.g. 10000"
+                                            value={targetSteps}
+                                            onChange={(e) => setTargetSteps(e.target.value)}
+                                            className="input h-10 text-xs font-bold bg-surface-muted/30"
+                                        />
+                                    </label>
+                                    <label className="space-y-1 block">
+                                        <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Sleep (hrs)</span>
+                                        <input
+                                            type="number"
+                                            step="0.5"
+                                            placeholder="e.g. 8.0"
+                                            value={targetSleepHours}
+                                            onChange={(e) => setTargetSleepHours(e.target.value)}
+                                            className="input h-10 text-xs font-bold bg-surface-muted/30"
+                                        />
+                                    </label>
+                                    <label className="space-y-1 block">
+                                        <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Weight Goal (kg)</span>
+                                        <input
+                                            type="number"
+                                            step="0.1"
+                                            placeholder="e.g. 75.0"
+                                            value={targetWeightKg}
+                                            onChange={(e) => setTargetWeightKg(e.target.value)}
+                                            className="input h-10 text-xs font-bold bg-surface-muted/30"
+                                        />
+                                    </label>
+                                </div>
+
+                                <button
+                                    onClick={async () => {
+                                        await saveClientConfiguration();
+                                        setIsEditingTargets(false);
+                                    }}
+                                    disabled={savingSchedule}
+                                    className="btn-primary w-full h-10 text-xs font-black uppercase tracking-widest shadow-glow-brand mt-2"
+                                >
+                                    {savingSchedule ? "Saving..." : "Save Configuration"}
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
                     <h3 className="heading-3 px-2 flex items-center gap-2 uppercase tracking-widest text-[11px] font-black text-success">
                         <Calendar className="w-4 h-4" />
                         Check-ins
@@ -782,105 +984,6 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
             <div className="grid lg:grid-cols-3 gap-8">
                 {/* Workouts Management Column */}
                 <div className="lg:col-span-2 space-y-6">
-                    {/* Check-in Schedule & Targets (if NOT set yet) */}
-                    {client.checkInSchedule.day === null && (
-                        <div className="card p-6 space-y-4 border-warning/30 bg-warning/5">
-                            <div className="flex items-start justify-between gap-4 pb-2 border-b border-surface-border/50">
-                                <div>
-                                    <h3 className="heading-3 flex items-center gap-2 uppercase tracking-widest text-[11px] font-black text-brand-400">
-                                        <Calendar className="w-4 h-4" />
-                                        Configuration & Targets
-                                    </h3>
-                                    <p className="text-xs text-fg-muted mt-1">
-                                        Set check-in days and targets to onboard client.
-                                    </p>
-                                </div>
-                                <span className="px-2.5 py-1 rounded-lg bg-warning/10 border border-warning/25 text-warning text-[9px] font-black uppercase tracking-widest">
-                                    Required
-                                </span>
-                            </div>
-                            <div className="grid sm:grid-cols-2 gap-3">
-                                <label className="space-y-1">
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Check-in Day</span>
-                                    <select
-                                        value={checkInDay}
-                                        onChange={(e) => setCheckInDay(Number(e.target.value))}
-                                        className="input h-11 text-sm font-bold bg-surface-muted/30"
-                                    >
-                                        {CHECK_IN_DAYS.map((day, idx) => (
-                                            <option key={day} value={idx}>{day}</option>
-                                        ))}
-                                    </select>
-                                </label>
-                                <label className="space-y-1">
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Frequency</span>
-                                    <select
-                                        value={checkInFrequency}
-                                        onChange={(e) => setCheckInFrequency(Number(e.target.value))}
-                                        className="input h-11 text-sm font-bold bg-surface-muted/30"
-                                    >
-                                        {CHECK_IN_FREQUENCIES.map((freq) => (
-                                            <option key={freq.value} value={freq.value}>{freq.label}</option>
-                                        ))}
-                                    </select>
-                                </label>
-                            </div>
-                            
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
-                                <label className="space-y-1">
-                                    <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Calories (kcal)</span>
-                                    <input
-                                        type="number"
-                                        placeholder="e.g. 2500"
-                                        value={targetCalories}
-                                        onChange={(e) => setTargetCalories(e.target.value)}
-                                        className="input h-11 text-sm font-bold bg-surface-muted/30"
-                                    />
-                                </label>
-                                <label className="space-y-1">
-                                    <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Daily Steps</span>
-                                    <input
-                                        type="number"
-                                        placeholder="e.g. 10000"
-                                        value={targetSteps}
-                                        onChange={(e) => setTargetSteps(e.target.value)}
-                                        className="input h-11 text-sm font-bold bg-surface-muted/30"
-                                    />
-                                </label>
-                                <label className="space-y-1">
-                                    <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Sleep (hrs)</span>
-                                    <input
-                                        type="number"
-                                        step="0.5"
-                                        placeholder="e.g. 8.0"
-                                        value={targetSleepHours}
-                                        onChange={(e) => setTargetSleepHours(e.target.value)}
-                                        className="input h-11 text-sm font-bold bg-surface-muted/30"
-                                    />
-                                </label>
-                                <label className="space-y-1">
-                                    <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Weight Goal (kg)</span>
-                                    <input
-                                        type="number"
-                                        step="0.1"
-                                        placeholder="e.g. 75.0"
-                                        value={targetWeightKg}
-                                        onChange={(e) => setTargetWeightKg(e.target.value)}
-                                        className="input h-11 text-sm font-bold bg-surface-muted/30"
-                                    />
-                                </label>
-                            </div>
-
-                            <button
-                                onClick={saveClientConfiguration}
-                                disabled={savingSchedule}
-                                className="btn-primary w-full h-11 text-xs font-black uppercase tracking-widest shadow-glow-brand mt-2"
-                            >
-                                {savingSchedule ? "Saving..." : "Save Athlete Configuration"}
-                            </button>
-                        </div>
-                    )}
-
                     {/* Active Programme */}
                     <div className="space-y-4">
                         <h3 className="heading-3 px-2 flex items-center gap-2 uppercase tracking-widest text-[11px] font-black text-brand-400">
@@ -1269,104 +1372,6 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                      </div>
                  </div>
              </section>
-
-             {/* Check-in Schedule & Targets (if already set, moved to very bottom above Danger Zone) */}
-             {client.checkInSchedule.day !== null && (
-                 <div className="border-t border-surface-border pt-12 mt-12">
-                     <div className="card p-6 space-y-4 border-success/20 bg-success/5 max-w-2xl">
-                         <div className="flex items-start justify-between gap-4 pb-2 border-b border-surface-border/50">
-                             <div>
-                                 <h3 className="heading-3 flex items-center gap-2 uppercase tracking-widest text-[11px] font-black text-brand-400">
-                                     <Calendar className="w-4 h-4" />
-                                     Client Configuration & Targets
-                                 </h3>
-                                 <p className="text-xs text-fg-muted mt-1">
-                                     Modify schedule and target goals for this athlete.
-                                 </p>
-                             </div>
-                         </div>
-                         <div className="grid sm:grid-cols-2 gap-3">
-                             <label className="space-y-1">
-                                 <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Check-in Day</span>
-                                 <select
-                                     value={checkInDay}
-                                     onChange={(e) => setCheckInDay(Number(e.target.value))}
-                                     className="input h-11 text-sm font-bold bg-surface-muted/30"
-                                 >
-                                     {CHECK_IN_DAYS.map((day, idx) => (
-                                         <option key={day} value={idx}>{day}</option>
-                                     ))}
-                                 </select>
-                             </label>
-                             <label className="space-y-1">
-                                 <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Frequency</span>
-                                 <select
-                                     value={checkInFrequency}
-                                     onChange={(e) => setCheckInFrequency(Number(e.target.value))}
-                                     className="input h-11 text-sm font-bold bg-surface-muted/30"
-                                 >
-                                     {CHECK_IN_FREQUENCIES.map((freq) => (
-                                         <option key={freq.value} value={freq.value}>{freq.label}</option>
-                                     ))}
-                                 </select>
-                             </label>
-                         </div>
-
-                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
-                             <label className="space-y-1">
-                                 <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Calories (kcal)</span>
-                                 <input
-                                     type="number"
-                                     placeholder="e.g. 2500"
-                                     value={targetCalories}
-                                     onChange={(e) => setTargetCalories(e.target.value)}
-                                     className="input h-11 text-sm font-bold bg-surface-muted/30"
-                                 />
-                             </label>
-                             <label className="space-y-1">
-                                 <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Daily Steps</span>
-                                 <input
-                                     type="number"
-                                     placeholder="e.g. 10000"
-                                     value={targetSteps}
-                                     onChange={(e) => setTargetSteps(e.target.value)}
-                                     className="input h-11 text-sm font-bold bg-surface-muted/30"
-                                 />
-                             </label>
-                             <label className="space-y-1">
-                                 <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Sleep (hrs)</span>
-                                 <input
-                                     type="number"
-                                     step="0.5"
-                                     placeholder="e.g. 8.0"
-                                     value={targetSleepHours}
-                                     onChange={(e) => setTargetSleepHours(e.target.value)}
-                                     className="input h-11 text-sm font-bold bg-surface-muted/30"
-                                 />
-                             </label>
-                             <label className="space-y-1">
-                                 <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Weight Goal (kg)</span>
-                                 <input
-                                     type="number"
-                                     step="0.1"
-                                     placeholder="e.g. 75.0"
-                                     value={targetWeightKg}
-                                     onChange={(e) => setTargetWeightKg(e.target.value)}
-                                     className="input h-11 text-sm font-bold bg-surface-muted/30"
-                                 />
-                             </label>
-                         </div>
-
-                         <button
-                             onClick={saveClientConfiguration}
-                             disabled={savingSchedule}
-                             className="btn-primary w-full h-11 text-xs font-black uppercase tracking-widest shadow-glow-brand mt-2"
-                         >
-                             {savingSchedule ? "Saving..." : "Update Configuration & Targets"}
-                         </button>
-                     </div>
-                 </div>
-             )}
 
              {/* Danger Zone */}
              <div className="border-t border-surface-border pt-12 mt-12">

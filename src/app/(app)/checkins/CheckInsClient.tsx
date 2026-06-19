@@ -665,14 +665,14 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
 
     useEffect(() => {
-        if (!isLogging && !editMode) return;
+        if (isLogging) return;
+        if (!editMode) return;
         
         const date = new Date(selectedDate);
         const week = getWeekNumber(date);
         const existing = checkIns.find(c => c.weekNumber === week);
         
         if (existing) {
-            // Found one - ALWAYS load it and set to edit mode
             setCheckInId(existing.id);
             setEnergy(existing.energyRating || 0);
             setSleep(existing.sleepRating || 0);
@@ -681,20 +681,6 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
             setNotes(existing.feedback || "");
             setFrontImg(existing.frontImageUrl || "");
             setSideImg(existing.sideImageUrl || "");
-            setEditMode(true);
-            setIsLogging(false);
-        } else {
-            // New week with no entry - Reset to blank and set to new entry mode
-            setCheckInId(null);
-            setEnergy(0);
-            setSleep(0);
-            setStress(0);
-            setTraining(0);
-            setNotes("");
-            setFrontImg("");
-            setSideImg("");
-            setEditMode(false);
-            setIsLogging(true);
         }
     }, [selectedDate, checkIns]);
 
@@ -752,6 +738,24 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
     const isOverdue = !hasTodayEntry && checkInDueState.isOverdue;
     const needsCheckIn = !hasTodayEntry && (isDueDay || isOverdue);
 
+    const getStatusText = () => {
+        if (hasTodayEntry) {
+            if (checkInDueState.isConfigured && daysUntilNext !== null) {
+                if (daysUntilNext === 1) return "Next check-in is tomorrow";
+                return `Next check-in in ${daysUntilNext} days`;
+            }
+            return "Check-in completed";
+        }
+        if (checkInDueState.isConfigured) {
+            if (isOverdue) return "Check-in overdue";
+            if (isDueDay) return "Check-in is due today";
+            if (daysUntilNext === 1) return "Next check-in is tomorrow";
+            if (daysUntilNext !== null) return `Next check-in in ${daysUntilNext} days`;
+            return `Due ${checkInDueState.dueDayLabel}`;
+        }
+        return "Submit Check-in";
+    };
+
     // Stats based on selection or defaults
     const prevCheckIn  = checkIns.find(c => c.weekNumber < (editMode ? selectedWeek : currentWeekReal));
     const prevWeight   = previousWeeklyAverageWeight ?? prevCheckIn?.bodyweightKg;
@@ -772,11 +776,6 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
     const consistencyPct = workoutsTarget > 0 ? Math.round((workoutsThisWeek / workoutsTarget) * 100) : 100;
 
     const startLogging = () => {
-        // If a check-in for this week already exists, edit it instead of creating a blank new one
-        if (currentWeekEntry) {
-            editCheckIn(currentWeekEntry);
-            return;
-        }
         setCheckInId(null);
         setSelectedDate(new Date().toISOString().split("T")[0]);
         setEnergy(0);
@@ -975,31 +974,27 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                 )}
                 <div className="flex justify-between items-center mb-2">
                     <h2 className="text-xl font-black text-fg tracking-tight">Week Summary</h2>
-                    {hasTodayEntry ? (
-                         <div className="bg-brand-950/20 border border-brand-500/20 px-3 py-1 rounded-xl flex items-center gap-2">
-                            <Clock className="w-3 h-3 text-brand-400" />
-                            <span className="text-[10px] font-black text-brand-400 uppercase tracking-widest leading-none">Next in {daysUntilNext}d</span>
-                        </div>
-                    ) : isOverdue ? (
-                         <div className="bg-danger/10 border border-danger/25 px-3 py-1 rounded-xl flex items-center gap-2 animate-pulse-slow">
-                            <AlertCircle className="w-3 h-3 text-danger" />
-                            <span className="text-[10px] font-black text-danger uppercase tracking-widest leading-none">Overdue</span>
-                        </div>
-                    ) : isDueDay ? (
-                         <div className="bg-warning/10 border border-warning/20 px-3 py-1 rounded-xl flex items-center gap-2 animate-pulse-slow">
-                            <AlertCircle className="w-3 h-3 text-warning" />
-                            <span className="text-[10px] font-black text-warning uppercase tracking-widest leading-none">Due Now</span>
-                        </div>
-                    ) : (
-                        <div className="bg-surface-muted border border-surface-border px-3 py-1 rounded-xl flex items-center gap-2">
-                            <Calendar className="w-3 h-3 text-fg-subtle" />
-                            <span className="text-[10px] font-black text-fg-subtle uppercase tracking-widest leading-none">
-                                {checkInDueState.isConfigured
-                                    ? `Due ${checkInDueState.dueDayLabel}${daysUntilNext !== null ? ` (${daysUntilNext}d)` : ""}`
-                                    : "Submit Check-in"}
-                            </span>
-                        </div>
-                    )}
+                    <div className={cn(
+                        "px-3 py-1 rounded-xl flex items-center gap-2",
+                        hasTodayEntry
+                            ? "bg-brand-950/20 border border-brand-500/20 text-brand-400"
+                            : isOverdue
+                            ? "bg-danger/10 border border-danger/25 text-danger animate-pulse-slow"
+                            : isDueDay
+                            ? "bg-warning/10 border border-warning/20 text-warning animate-pulse-slow"
+                            : "bg-surface-muted border border-surface-border text-fg-subtle"
+                    )}>
+                        {hasTodayEntry ? (
+                            <Clock className="w-3 h-3" />
+                        ) : (isOverdue || isDueDay) ? (
+                            <AlertCircle className="w-3 h-3" />
+                        ) : (
+                            <Calendar className="w-3 h-3" />
+                        )}
+                        <span className="text-[10px] font-black uppercase tracking-widest leading-none">
+                            {getStatusText()}
+                        </span>
+                    </div>
                 </div>
 
                 {hasTodayEntry ? (
@@ -1109,7 +1104,17 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                             </div>
                             <div>
                                 <p className="text-lg font-black text-fg tracking-tight">
-                                    {!checkInDueState.isConfigured ? "Submit Weekly Check-in" : isOverdue ? "Check-in Overdue" : isDueDay ? "Check-in Due Today" : "Submit Check-in"}
+                                    {!checkInDueState.isConfigured 
+                                        ? "Submit Weekly Check-in" 
+                                        : isOverdue 
+                                        ? "Check-in overdue" 
+                                        : isDueDay 
+                                        ? "Check-in is due today" 
+                                        : daysUntilNext === 1
+                                        ? "Next check-in is tomorrow"
+                                        : daysUntilNext !== null
+                                        ? `Next check-in in ${daysUntilNext} days`
+                                        : "Submit Check-in"}
                                 </p>
                                 <p className="text-sm text-fg-muted max-w-xs mx-auto mt-1 leading-relaxed">
                                     {!checkInDueState.isConfigured
