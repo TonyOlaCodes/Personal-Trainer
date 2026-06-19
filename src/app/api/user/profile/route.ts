@@ -28,20 +28,38 @@ export async function PATCH(req: Request) {
         const body = await req.json();
         const parsed = profileSchema.parse(body);
 
-        const updated = await prisma.user.update({
-            where: { clerkId: userId },
-            data: {
-                ...(parsed.name !== undefined && { name: parsed.name }),
-                ...(parsed.avatarUrl !== undefined && { avatarUrl: parsed.avatarUrl === "" ? null : parsed.avatarUrl }),
-                ...(parsed.goal !== undefined && { goal: parsed.goal }),
-                ...(parsed.trainingDaysPerWeek !== undefined && { trainingDaysPerWeek: parsed.trainingDaysPerWeek }),
-                ...(parsed.experienceLevel !== undefined && { experienceLevel: parsed.experienceLevel }),
-                ...(parsed.trainingLocation !== undefined && { trainingLocation: parsed.trainingLocation }),
-                ...(parsed.targetWeightKg !== undefined && { targetWeightKg: Math.round(parsed.targetWeightKg * 100) / 100 }),
-                ...(parsed.weightKg !== undefined && { weightKg: Math.round(parsed.weightKg * 100) / 100 }),
-                ...(parsed.hiddenGoals !== undefined && { hiddenGoals: parsed.hiddenGoals }),
-            },
-        });
+        let updated;
+        try {
+            updated = await prisma.user.update({
+                where: { clerkId: userId },
+                data: {
+                    ...(parsed.name !== undefined && { name: parsed.name }),
+                    ...(parsed.avatarUrl !== undefined && { avatarUrl: parsed.avatarUrl === "" ? null : parsed.avatarUrl }),
+                    ...(parsed.goal !== undefined && { goal: parsed.goal }),
+                    ...(parsed.trainingDaysPerWeek !== undefined && { trainingDaysPerWeek: parsed.trainingDaysPerWeek }),
+                    ...(parsed.experienceLevel !== undefined && { experienceLevel: parsed.experienceLevel }),
+                    ...(parsed.trainingLocation !== undefined && { trainingLocation: parsed.trainingLocation }),
+                    ...(parsed.targetWeightKg !== undefined && { targetWeightKg: Math.round(parsed.targetWeightKg * 100) / 100 }),
+                    ...(parsed.weightKg !== undefined && { weightKg: Math.round(parsed.weightKg * 100) / 100 }),
+                    ...(parsed.hiddenGoals !== undefined && { hiddenGoals: parsed.hiddenGoals }),
+                },
+            });
+        } catch (dbErr) {
+            console.warn("[Profile PATCH] Update failed, retrying without hiddenGoals field:", dbErr);
+            updated = await prisma.user.update({
+                where: { clerkId: userId },
+                data: {
+                    ...(parsed.name !== undefined && { name: parsed.name }),
+                    ...(parsed.avatarUrl !== undefined && { avatarUrl: parsed.avatarUrl === "" ? null : parsed.avatarUrl }),
+                    ...(parsed.goal !== undefined && { goal: parsed.goal }),
+                    ...(parsed.trainingDaysPerWeek !== undefined && { trainingDaysPerWeek: parsed.trainingDaysPerWeek }),
+                    ...(parsed.experienceLevel !== undefined && { experienceLevel: parsed.experienceLevel }),
+                    ...(parsed.trainingLocation !== undefined && { trainingLocation: parsed.trainingLocation }),
+                    ...(parsed.targetWeightKg !== undefined && { targetWeightKg: Math.round(parsed.targetWeightKg * 100) / 100 }),
+                    ...(parsed.weightKg !== undefined && { weightKg: Math.round(parsed.weightKg * 100) / 100 }),
+                },
+            });
+        }
 
         if (
             parsed.targetCalories !== undefined ||

@@ -493,20 +493,20 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                 </div>
             </div>
 
-            <div id="weekly-metrics" className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <div id="weekly-metrics" className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
                 {/* Daily Weight Update */}
                 {!user.hiddenGoals?.includes("weight") && (
                     <div className={cn(
-                        "card p-4 flex items-center gap-3 transition-all relative overflow-hidden group",
+                        "card p-3 sm:p-4 flex items-center gap-2 sm:gap-3 transition-all relative overflow-hidden group",
                         weightLogged
                             ? "bg-success/10 border-success/30 shadow-glow-success-sm"
                             : "bg-surface-muted/10 border-brand-500/10 hover:border-brand-500/30"
                     )}>
                     <div className={cn(
-                        "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform",
+                        "w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform",
                         weightLogged ? "bg-success/15" : "bg-brand-500/5"
                     )}>
-                        {weightLogged ? <Check className="w-4.5 h-4.5 text-success" /> : <Scale className="w-4.5 h-4.5 text-brand-400" />}
+                        {weightLogged ? <Check className="w-3.5 h-3.5 sm:w-4.5 sm:h-4.5 text-success" /> : <Scale className="w-3.5 h-3.5 sm:w-4.5 sm:h-4.5 text-brand-400" />}
                     </div>
                     <div className="min-w-0 flex-1">
                         <p className={cn(
@@ -522,7 +522,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                                 value={weight}
                                 onChange={(e) => setWeight(e.target.value)}
                                 onBlur={(e) => handleUpdateWeight(e.target.value)}
-                                className="w-20 bg-transparent text-2xl font-black text-fg focus:outline-none focus:text-brand-400 transition-colors"
+                                className="w-16 sm:w-20 bg-transparent text-lg sm:text-2xl font-black text-fg focus:outline-none focus:text-brand-400 transition-colors"
                                 placeholder={latestWeight ? latestWeight.toFixed(2) : "--"}
                             />
                             <span className="text-[10px] font-semibold text-fg-muted uppercase">kg</span>
@@ -590,17 +590,17 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                         <div
                             key={metric.key}
                             className={cn(
-                                "card p-4 flex items-center gap-3 transition-all relative overflow-hidden",
+                                "card p-3 sm:p-4 flex items-center gap-2 sm:gap-3 transition-all relative overflow-hidden",
                                 metric.logged
                                     ? "bg-success/10 border-success/30 shadow-glow-success-sm"
                                     : "bg-surface-muted/10 border-brand-500/10 hover:border-brand-500/30"
                             )}
                         >
                             <div className={cn(
-                                "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
+                                "w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0",
                                 metric.logged ? "bg-success/15" : "bg-brand-500/5"
                             )}>
-                                {metric.logged ? <Check className="w-4.5 h-4.5 text-success" /> : <Icon className="w-4.5 h-4.5 text-brand-400" />}
+                                {metric.logged ? <Check className="w-3.5 h-3.5 sm:w-4.5 sm:h-4.5 text-success" /> : <Icon className="w-3.5 h-3.5 sm:w-4.5 sm:h-4.5 text-brand-400" />}
                             </div>
                             <div className="min-w-0 flex-1">
                                 <p className={cn(
@@ -616,7 +616,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                                         value={metric.value}
                                         onChange={(e) => metric.setValue(e.target.value)}
                                         onBlur={(e) => handleUpdateDailyMetric(metric.key, e.target.value)}
-                                        className="w-20 bg-transparent text-2xl font-black text-fg focus:outline-none focus:text-brand-400 transition-colors"
+                                        className="w-16 sm:w-20 bg-transparent text-lg sm:text-2xl font-black text-fg focus:outline-none focus:text-brand-400 transition-colors"
                                         placeholder={metric.latest ? metric.latest.toString() : metric.target ? metric.target.toString() : "--"}
                                     />
                                     <span className="text-[10px] font-semibold text-fg-muted uppercase">{metric.unit}</span>

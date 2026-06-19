@@ -7,6 +7,7 @@ import {
     Camera, Loader2, Save, Target
 } from "lucide-react";
 import { useClerk } from "@clerk/nextjs";
+import { useRouter } from "next/navigation";
 import { cn, getInitials } from "@/lib/utils";
 
 interface Props {
@@ -47,6 +48,7 @@ const LOC_LABELS: Record<string, string> = {
 
 export function SettingsClient({ user }: Props) {
     const { signOut } = useClerk();
+    const router = useRouter();
     const [activeTab, setActiveTab] = useState("profile");
 
     // Profile form states
@@ -146,8 +148,15 @@ export function SettingsClient({ user }: Props) {
             });
             if (res.ok) {
                 setGoalSaved(true);
+                router.refresh();
                 setTimeout(() => setGoalSaved(false), 2500);
+            } else {
+                const data = await res.json();
+                alert(data.error || "Failed to save goals");
             }
+        } catch (err) {
+            console.error(err);
+            alert("Connection error occurred while saving goals.");
         } finally {
             setGoalSaving(false);
         }
