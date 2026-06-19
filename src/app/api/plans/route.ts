@@ -63,6 +63,8 @@ export async function POST(req: Request) {
     const { userId } = await auth();
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+    await ensureDbSchema();
+
     const user = await prisma.user.findUnique({ where: { clerkId: userId } });
     if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
@@ -74,6 +76,7 @@ export async function POST(req: Request) {
     
     const shareCode = randomBytes(4).toString("hex").toUpperCase();
 
+    try {
     const plan = await prisma.plan.create({
         data: {
             name,
@@ -124,4 +127,11 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json(plan, { status: 201 });
+    } catch (error) {
+        console.error("[Plans POST] Failed to create plan:", error);
+        return NextResponse.json(
+            { error: "The plan could not be saved. Please try again." },
+            { status: 500 },
+        );
+    }
 }
