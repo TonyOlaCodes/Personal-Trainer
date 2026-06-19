@@ -29,7 +29,7 @@ export default async function AppLayout({
     }
 
     if (isDeactivated) {
-        redirect("/sign-in");
+        redirect("/deactivated");
     }
 
     if (!user?.onboardingDone) {

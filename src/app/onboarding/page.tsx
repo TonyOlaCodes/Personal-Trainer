@@ -18,7 +18,7 @@ export default async function OnboardingServerPage() {
     });
 
     if (await getUserDeactivationStatusByClerkId(userId)) {
-        redirect("/sign-in");
+        redirect("/deactivated");
     }
 
     if (user?.onboardingDone) {
