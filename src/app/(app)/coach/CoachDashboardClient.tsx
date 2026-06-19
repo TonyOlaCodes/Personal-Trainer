@@ -1,12 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
     Users, Activity, Calendar,
-    ChevronRight, TrendingUp, HelpCircle, CheckCircle2
+    ChevronRight, TrendingUp, HelpCircle, CheckCircle2,
+    Dumbbell, Loader2
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { cn, formatDate, getInitials } from "@/lib/utils";
+
+const CHECK_IN_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 interface Client {
     id: string;
@@ -15,6 +19,10 @@ interface Client {
     avatarUrl?: string | null;
     isDeleted?: boolean;
     hasCheckInSchedule?: boolean;
+    checkInSchedule: { day: number | null; frequencyWeeks: number | null; startDate: string | null };
+    targetCalories: number | null;
+    targetSteps: number | null;
+    targetSleepHours: number | null;
     goal?: string | null;
     currentWeightKg?: number | null;
     targetWeightKg?: number | null;
@@ -35,13 +43,280 @@ interface RecentCheckIn {
 interface Props {
     clients: Client[];
     recentCheckIns: RecentCheckIn[];
+    availablePlans: { id: string; name: string; type: string }[];
 }
 
-export function CoachDashboardClient({ clients, recentCheckIns }: Props) {
+export function CoachDashboardClient({ clients, recentCheckIns, availablePlans }: Props) {
+    const router = useRouter();
+    const [skippedClients, setSkippedClients] = useState<string[]>([]);
+    const [savingSetup, setSavingSetup] = useState(false);
+
     const pendingCheckIns = recentCheckIns.filter(ci => ci.status === "Pending").length;
     const activeClients = clients.filter(c => !c.isDeleted);
     const deletedClients = clients.filter(c => c.isDeleted);
 
+    // Queue of clients who need onboarding setup and haven't been skipped
+    const needsSetupClients = activeClients.filter(c => !c.hasCheckInSchedule && !skippedClients.includes(c.id));
+    const currentSetupClient = needsSetupClients[0];
+
+    // Local form states for wizard
+    const [setupDay, setSetupDay] = useState(6);
+    const [setupFreq, setSetupFreq] = useState(1);
+    const [setupCal, setSetupCal] = useState("");
+    const [setupSteps, setSetupSteps] = useState("");
+    const [setupSleep, setSetupSleep] = useState("");
+    const [setupWeight, setSetupWeight] = useState("");
+    const [setupPlanId, setSetupPlanId] = useState("");
+
+    // Pre-fill setup inputs when switching between clients
+    useEffect(() => {
+        if (currentSetupClient) {
+            setSetupDay(currentSetupClient.checkInSchedule?.day !== null ? currentSetupClient.checkInSchedule.day : 6);
+            setSetupFreq(currentSetupClient.checkInSchedule?.frequencyWeeks !== null ? currentSetupClient.checkInSchedule.frequencyWeeks : 1);
+            setSetupCal(currentSetupClient.targetCalories ? String(currentSetupClient.targetCalories) : "");
+            setSetupSteps(currentSetupClient.targetSteps ? String(currentSetupClient.targetSteps) : "");
+            setSetupSleep(currentSetupClient.targetSleepHours ? String(currentSetupClient.targetSleepHours) : "");
+            setSetupWeight(currentSetupClient.targetWeightKg ? String(currentSetupClient.targetWeightKg) : "");
+            setSetupPlanId("");
+        }
+    }, [currentSetupClient?.id]);
+
+    const handleSaveSetup = async () => {
+        if (!currentSetupClient) return;
+        setSavingSetup(true);
+        try {
+            // 1. Save schedule
+            const scheduleRes = await fetch("/api/coach/clients/checkin-schedule", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    clientId: currentSetupClient.id,
+                    day: setupDay,
+                    frequencyWeeks: setupFreq,
+                }),
+            });
+            if (!scheduleRes.ok) throw new Error("Failed to save check-in schedule");
+
+            // 2. Save goals
+            const goalsRes = await fetch("/api/coach/clients/goals", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    clientId: currentSetupClient.id,
+                    targetCalories: setupCal ? Math.round(Number(setupCal)) : null,
+                    targetSteps: setupSteps ? Math.round(Number(setupSteps)) : null,
+                    targetSleepHours: setupSleep ? Number(setupSleep) : null,
+                    targetWeightKg: setupWeight ? Number(setupWeight) : null,
+                }),
+            });
+            if (!goalsRes.ok) throw new Error("Failed to save client targets");
+
+            // 3. Save plan if selected
+            if (setupPlanId) {
+                const planRes = await fetch("/api/coach/clients/plan", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        clientId: currentSetupClient.id,
+                        planId: setupPlanId,
+                    }),
+                });
+                if (!planRes.ok) throw new Error("Failed to assign training plan");
+            }
+
+            // Success: advance to next client in the queue
+            setSkippedClients(prev => [...prev, currentSetupClient.id]);
+            router.refresh();
+        } catch (e: any) {
+            alert(e.message || "An error occurred during client setup");
+        } finally {
+            setSavingSetup(false);
+        }
+    };
+
+    const handleSkipSetup = () => {
+        if (currentSetupClient) {
+            setSkippedClients(prev => [...prev, currentSetupClient.id]);
+        }
+    };
+
+    // If there is a client needing setup, render the onboarding wizard!
+    if (currentSetupClient) {
+        return (
+            <div className="max-w-2xl mx-auto space-y-6 animate-fade-in py-4">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h2 className="text-2xl font-black text-fg tracking-tight">Onboard New Athlete</h2>
+                        <p className="text-xs text-fg-muted mt-1">Configure customizable settings for your new client.</p>
+                    </div>
+                    <span className="badge-brand text-xs font-black px-3 py-1 rounded-full uppercase tracking-wider">
+                        Pending Setup: {needsSetupClients.length} left
+                    </span>
+                </div>
+
+                <div className="card p-6 md:p-8 space-y-6 border-brand-500/20 bg-brand-950/5 shadow-glow-brand-sm">
+                    {/* Athlete Profile Summary */}
+                    <div className="flex items-center gap-4 pb-6 border-b border-surface-border">
+                        <div className="w-14 h-14 rounded-2xl bg-gradient-brand flex items-center justify-center text-lg font-black text-white overflow-hidden shadow-glow-sm">
+                            {currentSetupClient.avatarUrl ? (
+                                <img src={currentSetupClient.avatarUrl} alt="avatar" className="w-full h-full object-cover rounded-2xl" />
+                            ) : (
+                                getInitials(currentSetupClient.name)
+                            )}
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-black text-fg">{currentSetupClient.name}</h3>
+                            <p className="text-xs text-fg-subtle mt-0.5">{currentSetupClient.email}</p>
+                            {currentSetupClient.goal && (
+                                <span className="inline-block mt-2 badge-muted text-[8px] uppercase tracking-wider">
+                                    Goal: {currentSetupClient.goal.replace("_", " ")}
+                                </span>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Form Fields */}
+                    <div className="space-y-6">
+                        {/* 1. Check-in Schedule */}
+                        <div className="space-y-3">
+                            <h4 className="text-xs font-black text-brand-400 uppercase tracking-widest flex items-center gap-2">
+                                <Calendar className="w-4 h-4" />
+                                1. Check-in Schedule
+                            </h4>
+                            <div className="grid grid-cols-2 gap-4">
+                                <label className="space-y-1.5">
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Check-in Day</span>
+                                    <select
+                                        value={setupDay}
+                                        onChange={(e) => setSetupDay(Number(e.target.value))}
+                                        className="input h-11 text-sm font-bold bg-surface-muted/30"
+                                    >
+                                        {CHECK_IN_DAYS.map((day, idx) => (
+                                            <option key={day} value={idx}>{day}</option>
+                                        ))}
+                                    </select>
+                                </label>
+                                <label className="space-y-1.5">
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Frequency</span>
+                                    <select
+                                        value={setupFreq}
+                                        onChange={(e) => setSetupFreq(Number(e.target.value))}
+                                        className="input h-11 text-sm font-bold bg-surface-muted/30"
+                                    >
+                                        <option value={1}>Weekly</option>
+                                        <option value={2}>Every 2 weeks</option>
+                                        <option value={4}>Every 4 weeks</option>
+                                    </select>
+                                </label>
+                            </div>
+                        </div>
+
+                        {/* 2. Target Metrics */}
+                        <div className="space-y-3 pt-2">
+                            <h4 className="text-xs font-black text-brand-400 uppercase tracking-widest flex items-center gap-2">
+                                <Activity className="w-4 h-4" />
+                                2. Athlete Targets
+                            </h4>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                <label className="space-y-1.5">
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Calories (kcal)</span>
+                                    <input
+                                        type="number"
+                                        placeholder="e.g. 2500"
+                                        value={setupCal}
+                                        onChange={(e) => setSetupCal(e.target.value)}
+                                        className="input h-11 text-sm font-bold bg-surface-muted/30 animate-pulse-slow"
+                                    />
+                                </label>
+                                <label className="space-y-1.5">
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Daily Steps</span>
+                                    <input
+                                        type="number"
+                                        placeholder="e.g. 10000"
+                                        value={setupSteps}
+                                        onChange={(e) => setSetupSteps(e.target.value)}
+                                        className="input h-11 text-sm font-bold bg-surface-muted/30"
+                                    />
+                                </label>
+                                <label className="space-y-1.5">
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Sleep (hrs)</span>
+                                    <input
+                                        type="number"
+                                        step="0.5"
+                                        placeholder="e.g. 8.0"
+                                        value={setupSleep}
+                                        onChange={(e) => setSetupSleep(e.target.value)}
+                                        className="input h-11 text-sm font-bold bg-surface-muted/30"
+                                    />
+                                </label>
+                                <label className="space-y-1.5">
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Weight Target (kg)</span>
+                                    <input
+                                        type="number"
+                                        step="0.1"
+                                        placeholder="e.g. 75.0"
+                                        value={setupWeight}
+                                        onChange={(e) => setSetupWeight(e.target.value)}
+                                        className="input h-11 text-sm font-bold bg-surface-muted/30"
+                                    />
+                                </label>
+                            </div>
+                        </div>
+
+                        {/* 3. Assign Training Programme */}
+                        <div className="space-y-3 pt-2">
+                            <h4 className="text-xs font-black text-brand-400 uppercase tracking-widest flex items-center gap-2">
+                                <Dumbbell className="w-4 h-4" />
+                                3. Training Programme
+                            </h4>
+                            <label className="space-y-1.5 block">
+                                <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Select Programme</span>
+                                <select
+                                    value={setupPlanId}
+                                    onChange={(e) => setSetupPlanId(e.target.value)}
+                                    className="input h-11 text-sm font-bold bg-surface-muted/30"
+                                >
+                                    <option value="">No plan / Assign later</option>
+                                    {availablePlans.map((plan) => (
+                                        <option key={plan.id} value={plan.id}>{plan.name} ({plan.type.replace("_", " ")})</option>
+                                    ))}
+                                </select>
+                            </label>
+                        </div>
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="pt-6 border-t border-surface-border flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <button
+                            type="button"
+                            onClick={handleSkipSetup}
+                            disabled={savingSetup}
+                            className="text-xs font-black text-fg-subtle hover:text-fg uppercase tracking-widest transition-colors py-2 px-4 hover:bg-surface-muted/50 rounded-xl"
+                        >
+                            Complete Later
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleSaveSetup}
+                            disabled={savingSetup}
+                            className="btn-primary w-full sm:w-auto px-8 h-12 text-xs font-black uppercase tracking-widest flex items-center gap-2 justify-center shadow-glow-brand"
+                        >
+                            {savingSetup ? (
+                                <>
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    Deploying Setup...
+                                </>
+                            ) : (
+                                "Save & Deploy Athlete"
+                            )}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // Default Coach Dashboard view if no setups are active
     return (
         <div className="space-y-8 animate-fade-in">
             {/* Stats row */}
@@ -112,7 +387,7 @@ export function CoachDashboardClient({ clients, recentCheckIns }: Props) {
                                                 )}
                                                 {!c.isDeleted && !c.hasCheckInSchedule && (
                                                     <span className="text-[8px] uppercase font-black px-2 py-0.5 rounded-full border border-warning/30 bg-warning/10 text-warning shrink-0">
-                                                        Schedule needed
+                                                        Setup needed
                                                     </span>
                                                 )}
                                             </div>

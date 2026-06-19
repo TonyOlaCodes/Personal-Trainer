@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { ClientDetailView } from "./ClientDetailView";
 import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
+import { getDailyMetricTargets } from "@/lib/dailyMetrics";
 import { calculateOneRM } from "@/lib/utils";
 
 import { SafeFallback, isNextInternalError } from "@/components/shared/SafeFallback";
@@ -40,7 +41,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         }
         const isDeletedClient = target.email.endsWith("@deleted.local");
 
-        const [activePlan, availablePlans, checkInSchedule, bodyweightRows, workoutNotesRows, completedLogs] = await Promise.all([
+        const [activePlan, availablePlans, checkInSchedule, bodyweightRows, workoutNotesRows, completedLogs, clientMetricTargets] = await Promise.all([
             Promise.resolve(target.plans[0]?.plan ?? null),
             prisma.plan.findMany({
                 where: {
@@ -83,7 +84,8 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                     }
                 },
                 orderBy: { loggedAt: "asc" }
-            })
+            }),
+            getDailyMetricTargets(target.id)
         ]);
 
         const exerciseHistory: Record<string, any[]> = {};
@@ -164,6 +166,9 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                             adherenceTrend,
                             lastActiveAt: target.lastActiveAt?.toISOString() || null,
                             hiddenGoals: target.hiddenGoals ?? [],
+                            targetCalories: clientMetricTargets.targetCalories,
+                            targetSteps: clientMetricTargets.targetSteps,
+                            targetSleepHours: clientMetricTargets.targetSleepHours,
                         }}
                         currentUserId={actor.id}
                         availablePlans={availablePlans}

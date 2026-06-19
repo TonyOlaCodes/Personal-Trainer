@@ -396,7 +396,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
     ];
 
     return (
-        <div className="space-y-6 animate-fade-in pb-10">
+        <div className={cn("space-y-6 animate-fade-in pb-10", (todayWorkout && !todayCompleted) && "pb-28")}>
             <WorkoutSessionModal sessionId={selectedSessionId} onClose={() => setSelectedSessionId(null)} />
             {showTour && <Walkthrough steps={tourSteps} onComplete={() => setShowTour(false)} />}
 
@@ -683,7 +683,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                                     {currentCheckin 
                                         ? currentCheckin.status === "REVIEWED" ? "✅ Coach reviewed" : "⏳ Awaiting coach review"
                                         : !checkInDueState.isConfigured
-                                            ? "No check-in due"
+                                            ? "Tap to submit weekly check-in"
                                             : checkInDueState.isDueToday
                                                 ? "Due today - tap to record"
                                                 : checkInDueState.isOverdue
@@ -715,16 +715,9 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                         )}
                     </div>
                     {(todayWorkout && !todayCompleted) && (
-                        <Link 
-                            href={`/plans/log/${todayWorkout.id}`} 
-                            className={cn(
-                                "btn-primary btn-sm px-4",
-                                localActiveSession?.workoutId === todayWorkout.id ? "shadow-glow-success bg-success border-success hover:bg-success-600" : "shadow-glow-brand"
-                            )}
-                        >
-                            <Flame className={cn("w-3 h-3", localActiveSession?.workoutId === todayWorkout.id && "animate-pulse")} />
-                            {localActiveSession?.workoutId === todayWorkout.id ? "Resume" : "Start"}
-                        </Link>
+                        <span className="text-xs text-brand-400 font-black uppercase tracking-widest animate-pulse-slow">
+                            {localActiveSession?.workoutId === todayWorkout.id ? "Active now" : "Scheduled today"}
+                        </span>
                     )}
                 </div>
 
@@ -791,6 +784,20 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                                     +{todayWorkout.exercises.length - 5} more exercises
                                 </p>
                             )}
+                        </div>
+
+                        {/* Centered Start / Resume CTA */}
+                        <div className="mt-6 pt-4 border-t border-surface-border/50 flex justify-center">
+                            <Link
+                                href={`/plans/log/${todayWorkout.id}`}
+                                className={cn(
+                                    "btn-primary w-full max-w-md py-4 text-sm font-black uppercase tracking-widest flex items-center justify-center gap-2 rounded-2xl transition-all hover:scale-[1.02] active:scale-[0.98] shadow-glow-brand",
+                                    localActiveSession?.workoutId === todayWorkout.id ? "shadow-glow-success bg-success border-success hover:bg-success-600" : ""
+                                )}
+                            >
+                                <Flame className={cn("w-4.5 h-4.5", localActiveSession?.workoutId === todayWorkout.id && "animate-pulse")} />
+                                {localActiveSession?.workoutId === todayWorkout.id ? "Resume Workout Session" : "Start Workout"}
+                            </Link>
                         </div>
                     </div>
                 ) : (
@@ -874,6 +881,24 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                     </div>
                     <Link href="/settings" className="btn-secondary btn-sm shrink-0 font-bold uppercase tracking-wide text-[10px]">
                         Redeem Code
+                    </Link>
+                </div>
+            )}
+
+            {/* Sticky Start/Resume Workout CTA for Mobile */}
+            {(todayWorkout && !todayCompleted) && (
+                <div className="fixed bottom-6 left-4 right-4 z-40 md:hidden animate-slide-up">
+                    <Link
+                        href={`/plans/log/${todayWorkout.id}`}
+                        className={cn(
+                            "btn-primary w-full py-4 shadow-2xl text-sm font-black uppercase tracking-widest flex items-center justify-center gap-2 rounded-2xl border",
+                            localActiveSession?.workoutId === todayWorkout.id 
+                                ? "bg-success border-success text-white shadow-glow-success" 
+                                : "bg-brand-500 border-brand-400 text-white shadow-glow-brand"
+                        )}
+                    >
+                        <Flame className={cn("w-4 h-4", localActiveSession?.workoutId === todayWorkout.id && "animate-pulse")} />
+                        {localActiveSession?.workoutId === todayWorkout.id ? "Resume Active Workout" : "Start Workout"}
                     </Link>
                 </div>
             )}

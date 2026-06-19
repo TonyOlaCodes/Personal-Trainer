@@ -772,10 +772,6 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
     const consistencyPct = workoutsTarget > 0 ? Math.round((workoutsThisWeek / workoutsTarget) * 100) : 100;
 
     const startLogging = () => {
-        if (!checkInDueState.isConfigured) {
-            alert("Your coach needs to set your check-in schedule first.");
-            return;
-        }
         // If a check-in for this week already exists, edit it instead of creating a blank new one
         if (currentWeekEntry) {
             editCheckIn(currentWeekEntry);
@@ -1000,7 +996,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                             <span className="text-[10px] font-black text-fg-subtle uppercase tracking-widest leading-none">
                                 {checkInDueState.isConfigured
                                     ? `Due ${checkInDueState.dueDayLabel}${daysUntilNext !== null ? ` (${daysUntilNext}d)` : ""}`
-                                    : "Schedule not set"}
+                                    : "Submit Check-in"}
                             </span>
                         </div>
                     )}
@@ -1113,11 +1109,11 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                             </div>
                             <div>
                                 <p className="text-lg font-black text-fg tracking-tight">
-                                    {!checkInDueState.isConfigured ? "Check-in Schedule Not Set" : isOverdue ? "Check-in Overdue" : isDueDay ? "Check-in Due Today" : "Submit Check-in"}
+                                    {!checkInDueState.isConfigured ? "Submit Weekly Check-in" : isOverdue ? "Check-in Overdue" : isDueDay ? "Check-in Due Today" : "Submit Check-in"}
                                 </p>
                                 <p className="text-sm text-fg-muted max-w-xs mx-auto mt-1 leading-relaxed">
                                     {!checkInDueState.isConfigured
-                                        ? "Your coach needs to choose your check-in day and frequency first."
+                                        ? "Submit your weekly check-in, notes, and progress photos to your coach."
                                         : isOverdue
                                         ? "You missed this week's check-in. Fill it in now so your coach has the full week."
                                         : isDueDay

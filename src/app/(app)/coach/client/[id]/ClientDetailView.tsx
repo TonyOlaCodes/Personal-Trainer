@@ -39,6 +39,9 @@ interface Client {
     };
     targetWeightKg?: number | null;
     currentWeightKg?: number | null;
+    targetCalories?: number | null;
+    targetSteps?: number | null;
+    targetSleepHours?: number | null;
     adherencePercentage?: number;
     adherenceTrend?: "UP" | "DOWN" | "STABLE";
     lastActiveAt?: string | null;
@@ -99,6 +102,10 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
     const [checkInDay, setCheckInDay] = useState(client.checkInSchedule.day ?? 6);
     const [checkInFrequency, setCheckInFrequency] = useState(client.checkInSchedule.frequencyWeeks ?? 1);
     const [savingSchedule, setSavingSchedule] = useState(false);
+    const [targetWeightKg, setTargetWeightKg] = useState(client.targetWeightKg ? String(client.targetWeightKg) : "");
+    const [targetCalories, setTargetCalories] = useState(client.targetCalories ? String(client.targetCalories) : "");
+    const [targetSteps, setTargetSteps] = useState(client.targetSteps ? String(client.targetSteps) : "");
+    const [targetSleepHours, setTargetSleepHours] = useState(client.targetSleepHours ? String(client.targetSleepHours) : "");
     const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; date: string; weightKg: number } | null>(null);
     const [hoveredVolPoint, setHoveredVolPoint] = useState<{ id: string; workoutName: string; date: string; formattedDate: string; volume: number; x: number; y: number } | null>(null);
     const isWeightHidden = client.hiddenGoals?.includes("weight");
@@ -198,10 +205,11 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
         }
     };
 
-    const saveCheckInSchedule = async () => {
+    const saveClientConfiguration = async () => {
         setSavingSchedule(true);
         try {
-            const res = await fetch("/api/coach/clients/checkin-schedule", {
+            // Save schedule
+            const scheduleRes = await fetch("/api/coach/clients/checkin-schedule", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -210,13 +218,25 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                     frequencyWeeks: checkInFrequency,
                 }),
             });
-            if (res.ok) {
-                router.refresh();
-            } else {
-                alert("Failed to update check-in schedule.");
-            }
-        } catch (e) {
-            alert("Network error.");
+            if (!scheduleRes.ok) throw new Error("Failed to update check-in schedule.");
+
+            // Save goals
+            const goalsRes = await fetch("/api/coach/clients/goals", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    clientId: client.id,
+                    targetCalories: targetCalories ? Math.round(Number(targetCalories)) : null,
+                    targetSteps: targetSteps ? Math.round(Number(targetSteps)) : null,
+                    targetSleepHours: targetSleepHours ? Number(targetSleepHours) : null,
+                    targetWeightKg: targetWeightKg ? Number(targetWeightKg) : null,
+                }),
+            });
+            if (!goalsRes.ok) throw new Error("Failed to update targets.");
+
+            router.refresh();
+        } catch (e: any) {
+            alert(e.message || "Network error.");
         } finally {
             setSavingSchedule(false);
         }
@@ -762,17 +782,17 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
             <div className="grid lg:grid-cols-3 gap-8">
                 {/* Workouts Management Column */}
                 <div className="lg:col-span-2 space-y-6">
-                    {/* Check-in Schedule (if NOT set yet) */}
+                    {/* Check-in Schedule & Targets (if NOT set yet) */}
                     {client.checkInSchedule.day === null && (
                         <div className="card p-6 space-y-4 border-warning/30 bg-warning/5">
-                            <div className="flex items-start justify-between gap-4">
+                            <div className="flex items-start justify-between gap-4 pb-2 border-b border-surface-border/50">
                                 <div>
                                     <h3 className="heading-3 flex items-center gap-2 uppercase tracking-widest text-[11px] font-black text-brand-400">
                                         <Calendar className="w-4 h-4" />
-                                        Check-in Schedule
+                                        Configuration & Targets
                                     </h3>
                                     <p className="text-xs text-fg-muted mt-1">
-                                        Choose when this client should submit check-ins.
+                                        Set check-in days and targets to onboard client.
                                     </p>
                                 </div>
                                 <span className="px-2.5 py-1 rounded-lg bg-warning/10 border border-warning/25 text-warning text-[9px] font-black uppercase tracking-widest">
@@ -781,7 +801,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                             </div>
                             <div className="grid sm:grid-cols-2 gap-3">
                                 <label className="space-y-1">
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Day</span>
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Check-in Day</span>
                                     <select
                                         value={checkInDay}
                                         onChange={(e) => setCheckInDay(Number(e.target.value))}
@@ -805,12 +825,58 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                     </select>
                                 </label>
                             </div>
+                            
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+                                <label className="space-y-1">
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Calories (kcal)</span>
+                                    <input
+                                        type="number"
+                                        placeholder="e.g. 2500"
+                                        value={targetCalories}
+                                        onChange={(e) => setTargetCalories(e.target.value)}
+                                        className="input h-11 text-sm font-bold bg-surface-muted/30"
+                                    />
+                                </label>
+                                <label className="space-y-1">
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Daily Steps</span>
+                                    <input
+                                        type="number"
+                                        placeholder="e.g. 10000"
+                                        value={targetSteps}
+                                        onChange={(e) => setTargetSteps(e.target.value)}
+                                        className="input h-11 text-sm font-bold bg-surface-muted/30"
+                                    />
+                                </label>
+                                <label className="space-y-1">
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Sleep (hrs)</span>
+                                    <input
+                                        type="number"
+                                        step="0.5"
+                                        placeholder="e.g. 8.0"
+                                        value={targetSleepHours}
+                                        onChange={(e) => setTargetSleepHours(e.target.value)}
+                                        className="input h-11 text-sm font-bold bg-surface-muted/30"
+                                    />
+                                </label>
+                                <label className="space-y-1">
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Weight Goal (kg)</span>
+                                    <input
+                                        type="number"
+                                        step="0.1"
+                                        placeholder="e.g. 75.0"
+                                        value={targetWeightKg}
+                                        onChange={(e) => setTargetWeightKg(e.target.value)}
+                                        className="input h-11 text-sm font-bold bg-surface-muted/30"
+                                    />
+                                </label>
+                            </div>
+
                             <button
-                                onClick={saveCheckInSchedule}
+                                onClick={saveClientConfiguration}
                                 disabled={savingSchedule}
-                                className="btn-primary w-full h-10 text-xs font-black uppercase tracking-widest"
+                                className="btn-primary w-full h-11 text-xs font-black uppercase tracking-widest shadow-glow-brand mt-2"
                             >
-                                {savingSchedule ? "Saving..." : "Save Check-in Schedule"}
+                                {savingSchedule ? "Saving..." : "Save Athlete Configuration"}
                             </button>
                         </div>
                     )}
@@ -1204,24 +1270,24 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                  </div>
              </section>
 
-             {/* Check-in Schedule (if already set, moved to very bottom above Danger Zone) */}
+             {/* Check-in Schedule & Targets (if already set, moved to very bottom above Danger Zone) */}
              {client.checkInSchedule.day !== null && (
                  <div className="border-t border-surface-border pt-12 mt-12">
                      <div className="card p-6 space-y-4 border-success/20 bg-success/5 max-w-2xl">
-                         <div className="flex items-start justify-between gap-4">
+                         <div className="flex items-start justify-between gap-4 pb-2 border-b border-surface-border/50">
                              <div>
                                  <h3 className="heading-3 flex items-center gap-2 uppercase tracking-widest text-[11px] font-black text-brand-400">
                                      <Calendar className="w-4 h-4" />
-                                     Check-in Schedule
+                                     Client Configuration & Targets
                                  </h3>
                                  <p className="text-xs text-fg-muted mt-1">
-                                     Currently active: {CHECK_IN_FREQUENCIES.find(f => f.value === client.checkInSchedule.frequencyWeeks)?.label ?? "Custom"} on {CHECK_IN_DAYS[client.checkInSchedule.day]}
+                                     Modify schedule and target goals for this athlete.
                                  </p>
                              </div>
                          </div>
                          <div className="grid sm:grid-cols-2 gap-3">
                              <label className="space-y-1">
-                                 <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Day</span>
+                                 <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Check-in Day</span>
                                  <select
                                      value={checkInDay}
                                      onChange={(e) => setCheckInDay(Number(e.target.value))}
@@ -1245,12 +1311,58 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                  </select>
                              </label>
                          </div>
+
+                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+                             <label className="space-y-1">
+                                 <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Calories (kcal)</span>
+                                 <input
+                                     type="number"
+                                     placeholder="e.g. 2500"
+                                     value={targetCalories}
+                                     onChange={(e) => setTargetCalories(e.target.value)}
+                                     className="input h-11 text-sm font-bold bg-surface-muted/30"
+                                 />
+                             </label>
+                             <label className="space-y-1">
+                                 <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Daily Steps</span>
+                                 <input
+                                     type="number"
+                                     placeholder="e.g. 10000"
+                                     value={targetSteps}
+                                     onChange={(e) => setTargetSteps(e.target.value)}
+                                     className="input h-11 text-sm font-bold bg-surface-muted/30"
+                                 />
+                             </label>
+                             <label className="space-y-1">
+                                 <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Sleep (hrs)</span>
+                                 <input
+                                     type="number"
+                                     step="0.5"
+                                     placeholder="e.g. 8.0"
+                                     value={targetSleepHours}
+                                     onChange={(e) => setTargetSleepHours(e.target.value)}
+                                     className="input h-11 text-sm font-bold bg-surface-muted/30"
+                                 />
+                             </label>
+                             <label className="space-y-1">
+                                 <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Weight Goal (kg)</span>
+                                 <input
+                                     type="number"
+                                     step="0.1"
+                                     placeholder="e.g. 75.0"
+                                     value={targetWeightKg}
+                                     onChange={(e) => setTargetWeightKg(e.target.value)}
+                                     className="input h-11 text-sm font-bold bg-surface-muted/30"
+                                 />
+                             </label>
+                         </div>
+
                          <button
-                             onClick={saveCheckInSchedule}
+                             onClick={saveClientConfiguration}
                              disabled={savingSchedule}
-                             className="btn-primary w-full h-10 text-xs font-black uppercase tracking-widest"
+                             className="btn-primary w-full h-11 text-xs font-black uppercase tracking-widest shadow-glow-brand mt-2"
                          >
-                             {savingSchedule ? "Saving..." : "Update Check-in Schedule"}
+                             {savingSchedule ? "Saving..." : "Update Configuration & Targets"}
                          </button>
                      </div>
                  </div>

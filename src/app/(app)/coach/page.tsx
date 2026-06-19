@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { CoachDashboardClient } from "./CoachDashboardClient";
 import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
+import { getDailyMetricTargets } from "@/lib/dailyMetrics";
 import { ensureBodyweightTable } from "@/lib/bodyweight";
 
 export const metadata = { title: "Coach Dashboard" };
@@ -50,7 +51,7 @@ export default async function CoachDashboardPage() {
 
     const clientIds = coach.clients.map((client) => client.id);
 
-    const [recentCheckIns, bodyweightRows] = await Promise.all([
+    const [recentCheckIns, bodyweightRows, availablePlans] = await Promise.all([
         prisma.checkIn.findMany({
             where: { user: { coachId: coach.id } },
             include: { user: { select: { name: true } } },
@@ -63,6 +64,15 @@ export default async function CoachDashboardPage() {
             WHERE "userId" IN (${Prisma.join(clientIds)})
             ORDER BY "loggedDate" ASC
         ` : Promise.resolve([]),
+        prisma.plan.findMany({
+            where: {
+                OR: [
+                    { type: "PREBUILT" },
+                    { creatorId: coach.id }
+                ]
+            },
+            select: { id: true, name: true, type: true }
+        })
     ]);
 
     const bodyweightByClientId = new Map<string, { date: string; weightKg: number }[]>();
@@ -72,45 +82,57 @@ export default async function CoachDashboardPage() {
         bodyweightByClientId.set(row.userId, rows);
     });
 
-    const clientSchedules = await Promise.all(
-        coach.clients.map(async (client) => ({
-            id: client.id,
-            schedule: await getUserCheckInSchedule(client.id),
-        }))
+    const clientExtraData = await Promise.all(
+        coach.clients.map(async (client) => {
+            const schedule = await getUserCheckInSchedule(client.id);
+            const targets = await getDailyMetricTargets(client.id);
+            return {
+                id: client.id,
+                schedule,
+                targets,
+            };
+        })
     );
-    const scheduleByClientId = new Map(clientSchedules.map((item) => [item.id, item.schedule]));
+    const extraDataByClientId = new Map(clientExtraData.map((item) => [item.id, item]));
 
     return (
         <>
             <TopBar title="Coach Command Centre" subtitle="Manage your stable of athletes" />
             <div className="p-6 max-w-6xl mx-auto">
                 <CoachDashboardClient
-                    clients={coach.clients.map(c => ({
-                        id: c.id,
-                        name: c.name || "Unnamed Client",
-                        email: c.email,
-                        avatarUrl: c.avatarUrl,
-                        isDeleted: c.email.endsWith("@deleted.local"),
-                        goal: c.goal,
-                        currentWeightKg: c.weightKg,
-                        targetWeightKg: c.targetWeightKg,
-                        hasCheckInSchedule: scheduleByClientId.get(c.id)?.day !== null,
-                        stats: { logs: c._count.workoutLogs, checkins: c._count.checkIns },
-                        recentLogs: c.workoutLogs.map((log) => ({
-                            id: log.id,
-                            workoutName: log.workout.name,
-                            date: log.loggedAt.toISOString(),
-                            setCount: log.sets.length,
-                        })),
-                        recentCheckIns: c.checkIns.map((checkIn) => ({
-                            id: checkIn.id,
-                            week: checkIn.weekNumber,
-                            date: checkIn.createdAt.toISOString(),
-                            status: checkIn.status,
-                            bodyweightKg: checkIn.bodyweightKg,
-                        })),
-                        bodyweightHistory: bodyweightByClientId.get(c.id) ?? [],
-                    }))}
+                    clients={coach.clients.map(c => {
+                        const extra = extraDataByClientId.get(c.id);
+                        return {
+                            id: c.id,
+                            name: c.name || "Unnamed Client",
+                            email: c.email,
+                            avatarUrl: c.avatarUrl,
+                            isDeleted: c.email.endsWith("@deleted.local"),
+                            goal: c.goal,
+                            currentWeightKg: c.weightKg,
+                            targetWeightKg: c.targetWeightKg,
+                            hasCheckInSchedule: extra?.schedule?.day !== null,
+                            checkInSchedule: extra?.schedule ?? { day: null, frequencyWeeks: null, startDate: null },
+                            targetCalories: extra?.targets?.targetCalories ?? null,
+                            targetSteps: extra?.targets?.targetSteps ?? null,
+                            targetSleepHours: extra?.targets?.targetSleepHours ?? null,
+                            stats: { logs: c._count.workoutLogs, checkins: c._count.checkIns },
+                            recentLogs: c.workoutLogs.map((log) => ({
+                                id: log.id,
+                                workoutName: log.workout.name,
+                                date: log.loggedAt.toISOString(),
+                                setCount: log.sets.length,
+                            })),
+                            recentCheckIns: c.checkIns.map((checkIn) => ({
+                                id: checkIn.id,
+                                week: checkIn.weekNumber,
+                                date: checkIn.createdAt.toISOString(),
+                                status: checkIn.status,
+                                bodyweightKg: checkIn.bodyweightKg,
+                            })),
+                            bodyweightHistory: bodyweightByClientId.get(c.id) ?? [],
+                        };
+                    })}
                     recentCheckIns={recentCheckIns.map(ci => ({
                         id: ci.id,
                         clientName: ci.user.name || "Client",
@@ -118,6 +140,7 @@ export default async function CoachDashboardPage() {
                         date: ci.createdAt.toISOString(),
                         status: ci.coachResponse ? "Responded" : "Pending",
                     }))}
+                    availablePlans={availablePlans}
                 />
             </div>
         </>
