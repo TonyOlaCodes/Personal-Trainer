@@ -1,6 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect, notFound } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { prisma, ensureDbSchema } from "@/lib/prisma";
 import { WorkoutLogClient } from "./WorkoutLogClient";
 import { getExerciseMediaByNames } from "@/lib/exerciseMedia";
 
@@ -13,6 +13,7 @@ export default async function WorkoutLogPage({
     params: Promise<{ workoutId: string }>;
     searchParams: Promise<{ date?: string }>;
 }) {
+    await ensureDbSchema();
     const { userId } = await auth();
     if (!userId) redirect("/sign-in");
 

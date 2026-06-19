@@ -1,6 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, ensureDbSchema } from "@/lib/prisma";
 import { z } from "zod";
 import { randomBytes } from "crypto";
 
@@ -32,6 +32,7 @@ const planSchema = z.object({
 
 // GET all plans for the user
 export async function GET() {
+    await ensureDbSchema();
     const { userId } = await auth();
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

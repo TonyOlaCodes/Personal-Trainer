@@ -1,12 +1,13 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { prisma, ensureDbSchema } from "@/lib/prisma";
 import { getUserDeactivationStatusByClerkId } from "@/lib/userDeactivation";
 import { OnboardingPage as OnboardingClient } from "./OnboardingClient";
 
 export const metadata = { title: "Onboarding | FitCoach Pro" };
 
 export default async function OnboardingServerPage() {
+    await ensureDbSchema();
     const { userId } = await auth();
     if (!userId) {
         redirect("/sign-in");

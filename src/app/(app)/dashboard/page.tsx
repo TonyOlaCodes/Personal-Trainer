@@ -1,6 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { prisma, ensureDbSchema } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { getDayName, formatDate, getWeekNumber } from "@/lib/utils";
 import { cookies } from "next/headers";
@@ -15,6 +15,7 @@ export const metadata = { title: "Dashboard" };
 
 export default async function DashboardPage() {
     try {
+        await ensureDbSchema();
         const { userId } = await auth();
         if (!userId) redirect("/sign-in");
 

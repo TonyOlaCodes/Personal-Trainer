@@ -1,22 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, ensureDbSchema } from "@/lib/prisma";
 import { z } from "zod";
-
-let exerciseSchemaReady = false;
-
-async function ensureExerciseIsCustomColumn() {
-    if (exerciseSchemaReady) return;
-    try {
-        await prisma.$executeRaw`
-            ALTER TABLE "exercises"
-            ADD COLUMN IF NOT EXISTS "isCustom" BOOLEAN DEFAULT false
-        `;
-        exerciseSchemaReady = true;
-    } catch (e) {
-        console.warn("[ensureExerciseIsCustomColumn] Failed to add column:", e);
-    }
-}
 
 const logSchema = z.object({
     workoutId: z.string(),
@@ -41,7 +26,7 @@ const logSchema = z.object({
 
 // POST log a completed or in-progress workout
 export async function POST(req: Request) {
-    await ensureExerciseIsCustomColumn();
+    await ensureDbSchema();
     const { userId } = await auth();
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

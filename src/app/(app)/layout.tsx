@@ -1,6 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { prisma, ensureDbSchema } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { MobileTabBar } from "@/components/layout/MobileTabBar";
@@ -12,6 +12,7 @@ export default async function AppLayout({
 }: {
     children: React.ReactNode;
 }) {
+    await ensureDbSchema();
     const { userId } = await auth();
     if (!userId) redirect("/sign-in");
 

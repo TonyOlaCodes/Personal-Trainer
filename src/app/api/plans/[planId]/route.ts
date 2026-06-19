@@ -1,6 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, ensureDbSchema } from "@/lib/prisma";
 import { createNotification } from "@/lib/notifications";
 
 interface PlanExercisePayload {
@@ -38,6 +38,7 @@ export async function GET(
     req: Request,
     { params }: { params: Promise<{ planId: string }> }
 ) {
+    await ensureDbSchema();
     const { userId } = await auth();
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
