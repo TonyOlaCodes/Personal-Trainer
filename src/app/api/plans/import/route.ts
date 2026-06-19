@@ -19,7 +19,7 @@ export async function POST(req: Request) {
             weeks: {
                 include: {
                     workouts: {
-                        include: { exercises: true },
+                        include: { exercises: { where: { isCustom: false }, orderBy: { order: "asc" } } },
                     },
                 },
             },

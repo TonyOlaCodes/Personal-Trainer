@@ -64,9 +64,23 @@ export async function POST(req: Request) {
         }
     }
 
-    // Delete existing IN_PROGRESS log for this workout if it exists to avoid duplicates
+    // Delete existing IN_PROGRESS log for this workout on the same day range to avoid duplicates
+    const targetDate = loggedAt ? new Date(loggedAt) : new Date();
+    const startOfDay = new Date(targetDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(targetDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
     await prisma.workoutLog.deleteMany({
-        where: { userId: user.id, workoutId, status: "IN_PROGRESS" }
+        where: {
+            userId: user.id,
+            workoutId,
+            status: "IN_PROGRESS",
+            loggedAt: {
+                gte: startOfDay,
+                lte: endOfDay
+            }
+        }
     });
 
     // Process exercises to get real IDs safely (avoiding race conditions) and sync layout order

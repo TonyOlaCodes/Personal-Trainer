@@ -52,7 +52,8 @@ export default async function DashboardPage() {
                 },
             });
         } catch (e) {
-            console.warn("[Dashboard] DB unreachable:", e);
+            console.error("[Dashboard] Failed to load dashboard user:", e);
+            throw e;
         }
 
         if (!user) {
@@ -244,6 +245,7 @@ export default async function DashboardPage() {
                                 id: activeSession.id,
                                 workoutId: activeSession.workoutId,
                                 workoutName: activeSession.workout.name,
+                                loggedAt: activeSession.loggedAt.toISOString(),
                             } : null}
                             recentLogs={uniqueLogs
                                 .slice(0, 5)

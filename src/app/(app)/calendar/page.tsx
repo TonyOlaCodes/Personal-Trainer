@@ -21,7 +21,7 @@ export default async function CalendarPage() {
                             weeks: {
                                 include: { 
                                     workouts: { 
-                                        include: { exercises: { orderBy: { order: "asc" } } }, 
+                                        include: { exercises: { where: { isCustom: false }, orderBy: { order: "asc" } } }, 
                                         orderBy: { dayNumber: "asc" } 
                                     } 
                                 },

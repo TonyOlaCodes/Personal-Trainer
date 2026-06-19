@@ -16,11 +16,10 @@ export async function ensureDbSchema() {
     try {
         await prisma.$executeRaw`
             ALTER TABLE "exercises"
-            ADD COLUMN IF NOT EXISTS "isCustom" BOOLEAN DEFAULT false
+            ADD COLUMN IF NOT EXISTS "isCustom" BOOLEAN NOT NULL DEFAULT false
         `;
         schemaInitialized = true;
     } catch (e) {
         console.warn("[ensureDbSchema] Failed to verify schema:", e);
     }
 }
-

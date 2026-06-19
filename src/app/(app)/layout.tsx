@@ -6,6 +6,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { MobileTabBar } from "@/components/layout/MobileTabBar";
 import { RoleProvider } from "@/lib/RoleContext";
 import { getUserDeactivationStatusByClerkId, ensureUserAccountStatusColumns } from "@/lib/userDeactivation";
+import { SafeFallback } from "@/components/shared/SafeFallback";
 
 export default async function AppLayout({
     children,
@@ -18,6 +19,7 @@ export default async function AppLayout({
 
     let user: { role: string; onboardingDone: boolean; id: string } | null = null;
     let isDeactivated = false;
+    let accountLookupFailed = false;
     try {
         user = await prisma.user.findUnique({
             where: { clerkId: userId },
@@ -26,7 +28,12 @@ export default async function AppLayout({
         isDeactivated = await getUserDeactivationStatusByClerkId(userId);
         await ensureUserAccountStatusColumns();
     } catch (e) {
-        console.warn("[AppLayout] DB unreachable, treating as new user:", e);
+        accountLookupFailed = true;
+        console.error("[AppLayout] Failed to load account state:", e);
+    }
+
+    if (accountLookupFailed) {
+        return <SafeFallback title="Account" />;
     }
 
     if (isDeactivated) {

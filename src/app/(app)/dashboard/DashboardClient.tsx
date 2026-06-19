@@ -44,7 +44,7 @@ interface Props {
     todayWorkout: Workout | null;
     nextTrainingDay: { id: string; name: string; date: string; dayLabel: string } | null;
     todayCompleted?: boolean;
-    activeSession: { id: string; workoutId: string; workoutName: string } | null;
+    activeSession: { id: string; workoutId: string; workoutName: string; loggedAt?: string } | null;
     recentLogs: RecentLog[];
     avgDurationMin?: number;
     currentCheckin?: {
@@ -129,7 +129,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
         }
     }, []);
 
-    const uncompleteLog = async (logId: string, workoutId: string) => {
+    const uncompleteLog = async (logId: string, workoutId: string, loggedAt?: string) => {
         try {
             const res = await fetch(`/api/logs/${logId}`, {
                 method: "PATCH",
@@ -137,7 +137,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                 body: JSON.stringify({ status: "IN_PROGRESS" })
             });
             if (res.ok) {
-                router.push(`/plans/log/${workoutId}`);
+                router.push(`/plans/log/${workoutId}${loggedAt ? `?date=${encodeURIComponent(loggedAt)}` : ""}`);
             }
         } catch (e) {
             console.error(e);
@@ -668,7 +668,10 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                                 <Trash2 className="w-4 h-4" />
                                 <span className="hidden sm:inline">Discard</span>
                             </button>
-                            <Link href={`/plans/log/${localActiveSession.workoutId}`} className="btn-primary shadow-glow-brand px-6">
+                            <Link 
+                                href={`/plans/log/${localActiveSession.workoutId}${localActiveSession.loggedAt ? `?date=${encodeURIComponent(localActiveSession.loggedAt)}` : ""}`} 
+                                className="btn-primary shadow-glow-brand px-6"
+                            >
                                 {discarding ? "..." : "Resume"}
                             </Link>
                         </div>
@@ -740,7 +743,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                         <h3 className="heading-3">Today&apos;s Workout</h3>
                         {(nextTrainingDay && (!todayWorkout || todayCompleted)) && (
                             <Link
-                                href={`/plans/log/${nextTrainingDay.id}`}
+                                href={`/plans/log/${nextTrainingDay.id}?date=${encodeURIComponent(nextTrainingDay.date)}`}
                                 className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-brand-300 hover:text-brand-200 transition-colors"
                             >
                                 Next training day - {nextTrainingDay.name}, {nextTrainingDay.dayLabel} {formatDate(nextTrainingDay.date, { day: "numeric", month: "long" })}
@@ -888,7 +891,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                                         onClick={(e) => {
                                             e.preventDefault();
                                             e.stopPropagation();
-                                            uncompleteLog(log.id, log.workoutId);
+                                            uncompleteLog(log.id, log.workoutId, log.loggedAt);
                                         }}
                                         className="btn-icon w-7 h-7 bg-surface-elevated hover:bg-brand-500 hover:text-white transition-all shadow-sm"
                                         title="Uncomplete and Edit"

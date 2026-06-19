@@ -122,7 +122,14 @@ export async function PATCH(
                 user: { coachId: user.id }
             }
         });
-        if (!isCoachOfAssignee) {
+        // Allow client to edit if the plan is assigned to them
+        const isAssignee = await prisma.userPlan.findFirst({
+            where: {
+                planId: planId,
+                userId: user.id
+            }
+        });
+        if (!isCoachOfAssignee && !isAssignee) {
             return NextResponse.json({ error: "Unauthorized to edit" }, { status: 403 });
         }
     }
@@ -166,7 +173,7 @@ export async function PATCH(
                 },
                 include: {
                     weeks: {
-                        include: { workouts: { include: { exercises: true } } },
+                        include: { workouts: { include: { exercises: { where: { isCustom: false }, orderBy: { order: "asc" } } } } },
                     },
                 },
             });

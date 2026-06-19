@@ -67,7 +67,7 @@ export default async function LogViewPage({ params }: { params: Promise<{ logId:
                             <span className="text-[10px] font-black uppercase tracking-widest text-brand-400 italic">{log.user.name}</span>
                         </div>
                         {isOwner && (
-                            <EditSessionButton logId={log.id} workoutId={log.workoutId} />
+                            <EditSessionButton logId={log.id} workoutId={log.workoutId} loggedAt={log.loggedAt.toISOString()} />
                         )}
                     </div>
                 </div>

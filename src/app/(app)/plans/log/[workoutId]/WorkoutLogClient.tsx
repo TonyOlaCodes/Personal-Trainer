@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
     Timer, Flame, Check, HelpCircle,
-    Trash2, Plus, InfoIcon, Award, Video, Play, Zap, X
+    Trash2, Plus, InfoIcon, Award, Video, Play, Zap, X, ChevronLeft
 } from "lucide-react";
 import { cn, generateId } from "@/lib/utils";
 import { isCardio, ExerciseAutocomplete } from "@/components/shared/ExerciseAutocomplete";
@@ -89,6 +89,18 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
     const [elapsed, setElapsed] = useState(0);
     const [saving, setSaving] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [hasStarted, setHasStarted] = useState(false);
+
+    const isSameDay = (d1Str: string | number | Date, d2Str: string | number | Date) => {
+        const date1 = new Date(d1Str);
+        const date2 = new Date(d2Str);
+        return date1.getFullYear() === date2.getFullYear() &&
+               date1.getMonth() === date2.getMonth() &&
+               date1.getDate() === date2.getDate();
+    };
+
+    const targetDateStr = logDate ? new Date(logDate).toISOString().split("T")[0] : new Date().toISOString().split("T")[0];
+    const localStorageKey = `workout_start_time_${workout.id}_${targetDateStr}`;
 
     const [showFinishModal, setShowFinishModal] = useState(false);
     const [manualDurationMinutes, setManualDurationMinutes] = useState("");
@@ -124,19 +136,21 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
             setLoading(true);
             try {
                 // Read from localStorage to keep timer on track across reloads/backgrounding
-                const savedStart = localStorage.getItem(`workout_start_time_${workout.id}`);
+                const savedStart = localStorage.getItem(localStorageKey);
                 let initialStartTime = savedStart ? parseInt(savedStart) : Date.now();
                 if (isNaN(initialStartTime)) {
                     initialStartTime = Date.now();
                 }
                 setStartTime(initialStartTime);
-                localStorage.setItem(`workout_start_time_${workout.id}`, initialStartTime.toString());
 
                 const res = await fetch("/api/logs?active=true");
                 const active = await res.json();
                 
-                if (active && active.workoutId === workout.id) {
+                const targetDate = logDate ? new Date(logDate) : new Date();
+                
+                if (active && active.workoutId === workout.id && isSameDay(active.loggedAt, targetDate)) {
                     setActiveLogId(active.id);
+                    setHasStarted(true);
                     const restored: Record<string, SetLog[]> = {};
                     const reconstructedExercises: Exercise[] = [];
 
@@ -148,7 +162,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                     }
 
                     setStartTime(dbStartTime);
-                    localStorage.setItem(`workout_start_time_${workout.id}`, dbStartTime.toString());
+                    localStorage.setItem(localStorageKey, dbStartTime.toString());
 
                     active.sets.forEach((s: ActiveLogSet) => {
                         const ex = s.exercise;
@@ -195,9 +209,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                         }));
                     });
                     setLogs(initialLogs);
-                    // Crucial: Save immediately to lock in the start time (loggedAt) in the DB
-                    // This prevents the timer from resetting if the user navigates away and back
-                    saveProgress(initialLogs, workout.exercises, initialStartTime);
+                    setHasStarted(false);
                 }
             } catch (e) {
                 console.error("Failed to load active log:", e);
@@ -206,7 +218,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
             }
         };
         load();
-    }, [workout]);
+    }, [workout, logDate]);
 
     // Track when Swap/Add modal is open and adjust startTime when closed to pause timer
     useEffect(() => {
@@ -220,7 +232,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                 const editDuration = Date.now() - editStartedAt;
                 setStartTime(prev => {
                     const nextStart = prev + editDuration;
-                    localStorage.setItem(`workout_start_time_${workout.id}`, nextStart.toString());
+                    localStorage.setItem(localStorageKey, nextStart.toString());
                     saveProgress(logs, activeExercises, nextStart);
                     return nextStart;
                 });
@@ -302,6 +314,14 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
         } catch (e) {
             console.error("Auto-save failed:", e);
         }
+    };
+
+    const startSession = () => {
+        const now = Date.now();
+        setStartTime(now);
+        localStorage.setItem(localStorageKey, now.toString());
+        setHasStarted(true);
+        saveProgress(logs, activeExercises, now);
     };
 
     const updateSet = (exId: string, setIdx: number, updates: Partial<SetLog>) => {
@@ -520,7 +540,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
             
             if (res.ok) {
                 const saved = await res.json();
-                localStorage.removeItem(`workout_start_time_${workout.id}`);
+                localStorage.removeItem(localStorageKey);
                 setShowFinishModal(false);
                 router.push(`/plans/log/view/${saved.id}`);
                 router.refresh();
@@ -546,7 +566,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
     };
 
     const handleDiscard = async () => {
-        localStorage.removeItem(`workout_start_time_${workout.id}`);
+        localStorage.removeItem(localStorageKey);
         if (!activeLogId) {
             router.back();
             return;
@@ -576,6 +596,153 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                     <div className="w-12 h-12 border-4 border-brand-500/20 border-t-brand-500 rounded-full animate-spin mx-auto mb-4" />
                     <p className="text-fg-subtle text-sm">Resuming session...</p>
                 </div>
+            </div>
+        );
+    }
+
+    if (!hasStarted) {
+        return (
+            <div className="min-h-screen bg-surface flex flex-col pt-safe-area">
+                {/* Header */}
+                <div className="flex items-center justify-between px-4 h-16 border-b border-surface-border glass fixed top-0 inset-x-0 z-40 md:pl-[var(--sidebar-width)]">
+                    <button 
+                        onClick={() => router.back()} 
+                        className="btn-icon text-fg-muted hover:text-fg hover:bg-surface-muted/50"
+                        title="Back"
+                    >
+                        <ChevronLeft className="w-5 h-5" />
+                    </button>
+                    <div className="text-center">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">Workout Preview</p>
+                        <h2 className="text-sm font-bold text-fg truncate max-w-[180px]">{workout.name}</h2>
+                    </div>
+                    <div className="w-9" /> {/* Spacer */}
+                </div>
+
+                <div className="flex-1 p-4 pt-20 pb-24 overflow-y-auto no-scrollbar md:pl-[var(--sidebar-width) + 1rem]">
+                    <div className="max-w-2xl mx-auto space-y-6">
+                        {workout.exercises.map((ex) => {
+                            const media = exerciseMedia[ex.name];
+                            const hasPreview = !!(media?.videoUrl || media?.instructions);
+
+                            return (
+                                <div key={ex.id} className="card p-4 space-y-3 animate-slide-up">
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div>
+                                            <h3 className="font-bold text-fg text-base leading-tight">{ex.name}</h3>
+                                            {ex.notes && <p className="text-xs text-fg-muted mt-1">{ex.notes}</p>}
+                                        </div>
+                                        {hasPreview && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setPreviewExercise({ name: ex.name, media })}
+                                                className="w-8 h-8 rounded-full bg-brand-500/10 text-brand-400 border border-brand-500/20 flex items-center justify-center hover:bg-brand-500 hover:text-white transition-colors shrink-0"
+                                                title="Exercise preview"
+                                            >
+                                                {media?.videoUrl ? <Play className="w-3.5 h-3.5 fill-current" /> : <HelpCircle className="w-4 h-4" />}
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    <div className="pt-2 border-t border-surface-border/40 space-y-1">
+                                        {Array.from({ length: ex.sets }).map((_, idx) => (
+                                            <div key={idx} className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-surface-muted/30 text-xs">
+                                                <span className="font-semibold text-fg-muted">Set {idx + 1}</span>
+                                                <span className="font-bold text-fg">
+                                                    {isCardio(ex.name) 
+                                                        ? `${ex.reps} min`
+                                                        : `${ex.reps} reps`}
+                                                    {ex.weightTargetKg ? ` @ ${ex.weightTargetKg} kg` : ""}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            );
+                        })}
+
+                        <div className="pt-6 pb-12 flex flex-col items-center gap-4">
+                            <button
+                                onClick={startSession}
+                                className="btn-primary w-full h-16 text-lg font-black uppercase tracking-widest shadow-glow-brand flex items-center justify-center gap-3 transition-all hover:scale-[1.02] active:scale-95 rounded-2xl"
+                            >
+                                <Flame className="w-6 h-6 text-brand-300 animate-pulse" />
+                                Start Session
+                            </button>
+                            <button 
+                                onClick={() => router.back()} 
+                                className="text-xs font-bold text-fg-subtle hover:text-fg uppercase tracking-widest"
+                            >
+                                Cancel & Go Back
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                {previewExercise && (
+                    <div
+                        className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/80 animate-fade-in sm:p-4 backdrop-blur-sm"
+                        onClick={() => setPreviewExercise(null)}
+                    >
+                        <div
+                            className="bg-surface-card w-full h-[92vh] sm:h-auto sm:max-h-[88vh] sm:max-w-2xl rounded-t-[2rem] sm:rounded-3xl border border-surface-border shadow-glow-brand-lg overflow-hidden animate-slide-up flex flex-col"
+                            onClick={(event) => event.stopPropagation()}
+                            onPointerDown={(event) => setModalTouchStart(event.clientY)}
+                            onPointerUp={(event) => {
+                                if (modalTouchStart !== null && event.clientY - modalTouchStart > 90) {
+                                    setPreviewExercise(null);
+                                }
+                                setModalTouchStart(null);
+                            }}
+                        >
+                            <div className="flex items-center justify-between gap-4 px-5 py-4 border-b border-surface-border">
+                                <div className="min-w-0">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">Exercise Preview</p>
+                                    <h3 className="text-lg font-black text-fg truncate">{previewExercise.name}</h3>
+                                </div>
+                                <button
+                                    onClick={() => setPreviewExercise(null)}
+                                    className="btn-icon"
+                                    title="Close preview"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+
+                            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                                {previewExercise.media.videoUrl && (
+                                    <div className="w-full overflow-hidden rounded-2xl border border-surface-border bg-black aspect-video">
+                                        {isDirectVideo(previewExercise.media.videoUrl) ? (
+                                            <video
+                                                src={previewExercise.media.videoUrl}
+                                                controls
+                                                playsInline
+                                                poster={previewExercise.media.thumbnailUrl || undefined}
+                                                className="w-full h-full object-contain"
+                                            />
+                                        ) : (
+                                            <iframe
+                                                src={getEmbedUrl(previewExercise.media.videoUrl)}
+                                                title={`${previewExercise.name} video preview`}
+                                                className="w-full h-full"
+                                                loading="lazy"
+                                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                                allowFullScreen
+                                            />
+                                        )}
+                                    </div>
+                                )}
+
+                                {previewExercise.media.instructions && (
+                                    <div className="rounded-2xl border border-surface-border bg-surface-muted/30 p-4">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle mb-2">Instructions</p>
+                                        <p className="text-sm text-fg-muted leading-relaxed whitespace-pre-wrap">{previewExercise.media.instructions}</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         );
     }

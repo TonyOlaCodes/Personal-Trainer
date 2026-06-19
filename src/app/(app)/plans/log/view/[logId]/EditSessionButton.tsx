@@ -8,9 +8,10 @@ import { cn } from "@/lib/utils";
 interface Props {
     logId: string;
     workoutId: string;
+    loggedAt?: string;
 }
 
-export function EditSessionButton({ logId, workoutId }: Props) {
+export function EditSessionButton({ logId, workoutId, loggedAt }: Props) {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
 
@@ -24,7 +25,7 @@ export function EditSessionButton({ logId, workoutId }: Props) {
                 body: JSON.stringify({ status: "IN_PROGRESS" })
             });
             if (res.ok) {
-                router.push(`/plans/log/${workoutId}`);
+                router.push(`/plans/log/${workoutId}${loggedAt ? `?date=${encodeURIComponent(loggedAt)}` : ""}`);
                 router.refresh();
             } else {
                 alert("Failed to reopen session. Try again.");
