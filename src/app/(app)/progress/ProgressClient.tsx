@@ -679,7 +679,7 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                         <div className="p-5 sm:p-6">
                             <div className="h-[300px] w-full">
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <AreaChart data={data.exerciseHistory[selectedExercise] || []} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                    <AreaChart data={(data?.exerciseHistory ?? {})[selectedExercise] || []} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                         <defs>
                                             <linearGradient id="exGrad" x1="0" y1="0" x2="0" y2="1">
                                                 <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.2} />
@@ -808,7 +808,7 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                 </div>
                 <div className="h-[280px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={data.volumes?.[volTimeframe] || []} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                        <BarChart data={data?.volumes?.[volTimeframe] || []} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" vertical={false} />
                             <XAxis dataKey="label" stroke="#4B5563" fontSize={9} tickLine={false} axisLine={false} />
                             <YAxis stroke="#4B5563" fontSize={9} tickLine={false} axisLine={false} tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v} />
@@ -819,8 +819,8 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                                 labelStyle={{ color: "#6B7280", fontSize: 10, fontWeight: 800 }}
                             />
                             <Bar dataKey="volume" radius={[6, 6, 0, 0]} barSize={volTimeframe === 'daily' ? 12 : 28}>
-                                {(data.volumes?.[volTimeframe] || []).map((_: unknown, index: number) => {
-                                    const isLast = index === (data.volumes?.[volTimeframe] || []).length - 1;
+                                {(data?.volumes?.[volTimeframe] || []).map((_: unknown, index: number) => {
+                                    const isLast = index === (data?.volumes?.[volTimeframe] || []).length - 1;
                                     return (
                                         <Cell
                                             key={`cell-${index}`}
@@ -847,7 +847,7 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                             <div className="flex-1 min-w-0">
                                 <h3 className="text-lg font-black text-fg tracking-tight">{selectedExercise}</h3>
                                 <p className="text-[10px] text-fg-muted font-bold uppercase tracking-widest mt-1">
-                                    {(data.exerciseHistory[selectedExercise] || []).length} sessions logged
+                                    {((data?.exerciseHistory ?? {})[selectedExercise] || []).length} sessions logged
                                 </p>
                             </div>
                             {selectedExerciseStats && (
@@ -871,7 +871,7 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                             {/* Graph */}
                             <div className="h-[240px] w-full">
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <AreaChart data={data.exerciseHistory[selectedExercise] || []} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                    <AreaChart data={(data?.exerciseHistory ?? {})[selectedExercise] || []} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                         <defs>
                                             <linearGradient id="modalGrad" x1="0" y1="0" x2="0" y2="1">
                                                 <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.2} />
@@ -918,7 +918,7 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                             <div>
                                 <h4 className="text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-3">Session Log</h4>
                                 <div className="space-y-2">
-                                    {(data.exerciseHistory[selectedExercise] || []).slice().reverse().map((session: any, i: number) => (
+                                    {((data?.exerciseHistory ?? {})[selectedExercise] || []).slice().reverse().map((session: any, i: number) => (
                                         <div key={i} className="flex items-center justify-between p-3 bg-surface-elevated/50 rounded-xl">
                                             <div className="flex items-center gap-3">
                                                 <span className="text-[10px] font-bold text-fg-subtle w-16 whitespace-nowrap">{session.date}</span>

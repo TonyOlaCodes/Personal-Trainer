@@ -14,25 +14,44 @@ export default async function SettingsPage() {
         const { userId } = await auth();
         if (!userId) redirect("/sign-in");
 
-        const user = await prisma.user.findUnique({
-            where: { clerkId: userId },
-            select: {
-                id: true,
-                name: true, email: true, role: true, onboardingDone: true, avatarUrl: true,
-                goal: true, trainingDaysPerWeek: true, experienceLevel: true, trainingLocation: true,
-                targetWeightKg: true, weightKg: true,
-                hiddenGoals: true,
-            },
-        });
+        let user = null;
+        try {
+            user = await prisma.user.findUnique({
+                where: { clerkId: userId },
+                select: {
+                    id: true,
+                    name: true, email: true, role: true, onboardingDone: true, avatarUrl: true,
+                    goal: true, trainingDaysPerWeek: true, experienceLevel: true, trainingLocation: true,
+                    targetWeightKg: true, weightKg: true,
+                    hiddenGoals: true,
+                },
+            });
+        } catch (dbErr) {
+            console.warn("[SettingsPage] Failed to fetch user with hiddenGoals, retrying without it:", dbErr);
+            try {
+                user = await prisma.user.findUnique({
+                    where: { clerkId: userId },
+                    select: {
+                        id: true,
+                        name: true, email: true, role: true, onboardingDone: true, avatarUrl: true,
+                        goal: true, trainingDaysPerWeek: true, experienceLevel: true, trainingLocation: true,
+                        targetWeightKg: true, weightKg: true,
+                    },
+                });
+            } catch (dbErr2) {
+                console.error("[SettingsPage] Failed to fetch user profile completely:", dbErr2);
+            }
+        }
 
         if (!user) redirect("/sign-in");
 
         const dailyMetricTargets = await getDailyMetricTargets(user.id);
+        const hiddenGoals = (user as any).hiddenGoals ?? [];
 
         return (
             <>
                 <TopBar title="Settings" subtitle="Manage your account preferences" />
-                <SettingsClient user={{ ...user, hiddenGoals: user.hiddenGoals ?? [], ...dailyMetricTargets }} />
+                <SettingsClient user={{ ...user, hiddenGoals, ...dailyMetricTargets }} />
             </>
         );
     } catch (e) {

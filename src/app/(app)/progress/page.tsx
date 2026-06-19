@@ -15,16 +15,31 @@ export default async function ProgressPage() {
         const { userId } = await auth();
         if (!userId) redirect("/sign-in");
 
-        const user = await prisma.user.findUnique({ 
-            where: { clerkId: userId },
-            select: { role: true, hiddenGoals: true }
-        });
+        let user = null;
+        try {
+            user = await prisma.user.findUnique({ 
+                where: { clerkId: userId },
+                select: { role: true, hiddenGoals: true }
+            });
+        } catch (dbErr) {
+            console.warn("[ProgressPage] Failed to fetch user with hiddenGoals, retrying with role only:", dbErr);
+            try {
+                user = await prisma.user.findUnique({
+                    where: { clerkId: userId },
+                    select: { role: true }
+                });
+            } catch (dbErr2) {
+                console.error("[ProgressPage] Failed to fetch user completely:", dbErr2);
+            }
+        }
         
         if (!user) redirect("/sign-in");
 
         if (user.role === "COACH" || user.role === "SUPER_ADMIN") {
             redirect("/coach");
         }
+
+        const hiddenGoals = (user as any).hiddenGoals ?? [];
 
         return (
             <div className="bg-surface-base min-h-screen">
@@ -33,7 +48,7 @@ export default async function ProgressPage() {
                     subtitle="Am I improving?" 
                 />
                 <main className="animate-fade-in">
-                    <ProgressClient userRole={user.role} hiddenGoals={user.hiddenGoals ?? []} />
+                    <ProgressClient userRole={user.role} hiddenGoals={hiddenGoals} />
                 </main>
             </div>
         );
