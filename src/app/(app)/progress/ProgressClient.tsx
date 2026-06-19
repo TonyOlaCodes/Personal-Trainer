@@ -10,7 +10,8 @@ import {
     TrendingUp, TrendingDown, Loader2,
     Dumbbell, Activity, Search, ChevronRight,
     Scale, Zap, BarChart2,
-    Flame, ArrowUpRight, ArrowDownRight, X, Utensils, Footprints, Moon
+    Flame, ArrowUpRight, ArrowDownRight, X, Utensils, Footprints, Moon,
+    Pin
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PremiumLockScreen } from "@/components/shared/PremiumLockScreen";
@@ -32,9 +33,20 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
     const [sbdDays, setSbdDays] = useState<30 | 90 | 365>(90);
     const [volTimeframe, setVolTimeframe] = useState<"daily" | "weekly" | "monthly" | "yearly">("weekly");
     const [isHydrated, setIsHydrated] = useState(false);
+    const [pinnedExercises, setPinnedExercises] = useState<string[]>([]);
 
     useEffect(() => {
         setIsHydrated(true);
+        if (typeof window !== "undefined") {
+            const stored = localStorage.getItem("pinned_exercises");
+            if (stored) {
+                try {
+                    setPinnedExercises(JSON.parse(stored));
+                } catch (e) {
+                    console.error("[ProgressClient] Failed to load pinned exercises:", e);
+                }
+            }
+        }
     }, []);
 
     useEffect(() => {
@@ -44,11 +56,39 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
             .then(d => {
                 setData(d);
                 const exercises = Object.keys(d?.exerciseHistory ?? {});
-                if (exercises.length > 0) setSelectedExercise(exercises[0]);
+                if (exercises.length > 0) {
+                    const stored = localStorage.getItem("pinned_exercises");
+                    let pinned: string[] = [];
+                    if (stored) {
+                        try { pinned = JSON.parse(stored); } catch {}
+                    }
+                    const activePinned = pinned.filter(p => exercises.includes(p));
+                    if (activePinned.length > 0) {
+                        setSelectedExercise(activePinned[0]);
+                    } else {
+                        setSelectedExercise(exercises[0]);
+                    }
+                }
                 setLoading(false);
             })
             .catch(() => setLoading(false));
     }, [isPremium]);
+
+    const togglePinExercise = (ex: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        let nextPinned = [...pinnedExercises];
+        if (pinnedExercises.includes(ex)) {
+            nextPinned = nextPinned.filter(name => name !== ex);
+        } else {
+            if (pinnedExercises.length >= 3) {
+                alert("You can only pin up to 3 exercises. Please unpin an exercise first.");
+                return;
+            }
+            nextPinned.push(ex);
+        }
+        setPinnedExercises(nextPinned);
+        localStorage.setItem("pinned_exercises", JSON.stringify(nextPinned));
+    };
 
     const getRegex = (q: string) => {
         try {
@@ -59,8 +99,18 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
     const exerciseList = useMemo(() => {
         if (!data) return [];
         const names = Object.keys(data?.exerciseHistory ?? {});
-        return names.filter(ex => exerciseSearchQuery ? getRegex(exerciseSearchQuery).test(ex) : true);
-    }, [data, exerciseSearchQuery]);
+        const filtered = names.filter(ex => exerciseSearchQuery ? getRegex(exerciseSearchQuery).test(ex) : true);
+        return [...filtered].sort((a, b) => {
+            const aPinned = pinnedExercises.includes(a);
+            const bPinned = pinnedExercises.includes(b);
+            if (aPinned && !bPinned) return -1;
+            if (!aPinned && bPinned) return 1;
+            if (aPinned && bPinned) {
+                return pinnedExercises.indexOf(a) - pinnedExercises.indexOf(b);
+            }
+            return 0;
+        });
+    }, [data, exerciseSearchQuery, pinnedExercises]);
 
     const selectedExerciseStats = useMemo(() => {
         if (!data || !selectedExercise) return null;
@@ -757,12 +807,21 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                                 const hist = (data?.exerciseHistory ?? {})[ex] ?? [];
                                 const latest = hist.length > 0 ? hist[hist.length - 1] : null;
                                 const isActive = selectedExercise === ex;
+                                const isPinned = pinnedExercises.includes(ex);
                                 return (
-                                    <button
+                                    <div
                                         key={ex}
+                                        role="button"
+                                        tabIndex={0}
                                         onClick={() => { setSelectedExercise(ex); setShowExerciseModal(false); }}
+                                        onKeyDown={(e) => {
+                                            if (e.key === "Enter" || e.key === " ") {
+                                                setSelectedExercise(ex);
+                                                setShowExerciseModal(false);
+                                            }
+                                        }}
                                         className={cn(
-                                            "w-full flex items-center justify-between p-3 rounded-xl transition-all text-left",
+                                            "w-full flex items-center justify-between p-3 rounded-xl transition-all text-left cursor-pointer group",
                                             isActive ? "bg-brand-500/10 border border-brand-500/20" : "hover:bg-surface-elevated border border-transparent"
                                         )}
                                     >
@@ -775,8 +834,21 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                                                 <p className="text-[10px] text-fg-muted truncate">Best: {latest?.weight ?? "--"}kg · {hist?.length ?? 0} sessions</p>
                                             </div>
                                         </div>
-                                        <ChevronRight className={cn("w-4 h-4 shrink-0 transition-opacity", isActive ? "text-brand-400 opacity-100" : "opacity-0")} />
-                                    </button>
+                                        <div className="flex items-center gap-1 shrink-0">
+                                            <button
+                                                type="button"
+                                                onClick={(e) => togglePinExercise(ex, e)}
+                                                className={cn(
+                                                    "p-1.5 rounded-lg transition-all hover:bg-surface-muted/80",
+                                                    isPinned ? "text-brand-400 opacity-100" : "text-fg-subtle opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                                )}
+                                                title={isPinned ? "Unpin exercise" : "Pin exercise"}
+                                            >
+                                                <Pin className={cn("w-3.5 h-3.5", isPinned && "fill-brand-400")} />
+                                            </button>
+                                            <ChevronRight className={cn("w-4 h-4 shrink-0 transition-opacity", isActive ? "text-brand-400 opacity-100" : "opacity-0")} />
+                                        </div>
+                                    </div>
                                 );
                             })}
                         </div>
