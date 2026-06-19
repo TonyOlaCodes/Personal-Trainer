@@ -305,19 +305,10 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
     const todayDate = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, "0")}-${String(nowLocal.getDate()).padStart(2, "0")}`;
     const isWeightDateToday = weightDate === todayDate;
 
-    const formatWeightTrend = (current?: number | null, previous?: number | null) => {
-        if (!current || !previous) return "";
-        const diff = Math.round((current - previous) * 100) / 100;
-        if (diff === 0) return "No change";
-        return `${diff > 0 ? "Up" : "Down"} by ${Math.abs(diff).toFixed(2)}kg`;
-    };
-
     const bodyweightStatus = () => {
         if (weightMsg) return weightMsg;
         if (weightLogged) {
-            const currentWeight = Number(weight);
-            const trend = formatWeightTrend(currentWeight, selectedPreviousWeight);
-            return `${isWeightDateToday ? "Logged today" : "Logged for this day"}${trend ? ` - ${trend}` : ""}`;
+            return isWeightDateToday ? "Logged today" : "Logged";
         }
         if (user.targetWeightKg) {
             return `Target ${user.targetWeightKg}kg`;
@@ -327,7 +318,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
 
     const dailyMetricStatus = (logged: boolean, target?: number | null) => {
         if (metricsMsg) return metricsMsg;
-        if (logged) return isWeightDateToday ? "Logged today" : "Logged for this day";
+        if (logged) return isWeightDateToday ? "Logged today" : "Logged";
         return target ? `Target ${target.toLocaleString()}` : "Blank until logged";
     };
 

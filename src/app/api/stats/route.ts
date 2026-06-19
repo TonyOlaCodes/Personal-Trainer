@@ -195,15 +195,7 @@ export async function GET() {
 
     const combinedWeightMap = new Map<string, { date: string; dateKey: string; weight: number }>();
 
-    // 1. Initial user.weightKg at user.createdAt (if available)
-    if (user.weightKg) {
-        const uDate = user.createdAt ?? new Date();
-        const dateKey = uDate.toISOString().slice(0, 10);
-        const dateStr = format(uDate, "MMM dd");
-        combinedWeightMap.set(dateKey, { date: dateStr, dateKey, weight: user.weightKg });
-    }
-
-    // 2. Weekly check-ins
+    // 1. Weekly check-ins
     (user.checkIns ?? []).forEach((c: any) => {
         if (c.bodyweightKg) {
             const cDate = c.createdAt ?? new Date();
@@ -213,7 +205,7 @@ export async function GET() {
         }
     });
 
-    // 3. Bodyweight logs
+    // 2. Bodyweight logs
     (dbBodyweightLogs ?? []).forEach((row: any) => {
         if (row.weight) {
             const dateKey = row.dateKey ? row.dateKey.slice(0, 10) : "";
@@ -226,6 +218,14 @@ export async function GET() {
             }
         }
     });
+
+    // 3. Fallback: If no history exists at all, use user.weightKg at user.createdAt (so there's at least one data point)
+    if (combinedWeightMap.size === 0 && user.weightKg) {
+        const uDate = user.createdAt ?? new Date();
+        const dateKey = uDate.toISOString().slice(0, 10);
+        const dateStr = format(uDate, "MMM dd");
+        combinedWeightMap.set(dateKey, { date: dateStr, dateKey, weight: user.weightKg });
+    }
 
     const bodyweightHistory = Array.from(combinedWeightMap.values())
         .sort((a, b) => a.dateKey.localeCompare(b.dateKey));
