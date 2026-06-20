@@ -11,6 +11,7 @@ import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Line
 } from "recharts";
 import Link from "next/link";
+import { ReturnLink } from "@/components/shared/ReturnLink";
 import { cn, formatDate, getInitials } from "@/lib/utils";
 
 const CHECK_IN_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -1183,7 +1184,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                 <p className="text-sm text-fg-muted px-2 italic">Zero sessions logged in recent database cycles.</p>
                             ) : (
                                 logs.map((l) => (
-                                    <Link key={l.id} href={`/plans/log/view/${l.id}`} className="card p-4 flex items-center justify-between group hover:border-brand-500/40 transition-all cursor-pointer">
+                                    <ReturnLink key={l.id} href={`/plans/log/view/${l.id}`} className="card p-4 flex items-center justify-between group hover:border-brand-500/40 transition-all cursor-pointer">
                                         <div>
                                             <h5 className="font-black text-fg text-sm tracking-tight group-hover:text-brand-400">{l.workoutName}</h5>
                                             <p className="text-[10px] text-fg-muted font-bold uppercase tracking-widest">{l.setCount} sets verified</p>
@@ -1192,7 +1193,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                             <p className="text-[10px] text-fg-subtle font-black uppercase tracking-widest">{formatDate(l.date)}</p>
                                             <ChevronRight className="w-4 h-4 text-fg-subtle ml-auto mt-1 opacity-0 group-hover:opacity-100 transition-all transform group-hover:translate-x-1" />
                                         </div>
-                                    </Link>
+                                    </ReturnLink>
                                 ))
                             )}
                         </div>

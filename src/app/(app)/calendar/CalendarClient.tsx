@@ -9,6 +9,7 @@ import {
     Zap, Hash
 } from "lucide-react";
 import Link from "next/link";
+import { ReturnLink } from "@/components/shared/ReturnLink";
 import { cn, toDateKey } from "@/lib/utils";
 
 /* ─────────────────────────── Types ─────────────────────────── */
@@ -357,13 +358,13 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates }: Props
                                             );
                                         })}
                                     </div>
-                                    <Link 
+                                    <ReturnLink 
                                         href={`/plans/log/view/${sessionLog.id}`}
                                         className="btn-primary w-full h-11 text-[10px] font-black uppercase tracking-[.2em] group flex items-center justify-center gap-2 mt-2 shadow-glow-brand"
                                     >
                                         <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                                         Review Session
-                                    </Link>
+                                    </ReturnLink>
                                 </div>
                             </div>
                                 ))}
@@ -416,21 +417,21 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates }: Props
                                 </div>
 
                                 {selectedDate < today ? (
-                                    <Link
+                                    <ReturnLink
                                         href={`/plans/log/${selectedPlanned.id}?date=${selectedDateKey}&start=1`}
                                         className="btn-secondary w-full h-12 text-xs font-black uppercase tracking-[0.15em] group hover:scale-[1.02] transition-all"
                                     >
                                         <PlayCircle className="w-4 h-4 mr-2 group-hover:rotate-12 transition-transform" />
                                         Log Past Session
-                                    </Link>
+                                    </ReturnLink>
                                 ) : (
-                                    <Link
+                                    <ReturnLink
                                         href={`/plans/log/${selectedPlanned.id}?date=${selectedDateKey}&start=1`}
                                         className="btn-primary w-full h-14 text-xs font-black uppercase tracking-[0.2em] shadow-glow-brand group hover:scale-[1.02] transition-all"
                                     >
                                         <PlayCircle className="w-5 h-5 mr-3 group-hover:rotate-12 transition-transform" />
                                         Start Session
-                                    </Link>
+                                    </ReturnLink>
                                 )}
                             </div>
                         ) : (

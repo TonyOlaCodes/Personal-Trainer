@@ -5,8 +5,11 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Walkthrough } from "@/components/shared/Walkthrough";
 import { WorkoutSessionModal } from "@/components/shared/WorkoutSessionModal";
+import { ReturnLink } from "@/components/shared/ReturnLink";
 import { Dumbbell, ChevronRight, Clock, Flame, Activity, Calendar, Ticket, Check, Edit3, Trash2, Scale, Utensils, Footprints, Moon, AlertCircle } from "lucide-react";
 import { formatDate, formatRelative, cn, toDateKey, parseLogDate } from "@/lib/utils";
+import { appendReturnTo } from "@/lib/navigation";
+import { useCurrentPath } from "@/hooks/useNavigation";
 import { isCardio } from "@/components/shared/ExerciseAutocomplete";
 
 interface Exercise {
@@ -86,6 +89,7 @@ interface Props {
 
 export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDay, todayCompleted, activeSession, recentLogs, avgDurationMin, currentCheckin, checkInDueState, bodyweight, dailyMetrics }: Props) {
     const router = useRouter();
+    const currentPath = useCurrentPath();
     const [code, setCode] = useState("");
     const [codeStatus, setCodeStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
     const [codeMsg, setCodeMsg] = useState("");
@@ -156,7 +160,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                 const dateQuery = loggedAt
                     ? `?date=${encodeURIComponent(toDateKey(parseLogDate(loggedAt)))}`
                     : "";
-                router.push(`/plans/log/${workoutId}${dateQuery}`);
+                router.push(appendReturnTo(`/plans/log/${workoutId}${dateQuery}`, currentPath));
             }
         } catch (e) {
             console.error(e);
@@ -695,12 +699,12 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                                 <Trash2 className="w-4 h-4" />
                                 <span className="hidden sm:inline">Discard</span>
                             </button>
-                            <Link 
+                            <ReturnLink 
                                 href={`/plans/log/${localActiveSession.workoutId}${localActiveSession.loggedAt ? `?date=${encodeURIComponent(toDateKey(parseLogDate(localActiveSession.loggedAt)))}` : ""}`} 
                                 className="btn-primary shadow-glow-brand px-6"
                             >
                                 {discarding ? "..." : "Resume"}
-                            </Link>
+                            </ReturnLink>
                         </div>
                     </div>
                 </div>
@@ -769,13 +773,13 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                     <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
                         <h3 className="heading-3">Today&apos;s Workout</h3>
                         {(nextTrainingDay && (!todayWorkout || todayCompleted)) && (
-                            <Link
+                            <ReturnLink
                                 href={`/plans/log/${nextTrainingDay.id}?date=${encodeURIComponent(nextTrainingDay.date)}&start=1`}
                                 className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-brand-300 hover:text-brand-200 transition-colors"
                             >
                                 Next training day - {nextTrainingDay.name}, {nextTrainingDay.dayLabel} {formatDate(nextTrainingDay.date, { day: "numeric", month: "long" })}
                                 <ChevronRight className="w-3 h-3" />
-                            </Link>
+                            </ReturnLink>
                         )}
                     </div>
                     {(todayWorkout && !todayCompleted) && (
@@ -852,7 +856,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
 
                         {/* Centered Start / Resume CTA */}
                         <div className="mt-6 pt-4 border-t border-surface-border/50 flex justify-center">
-                            <Link
+                            <ReturnLink
                                 href={
                                     localActiveSession?.workoutId === todayWorkout.id
                                         ? `/plans/log/${todayWorkout.id}`
@@ -865,7 +869,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                             >
                                 <Flame className={cn("w-4.5 h-4.5", localActiveSession?.workoutId === todayWorkout.id && "animate-pulse")} />
                                 {localActiveSession?.workoutId === todayWorkout.id ? "Resume Workout Session" : "Start Workout"}
-                            </Link>
+                            </ReturnLink>
                         </div>
                     </div>
                 ) : (

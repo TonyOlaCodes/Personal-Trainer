@@ -1,9 +1,10 @@
 "use client";
 
 import { Edit3, Trash2 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { cn, toDateKey, parseLogDate } from "@/lib/utils";
+import { appendReturnTo, getReturnToFromSearchParams } from "@/lib/navigation";
 
 interface Props {
     logId: string;
@@ -13,6 +14,8 @@ interface Props {
 
 export function SessionActions({ logId, workoutId, loggedAt }: Props) {
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const returnTo = getReturnToFromSearchParams(searchParams);
     const [editing, setEditing] = useState(false);
     const [deleting, setDeleting] = useState(false);
 
@@ -29,7 +32,7 @@ export function SessionActions({ logId, workoutId, loggedAt }: Props) {
                 const dateQuery = loggedAt
                     ? `?date=${encodeURIComponent(toDateKey(parseLogDate(loggedAt)))}`
                     : "";
-                router.push(`/plans/log/${workoutId}${dateQuery}`);
+                router.push(appendReturnTo(`/plans/log/${workoutId}${dateQuery}`, returnTo));
                 router.refresh();
             } else {
                 alert("Failed to reopen session. Try again.");
@@ -50,7 +53,7 @@ export function SessionActions({ logId, workoutId, loggedAt }: Props) {
         try {
             const res = await fetch(`/api/logs/${logId}`, { method: "DELETE" });
             if (res.ok) {
-                router.push("/dashboard");
+                router.push(returnTo);
                 router.refresh();
             } else {
                 alert("Failed to delete session. Try again.");

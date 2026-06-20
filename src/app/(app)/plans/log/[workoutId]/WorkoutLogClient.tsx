@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
     Timer, Flame, Check, HelpCircle,
     Trash2, Plus, InfoIcon, Award, Video, Play, Zap, X, ChevronLeft
 } from "lucide-react";
 import { cn, generateId, formatDate, isSameCalendarDay, parseLogDate, toDateKey, toLoggedAtIso } from "@/lib/utils";
+import { appendReturnTo, getReturnToFromSearchParams } from "@/lib/navigation";
 import { isCardio, ExerciseAutocomplete } from "@/components/shared/ExerciseAutocomplete";
 
 interface Exercise {
@@ -164,6 +165,8 @@ function isDirectVideo(url: string) {
 
 export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWorkoutLogSets = [], initialActiveLog = null }: Props) {
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const returnTo = getReturnToFromSearchParams(searchParams);
     const targetDateStr = logDate ? toDateKey(parseLogDate(logDate)) : toDateKey(new Date());
     const localStorageKey = `workout_start_time_${workout.id}_${targetDateStr}`;
 
@@ -608,7 +611,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                 const saved = await res.json();
                 localStorage.removeItem(localStorageKey);
                 setShowFinishModal(false);
-                router.push(`/plans/log/view/${saved.id}`);
+                router.push(appendReturnTo(`/plans/log/view/${saved.id}`, returnTo));
                 router.refresh();
             } else {
                 let errMsg = "Unknown error";
@@ -644,7 +647,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
         try {
             const res = await fetch(`/api/logs/${activeLogId}`, { method: "DELETE" });
             if (res.ok) {
-                router.push("/dashboard");
+                router.push(returnTo);
                 router.refresh();
             }
         } catch (e) {

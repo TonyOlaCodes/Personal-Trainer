@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PremiumLockScreen } from "@/components/shared/PremiumLockScreen";
+import { ReturnLink } from "@/components/shared/ReturnLink";
 import Link from "next/link";
 
 interface Props {
@@ -276,12 +277,12 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                         </div>
                         <div className="flex items-center gap-2">
                              {data.lastWorkout.id && (
-                                <Link 
+                                <ReturnLink 
                                     href={`/plans/log/view/${data.lastWorkout.id}`}
                                     className="btn-ghost btn-sm text-[10px] uppercase font-black tracking-widest text-brand-400 border border-brand-500/10 hover:border-brand-500/30"
                                 >
                                     Review
-                                </Link>
+                                </ReturnLink>
                              )}
                             {data.lastWorkout.feeling && (
                                 <div className="text-lg">{["😵", "😓", "😐", "💪", "🔥"][data.lastWorkout.feeling - 1]}</div>

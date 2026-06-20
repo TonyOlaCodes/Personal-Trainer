@@ -3,9 +3,10 @@ import { redirect, notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { formatDate, cn } from "@/lib/utils";
-import Link from "next/link";
-import { ChevronLeft, Dumbbell, Clock, Zap, Video, FileText, Smile } from "lucide-react";
+import { Suspense } from "react";
+import { Dumbbell, Clock, Zap, Video, FileText, Smile } from "lucide-react";
 import { SessionActions } from "./SessionActions";
+import { BackButton } from "@/components/shared/BackButton";
 
 export default async function LogViewPage({ params }: { params: Promise<{ logId: string }> }) {
     const { logId } = await params;
@@ -57,17 +58,18 @@ export default async function LogViewPage({ params }: { params: Promise<{ logId:
             <TopBar title="Performance Archive" subtitle={formatDate(log.loggedAt)} />
             <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-6 animate-fade-in">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <Link href="/dashboard" className="btn-ghost btn-sm text-fg-subtle flex items-center gap-2">
-                        <ChevronLeft className="w-4 h-4" />
-                        Return
-                    </Link>
+                    <Suspense fallback={<div className="btn-ghost btn-sm text-fg-subtle">Back</div>}>
+                        <BackButton label="Back" />
+                    </Suspense>
                     <div className="flex items-center gap-3">
                         <div className="flex items-center gap-2">
                             <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Origin:</span>
                             <span className="text-[10px] font-black uppercase tracking-widest text-brand-400 italic">{log.user.name}</span>
                         </div>
                         {isOwner && (
-                            <SessionActions logId={log.id} workoutId={log.workoutId} loggedAt={log.loggedAt.toISOString()} />
+                            <Suspense fallback={null}>
+                                <SessionActions logId={log.id} workoutId={log.workoutId} loggedAt={log.loggedAt.toISOString()} />
+                            </Suspense>
                         )}
                     </div>
                 </div>

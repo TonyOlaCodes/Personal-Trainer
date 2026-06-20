@@ -1,5 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect, notFound } from "next/navigation";
+import { Suspense } from "react";
 import { prisma, ensureDbSchema } from "@/lib/prisma";
 import { WorkoutLogClient } from "./WorkoutLogClient";
 import { getExerciseMediaByNames } from "@/lib/exerciseMedia";
@@ -139,7 +140,8 @@ export default async function WorkoutLogPage({
 
     return (
         <div className="bg-surface min-h-screen">
-            <WorkoutLogClient
+            <Suspense fallback={<div className="min-h-screen bg-surface" />}>
+                <WorkoutLogClient
                 workout={{
                     id: workout.id,
                     name: workout.name,
@@ -158,7 +160,8 @@ export default async function WorkoutLogPage({
                 logDate={date}
                 lastWorkoutLogSets={lastWorkoutLogSets}
                 initialActiveLog={initialActiveLog}
-            />
+                />
+            </Suspense>
         </div>
     );
 }
