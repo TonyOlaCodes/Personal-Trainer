@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { ProgressClient } from "./ProgressClient";
-import { SafeFallback, isNextInternalError } from "@/components/shared/SafeFallback";
+import { SafeFallback, rethrowNextInternalErrors } from "@/components/shared/SafeFallback";
+import { formatErrorDetails } from "@/lib/ensureAppSchema";
 
 export const metadata = { 
     title: "Progress & Analytics | Performance Tracker",
@@ -53,8 +54,8 @@ export default async function ProgressPage() {
             </div>
         );
     } catch (e) {
-        if (isNextInternalError(e)) throw e;
+        rethrowNextInternalErrors(e);
         console.error("[ProgressPage] Error:", e);
-        return <SafeFallback title="Progress" />;
+        return <SafeFallback title="Progress" errorDetails={formatErrorDetails(e)} />;
     }
 }

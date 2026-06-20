@@ -1,6 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
-import { prisma, ensureDbSchema } from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { getDayName, formatDate, getWeekNumber } from "@/lib/utils";
 import { cookies } from "next/headers";
@@ -8,14 +8,14 @@ import { DashboardClient } from "./DashboardClient";
 import { getBodyweightSummary } from "@/lib/bodyweight";
 import { getCheckInDueState, getUserCheckInSchedule } from "@/lib/checkInSchedule";
 import { getDailyMetricsSummary } from "@/lib/dailyMetrics";
-
-import { SafeFallback, isNextInternalError } from "@/components/shared/SafeFallback";
+import { ensureAppSchema, formatErrorDetails } from "@/lib/ensureAppSchema";
+import { SafeFallback, rethrowNextInternalErrors } from "@/components/shared/SafeFallback";
 
 export const metadata = { title: "Dashboard" };
 
 export default async function DashboardPage() {
     try {
-        await ensureDbSchema();
+        await ensureAppSchema();
         const { userId } = await auth();
         if (!userId) redirect("/sign-in");
 
@@ -180,7 +180,7 @@ export default async function DashboardPage() {
                     totalDuration += l.duration;
                     durationCount++;
                 }
-                if (!seenNames.has(l.workout.name) && activeSession?.id !== l.id) {
+                if (l.workout && !seenNames.has(l.workout.name) && activeSession?.id !== l.id) {
                     seenNames.add(l.workout.name);
                     uniqueLogs.push(l);
                 }
@@ -241,7 +241,7 @@ export default async function DashboardPage() {
                             nextTrainingDay={nextTrainingDay}
                             todayCompleted={!!isTodayWorkoutCompleted}
                             avgDurationMin={avgDurationMin}
-                            activeSession={activeSession ? {
+                            activeSession={activeSession?.workout ? {
                                 id: activeSession.id,
                                 workoutId: activeSession.workoutId,
                                 workoutName: activeSession.workout.name,
@@ -249,6 +249,7 @@ export default async function DashboardPage() {
                             } : null}
                             recentLogs={uniqueLogs
                                 .slice(0, 5)
+                                .filter((l: any) => l.workout)
                                 .map((l: any) => ({
                                     id: l.id,
                                     workoutId: l.workoutId,
@@ -285,9 +286,8 @@ export default async function DashboardPage() {
             </>
         );
     } catch (error) {
-        if (isNextInternalError(error)) throw error;
+        rethrowNextInternalErrors(error);
         console.error("[DashboardPage] Error:", error);
-        require('fs').writeFileSync('dashboard-error.txt', String(error?.stack || error));
-        return <SafeFallback title="Dashboard" errorDetails={String(error?.stack || error)} />;
+        return <SafeFallback title="Dashboard" errorDetails={formatErrorDetails(error)} />;
     }
 }

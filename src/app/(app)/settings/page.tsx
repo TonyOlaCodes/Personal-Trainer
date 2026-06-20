@@ -4,7 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { SettingsClient } from "./SettingsClient";
 import { getDailyMetricTargets } from "@/lib/dailyMetrics";
-import { SafeFallback, isNextInternalError } from "@/components/shared/SafeFallback";
+import { SafeFallback, rethrowNextInternalErrors } from "@/components/shared/SafeFallback";
+import { formatErrorDetails } from "@/lib/ensureAppSchema";
 
 
 export const metadata = { title: "Settings" };
@@ -55,8 +56,8 @@ export default async function SettingsPage() {
             </>
         );
     } catch (e) {
-        if (isNextInternalError(e)) throw e;
+        rethrowNextInternalErrors(e);
         console.error("[SettingsPage] Error:", e);
-        return <SafeFallback title="Settings" />;
+        return <SafeFallback title="Settings" errorDetails={formatErrorDetails(e)} />;
     }
 }

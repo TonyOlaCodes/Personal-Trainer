@@ -6,7 +6,8 @@ import { CheckInsClient } from "./CheckInsClient";
 import { startOfWeek, endOfWeek } from "date-fns";
 import { getBodyweightWeeklyAverage } from "@/lib/bodyweight";
 import { getCheckInDueState, getUserCheckInSchedule } from "@/lib/checkInSchedule";
-import { SafeFallback, isNextInternalError } from "@/components/shared/SafeFallback";
+import { SafeFallback, rethrowNextInternalErrors } from "@/components/shared/SafeFallback";
+import { formatErrorDetails } from "@/lib/ensureAppSchema";
 
 export const metadata = { title: "Check-ins" };
 
@@ -146,8 +147,8 @@ export default async function CheckInsPage() {
             </>
         );
     } catch (e) {
-        if (isNextInternalError(e)) throw e;
+        rethrowNextInternalErrors(e);
         console.error("[CheckInsPage] Error:", e);
-        return <SafeFallback title="Check-ins" />;
+        return <SafeFallback title="Check-ins" errorDetails={formatErrorDetails(e)} />;
     }
 }

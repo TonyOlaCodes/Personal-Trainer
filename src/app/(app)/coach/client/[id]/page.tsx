@@ -7,7 +7,8 @@ import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
 import { getDailyMetricTargets } from "@/lib/dailyMetrics";
 import { calculateOneRM } from "@/lib/utils";
 
-import { SafeFallback, isNextInternalError } from "@/components/shared/SafeFallback";
+import { SafeFallback, rethrowNextInternalErrors } from "@/components/shared/SafeFallback";
+import { formatErrorDetails } from "@/lib/ensureAppSchema";
 
 export const metadata = { title: "Client Details" };
 
@@ -215,8 +216,8 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             </>
         );
     } catch (e) {
-        if (isNextInternalError(e)) throw e;
+        rethrowNextInternalErrors(e);
         console.error("[ClientDetailPage] Error:", e);
-        return <SafeFallback title="Client Details" />;
+        return <SafeFallback title="Client Details" errorDetails={formatErrorDetails(e)} />;
     }
 }

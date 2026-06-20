@@ -1,11 +1,12 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
-import { prisma, ensureDbSchema } from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { MobileTabBar } from "@/components/layout/MobileTabBar";
 import { RoleProvider } from "@/lib/RoleContext";
-import { getUserDeactivationStatusByClerkId, ensureUserAccountStatusColumns } from "@/lib/userDeactivation";
+import { getUserDeactivationStatusByClerkId } from "@/lib/userDeactivation";
+import { ensureAppSchema, formatErrorDetails } from "@/lib/ensureAppSchema";
 import { SafeFallback } from "@/components/shared/SafeFallback";
 
 export default async function AppLayout({
@@ -13,27 +14,26 @@ export default async function AppLayout({
 }: {
     children: React.ReactNode;
 }) {
-    await ensureDbSchema();
+    await ensureAppSchema();
     const { userId } = await auth();
     if (!userId) redirect("/sign-in");
 
     let user: { role: string; onboardingDone: boolean; id: string } | null = null;
     let isDeactivated = false;
-    let accountLookupFailed = false;
+    let layoutError: unknown = null;
     try {
         user = await prisma.user.findUnique({
             where: { clerkId: userId },
             select: { role: true, onboardingDone: true, id: true },
         });
         isDeactivated = await getUserDeactivationStatusByClerkId(userId);
-        await ensureUserAccountStatusColumns();
     } catch (e) {
-        accountLookupFailed = true;
+        layoutError = e;
         console.error("[AppLayout] Failed to load account state:", e);
     }
 
-    if (accountLookupFailed) {
-        return <SafeFallback title="Account" />;
+    if (layoutError) {
+        return <SafeFallback title="Account" errorDetails={formatErrorDetails(layoutError)} />;
     }
 
     if (isDeactivated) {

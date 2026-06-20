@@ -24,30 +24,7 @@ export function SafeFallback({ title, errorDetails }: { title: string, errorDeta
     );
 }
 
-export function isNextInternalError(err: any): boolean {
-    if (!err) return false;
-    
-    // unstable_rethrow throws Next.js internal errors. We don't catch it so it bubbles up.
-    if (typeof unstable_rethrow === "function") {
-        unstable_rethrow(err);
-    }
-    
-    if (typeof err.digest === "string") {
-        if (err.digest.startsWith("NEXT_REDIRECT") || 
-            err.digest === "NEXT_NOT_FOUND" || 
-            err.digest === "DYNAMIC_SERVER_USAGE") {
-            return true;
-        }
-    }
-    
-    if (err instanceof Error) {
-        if (err.name === "DynamicServerError" || 
-            err.message.includes("Dynamic server usage") || 
-            err.message.includes("NEXT_REDIRECT") || 
-            err.message === "NEXT_NOT_FOUND") {
-            return true;
-        }
-    }
-    
-    return false;
+/** Re-throw Next.js control-flow errors (redirect, notFound, etc.) before handling real failures. */
+export function rethrowNextInternalErrors(err: unknown): void {
+    unstable_rethrow(err);
 }
