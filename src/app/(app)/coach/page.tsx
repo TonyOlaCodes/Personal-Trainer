@@ -7,6 +7,7 @@ import { CoachDashboardClient } from "./CoachDashboardClient";
 import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
 import { getDailyMetricTargets } from "@/lib/dailyMetrics";
 import { ensureBodyweightTable } from "@/lib/bodyweight";
+import { dedupeCoachPlansByName, normalizePlanIdForPicker } from "@/lib/coachPlans";
 
 export const metadata = { title: "Coach Dashboard" };
 
@@ -20,6 +21,7 @@ export default async function CoachDashboardPage() {
             clients: {
                 select: {
                     id: true, name: true, email: true, role: true, avatarUrl: true,
+                    isDeleted: true, isDeactivated: true,
                     goal: true, targetWeightKg: true, weightKg: true,
                     workoutLogs: {
                         where: { status: "COMPLETED" },
@@ -51,7 +53,7 @@ export default async function CoachDashboardPage() {
 
     const clientIds = coach.clients.map((client) => client.id);
 
-    const [recentCheckIns, bodyweightRows, availablePlans] = await Promise.all([
+    const [recentCheckIns, bodyweightRows, allCoachPlans, activeClientPlans, inviteClientPlans] = await Promise.all([
         prisma.checkIn.findMany({
             where: { user: { coachId: coach.id } },
             include: { user: { select: { name: true } } },
@@ -65,15 +67,38 @@ export default async function CoachDashboardPage() {
             ORDER BY "loggedDate" ASC
         ` : Promise.resolve([]),
         prisma.plan.findMany({
-            where: {
-                OR: [
-                    { type: "PREBUILT" },
-                    { creatorId: coach.id }
-                ]
-            },
-            select: { id: true, name: true, type: true }
-        })
+            where: { creatorId: coach.id },
+            select: { id: true, name: true, type: true, updatedAt: true },
+            orderBy: { updatedAt: "desc" },
+        }),
+        clientIds.length > 0
+            ? prisma.userPlan.findMany({
+                where: { userId: { in: clientIds }, isActive: true },
+                select: { userId: true, planId: true },
+            })
+            : Promise.resolve([]),
+        clientIds.length > 0
+            ? prisma.accessCode.findMany({
+                where: { usedById: { in: clientIds }, planId: { not: null } },
+                select: { usedById: true, planId: true },
+                orderBy: { usedAt: "desc" },
+            })
+            : Promise.resolve([]),
     ]);
+
+    const availablePlans = dedupeCoachPlansByName(allCoachPlans).map(({ updatedAt: _updatedAt, ...plan }) => plan);
+
+    const suggestedPlanByClientId = new Map<string, string>();
+    for (const row of inviteClientPlans) {
+        if (row.usedById && row.planId) {
+            suggestedPlanByClientId.set(row.usedById, row.planId);
+        }
+    }
+    for (const row of activeClientPlans) {
+        if (row.planId) {
+            suggestedPlanByClientId.set(row.userId, row.planId);
+        }
+    }
 
     const bodyweightByClientId = new Map<string, { date: string; weightKg: number }[]>();
     bodyweightRows.forEach((row) => {
@@ -97,7 +122,7 @@ export default async function CoachDashboardPage() {
 
     return (
         <>
-            <TopBar title="Coach Command Centre" subtitle="Manage your stable of athletes" />
+            <TopBar title="Coach Command Centre" subtitle="Manage your clients" />
             <div className="p-6 max-w-6xl mx-auto">
                 <CoachDashboardClient
                     clients={coach.clients.map(c => {
@@ -107,7 +132,7 @@ export default async function CoachDashboardPage() {
                             name: c.name || "Unnamed Client",
                             email: c.email,
                             avatarUrl: c.avatarUrl,
-                            isDeleted: c.email.endsWith("@deleted.local"),
+                            isDeleted: c.isDeleted || c.isDeactivated || c.email.endsWith("@deleted.local"),
                             goal: c.goal,
                             currentWeightKg: c.weightKg,
                             targetWeightKg: c.targetWeightKg,
@@ -116,6 +141,11 @@ export default async function CoachDashboardPage() {
                             targetCalories: extra?.targets?.targetCalories ?? null,
                             targetSteps: extra?.targets?.targetSteps ?? null,
                             targetSleepHours: extra?.targets?.targetSleepHours ?? null,
+                            suggestedPlanId: normalizePlanIdForPicker(
+                                suggestedPlanByClientId.get(c.id),
+                                allCoachPlans,
+                                availablePlans
+                            ) || null,
                             stats: { logs: c._count.workoutLogs, checkins: c._count.checkIns },
                             recentLogs: c.workoutLogs.map((log) => ({
                                 id: log.id,

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { CoachInvitesClient } from "./CoachInvitesClient";
+import { dedupeCoachPlansByName } from "@/lib/coachPlans";
 
 export const metadata = { title: "Invite Clients" };
 
@@ -19,10 +20,11 @@ export default async function CoachInvitesPage() {
         redirect("/dashboard");
     }
 
-    const [plans, codes] = await Promise.all([
+    const [rawPlans, codes] = await Promise.all([
         prisma.plan.findMany({
             where: { creatorId: coach.id },
-            select: { id: true, name: true }
+            select: { id: true, name: true, type: true, updatedAt: true },
+            orderBy: { updatedAt: "desc" },
         }),
         prisma.accessCode.findMany({
             where: { generatedBy: coach.id },
@@ -33,6 +35,8 @@ export default async function CoachInvitesPage() {
             orderBy: { createdAt: "desc" },
         })
     ]);
+
+    const plans = dedupeCoachPlansByName(rawPlans).map(({ updatedAt: _updatedAt, ...plan }) => plan);
 
     return (
         <>

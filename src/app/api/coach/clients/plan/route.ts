@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { createNotification } from "@/lib/notifications";
+import { requireCoachCanEditClient } from "@/lib/apiAuth";
 
 const planUpdateSchema = z.object({
     clientId: z.string().min(1),
@@ -21,13 +22,11 @@ export async function POST(req: Request) {
     try {
         const { clientId, planId } = planUpdateSchema.parse(await req.json());
 
-        // Verify relationship
+        const editCheck = await requireCoachCanEditClient(coach, clientId);
+        if (editCheck.error) return editCheck.error;
+
         const client = await prisma.user.findUnique({ where: { id: clientId } });
         if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 });
-        
-        if (coach.role === "COACH" && client.coachId !== coach.id) {
-            return NextResponse.json({ error: "Unauthorized: Not your client" }, { status: 403 });
-        }
 
         const plan = await prisma.plan.findUnique({ where: { id: planId } });
         if (!plan) return NextResponse.json({ error: "Plan not found" }, { status: 404 });

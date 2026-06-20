@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
     Users, Activity, Calendar,
     ChevronRight, TrendingUp, HelpCircle, CheckCircle2,
@@ -9,6 +9,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { cn, formatDate, getInitials } from "@/lib/utils";
+import { formatCoachPlanLabel } from "@/lib/coachPlans";
 
 const CHECK_IN_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -23,6 +24,7 @@ interface Client {
     targetCalories: number | null;
     targetSteps: number | null;
     targetSleepHours: number | null;
+    suggestedPlanId?: string | null;
     goal?: string | null;
     currentWeightKg?: number | null;
     targetWeightKg?: number | null;
@@ -51,6 +53,13 @@ export function CoachDashboardClient({ clients, recentCheckIns, availablePlans }
     const [skippedClients, setSkippedClients] = useState<string[]>([]);
     const [savingSetup, setSavingSetup] = useState(false);
 
+    const sortedClients = useMemo(() => {
+        return [...clients].sort((a, b) => {
+            if (a.isDeleted !== b.isDeleted) return a.isDeleted ? 1 : -1;
+            return (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base" });
+        });
+    }, [clients]);
+
     const pendingCheckIns = recentCheckIns.filter(ci => ci.status === "Pending").length;
     const activeClients = clients.filter(c => !c.isDeleted);
     const deletedClients = clients.filter(c => c.isDeleted);
@@ -77,9 +86,13 @@ export function CoachDashboardClient({ clients, recentCheckIns, availablePlans }
             setSetupSteps(currentSetupClient.targetSteps ? String(currentSetupClient.targetSteps) : "");
             setSetupSleep(currentSetupClient.targetSleepHours ? String(currentSetupClient.targetSleepHours) : "");
             setSetupWeight(currentSetupClient.targetWeightKg ? String(currentSetupClient.targetWeightKg) : "");
-            setSetupPlanId("");
+            const suggested = currentSetupClient.suggestedPlanId ?? "";
+            const validSuggested = suggested && availablePlans.some((plan) => plan.id === suggested)
+                ? suggested
+                : "";
+            setSetupPlanId(validSuggested);
         }
-    }, [currentSetupClient?.id]);
+    }, [currentSetupClient?.id, currentSetupClient?.suggestedPlanId, availablePlans]);
 
     const handleSaveSetup = async () => {
         if (!currentSetupClient) return;
@@ -271,6 +284,11 @@ export function CoachDashboardClient({ clients, recentCheckIns, availablePlans }
                             </h4>
                             <label className="space-y-1.5 block">
                                 <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Select Programme</span>
+                                {setupPlanId && (
+                                    <p className="text-[10px] text-brand-400/90 font-semibold">
+                                        Pre-filled from invite — change below if needed.
+                                    </p>
+                                )}
                                 <select
                                     value={setupPlanId}
                                     onChange={(e) => setSetupPlanId(e.target.value)}
@@ -278,7 +296,7 @@ export function CoachDashboardClient({ clients, recentCheckIns, availablePlans }
                                 >
                                     <option value="">No plan / Assign later</option>
                                     {availablePlans.map((plan) => (
-                                        <option key={plan.id} value={plan.id}>{plan.name} ({plan.type.replace("_", " ")})</option>
+                                        <option key={plan.id} value={plan.id}>{formatCoachPlanLabel(plan)}</option>
                                     ))}
                                 </select>
                             </label>
@@ -352,16 +370,16 @@ export function CoachDashboardClient({ clients, recentCheckIns, availablePlans }
                 {/* Client Roster */}
                 <div className="lg:col-span-2 space-y-4">
                     <div className="flex items-center justify-between px-2">
-                        <h3 className="heading-3">My Stable</h3>
+                        <h3 className="heading-3">My Clients</h3>
                     </div>
 
                     <div className="grid sm:grid-cols-2 gap-4">
-                        {clients.length === 0 ? (
+                        {sortedClients.length === 0 ? (
                             <div className="col-span-2 card p-10 text-center">
                                 <p className="text-fg-muted">You have no clients assigned yet.</p>
                             </div>
                         ) : (
-                            clients.map((c) => (
+                            sortedClients.map((c) => (
                                 <Link
                                     key={c.id}
                                     href={`/coach/client/${c.id}`}
@@ -410,7 +428,7 @@ export function CoachDashboardClient({ clients, recentCheckIns, availablePlans }
                     </div>
                     {deletedClients.length > 0 && (
                         <p className="px-2 text-xs text-fg-subtle">
-                            Deleted clients are kept here as inactive markers only; their account data has been removed.
+                            Deleted or deactivated clients are listed at the bottom for reference only; their account data has been removed.
                         </p>
                     )}
                 </div>

@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import { requireCoachCanEditClient } from "@/lib/apiAuth";
 
 const schema = z.object({
     clientId: z.string(),
@@ -22,13 +23,11 @@ export async function POST(req: Request) {
 
     const { clientId } = parsed.data;
 
-    // Verify client belongs to coach
+    const editCheck = await requireCoachCanEditClient(coach, clientId);
+    if (editCheck.error) return editCheck.error;
+
     const client = await prisma.user.findUnique({ where: { id: clientId } });
     if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 });
-
-    if (coach.role !== "SUPER_ADMIN" && client.coachId !== coach.id) {
-        return NextResponse.json({ error: "Forbidden: Not your client" }, { status: 403 });
-    }
 
     // Demote: Remove coach association and set role back to FREE
     // Also invalidate the access code they used so it shows as "Expired/Revoked" in history

@@ -2,7 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import type { User } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getUserDeactivationStatusByClerkId } from "@/lib/userDeactivation";
+import { getUserDeactivationStatusByClerkId, isInactiveAccount } from "@/lib/userDeactivation";
 import { isClientViewMode, parseTeamCoachId } from "@/lib/roles";
 
 export { defaultHomeForRole, isClientViewMode, parseTeamCoachId } from "@/lib/roles";
@@ -56,6 +56,34 @@ export async function canAccessClient(
         select: { coachId: true },
     });
     return client?.coachId === actor.id;
+}
+
+/** Block coach mutations when the athlete account is deleted or deactivated. */
+export async function requireCoachCanEditClient(
+    actor: Pick<User, "id" | "role">,
+    clientId: string
+): Promise<{ error: null } | { error: NextResponse }> {
+    if (!(await canAccessClient(actor, clientId))) {
+        return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
+    }
+
+    const client = await prisma.user.findUnique({
+        where: { id: clientId },
+        select: { email: true, isDeleted: true, isDeactivated: true },
+    });
+    if (!client) {
+        return { error: NextResponse.json({ error: "Client not found" }, { status: 404 }) };
+    }
+    if (isInactiveAccount(client)) {
+        return {
+            error: NextResponse.json(
+                { error: "This account is inactive and cannot be edited" },
+                { status: 403 }
+            ),
+        };
+    }
+
+    return { error: null };
 }
 
 export async function canDirectMessage(

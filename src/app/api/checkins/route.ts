@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { CheckInStatus, Prisma } from "@prisma/client";
 import { z } from "zod";
 import { createNotification } from "@/lib/notifications";
+import { isInactiveAccount } from "@/lib/userDeactivation";
 
 const checkInSchema = z.object({
     bodyweightKg: z.number().optional(),
@@ -165,6 +166,16 @@ export async function PATCH(req: Request) {
         }
         if (isCoach && user.role !== "SUPER_ADMIN" && existing.user.coachId !== user.id) {
             return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        }
+
+        if (isCoach) {
+            const athlete = await prisma.user.findUnique({
+                where: { id: existing.userId },
+                select: { email: true, isDeleted: true, isDeactivated: true },
+            });
+            if (athlete && isInactiveAccount(athlete)) {
+                return NextResponse.json({ error: "This account is inactive and cannot be edited" }, { status: 403 });
+            }
         }
 
         // Determine what to update based on who is editing

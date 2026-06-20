@@ -12,7 +12,9 @@ import {
 } from "recharts";
 import Link from "next/link";
 import { ReturnLink } from "@/components/shared/ReturnLink";
+import { RecentSessionsListModal, PREVIEW_LIMIT } from "@/components/shared/RecentSessionsListModal";
 import { cn, formatDate, getInitials } from "@/lib/utils";
+import { formatCoachPlanLabel } from "@/lib/coachPlans";
 
 const CHECK_IN_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const CHECK_IN_FREQUENCIES = [
@@ -90,9 +92,11 @@ interface Props {
     workoutHistory: WorkoutHistoryEntry[];
     exerciseHistory: Record<string, Array<{ date: string, weight: number, reps: number, volume: number, oneRM: number }>>;
     exerciseLastDone: Record<string, number>;
+    readOnly?: boolean;
 }
 
-export function ClientDetailView({ client, currentUserId, availablePlans, logs, checkIns, bodyweightHistory, workoutNotes, workoutHistory, exerciseHistory, exerciseLastDone }: Props) {
+export function ClientDetailView({ client, currentUserId, availablePlans, logs, checkIns, bodyweightHistory, workoutNotes, workoutHistory, exerciseHistory, exerciseLastDone, readOnly = false }: Props) {
+    const canEdit = !readOnly;
     const [assigning, setAssigning] = useState(false);
     const [assignMode, setAssignMode] = useState<"MENU" | "LIST" | "IMPORT">("MENU");
     const [updating, setUpdating] = useState(false);
@@ -107,7 +111,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
     const [targetCalories, setTargetCalories] = useState(client.targetCalories ? String(client.targetCalories) : "");
     const [targetSteps, setTargetSteps] = useState(client.targetSteps ? String(client.targetSteps) : "");
     const [targetSleepHours, setTargetSleepHours] = useState(client.targetSleepHours ? String(client.targetSleepHours) : "");
-    const [isEditingTargets, setIsEditingTargets] = useState(client.checkInSchedule.day === null);
+    const [isEditingTargets, setIsEditingTargets] = useState(canEdit && client.checkInSchedule.day === null);
 
     useEffect(() => {
         setCheckInDay(client.checkInSchedule.day ?? 6);
@@ -116,8 +120,8 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
         setTargetCalories(client.targetCalories ? String(client.targetCalories) : "");
         setTargetSteps(client.targetSteps ? String(client.targetSteps) : "");
         setTargetSleepHours(client.targetSleepHours ? String(client.targetSleepHours) : "");
-        setIsEditingTargets(client.checkInSchedule.day === null);
-    }, [client]);
+        setIsEditingTargets(canEdit && client.checkInSchedule.day === null);
+    }, [client, canEdit]);
 
     const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; date: string; weightKg: number } | null>(null);
     const [hoveredVolPoint, setHoveredVolPoint] = useState<{ id: string; workoutName: string; date: string; formattedDate: string; volume: number; x: number; y: number } | null>(null);
@@ -140,10 +144,12 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
     const [chatInput, setChatInput] = useState("");
     const [sendingChat, setSendingChat] = useState(false);
     const chatBottomRef = useRef<HTMLDivElement>(null);
+    const [showAllSessions, setShowAllSessions] = useState(false);
 
     const router = useRouter();
 
     const updatePlan = async (planId: string) => {
+        if (!canEdit) return;
         setUpdating(true);
         try {
             const res = await fetch("/api/coach/clients/plan", {
@@ -164,7 +170,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
     };
 
     const handleImport = async () => {
-        if (!shareCode) return;
+        if (!canEdit || !shareCode) return;
         setImporting(true);
         try {
             const res = await fetch("/api/plans/import", {
@@ -194,6 +200,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
     };
 
     const handleRemoveClient = async () => {
+        if (!canEdit) return;
         if (confirmEmail.toLowerCase() !== client.email.toLowerCase()) {
             alert("Email mismatch. Operation aborted.");
             return;
@@ -219,6 +226,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
     };
 
     const saveClientConfiguration = async () => {
+        if (!canEdit) return;
         setSavingSchedule(true);
         try {
             // Save schedule
@@ -301,7 +309,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
     }, [chatMessages, showQuickChat]);
 
     const sendChatMessage = async () => {
-        if (!chatInput.trim() || sendingChat) return;
+        if (!canEdit || !chatInput.trim() || sendingChat) return;
         setSendingChat(true);
 
         const text = chatInput.trim();
@@ -442,6 +450,25 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
 
     return (
         <div className="space-y-8 animate-fade-in">
+            <RecentSessionsListModal
+                open={showAllSessions}
+                onClose={() => setShowAllSessions(false)}
+                title={`${client.name ?? "Client"} Sessions`}
+                subtitle="Full workout history"
+                sessions={logs}
+                sessionHref={(id) => `/plans/log/view/${id}`}
+            />
+            {readOnly && (
+                <div className="card p-4 border-warning/30 bg-warning/5 flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 text-warning shrink-0 mt-0.5" />
+                    <div>
+                        <p className="text-sm font-bold text-fg">View only — account inactive</p>
+                        <p className="text-xs text-fg-muted mt-1">
+                            This athlete&apos;s account was deleted or deactivated. You can review history, but plans, goals, messages, and settings cannot be changed.
+                        </p>
+                    </div>
+                </div>
+            )}
             {/* Client Profile Header */}
             <div className="card p-6 flex flex-col sm:flex-row items-center gap-6 justify-between text-center sm:text-left">
                 <div className="flex flex-col sm:flex-row items-center gap-6">
@@ -474,7 +501,13 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                 <div className="flex gap-3">
                     <button 
                         onClick={() => setShowQuickChat(true)} 
-                        className={cn("btn-secondary px-6 h-11 transition-all", showQuickChat && "bg-brand-500/20 text-brand-400 border-brand-500/30")}
+                        disabled={!canEdit}
+                        title={canEdit ? "Message athlete" : "Cannot message inactive accounts"}
+                        className={cn(
+                            "btn-secondary px-6 h-11 transition-all",
+                            !canEdit && "opacity-50 cursor-not-allowed",
+                            showQuickChat && "bg-brand-500/20 text-brand-400 border-brand-500/30"
+                        )}
                     >
                         <MessageSquare className="w-4 h-4" /> Message
                     </button>
@@ -758,10 +791,16 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                 <h3 className="text-xs font-black uppercase tracking-widest text-fg">Goals & Schedule</h3>
                             </div>
                             {client.checkInSchedule.day === null ? (
+                                canEdit ? (
                                 <span className="px-2 py-0.5 rounded-lg bg-warning/10 border border-warning/25 text-warning text-[9px] font-black uppercase tracking-widest">
                                     Setup Required
                                 </span>
-                            ) : (
+                                ) : (
+                                <span className="px-2 py-0.5 rounded-lg bg-surface-muted border border-surface-border text-fg-subtle text-[9px] font-black uppercase tracking-widest">
+                                    View Only
+                                </span>
+                                )
+                            ) : canEdit ? (
                                 <button
                                     onClick={() => setIsEditingTargets(prev => !prev)}
                                     className="text-brand-400 hover:text-brand-350 text-[10px] font-black uppercase tracking-wider flex items-center gap-1 transition-colors"
@@ -776,11 +815,11 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                         </>
                                     )}
                                 </button>
-                            )}
+                            ) : null}
                         </div>
 
                         {/* Content */}
-                        {!isEditingTargets && client.checkInSchedule.day !== null ? (
+                        {!canEdit || (!isEditingTargets && client.checkInSchedule.day !== null) ? (
                             // VIEW MODE
                             <div className="space-y-4">
                                 <div className="grid grid-cols-2 gap-3">
@@ -1004,7 +1043,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                     <Award className="w-8 h-8 text-brand-400 opacity-40 shrink-0 group-hover:opacity-100 transition-opacity" />
                                 </Link>
 
-                                {assigning ? (
+                                {canEdit && assigning ? (
                                     <div className="mt-6 space-y-3 animate-fade-in bg-surface-muted/50 p-4 rounded-2xl border border-surface-border">
                                         <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Select New Plan</p>
                                         <div className="flex flex-col gap-2">
@@ -1029,6 +1068,8 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                     </div>
                                 ) : (
                                     <div className="mt-2 flex flex-col sm:flex-row gap-2">
+                                        {canEdit && (
+                                        <>
                                         <Link href={`/plans/create?id=${client.activePlan.id}&clientId=${client.id}`} className="btn-primary btn-sm flex-1 flex items-center justify-center gap-2 h-11 border border-brand-500/30">
                                             <Edit3 className="w-4 h-4" /> Edit Plan
                                         </Link>
@@ -1038,12 +1079,14 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                         >
                                             Assign New
                                         </button>
+                                        </>
+                                        )}
                                     </div>
                                 )}
                             </div>
                         ) : (
                             <div className="card p-8 text-center border-dashed bg-surface-muted/30">
-                                {assigning ? (
+                                {canEdit && assigning ? (
                                     <div className="space-y-6 animate-fade-in text-left">
                                         {assignMode === "MENU" && (
                                             <>
@@ -1166,7 +1209,11 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                             </div>
                                         </div>
                                         <p className="text-fg-muted text-[10px] font-black uppercase tracking-widest italic mb-6">No plan currently deployed to this client.</p>
+                                        {canEdit ? (
                                         <button onClick={() => { setAssigning(true); setAssignMode("MENU"); }} className="btn-primary px-10 h-12 shadow-glow-brand">Deploy New Plan</button>
+                                        ) : (
+                                        <p className="text-xs text-fg-subtle">Plans cannot be assigned to inactive accounts.</p>
+                                        )}
                                     </>
                                 )}
                             </div>
@@ -1175,15 +1222,27 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
 
                     {/* Recent Output */}
                     <div className="space-y-4">
-                        <h3 className="heading-3 px-2 flex items-center gap-2 uppercase tracking-widest text-[11px] font-black text-warning">
-                            <Activity className="w-4 h-4" />
-                            Recent Output
-                        </h3>
+                        <div className="flex items-center justify-between px-2">
+                            <h3 className="heading-3 flex items-center gap-2 uppercase tracking-widest text-[11px] font-black text-warning">
+                                <Activity className="w-4 h-4" />
+                                Recent Sessions
+                            </h3>
+                            {logs.length > 0 && (
+                                <button
+                                    type="button"
+                                    onClick={() => setShowAllSessions(true)}
+                                    className="btn-ghost btn-sm text-brand-400 text-[10px] font-black uppercase tracking-widest"
+                                >
+                                    View all
+                                    <ChevronRight className="w-3 h-3" />
+                                </button>
+                            )}
+                        </div>
                         <div className="space-y-2">
                             {logs.length === 0 ? (
-                                <p className="text-sm text-fg-muted px-2 italic">Zero sessions logged in recent database cycles.</p>
+                                <p className="text-sm text-fg-muted px-2 italic">No sessions logged yet.</p>
                             ) : (
-                                logs.map((l) => (
+                                logs.slice(0, PREVIEW_LIMIT).map((l) => (
                                     <ReturnLink key={l.id} href={`/plans/log/view/${l.id}`} className="card p-4 flex items-center justify-between group hover:border-brand-500/40 transition-all cursor-pointer">
                                         <div>
                                             <h5 className="font-black text-fg text-sm tracking-tight group-hover:text-brand-400">{l.workoutName}</h5>
@@ -1220,11 +1279,13 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                 ))}
                             </div>
                         </div>
+                        {canEdit && (
                         <div className="pt-4 border-t border-surface-border/50 text-center mt-4">
                             <Link href={`/plans/create?clientId=${client.id}`} className="text-xs font-black text-brand-400 hover:text-brand-300 transition-colors uppercase tracking-widest flex items-center justify-center gap-1.5">
                                 <Dumbbell className="w-3.5 h-3.5" /> Modify Workouts
                             </Link>
                         </div>
+                        )}
                     </div>
                 </div>
             </div>
@@ -1375,6 +1436,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
              </section>
 
              {/* Danger Zone */}
+             {canEdit && (
              <div className="border-t border-surface-border pt-12 mt-12">
                 <div className="card p-6 border-danger-500/20 bg-danger-500/5">
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
@@ -1427,6 +1489,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                     </div>
                 </div>
             </div>
+            )}
 
             {/* Quick Chat Slide-over Sheet */}
             {showQuickChat && (

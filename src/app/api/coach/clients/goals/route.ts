@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { normalizeCalories, normalizeSleepHours, normalizeSteps, updateDailyMetricTargets } from "@/lib/dailyMetrics";
 import { z } from "zod";
+import { requireCoachCanEditClient } from "@/lib/apiAuth";
 
 const goalsUpdateSchema = z.object({
     clientId: z.string().min(1),
@@ -25,13 +26,11 @@ export async function POST(req: Request) {
         const body = await req.json();
         const parsed = goalsUpdateSchema.parse(body);
 
-        // Verify relationship
+        const editCheck = await requireCoachCanEditClient(coach, parsed.clientId);
+        if (editCheck.error) return editCheck.error;
+
         const client = await prisma.user.findUnique({ where: { id: parsed.clientId } });
         if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 });
-
-        if (coach.role === "COACH" && client.coachId !== coach.id) {
-            return NextResponse.json({ error: "Unauthorized: Not your client" }, { status: 403 });
-        }
 
         // Update target weight on the client
         const updateData: any = {};

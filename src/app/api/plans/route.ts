@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma, ensureDbSchema } from "@/lib/prisma";
 import { z } from "zod";
 import { randomBytes } from "crypto";
+import { activeWorkoutWhere } from "@/lib/planWorkouts";
 
 const planSchema = z.object({
     name: z.string().min(1),
@@ -45,7 +46,13 @@ export async function GET() {
             plan: {
                 include: {
                     weeks: {
-                        include: { workouts: { include: { exercises: { where: { isCustom: false }, orderBy: { order: "asc" } } } } },
+                        include: {
+                            workouts: {
+                                where: activeWorkoutWhere(),
+                                include: { exercises: { where: { isCustom: false }, orderBy: { order: "asc" } } },
+                                orderBy: { dayNumber: "asc" },
+                            },
+                        },
                         orderBy: { weekNumber: "asc" },
                     },
                     _count: { select: { weeks: true } },

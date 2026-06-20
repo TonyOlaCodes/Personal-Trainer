@@ -479,11 +479,17 @@ const EXERCISE_DICTIONARY = [
 
 // Deduplicate by name (case-sensitive, matches DB unique constraint)
 const seen = new Set();
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const EXERCISE_MEDIA = require("./exerciseMediaData.js");
+
 const EXERCISES = EXERCISE_DICTIONARY.filter((ex) => {
     if (seen.has(ex.name)) return false;
     seen.add(ex.name);
     return true;
-});
+}).map((ex) => ({
+    ...ex,
+    ...(EXERCISE_MEDIA[ex.name] ?? {}),
+}));
 
 module.exports = { EXERCISES, MUSCLE_GROUPS: [
     "Chest", "Back", "Shoulders", "Biceps", "Triceps", "Forearms", "Traps",

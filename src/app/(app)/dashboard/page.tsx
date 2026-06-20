@@ -9,6 +9,7 @@ import { getBodyweightSummary } from "@/lib/bodyweight";
 import { getCheckInDueState, getUserCheckInSchedule } from "@/lib/checkInSchedule";
 import { getDailyMetricsSummary } from "@/lib/dailyMetrics";
 import { ensureAppSchema, formatErrorDetails } from "@/lib/ensureAppSchema";
+import { activeWorkoutWhere } from "@/lib/planWorkouts";
 import { SafeFallback, rethrowNextInternalErrors } from "@/components/shared/SafeFallback";
 
 export const metadata = { title: "Dashboard" };
@@ -34,6 +35,7 @@ export default async function DashboardPage() {
                                         orderBy: { weekNumber: "asc" },
                                         include: {
                                             workouts: {
+                                                where: activeWorkoutWhere(),
                                                 orderBy: { dayNumber: "asc" },
                                                 include: { exercises: { where: { isCustom: false }, orderBy: { order: "asc" } } },
                                             },
@@ -242,9 +244,7 @@ export default async function DashboardPage() {
                                 workoutName: activeSession.workout.name,
                                 loggedAt: activeSession.loggedAt.toISOString(),
                             } : null}
-                            recentLogs={recentCompletedLogs
-                                .slice(0, 20)
-                                .map((l: any) => ({
+                            recentLogs={recentCompletedLogs.map((l: any) => ({
                                     id: l.id,
                                     workoutId: l.workoutId,
                                     workoutName: l.workout.name,

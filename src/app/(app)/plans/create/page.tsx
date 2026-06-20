@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -16,7 +17,15 @@ export default async function CreatePlanPage() {
     return (
         <>
             <TopBar title="New Workout Plan" subtitle="Build a custom programme or follow a template" />
-            <PlanCreateClient />
+            <Suspense
+                fallback={
+                    <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+                        <p className="text-fg-muted animate-pulse">Loading plan editor...</p>
+                    </div>
+                }
+            >
+                <PlanCreateClient />
+            </Suspense>
         </>
     );
 }

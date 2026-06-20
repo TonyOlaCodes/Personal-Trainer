@@ -10,6 +10,7 @@ import {
     parseTeamCoachId,
     requireAuthUser,
 } from "@/lib/apiAuth";
+import { isInactiveAccount } from "@/lib/userDeactivation";
 
 // GET messages
 export async function GET(req: Request) {
@@ -139,6 +140,14 @@ export async function POST(req: Request) {
             }
         } else if (!(await canDirectMessage(user, receiverId))) {
             return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        }
+
+        const receiver = await prisma.user.findUnique({
+            where: { id: receiverId },
+            select: { email: true, isDeleted: true, isDeactivated: true },
+        });
+        if (receiver && isInactiveAccount(receiver)) {
+            return NextResponse.json({ error: "Cannot message this account" }, { status: 403 });
         }
     }
 

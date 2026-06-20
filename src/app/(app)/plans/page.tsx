@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -66,7 +67,9 @@ export default async function PlansPage() {
         <>
             <TopBar title="Plans" subtitle="Manage your workout programmes" />
             <div className="p-6 max-w-5xl mx-auto">
-                <PlansClient plans={plans} userRole={user.role} />
+                <Suspense fallback={<div className="min-h-[200px] animate-pulse rounded-xl bg-surface-muted" />}>
+                    <PlansClient plans={plans} userRole={user.role} />
+                </Suspense>
             </div>
         </>
     );

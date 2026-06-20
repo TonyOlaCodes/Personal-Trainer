@@ -5,6 +5,12 @@ import {
     countWorkoutLogsForWorkout,
     softHideExercise,
 } from "@/lib/dataSafety";
+import {
+    ACTIVE_WORKOUT_DAY_MAX,
+    ARCHIVED_WORKOUT_DAY_BASE,
+    activeWorkoutWhere,
+    legacyOrphanDayNumber,
+} from "@/lib/planWorkouts";
 
 export interface PlanExercisePayload {
     name: string;
@@ -44,6 +50,7 @@ const planInclude = {
         orderBy: { weekNumber: "asc" as const },
         include: {
             workouts: {
+                where: activeWorkoutWhere(),
                 orderBy: { dayNumber: "asc" as const },
                 include: { exercises: { where: { isCustom: false }, orderBy: { order: "asc" as const } } },
             },
@@ -51,11 +58,15 @@ const planInclude = {
     },
 };
 
+function normalizeName(value: string) {
+    return value.trim().toLowerCase();
+}
+
 async function syncExercises(
     tx: Tx,
     workoutId: string,
     payloadExercises: PlanExercisePayload[],
-    existingExercises: { id: string; _count?: { logSets: number } }[]
+    existingExercises: { id: string; name: string; _count?: { logSets: number } }[]
 ) {
     const existing = existingExercises.length
         ? existingExercises
@@ -64,6 +75,8 @@ async function syncExercises(
             orderBy: { order: "asc" },
             include: { _count: { select: { logSets: true } } },
         });
+
+    const matchedIds = new Set<string>();
 
     for (let i = 0; i < payloadExercises.length; i++) {
         const ex = payloadExercises[i];
@@ -79,15 +92,21 @@ async function syncExercises(
             isCustom: false,
         };
 
-        if (existing[i]) {
-            await tx.exercise.update({ where: { id: existing[i].id }, data });
+        const nameKey = normalizeName(ex.name);
+        let target =
+            (existing[i] && !matchedIds.has(existing[i].id) ? existing[i] : undefined) ??
+            existing.find((row) => !matchedIds.has(row.id) && normalizeName(row.name) === nameKey);
+
+        if (target) {
+            matchedIds.add(target.id);
+            await tx.exercise.update({ where: { id: target.id }, data });
         } else {
             await tx.exercise.create({ data: { workoutId, ...data } });
         }
     }
 
-    for (let i = payloadExercises.length; i < existing.length; i++) {
-        const ex = existing[i];
+    for (const ex of existing) {
+        if (matchedIds.has(ex.id)) continue;
         const logSetCount = ex._count?.logSets ?? (await countLogSetsForExercise(ex.id, tx));
         if (logSetCount > 0) {
             await softHideExercise(ex.id, tx);
@@ -98,7 +117,7 @@ async function syncExercises(
 }
 
 async function syncWeekWorkouts(tx: Tx, weekId: string, workouts: PlanWorkoutPayload[]) {
-    const existing = await tx.workout.findMany({
+    const allInWeek = await tx.workout.findMany({
         where: { weekId },
         include: {
             logs: { select: { id: true }, take: 1 },
@@ -111,6 +130,18 @@ async function syncWeekWorkouts(tx: Tx, weekId: string, workouts: PlanWorkoutPay
         orderBy: { dayNumber: "asc" },
     });
 
+    for (const workout of allInWeek) {
+        const relocated = legacyOrphanDayNumber(workout.dayNumber);
+        if (relocated !== null) {
+            await tx.workout.update({
+                where: { id: workout.id },
+                data: { dayNumber: relocated },
+            });
+            workout.dayNumber = relocated;
+        }
+    }
+
+    const existing = allInWeek.filter((w) => w.dayNumber <= ACTIVE_WORKOUT_DAY_MAX);
     const originalDayById = new Map(existing.map((w) => [w.id, w.dayNumber]));
 
     for (const workout of existing) {
@@ -123,11 +154,20 @@ async function syncWeekWorkouts(tx: Tx, weekId: string, workouts: PlanWorkoutPay
     const matchedIds = new Set<string>();
 
     for (const wd of workouts) {
+        const payloadName = normalizeName(wd.name);
+
         let workout = existing.find((w) => {
             if (matchedIds.has(w.id)) return false;
             if (wd.dayOfWeek !== null && wd.dayOfWeek !== undefined && w.dayOfWeek === wd.dayOfWeek) return true;
             return originalDayById.get(w.id) === wd.dayNumber;
         });
+
+        if (!workout) {
+            workout = existing.find((w) => {
+                if (matchedIds.has(w.id)) return false;
+                return normalizeName(w.name) === payloadName;
+            });
+        }
 
         if (!workout) {
             workout = existing.find((w) => !matchedIds.has(w.id));
@@ -164,7 +204,14 @@ async function syncWeekWorkouts(tx: Tx, weekId: string, workouts: PlanWorkoutPay
         const logCount = workout.logs.length > 0
             ? workout.logs.length
             : await countWorkoutLogsForWorkout(workout.id, tx);
-        if (logCount > 0) continue;
+        if (logCount > 0) {
+            const originalDay = originalDayById.get(workout.id) ?? ACTIVE_WORKOUT_DAY_MAX;
+            await tx.workout.update({
+                where: { id: workout.id },
+                data: { dayNumber: ARCHIVED_WORKOUT_DAY_BASE + originalDay },
+            });
+            continue;
+        }
         await tx.workout.delete({ where: { id: workout.id } });
     }
 }

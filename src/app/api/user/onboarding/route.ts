@@ -6,6 +6,7 @@ import { anonymizeDeletedUserAccount } from "@/lib/accountDeletion";
 import { normalizeCalories, normalizeSleepHours, normalizeSteps, updateDailyMetricTargets } from "@/lib/dailyMetrics";
 import { getUserDeactivationStatusByClerkId } from "@/lib/userDeactivation";
 import { defaultHomeForRole } from "@/lib/roles";
+import { ensureUnitSystemColumn } from "@/lib/units";
 import { z } from "zod";
 
 const schema = z.object({
@@ -19,6 +20,7 @@ const schema = z.object({
     heightCm: z.string().optional(),
     weightKg: z.string().optional(),
     targetWeightKg: z.string().optional(),
+    unitSystem: z.enum(["METRIC", "IMPERIAL"]).optional(),
     cardioPreference: z.string().optional(),
     dietAwareness: z.boolean().optional(),
     targetCalories: z.string().optional(),
@@ -29,6 +31,8 @@ const schema = z.object({
 
 export async function POST(req: Request) {
     try {
+        await ensureUnitSystemColumn(prisma);
+
         const { userId } = await auth();
         const user = await currentUser();
         if (!userId || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -72,6 +76,7 @@ export async function POST(req: Request) {
                     heightCm: toFloat(d.heightCm),
                     weightKg: toFloat(d.weightKg),
                     targetWeightKg: toFloat(d.targetWeightKg),
+                    unitSystem: d.unitSystem ?? "METRIC",
                     cardioPreference: d.cardioPreference,
                     dietAwareness: d.dietAwareness,
                 },
@@ -103,6 +108,7 @@ export async function POST(req: Request) {
                     heightCm: toFloat(d.heightCm),
                     weightKg: toFloat(d.weightKg),
                     targetWeightKg: toFloat(d.targetWeightKg),
+                    unitSystem: d.unitSystem ?? "METRIC",
                     cardioPreference: d.cardioPreference,
                     dietAwareness: d.dietAwareness,
                 },

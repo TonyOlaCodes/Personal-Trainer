@@ -19,6 +19,23 @@ type AccountStatusRow = {
 
 export type UserAccountStatus = Omit<AccountStatusRow, "id">;
 
+export function isInactiveAccount(user: {
+    email: string;
+    isDeactivated?: boolean;
+    isDeleted?: boolean;
+}): boolean {
+    return Boolean(
+        user.isDeleted ||
+        user.isDeactivated ||
+        user.email.endsWith("@deleted.local")
+    );
+}
+
+export async function getUserAccountStatusById(userId: string, db: DeactivationDb = prisma) {
+    const map = await getUserAccountStatusMap([userId], db);
+    return map.get(userId) ?? null;
+}
+
 let userDeactivationColumnReady = false;
 let userAccountStatusColumnsReady = false;
 

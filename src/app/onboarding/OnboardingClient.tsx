@@ -4,6 +4,17 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Zap, ChevronRight, ChevronLeft, SkipForward, Check, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+    type UnitSystem,
+    cmToFeetInches,
+    feetInchesToCm,
+    formatHeightFromCm,
+    formatWeightFromKg,
+    kgToLbsNumber,
+    lbsToKg,
+    metricBodyFromForm,
+    parseOptionalFloat,
+} from "@/lib/units";
 import { useClerk } from "@clerk/nextjs";
 import { defaultHomeForRole } from "@/lib/roles";
 
@@ -30,10 +41,15 @@ interface FormData {
     hasInjuries: boolean;
     injuryDetails: string;
     // Step 2
+    unitSystem: UnitSystem;
     age: string;
     heightCm: string;
+    heightFt: string;
+    heightIn: string;
     weightKg: string;
+    weightLbs: string;
     targetWeightKg: string;
+    targetWeightLbs: string;
     cardioPreference: string;
     dietAwareness: boolean;
     targetCalories: string;
@@ -50,9 +66,14 @@ const defaultForm: FormData = {
     hasInjuries: false,
     injuryDetails: "",
     age: "",
+    unitSystem: "METRIC",
     heightCm: "",
+    heightFt: "",
+    heightIn: "",
     weightKg: "",
+    weightLbs: "",
     targetWeightKg: "",
+    targetWeightLbs: "",
     cardioPreference: "",
     dietAwareness: false,
     targetCalories: "",
@@ -83,6 +104,42 @@ export function OnboardingPage() {
             setCoachName("");
         }
         setForm((prev) => ({ ...prev, [key]: value }));
+    };
+
+    const setUnitSystem = (next: UnitSystem) => {
+        if (next === form.unitSystem) return;
+
+        setForm((prev) => {
+            if (next === "IMPERIAL") {
+                const height = parseOptionalFloat(prev.heightCm);
+                const weight = parseOptionalFloat(prev.weightKg);
+                const targetWeight = parseOptionalFloat(prev.targetWeightKg);
+                const { feet, inches } = height != null ? cmToFeetInches(height) : { feet: 0, inches: 0 };
+
+                return {
+                    ...prev,
+                    unitSystem: "IMPERIAL",
+                    heightFt: height != null ? String(feet) : "",
+                    heightIn: height != null ? String(inches) : "",
+                    weightLbs: weight != null ? kgToLbsNumber(weight).toFixed(1) : "",
+                    targetWeightLbs: targetWeight != null ? kgToLbsNumber(targetWeight).toFixed(1) : "",
+                };
+            }
+
+            const feet = parseOptionalFloat(prev.heightFt) ?? 0;
+            const inches = parseOptionalFloat(prev.heightIn) ?? 0;
+            const hasHeight = Boolean(prev.heightFt.trim() || prev.heightIn.trim());
+            const weight = parseOptionalFloat(prev.weightLbs);
+            const targetWeight = parseOptionalFloat(prev.targetWeightLbs);
+
+            return {
+                ...prev,
+                unitSystem: "METRIC",
+                heightCm: hasHeight ? String(Math.round(feetInchesToCm(feet, inches))) : prev.heightCm,
+                weightKg: weight != null ? lbsToKg(weight).toFixed(2) : prev.weightKg,
+                targetWeightKg: targetWeight != null ? lbsToKg(targetWeight).toFixed(2) : prev.targetWeightKg,
+            };
+        });
     };
 
     const handleSkipOptional = () => {
@@ -138,10 +195,18 @@ export function OnboardingPage() {
     const handleSubmit = async () => {
         setSaving(true);
         try {
+            const bodyMetrics = metricBodyFromForm(form);
+            const payload = {
+                ...form,
+                heightCm: bodyMetrics.heightCm != null ? String(bodyMetrics.heightCm) : "",
+                weightKg: bodyMetrics.weightKg != null ? String(bodyMetrics.weightKg) : "",
+                targetWeightKg: bodyMetrics.targetWeightKg != null ? String(bodyMetrics.targetWeightKg) : "",
+            };
+
             const res = await fetch("/api/user/onboarding", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(form),
+                body: JSON.stringify(payload),
             });
             if (res.ok) {
                 const data = await res.json();
@@ -332,31 +397,132 @@ export function OnboardingPage() {
                                 <p className="subheading">Help us fine-tune your programme. You can skip this.</p>
                             </div>
 
+                            {/* Unit system */}
+                            <div>
+                                <label className="label">Units</label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    {([
+                                        { id: "METRIC" as const, label: "Metric", desc: "kg, cm" },
+                                        { id: "IMPERIAL" as const, label: "Imperial", desc: "lbs, ft & in" },
+                                    ]).map((option) => (
+                                        <button
+                                            key={option.id}
+                                            type="button"
+                                            onClick={() => setUnitSystem(option.id)}
+                                            className={cn(
+                                                "text-left p-3.5 rounded-xl border transition-all duration-200",
+                                                form.unitSystem === option.id
+                                                    ? "border-brand-600 bg-brand-950/60 shadow-glow-sm"
+                                                    : "border-surface-border bg-surface-muted hover:border-brand-700/50"
+                                            )}
+                                        >
+                                            <p className="font-semibold text-sm">{option.label}</p>
+                                            <p className="text-xs text-fg-muted">{option.desc}</p>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
                             {/* Body stats */}
                             <div className="grid grid-cols-2 gap-4">
-                                {[
-                                    { key: "age", label: "Age", ph: "e.g. 25", unit: "yrs" },
-                                    { key: "heightCm", label: "Height", ph: "e.g. 178", unit: "cm" },
-                                    { key: "weightKg", label: "Current Weight", ph: "e.g. 80", unit: "kg" },
-                                    { key: "targetWeightKg", label: "Target Weight", ph: "e.g. 90", unit: "kg" },
-                                ].map((f) => (
-                                    <div key={f.key}>
-                                        <label className="label">{f.label}</label>
-                                        <div className="relative">
-                                            <input
-                                                type="number"
-                                                step="0.01"
-                                                className="input pr-10"
-                                                placeholder={f.ph}
-                                                value={form[f.key as keyof FormData] as string}
-                                                onChange={(e) => update(f.key as keyof FormData, e.target.value)}
-                                            />
-                                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-fg-subtle">
-                                                {f.unit}
-                                            </span>
-                                        </div>
+                                <div>
+                                    <label className="label">Age</label>
+                                    <div className="relative">
+                                        <input
+                                            type="number"
+                                            className="input pr-10"
+                                            placeholder="e.g. 25"
+                                            value={form.age}
+                                            onChange={(e) => update("age", e.target.value)}
+                                        />
+                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-fg-subtle">
+                                            yrs
+                                        </span>
                                     </div>
-                                ))}
+                                </div>
+
+                                {form.unitSystem === "METRIC" ? (
+                                    <>
+                                        {[
+                                            { key: "heightCm" as const, label: "Height", ph: "e.g. 178", unit: "cm" },
+                                            { key: "weightKg" as const, label: "Current Weight", ph: "e.g. 80", unit: "kg" },
+                                            { key: "targetWeightKg" as const, label: "Target Weight", ph: "e.g. 90", unit: "kg" },
+                                        ].map((f) => (
+                                            <div key={f.key}>
+                                                <label className="label">{f.label}</label>
+                                                <div className="relative">
+                                                    <input
+                                                        type="number"
+                                                        step="0.01"
+                                                        className="input pr-10"
+                                                        placeholder={f.ph}
+                                                        value={form[f.key]}
+                                                        onChange={(e) => update(f.key, e.target.value)}
+                                                    />
+                                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-fg-subtle">
+                                                        {f.unit}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </>
+                                ) : (
+                                    <>
+                                        <div>
+                                            <label className="label">Height</label>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div className="relative">
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        className="input pr-8"
+                                                        placeholder="5"
+                                                        value={form.heightFt}
+                                                        onChange={(e) => update("heightFt", e.target.value)}
+                                                    />
+                                                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-fg-subtle">
+                                                        ft
+                                                    </span>
+                                                </div>
+                                                <div className="relative">
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        max="11"
+                                                        className="input pr-8"
+                                                        placeholder="10"
+                                                        value={form.heightIn}
+                                                        onChange={(e) => update("heightIn", e.target.value)}
+                                                    />
+                                                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-fg-subtle">
+                                                        in
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {[
+                                            { key: "weightLbs" as const, label: "Current Weight", ph: "e.g. 175", unit: "lbs" },
+                                            { key: "targetWeightLbs" as const, label: "Target Weight", ph: "e.g. 190", unit: "lbs" },
+                                        ].map((f) => (
+                                            <div key={f.key}>
+                                                <label className="label">{f.label}</label>
+                                                <div className="relative">
+                                                    <input
+                                                        type="number"
+                                                        step="0.1"
+                                                        className="input pr-10"
+                                                        placeholder={f.ph}
+                                                        value={form[f.key]}
+                                                        onChange={(e) => update(f.key, e.target.value)}
+                                                    />
+                                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-fg-subtle">
+                                                        {f.unit}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </>
+                                )}
                             </div>
 
                             {/* Daily targets */}
@@ -440,6 +606,32 @@ export function OnboardingPage() {
                                 <p className="text-sm"><span className="text-fg-muted">Training days:</span> <span className="font-medium">{form.trainingDaysPerWeek}x/week</span></p>
                                 <p className="text-sm"><span className="text-fg-muted">Experience:</span> <span className="font-medium">{form.experienceLevel}</span></p>
                                 <p className="text-sm"><span className="text-fg-muted">Location:</span> <span className="font-medium">{form.trainingLocation}</span></p>
+                                {(() => {
+                                    const body = metricBodyFromForm(form);
+                                    if (!body.heightCm && !body.weightKg && !body.targetWeightKg) return null;
+                                    return (
+                                        <>
+                                            {body.heightCm != null && (
+                                                <p className="text-sm">
+                                                    <span className="text-fg-muted">Height:</span>{" "}
+                                                    <span className="font-medium">{formatHeightFromCm(body.heightCm, form.unitSystem)}</span>
+                                                </p>
+                                            )}
+                                            {body.weightKg != null && (
+                                                <p className="text-sm">
+                                                    <span className="text-fg-muted">Current weight:</span>{" "}
+                                                    <span className="font-medium">{formatWeightFromKg(body.weightKg, form.unitSystem)}</span>
+                                                </p>
+                                            )}
+                                            {body.targetWeightKg != null && (
+                                                <p className="text-sm">
+                                                    <span className="text-fg-muted">Target weight:</span>{" "}
+                                                    <span className="font-medium">{formatWeightFromKg(body.targetWeightKg, form.unitSystem)}</span>
+                                                </p>
+                                            )}
+                                        </>
+                                    );
+                                })()}
                             </div>
                         </div>
                     )}

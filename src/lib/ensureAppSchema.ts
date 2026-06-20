@@ -4,6 +4,7 @@ import { ensureCheckInScheduleColumns } from "@/lib/checkInSchedule";
 import { ensureDailyMetricsTable, ensureDailyMetricTargetColumns } from "@/lib/dailyMetrics";
 import { ensureUserAccountStatusColumns } from "@/lib/userDeactivation";
 import { ensureExerciseDictionary } from "@/lib/exerciseDictionary";
+import { ensureUnitSystemColumn } from "@/lib/units";
 
 let appSchemaReady = false;
 
@@ -18,6 +19,7 @@ export async function ensureAppSchema() {
         ensureDailyMetricsTable(),
         ensureBodyweightTable(),
         ensureExerciseDictionary(),
+        ensureUnitSystemColumn(prisma),
     ]);
 
     appSchemaReady = true;

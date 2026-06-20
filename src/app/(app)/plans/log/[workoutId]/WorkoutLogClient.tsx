@@ -163,6 +163,24 @@ function isDirectVideo(url: string) {
     return /\.(mp4|webm|ogg)(\?.*)?$/i.test(url);
 }
 
+function getVideoThumbnail(url: string, thumbnailUrl?: string | null) {
+    if (thumbnailUrl) return thumbnailUrl;
+    try {
+        const parsed = new URL(url);
+        if (parsed.hostname.includes("youtube.com")) {
+            const id = parsed.searchParams.get("v");
+            if (id) return `https://img.youtube.com/vi/${id}/hqdefault.jpg`;
+        }
+        if (parsed.hostname.includes("youtu.be")) {
+            const id = parsed.pathname.replace("/", "");
+            if (id) return `https://img.youtube.com/vi/${id}/hqdefault.jpg`;
+        }
+    } catch {
+        return null;
+    }
+    return null;
+}
+
 export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWorkoutLogSets = [], initialActiveLog = null }: Props) {
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -699,19 +717,47 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                         const hasPreview = !!(media?.videoUrl || media?.instructions);
 
                         return (
-                        <div key={ex.id} id={`exercise-${ex.id}`} className="card p-4 space-y-4 animate-slide-up">
+                        <div key={ex.id} id={`exercise-${ex.id}`} className="card overflow-hidden p-0 space-y-0 animate-slide-up">
+                            {media?.videoUrl && (
+                                <button
+                                    type="button"
+                                    onClick={() => setPreviewExercise({ name: ex.name, media })}
+                                    className="relative w-full aspect-[2.4/1] max-h-36 bg-black group"
+                                    title="Watch form video"
+                                >
+                                    {getVideoThumbnail(media.videoUrl, media.thumbnailUrl) ? (
+                                        // eslint-disable-next-line @next/next/no-img-element
+                                        <img
+                                            src={getVideoThumbnail(media.videoUrl, media.thumbnailUrl)!}
+                                            alt={`${ex.name} demo`}
+                                            className="absolute inset-0 w-full h-full object-cover opacity-80 group-hover:opacity-60 transition-opacity"
+                                        />
+                                    ) : (
+                                        <div className="absolute inset-0 bg-gradient-to-br from-brand-950 to-surface-muted" />
+                                    )}
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/25 group-hover:bg-black/40 transition-colors">
+                                        <span className="w-11 h-11 rounded-full bg-brand-500 text-white shadow-glow-brand flex items-center justify-center border border-white/20 group-hover:scale-105 transition-transform">
+                                            <Play className="w-5 h-5 fill-current ml-0.5" />
+                                        </span>
+                                    </div>
+                                    <span className="absolute bottom-2 right-2 text-[9px] font-black uppercase tracking-widest text-white/90 bg-black/50 px-2 py-0.5 rounded-md">
+                                        Form video
+                                    </span>
+                                </button>
+                            )}
+                            <div className="p-4 space-y-4">
                             <div className="flex flex-col gap-2 w-full">
                                 <div className="flex items-start justify-between gap-2">
                                     <div className="flex items-center gap-2 flex-wrap">
                                         <h3 className="font-bold text-fg text-base leading-tight">{ex.name}</h3>
-                                        {hasPreview && (
+                                        {hasPreview && !media?.videoUrl && (
                                             <button
                                                 type="button"
                                                 onClick={() => setPreviewExercise({ name: ex.name, media })}
                                                 className="w-6 h-6 rounded-full bg-brand-500/10 text-brand-400 border border-brand-500/20 flex items-center justify-center hover:bg-brand-500 hover:text-white transition-colors shrink-0"
                                                 title="Exercise preview"
                                             >
-                                                {media?.videoUrl ? <Play className="w-3 h-3 fill-current" /> : <HelpCircle className="w-3.5 h-3.5" />}
+                                                <HelpCircle className="w-3.5 h-3.5" />
                                             </button>
                                         )}
                                     </div>
@@ -852,6 +898,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                                 <Plus className="w-3.5 h-3.5" />
                                 Add Set
                             </button>
+                            </div>
                         </div>
                     )})}
 

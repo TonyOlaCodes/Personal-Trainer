@@ -58,6 +58,11 @@ enum MessageStatus {
   SEEN
 }
 
+enum UnitSystem {
+  METRIC
+  IMPERIAL
+}
+
 model User {
   id                String   @id @default(cuid())
   clerkId           String   @unique
@@ -97,6 +102,7 @@ model User {
   heightCm          Float?
   weightKg          Float?
   targetWeightKg    Float?
+  unitSystem        UnitSystem @default(METRIC)
   sessionLengthMin  Int?
   likedExercises    String[]
   dislikedExercises String[]

@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { CalendarClient } from "./CalendarClient";
+import { activeWorkoutWhere } from "@/lib/planWorkouts";
 import { toDateKey } from "@/lib/utils";
 
 export const metadata = { title: "Calendar" };
@@ -23,6 +24,7 @@ export default async function CalendarPage() {
                             weeks: {
                                 include: { 
                                     workouts: { 
+                                        where: activeWorkoutWhere(),
                                         include: { exercises: { where: { isCustom: false }, orderBy: { order: "asc" } } }, 
                                         orderBy: { dayNumber: "asc" } 
                                     } 

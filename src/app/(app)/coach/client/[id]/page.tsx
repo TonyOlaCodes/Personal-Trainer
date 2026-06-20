@@ -9,6 +9,7 @@ import { calculateOneRM } from "@/lib/utils";
 
 import { SafeFallback, rethrowNextInternalErrors } from "@/components/shared/SafeFallback";
 import { formatErrorDetails } from "@/lib/ensureAppSchema";
+import { dedupeCoachPlansByName } from "@/lib/coachPlans";
 
 export const metadata = { title: "Client Details" };
 
@@ -39,19 +40,18 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         if (actor.role === "COACH" && target.coachId !== actor.id) {
             redirect("/coach");
         }
-        const isDeletedClient = target.email.endsWith("@deleted.local");
+        const isInactiveClient =
+            target.isDeleted ||
+            target.isDeactivated ||
+            target.email.endsWith("@deleted.local");
 
         const [activePlan, availablePlans, checkInSchedule, bodyweightRows, workoutNotesRows, completedLogs, clientMetricTargets] = await Promise.all([
             Promise.resolve(target.plans[0]?.plan ?? null),
             prisma.plan.findMany({
-                where: {
-                    OR: [
-                        { type: "PREBUILT" },
-                        { creatorId: actor.id },
-                    ],
-                },
-                select: { id: true, name: true, type: true },
-            }),
+                where: { creatorId: actor.id },
+                select: { id: true, name: true, type: true, updatedAt: true },
+                orderBy: { updatedAt: "desc" },
+            }).then((plans) => dedupeCoachPlansByName(plans).map(({ updatedAt: _updatedAt, ...plan }) => plan)),
             getUserCheckInSchedule(target.id),
             prisma.$queryRaw<Array<{ date: string; weightKg: number }>>`
                 SELECT "loggedDate"::text AS "date", "weightKg"
@@ -141,16 +141,17 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         return (
             <>
                 <TopBar
-                    title={isDeletedClient ? "Deleted account" : target.name || "Client Details"}
-                    subtitle={isDeletedClient ? "This client account is inactive and its data has been removed." : target.email}
+                    title={isInactiveClient ? "Inactive account" : target.name || "Client Details"}
+                    subtitle={isInactiveClient ? "This account is deleted or deactivated — view only." : target.email}
                     hideSearch={true}
                 />
                 <div className="p-6 max-w-5xl mx-auto">
                     <ClientDetailView
+                        readOnly={isInactiveClient}
                         client={{
                             id: target.id,
-                            name: isDeletedClient ? "Deleted account" : target.name,
-                            email: isDeletedClient ? "Inactive account" : target.email,
+                            name: isInactiveClient ? "Inactive account" : target.name,
+                            email: isInactiveClient ? "View only" : target.email,
                             role: target.role,
                             assignedCoachName: actor.role === "SUPER_ADMIN" ? target.coach?.name ?? target.coach?.email ?? null : null,
                             avatarUrl: target.avatarUrl,
@@ -172,21 +173,15 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                         }}
                         currentUserId={actor.id}
                         availablePlans={availablePlans}
-                        logs={(() => {
-                            const seenNames = new Set();
-                            return (target.workoutLogs ?? [])
-                                .filter(l => {
-                                    if (seenNames.has(l.workout.name)) return false;
-                                    seenNames.add(l.workout.name);
-                                    return true;
-                                })
-                                .map((l) => ({
-                                    id: l.id,
-                                    workoutName: l.workout.name,
-                                    date: l.loggedAt ? l.loggedAt.toISOString() : new Date().toISOString(),
-                                    setCount: l.sets.length,
-                                }));
-                        })()}
+                        logs={(completedLogs ?? [])
+                            .slice()
+                            .sort((a, b) => (b.loggedAt?.getTime() ?? 0) - (a.loggedAt?.getTime() ?? 0))
+                            .map((l) => ({
+                                id: l.id,
+                                workoutName: l.workout.name,
+                                date: l.loggedAt ? l.loggedAt.toISOString() : new Date().toISOString(),
+                                setCount: (l.sets ?? []).filter((s) => s.isCompleted).length,
+                            }))}
                         checkIns={(target.checkIns ?? []).map((ci) => ({
                             id: ci.id,
                             week: ci.weekNumber,

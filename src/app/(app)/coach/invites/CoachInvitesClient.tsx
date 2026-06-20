@@ -6,6 +6,7 @@ import {
     Calendar, UserPlus, Shield, ExternalLink 
 } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
+import { formatCoachPlanLabel } from "@/lib/coachPlans";
 import Link from "next/link";
 
 interface Code {
@@ -23,6 +24,7 @@ interface Code {
 interface Plan {
     id: string;
     name: string;
+    type?: string;
 }
 
 interface Props {
@@ -122,7 +124,7 @@ export function CoachInvitesClient({ plans, initialCodes }: Props) {
                             >
                                 <option value="">No Plan (Blank Slate)</option>
                                 {plans.map(p => (
-                                    <option key={p.id} value={p.id}>{p.name}</option>
+                                    <option key={p.id} value={p.id}>{formatCoachPlanLabel(p)}</option>
                                 ))}
                             </select>
                         </div>

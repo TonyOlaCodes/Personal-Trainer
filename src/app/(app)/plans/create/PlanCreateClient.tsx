@@ -85,7 +85,7 @@ export function PlanCreateClient() {
 
     const [saving, setSaving] = useState(false);
     const [saveNotice, setSaveNotice] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(() => Boolean(editId));
     const [error, setError] = useState<string | null>(null);
     const [lastAddedExerciseIdx, setLastAddedExerciseIdx] = useState<number | null>(null);
     const [draggedExerciseIdx, setDraggedExerciseIdx] = useState<number | null>(null);
@@ -100,6 +100,109 @@ export function PlanCreateClient() {
             exercises: workout.exercises.map((exercise) => ({ ...exercise })),
         })),
     }));
+
+    const mapExerciseFromApi = (e: PlanExercisePayload): LocalExercise => ({
+        name: e.name ?? "",
+        sets: typeof e.sets === "number" && Number.isFinite(e.sets) ? e.sets : 3,
+        reps: e.reps != null ? String(e.reps) : "10",
+        weightTargetKg: e.weightTargetKg ?? undefined,
+        order: e.order ?? 0,
+        muscleGroup: e.muscleGroup ?? null,
+    });
+
+    // Load data (Template or Edit)
+    useEffect(() => {
+        const load = async () => {
+            if (editId) {
+                setLoading(true);
+                setError(null);
+                try {
+                    const res = await fetch(`/api/plans/${editId}`);
+                    const data = await res.json() as PlanPayload;
+                    if (res.ok) {
+                        setName(data.name);
+                        setDesc(data.description || "");
+                        if (data.creator?.name) {
+                            setCreatorName(data.creator.name);
+                        }
+                        
+                        const mappedWeeks = data.weeks?.map((week) => ({
+                            weekNumber: week.weekNumber,
+                            name: week.name,
+                            workouts: (week.workouts || []).map((w) => ({
+                                name: w.name,
+                                dayNumber: w.dayNumber,
+                                dayOfWeek: w.dayOfWeek,
+                                exercises: (w.exercises || []).map(mapExerciseFromApi),
+                            }))
+                        })) || [];
+
+                        if (mappedWeeks.length > 0) {
+                            setWeeks(mappedWeeks);
+                        } else {
+                            setWeeks([{ weekNumber: 1, workouts: [{ name: "Day 1", dayNumber: 1, dayOfWeek: 0, exercises: [] }] }]);
+                        }
+                        setActiveWeekIdx(0);
+                        setActiveWorkoutIdx(0);
+                        setIsLinearityMode(false);
+                        setLinearityStartWeekIdx(0);
+                    } else {
+                        setWeeks([]);
+                        setError(data.error || "Failed to load plan details.");
+                    }
+                } catch (e) {
+                    console.error("Failed to fetch plan:", e);
+                    setError("Connection lost or server error.");
+                } finally {
+                    setLoading(false);
+                }
+            } else if (templateId && PLAN_TEMPLATES[templateId]) {
+                setError(null);
+                const t = PLAN_TEMPLATES[templateId];
+                setName(t.name);
+                setDesc(t.description);
+                setWeeks([{
+                    weekNumber: 1,
+                    workouts: t.workouts.map(w => ({
+                        name: w.name,
+                        dayNumber: w.dayNumber,
+                        dayOfWeek: (w.dayNumber - 1) % 7, // 1=0(Mon), 2=1(Tue)...
+                        exercises: w.exercises.map((e, idx) => ({ ...e, order: idx }))
+                    }))
+                }]);
+                setActiveWeekIdx(0);
+                setActiveWorkoutIdx(0);
+            } else {
+                setError(null);
+                setWeeks([{
+                    weekNumber: 1,
+                    workouts: [{ name: "Full Body A", dayNumber: 1, dayOfWeek: 0, exercises: [] }]
+                }]);
+                setActiveWeekIdx(0);
+                setActiveWorkoutIdx(0);
+            }
+        };
+        load();
+    }, [templateId, editId]);
+
+    useEffect(() => {
+        if (weeks.length === 0) return;
+        if (activeWeekIdx >= weeks.length) {
+            setActiveWeekIdx(0);
+        }
+    }, [weeks, activeWeekIdx]);
+
+    useEffect(() => {
+        const week = weeks[activeWeekIdx];
+        const workoutCount = week?.workouts.length ?? 0;
+        if (workoutCount === 0) return;
+        if (activeWorkoutIdx >= workoutCount) {
+            setActiveWorkoutIdx(0);
+        }
+    }, [weeks, activeWeekIdx, activeWorkoutIdx]);
+
+    const currentWeek = weeks[activeWeekIdx];
+    const workouts = currentWeek?.workouts || [];
 
     const copyText = async (text: string, message: string) => {
         try {
@@ -132,79 +235,6 @@ export function PlanCreateClient() {
         const body = currentWeek.workouts.map((w) => formatWorkoutText(w)).join("\n\n");
         copyText(`${weekHeader}\n\n${body}`, "Week copied!");
     };
-
-    // Load data (Template or Edit)
-    useEffect(() => {
-        const load = async () => {
-            if (editId) {
-                setLoading(true);
-                try {
-                    const res = await fetch(`/api/plans/${editId}`);
-                    const data = await res.json() as PlanPayload;
-                    if (res.ok) {
-                        setName(data.name);
-                        setDesc(data.description || "");
-                        if (data.creator?.name) {
-                            setCreatorName(data.creator.name);
-                        }
-                        
-                        const mappedWeeks = data.weeks?.map((week) => ({
-                            weekNumber: week.weekNumber,
-                            name: week.name,
-                            workouts: (week.workouts || []).map((w) => ({
-                                name: w.name,
-                                dayNumber: w.dayNumber,
-                                dayOfWeek: w.dayOfWeek,
-                                exercises: (w.exercises || []).map((e) => ({
-                                    name: e.name,
-                                    sets: e.sets,
-                                    reps: e.reps,
-                                    weightTargetKg: e.weightTargetKg ?? undefined,
-                                    order: e.order ?? 0,
-                                    muscleGroup: e.muscleGroup ?? null,
-                                }))
-                            }))
-                        })) || [];
-
-                        if (mappedWeeks.length > 0) {
-                            setWeeks(mappedWeeks);
-                        } else {
-                            setWeeks([{ weekNumber: 1, workouts: [{ name: "Day 1", dayNumber: 1, dayOfWeek: 0, exercises: [] }] }]);
-                        }
-                    } else {
-                        setError(data.error || "Failed to load plan details.");
-                    }
-                } catch (e) {
-                    console.error("Failed to fetch plan:", e);
-                    setError("Connection lost or server error.");
-                } finally {
-                    setLoading(false);
-                }
-            } else if (templateId && PLAN_TEMPLATES[templateId]) {
-                const t = PLAN_TEMPLATES[templateId];
-                setName(t.name);
-                setDesc(t.description);
-                setWeeks([{
-                    weekNumber: 1,
-                    workouts: t.workouts.map(w => ({
-                        name: w.name,
-                        dayNumber: w.dayNumber,
-                        dayOfWeek: (w.dayNumber - 1) % 7, // 1=0(Mon), 2=1(Tue)...
-                        exercises: w.exercises.map((e, idx) => ({ ...e, order: idx }))
-                    }))
-                }]);
-            } else {
-                setWeeks([{
-                    weekNumber: 1,
-                    workouts: [{ name: "Full Body A", dayNumber: 1, dayOfWeek: 0, exercises: [] }]
-                }]);
-            }
-        };
-        load();
-    }, [templateId, editId]);
-
-    const currentWeek = weeks[activeWeekIdx];
-    const workouts = currentWeek?.workouts || [];
 
     const handleNextWeek = () => {
         if (activeWeekIdx < weeks.length - 1) {
@@ -466,7 +496,7 @@ export function PlanCreateClient() {
         }
     };
 
-    if (loading || !currentWeek) {
+    if (loading) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
                 <Loader2 className="w-8 h-8 text-brand-400 animate-spin" />
@@ -484,6 +514,15 @@ export function PlanCreateClient() {
                 <h3 className="heading-3">Access Problem</h3>
                 <p className="text-sm text-fg-muted max-w-xs">{error}</p>
                 <button onClick={() => router.back()} className="btn-secondary mt-2">Go Back</button>
+            </div>
+        );
+    }
+
+    if (!currentWeek) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+                <Loader2 className="w-8 h-8 text-brand-400 animate-spin" />
+                <p className="text-fg-muted animate-pulse">Preparing plan editor...</p>
             </div>
         );
     }
@@ -951,92 +990,96 @@ export function PlanCreateClient() {
                                                             {eIdx + 1}
                                                         </span>
                                                     </div>
-                                                    <div className="flex-1 grid grid-cols-12 gap-4">
-                                                        <div className="col-span-12 sm:col-span-5 lg:col-span-6 min-w-0">
-                                                            <label className="label-mini block text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1 px-1">Exercise Name</label>
-                                                            {isViewOnly ? (
-                                                                <div className="w-full bg-surface-muted border border-surface-border rounded-xl px-4 py-2 text-sm text-fg break-words">{ex.name}</div>
-                                                            ) : (
-                                                                <ExerciseAutocomplete
-                                                                    value={ex.name}
-                                                                    onChange={(val, muscleGroup) => {
-                                                                        const nameChanged = val !== ex.name;
-                                                                        updateExercise(activeWorkoutIdx, eIdx, nameChanged ? {
-                                                                            name: val,
-                                                                            muscleGroup: muscleGroup ?? null,
-                                                                            reps: isCardio(val, muscleGroup) ? "20" : ex.reps,
-                                                                        } : {
-                                                                            name: val,
-                                                                            muscleGroup: muscleGroup ?? ex.muscleGroup ?? null,
-                                                                        });
-                                                                    }}
-                                                                    className="max-w-none"
-                                                                    autoFocus={lastAddedExerciseIdx === eIdx}
-                                                                />
-                                                            )}
-                                                        </div>
-                                                        <div className="col-span-4 sm:col-span-2">
-                                                            <label className="label-mini block text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1 px-1">
-                                                                {isCardio(ex.name, ex.muscleGroup) ? "Rounds" : "Sets"}
-                                                            </label>
-                                                            <input
-                                                                type="text"
-                                                                className="w-full bg-surface-muted border border-surface-border rounded-xl px-4 py-2 text-[16px] sm:text-sm text-fg text-center"
-                                                                value={ex.sets}
-                                                                onChange={(e) => {
-                                                                    const val = e.target.value;
-                                                                    if (/^\d*$/.test(val)) {
-                                                                        updateExercise(activeWorkoutIdx, eIdx, { sets: parseInt(val) || 0 });
-                                                                    }
-                                                                }}
-                                                                readOnly={isViewOnly}
-                                                            />
-                                                        </div>
-                                                        <div className="col-span-4 sm:col-span-2">
-                                                            <label className="label-mini block text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1 px-1">
-                                                                {isCardio(ex.name, ex.muscleGroup) ? "Mins" : "Reps"}
-                                                            </label>
-                                                            <input
-                                                                type="text"
-                                                                placeholder={isCardio(ex.name, ex.muscleGroup) ? "20" : "8-12"}
-                                                                className="w-full bg-surface-muted border border-surface-border rounded-xl px-4 py-2 text-[16px] sm:text-sm text-fg text-center"
-                                                                value={ex.reps}
-                                                                onChange={(e) => updateExercise(activeWorkoutIdx, eIdx, { reps: e.target.value })}
-                                                                readOnly={isViewOnly}
-                                                            />
-                                                        </div>
-                                                        <div className="col-span-4 sm:col-span-2">
-                                                            <label className="label-mini block text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1 px-1">
-                                                                Weight (kg)
-                                                            </label>
-                                                            <input
-                                                                type="number"
-                                                                placeholder="0"
-                                                                className="w-full bg-surface-muted border border-surface-border rounded-xl px-4 py-2 text-[16px] sm:text-sm text-fg text-center"
-                                                                value={ex.weightTargetKg || ""}
-                                                                onChange={(e) => updateExercise(activeWorkoutIdx, eIdx, { weightTargetKg: parseFloat(e.target.value) || undefined })}
-                                                                readOnly={isViewOnly}
-                                                            />
-                                                        </div>
-                                                        {!isViewOnly && (
-                                                            <div className="col-span-12 sm:col-span-1 flex items-end mt-2 sm:mt-0">
-                                                                <button
-                                                                    onClick={() => {
-                                                                        const next = cloneWeeks(weeks);
-                                                                        next.forEach((w: LocalWeek) => {
-                                                                            if (w.workouts[activeWorkoutIdx]) {
-                                                                                w.workouts[activeWorkoutIdx].exercises = w.workouts[activeWorkoutIdx].exercises.filter((_, i: number) => i !== eIdx);
-                                                                                w.workouts[activeWorkoutIdx].exercises.forEach((ex, idx: number) => ex.order = idx);
-                                                                            }
-                                                                        });
-                                                                        setWeeks(next);
-                                                                    }}
-                                                                    className="flex items-center justify-center w-full h-10 rounded-xl bg-danger-muted/5 text-danger/40 hover:text-danger hover:bg-danger-muted/20 transition-all"
-                                                                >
-                                                                    <Trash2 className="w-3.5 h-3.5" />
-                                                                </button>
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-2">
+                                                            <div className="flex-1 min-w-0">
+                                                                <label className="label-mini block text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1 px-1">Exercise Name</label>
+                                                                {isViewOnly ? (
+                                                                    <div className="w-full bg-surface-muted border border-surface-border rounded-xl px-4 py-2 text-sm text-fg break-words">{ex.name}</div>
+                                                                ) : (
+                                                                    <ExerciseAutocomplete
+                                                                        value={ex.name}
+                                                                        onChange={(val, muscleGroup) => {
+                                                                            const nameChanged = val !== ex.name;
+                                                                            updateExercise(activeWorkoutIdx, eIdx, nameChanged ? {
+                                                                                name: val,
+                                                                                muscleGroup: muscleGroup ?? null,
+                                                                                reps: isCardio(val, muscleGroup) ? "20" : ex.reps,
+                                                                            } : {
+                                                                                name: val,
+                                                                                muscleGroup: muscleGroup ?? ex.muscleGroup ?? null,
+                                                                            });
+                                                                        }}
+                                                                        className="max-w-none"
+                                                                        autoFocus={lastAddedExerciseIdx === eIdx}
+                                                                    />
+                                                                )}
                                                             </div>
-                                                        )}
+                                                            <div className="flex items-end gap-2 shrink-0">
+                                                                <div className="w-14 sm:w-16">
+                                                                    <label className="label-mini block text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1 px-1 text-center">
+                                                                        {isCardio(ex.name ?? "", ex.muscleGroup) ? "Rounds" : "Sets"}
+                                                                    </label>
+                                                                    <input
+                                                                        type="text"
+                                                                        className="w-full bg-surface-muted border border-surface-border rounded-xl px-2 py-2 text-[16px] sm:text-sm text-fg text-center"
+                                                                        value={ex.sets}
+                                                                        onChange={(e) => {
+                                                                            const val = e.target.value;
+                                                                            if (/^\d*$/.test(val)) {
+                                                                                updateExercise(activeWorkoutIdx, eIdx, { sets: parseInt(val) || 0 });
+                                                                            }
+                                                                        }}
+                                                                        readOnly={isViewOnly}
+                                                                    />
+                                                                </div>
+                                                                <div className="w-14 sm:w-16">
+                                                                    <label className="label-mini block text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1 px-1 text-center">
+                                                                        {isCardio(ex.name ?? "", ex.muscleGroup) ? "Mins" : "Reps"}
+                                                                    </label>
+                                                                    <input
+                                                                        type="text"
+                                                                        placeholder={isCardio(ex.name ?? "", ex.muscleGroup) ? "20" : "8-12"}
+                                                                        className="w-full bg-surface-muted border border-surface-border rounded-xl px-2 py-2 text-[16px] sm:text-sm text-fg text-center"
+                                                                        value={ex.reps}
+                                                                        onChange={(e) => updateExercise(activeWorkoutIdx, eIdx, { reps: e.target.value })}
+                                                                        readOnly={isViewOnly}
+                                                                    />
+                                                                </div>
+                                                                <div className="w-16 sm:w-[4.5rem]">
+                                                                    <label className="label-mini block text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1 px-1 text-center">
+                                                                        Weight
+                                                                    </label>
+                                                                    <input
+                                                                        type="number"
+                                                                        placeholder="0"
+                                                                        className="w-full bg-surface-muted border border-surface-border rounded-xl px-2 py-2 text-[16px] sm:text-sm text-fg text-center"
+                                                                        value={ex.weightTargetKg || ""}
+                                                                        onChange={(e) => updateExercise(activeWorkoutIdx, eIdx, { weightTargetKg: parseFloat(e.target.value) || undefined })}
+                                                                        readOnly={isViewOnly}
+                                                                    />
+                                                                </div>
+                                                                {!isViewOnly && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            const next = cloneWeeks(weeks);
+                                                                            next.forEach((w: LocalWeek) => {
+                                                                                if (w.workouts[activeWorkoutIdx]) {
+                                                                                    w.workouts[activeWorkoutIdx].exercises = w.workouts[activeWorkoutIdx].exercises.filter((_, i: number) => i !== eIdx);
+                                                                                    w.workouts[activeWorkoutIdx].exercises.forEach((ex, idx: number) => ex.order = idx);
+                                                                                }
+                                                                            });
+                                                                            setWeeks(next);
+                                                                        }}
+                                                                        className="flex items-center justify-center shrink-0 w-10 h-10 rounded-xl bg-danger-muted/5 text-danger/40 hover:text-danger hover:bg-danger-muted/20 transition-all"
+                                                                        title="Remove exercise"
+                                                                    >
+                                                                        <Trash2 className="w-3.5 h-3.5" />
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             ))}

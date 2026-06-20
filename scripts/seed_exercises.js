@@ -11,11 +11,18 @@ async function main() {
         try {
             await prisma.globalExercise.upsert({
                 where: { name: ex.name },
-                update: { muscleGroup: ex.muscleGroup },
+                update: {
+                    muscleGroup: ex.muscleGroup,
+                    ...(ex.videoUrl ? { videoUrl: ex.videoUrl } : {}),
+                    ...(ex.instructions ? { instructions: ex.instructions } : {}),
+                    ...(ex.thumbnailUrl ? { thumbnailUrl: ex.thumbnailUrl } : {}),
+                },
                 create: {
                     name: ex.name,
                     muscleGroup: ex.muscleGroup,
-                    instructions: `Targets: ${ex.muscleGroup}`,
+                    videoUrl: ex.videoUrl ?? null,
+                    instructions: ex.instructions ?? `Targets: ${ex.muscleGroup}`,
+                    thumbnailUrl: ex.thumbnailUrl ?? null,
                 },
             });
             seededCount++;

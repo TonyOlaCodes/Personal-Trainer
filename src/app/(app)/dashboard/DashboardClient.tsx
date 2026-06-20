@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Walkthrough } from "@/components/shared/Walkthrough";
 import { WorkoutSessionModal } from "@/components/shared/WorkoutSessionModal";
+import { RecentSessionsListModal, PREVIEW_LIMIT } from "@/components/shared/RecentSessionsListModal";
 import { ReturnLink } from "@/components/shared/ReturnLink";
 import { Dumbbell, ChevronRight, Clock, Flame, Activity, Calendar, Ticket, Check, Edit3, Trash2, Scale, Utensils, Footprints, Moon, AlertCircle } from "lucide-react";
 import { formatDate, formatRelative, cn, toDateKey, parseLogDate } from "@/lib/utils";
@@ -115,6 +116,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
     const [savingMetrics, setSavingMetrics] = useState(false);
     const [localActiveSession, setLocalActiveSession] = useState(activeSession);
     const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+    const [showAllSessions, setShowAllSessions] = useState(false);
 
     useEffect(() => {
         setLocalActiveSession(activeSession);
@@ -444,6 +446,17 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                     setSelectedSessionId(null);
                     router.refresh();
                 }}
+            />
+            <RecentSessionsListModal
+                open={showAllSessions}
+                onClose={() => setShowAllSessions(false)}
+                title="All Sessions"
+                sessions={recentLogs.map((log) => ({
+                    id: log.id,
+                    workoutName: log.workoutName,
+                    date: log.loggedAt,
+                }))}
+                onSelect={setSelectedSessionId}
             />
             {showTour && <Walkthrough steps={tourSteps} onComplete={() => setShowTour(false)} />}
 
@@ -899,15 +912,21 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
             <div id="recent-sessions">
                 <div className="flex items-center justify-between mb-3">
                     <h3 className="heading-3">Recent Sessions</h3>
-                    <Link href="/progress" className="btn-ghost btn-sm text-brand-400">
-                        View all
-                        <ChevronRight className="w-3.5 h-3.5" />
-                    </Link>
+                    {recentLogs.length > 0 && (
+                        <button
+                            type="button"
+                            onClick={() => setShowAllSessions(true)}
+                            className="btn-ghost btn-sm text-brand-400"
+                        >
+                            View all
+                            <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                    )}
                 </div>
 
                 {recentLogs.length > 0 ? (
                     <div className="card divide-y divide-surface-border">
-                        {recentLogs.slice(0, 10).map((log) => (
+                        {recentLogs.slice(0, PREVIEW_LIMIT).map((log) => (
                             <div
                                 onClick={() => setSelectedSessionId(log.id)}
                                 key={log.id}

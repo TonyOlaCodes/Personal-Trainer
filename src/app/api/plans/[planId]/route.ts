@@ -6,7 +6,9 @@ import {
     updatePlanPreservingHistory,
     type PlanPatchPayload,
 } from "@/lib/planUpdate";
+import { activeWorkoutWhere } from "@/lib/planWorkouts";
 import { countWorkoutLogsForPlan, DataSafetyError } from "@/lib/dataSafety";
+import { isInactiveAccount } from "@/lib/userDeactivation";
 
 interface PlanExercisePayload {
     name: string;
@@ -53,6 +55,7 @@ export async function GET(
                 orderBy: { weekNumber: "asc" },
                 include: {
                     workouts: {
+                        where: activeWorkoutWhere(),
                         orderBy: { dayNumber: "asc" },
                         include: { exercises: { where: { isCustom: false }, orderBy: { order: "asc" } } },
                     },
@@ -130,6 +133,24 @@ export async function PATCH(
         });
         if (!isCoachOfAssignee && !isAssignee) {
             return NextResponse.json({ error: "Unauthorized to edit" }, { status: 403 });
+        }
+        if (isCoachOfAssignee && !isAssignee) {
+            const activeAssignment = await prisma.userPlan.findFirst({
+                where: {
+                    planId,
+                    user: {
+                        coachId: user.id,
+                        isDeleted: false,
+                        isDeactivated: false,
+                    },
+                },
+            });
+            if (!activeAssignment) {
+                return NextResponse.json(
+                    { error: "This plan is linked to an inactive account and cannot be edited" },
+                    { status: 403 }
+                );
+            }
         }
     }
 
