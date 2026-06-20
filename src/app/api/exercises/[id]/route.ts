@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { countLogSetsForExercise, DataSafetyError, softHideExercise } from "@/lib/dataSafety";
 
 export async function DELETE(
     req: Request,
@@ -38,6 +39,16 @@ export async function DELETE(
 
     if (!isAllowed) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const logSetCount = await countLogSetsForExercise(exerciseId);
+    if (logSetCount > 0) {
+        await softHideExercise(exerciseId);
+        return NextResponse.json({
+            success: true,
+            softDeleted: true,
+            message: DataSafetyError.exerciseHasHistory,
+        });
     }
 
     await prisma.exercise.delete({ where: { id: exerciseId } });

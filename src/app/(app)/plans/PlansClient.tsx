@@ -75,11 +75,16 @@ export function PlansClient({ plans }: Props) {
         const res = await fetch(`/api/plans/${planId}`, { method: "DELETE" });
         if (res.ok) {
             window.location.reload();
-        } else {
-            const data = await res.json().catch(() => ({}));
-            alert(data.error ?? "Failed to remove plan");
-            setDeletingId(null);
+            return;
         }
+
+        const data = await res.json().catch(() => ({}));
+        const message =
+            res.status === 409 && isOwned
+                ? `${data.error ?? "This plan has training history and cannot be deleted."}\n\nTip: Deactivate the plan or use "Remove from my plans" if you imported it — your logged sessions stay safe.`
+                : (data.error ?? "Failed to remove plan");
+        alert(message);
+        setDeletingId(null);
     };
 
     const importPlan = async () => {

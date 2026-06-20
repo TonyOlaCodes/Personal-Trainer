@@ -4,11 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build",
+    "build": "prisma generate && npm run audit:safety && next build",
     "start": "next start",
     "lint": "eslint",
     "postinstall": "prisma generate",
-    "seed:exercises": "node scripts/seed_exercises.js"
+    "seed:exercises": "node scripts/seed_exercises.js",
+    "audit:safety": "node scripts/audit-data-safety.js"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.0.5",

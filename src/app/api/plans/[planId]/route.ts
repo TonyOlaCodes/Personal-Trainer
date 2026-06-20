@@ -6,6 +6,7 @@ import {
     updatePlanPreservingHistory,
     type PlanPatchPayload,
 } from "@/lib/planUpdate";
+import { countWorkoutLogsForPlan, DataSafetyError } from "@/lib/dataSafety";
 
 interface PlanExercisePayload {
     name: string;
@@ -174,6 +175,10 @@ export async function DELETE(
     const isAdmin = user.role === "SUPER_ADMIN";
 
     if (isOwner || isAdmin) {
+        const logCount = await countWorkoutLogsForPlan(planId);
+        if (logCount > 0) {
+            return NextResponse.json({ error: DataSafetyError.planHasHistory }, { status: 409 });
+        }
         await prisma.plan.delete({ where: { id: planId } });
         return NextResponse.json({ success: true, removed: "deleted" });
     }

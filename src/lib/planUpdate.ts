@@ -1,5 +1,10 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import {
+    countLogSetsForExercise,
+    countWorkoutLogsForWorkout,
+    softHideExercise,
+} from "@/lib/dataSafety";
 
 export interface PlanExercisePayload {
     name: string;
@@ -83,9 +88,9 @@ async function syncExercises(
 
     for (let i = payloadExercises.length; i < existing.length; i++) {
         const ex = existing[i];
-        const logSetCount = ex._count?.logSets ?? (await tx.logSet.count({ where: { exerciseId: ex.id } }));
+        const logSetCount = ex._count?.logSets ?? (await countLogSetsForExercise(ex.id, tx));
         if (logSetCount > 0) {
-            await tx.exercise.update({ where: { id: ex.id }, data: { isCustom: true } });
+            await softHideExercise(ex.id, tx);
         } else {
             await tx.exercise.delete({ where: { id: ex.id } });
         }
@@ -156,7 +161,10 @@ async function syncWeekWorkouts(tx: Tx, weekId: string, workouts: PlanWorkoutPay
 
     for (const workout of existing) {
         if (matchedIds.has(workout.id)) continue;
-        if (workout.logs.length > 0) continue;
+        const logCount = workout.logs.length > 0
+            ? workout.logs.length
+            : await countWorkoutLogsForWorkout(workout.id, tx);
+        if (logCount > 0) continue;
         await tx.workout.delete({ where: { id: workout.id } });
     }
 }
