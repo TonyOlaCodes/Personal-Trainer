@@ -888,10 +888,10 @@ export function PlanCreateClient() {
                                                         </span>
                                                     </div>
                                                     <div className="flex-1 grid grid-cols-12 gap-4">
-                                                        <div className="col-span-12 sm:col-span-4 lg:col-span-4">
+                                                        <div className="col-span-12 sm:col-span-5 lg:col-span-6 min-w-0">
                                                             <label className="label-mini block text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1 px-1">Exercise Name</label>
                                                             {isViewOnly ? (
-                                                                <div className="w-full bg-surface-muted border border-surface-border rounded-xl px-4 py-2 text-sm text-fg">{ex.name}</div>
+                                                                <div className="w-full bg-surface-muted border border-surface-border rounded-xl px-4 py-2 text-sm text-fg break-words">{ex.name}</div>
                                                             ) : (
                                                                 <ExerciseAutocomplete
                                                                     value={ex.name}
@@ -906,7 +906,7 @@ export function PlanCreateClient() {
                                                                             muscleGroup: muscleGroup ?? ex.muscleGroup ?? null,
                                                                         });
                                                                     }}
-                                                                    className="w-full bg-surface-muted border border-surface-border rounded-xl px-4 py-2 text-[16px] sm:text-sm text-fg"
+                                                                    className="max-w-none"
                                                                     autoFocus={lastAddedExerciseIdx === eIdx}
                                                                 />
                                                             )}
@@ -941,7 +941,7 @@ export function PlanCreateClient() {
                                                                 readOnly={isViewOnly}
                                                             />
                                                         </div>
-                                                        <div className="col-span-4 sm:col-span-3">
+                                                        <div className="col-span-4 sm:col-span-2">
                                                             <label className="label-mini block text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1 px-1">
                                                                 Weight (kg)
                                                             </label>

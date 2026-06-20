@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { muscleGroupBadgeClass } from "@/lib/muscleGroups";
+import { EXERCISE_SEARCH_LIMIT } from "@/lib/exerciseSearch";
 
 type ExerciseOption = { name: string; muscleGroup?: string | null };
 
@@ -71,8 +72,9 @@ function invalidateExerciseCache() {
 
 async function fetchExerciseSuggestions(query: string): Promise<ExerciseOption[]> {
     const q = query.trim();
-    const url = q ? `/api/exercises?q=${encodeURIComponent(q)}` : "/api/exercises";
-    const res = await fetch(url);
+    const params = new URLSearchParams({ limit: String(EXERCISE_SEARCH_LIMIT) });
+    if (q) params.set("q", q);
+    const res = await fetch(`/api/exercises?${params}`);
     if (!res.ok) throw new Error("Failed to fetch");
     return res.json();
 }
@@ -193,12 +195,15 @@ export function ExerciseAutocomplete({ value, onChange, placeholder, className, 
     };
 
     return (
-        <div ref={containerRef} className="relative">
+        <div ref={containerRef} className="relative min-w-0 w-full max-w-2xl">
             <input
                 ref={inputRef}
                 type="text"
                 placeholder={placeholder ?? "e.g. Lat Pullover"}
-                className={className}
+                className={cn(
+                    "w-full min-w-[10rem] bg-surface-muted border border-surface-border rounded-xl px-4 py-2 text-[16px] sm:text-sm text-fg",
+                    className
+                )}
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
                 onFocus={() => {
@@ -240,7 +245,7 @@ export function ExerciseAutocomplete({ value, onChange, placeholder, className, 
                                 )}>
                                     {i + 1}
                                 </span>
-                                <span className="truncate">{ex.name}</span>
+                                <span className="leading-snug break-words">{ex.name}</span>
                             </span>
                             {ex.muscleGroup && (
                                 <span className={cn(
@@ -252,8 +257,8 @@ export function ExerciseAutocomplete({ value, onChange, placeholder, className, 
                             )}
                         </button>
                     ))}
-                    <div className="px-4 py-1.5 text-[10px] text-fg-subtle border-t border-surface-border/30 bg-surface-muted/30 flex justify-between font-bold uppercase tracking-wider">
-                        <span>↑↓ to navigate • Ent to pick</span>
+                    <div className="px-4 py-1.5 text-[10px] text-fg-subtle border-t border-surface-border/30 bg-surface-muted/30 font-bold uppercase tracking-wider">
+                        <span>Top {EXERCISE_SEARCH_LIMIT} matches • ↑↓ navigate • Enter to pick</span>
                     </div>
                 </div>
             )}
