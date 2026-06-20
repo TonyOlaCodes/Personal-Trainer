@@ -212,10 +212,27 @@ export async function DELETE(
     if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
     const plan = await prisma.plan.findUnique({ where: { id: planId } });
-    if (!plan || plan.creatorId !== user.id) {
+    if (!plan) return NextResponse.json({ error: "Plan not found" }, { status: 404 });
+
+    const isOwner = plan.creatorId === user.id;
+    const isAdmin = user.role === "SUPER_ADMIN";
+
+    if (isOwner || isAdmin) {
+        await prisma.plan.delete({ where: { id: planId } });
+        return NextResponse.json({ success: true, removed: "deleted" });
+    }
+
+    const assignment = await prisma.userPlan.findUnique({
+        where: { userId_planId: { userId: user.id, planId } },
+    });
+
+    if (!assignment) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
 
-    await prisma.plan.delete({ where: { id: planId } });
-    return NextResponse.json({ success: true });
+    await prisma.userPlan.delete({
+        where: { userId_planId: { userId: user.id, planId } },
+    });
+
+    return NextResponse.json({ success: true, removed: "unlinked" });
 }

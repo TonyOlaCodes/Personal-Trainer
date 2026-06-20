@@ -1,28 +1,28 @@
+import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
+import { storeUploadedFile } from "@/lib/uploadStorage";
+
+export const runtime = "nodejs";
 
 export async function POST(req: Request) {
     try {
+        const { userId } = await auth();
+        if (!userId) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
         const formData = await req.formData();
-        const file = formData.get("file") as File;
-        if (!file) {
+        const file = formData.get("file");
+
+        if (!(file instanceof File)) {
             return NextResponse.json({ error: "No file received." }, { status: 400 });
         }
 
-        const buffer = Buffer.from(await file.arrayBuffer());
-        const ext = file.name.split('.').pop() || "bin";
-        const filename = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${ext}`;
-
-        const dir = path.join(process.cwd(), "public", "uploads");
-        await mkdir(dir, { recursive: true });
-
-        const filePath = path.join(dir, filename);
-        await writeFile(filePath, buffer);
-
-        return NextResponse.json({ url: `/uploads/${filename}`, type: file.type });
-    } catch (e: any) {
-        console.error("Upload error:", e);
-        return NextResponse.json({ error: "Upload failed: " + e.message }, { status: 500 });
+        const stored = await storeUploadedFile(file);
+        return NextResponse.json({ url: stored.url, type: stored.type });
+    } catch (error) {
+        console.error("Upload error:", error);
+        const message = error instanceof Error ? error.message : "Upload failed";
+        return NextResponse.json({ error: message }, { status: 500 });
     }
 }

@@ -1,15 +1,23 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import {
     Scale, Send, Check, Camera, TrendingUp, TrendingDown,
     Plus, Minus, Calendar, MessageSquare, CheckCircle2,
-    Zap, Moon, Brain, Activity, ChevronDown, AlertCircle,
+    Zap, Moon, UtensilsCrossed, ChevronDown, AlertCircle,
     Dumbbell, Flame, Edit2, Clock, Trash2, Loader2
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { formatDate, getWeekNumber, cn } from "@/lib/utils";
+import { uploadMediaFile } from "@/lib/compressImage";
+import {
+    getPerformanceMetricsFeedback,
+    METRIC_TONE_CLASSES,
+    SLEEP_VALUE_LABELS,
+    DIET_VALUE_LABELS,
+    ENERGY_VALUE_LABELS,
+} from "@/lib/checkInMetricsFeedback";
 import { PremiumLockScreen } from "@/components/shared/PremiumLockScreen";
 import { MediaLightbox } from "@/components/shared/MediaLightbox";
 
@@ -19,8 +27,9 @@ interface CheckIn {
     bodyweightKg?: number | null; feedback: string; notes?: string | null;
     status: "PENDING" | "REVIEWED"; coachResponse?: string | null;
     respondedAt?: string | null;
-    sleepRating?: number | null; stressRating?: number | null;
-    energyRating?: number | null; intensityRating?: number | null;
+    sleepRating?: number | null; dietRating?: number | null;
+    energyRating?: number | null;
+    stressRating?: number | null; intensityRating?: number | null;
     frontImageUrl?: string | null;
     sideImageUrl?: string | null;
     videoUrl?: string | null;
@@ -49,10 +58,38 @@ interface Props {
 }
 
 /* ─────────────────── Rating bar component ───────────────────── */
-const ENERGY_LABELS  = ["Low",    "Fair",   "Good",  "High",  "🔥 Peak"];
-const SLEEP_LABELS   = ["Poor",   "Fair",   "Okay",  "Good",  "Great"];
-const STRESS_LABELS  = ["None",   "Little", "Some",  "High",  "Max"];
-const TRAIN_LABELS   = ["Skipped","Light",  "Solid", "Hard",  "Beast"];
+const SLEEP_LABELS  = [...SLEEP_VALUE_LABELS];
+const DIET_LABELS   = [...DIET_VALUE_LABELS];
+const ENERGY_LABELS = [...ENERGY_VALUE_LABELS];
+
+function PerformanceMetricsFeedbackPanel({ sleep, diet, energy, sleepHidden }: {
+    sleep: number; diet: number; energy: number; sleepHidden?: boolean;
+}) {
+    const feedback = getPerformanceMetricsFeedback({ sleep, diet, energy, sleepHidden });
+    if (feedback.insights.length === 0) return null;
+
+    return (
+        <div className="space-y-2.5 pt-1">
+            {feedback.insights.map((item) => (
+                <div
+                    key={item.metric}
+                    className={cn("px-3.5 py-2.5 rounded-xl border text-xs font-medium leading-relaxed transition-all animate-slide-up", METRIC_TONE_CLASSES[item.tone])}
+                >
+                    <p className="text-[9px] font-black uppercase tracking-widest opacity-70 mb-0.5">
+                        {item.label} · {item.valueLabel}
+                    </p>
+                    {item.message}
+                </div>
+            ))}
+            {feedback.overall && (
+                <div className={cn("px-4 py-3 rounded-2xl border text-[13px] font-bold leading-relaxed transition-all animate-slide-up", METRIC_TONE_CLASSES[feedback.overall.tone])}>
+                    <p className="text-[9px] font-black uppercase tracking-[0.2em] opacity-70 mb-1">Overall</p>
+                    {feedback.overall.message}
+                </div>
+            )}
+        </div>
+    );
+}
 
 function RatingBar({ icon: Icon, label, sublabels, value, onChange, prevValue, inverse = false }: {
     icon: LucideIcon; label: string; sublabels: string[];
@@ -114,48 +151,15 @@ function RatingBar({ icon: Icon, label, sublabels, value, onChange, prevValue, i
     );
 }
 
-/* ─────────────────── Smart feedback generator ───────────────── */
-function getSmartFeedback(energy: number, sleep: number, stress: number, training: number): { msg: string; color: string } | null {
-    if (!energy && !sleep && !stress && !training) return null;
-
-    // Honest Review Logic based on performance profiles
-    const drive = energy + training; // Max 10
-    const recovery = sleep - stress; // Range -4 to +4
-    
-    // 1. ELITE PERFORMANCE
-    if (drive >= 9 && recovery >= 2) return { msg: "🔥 Elite synergy. You're peaking—utilize this drive to push for new PBs while the recovery is this high.", color: "text-success bg-success/10 border-success/20 shadow-glow-success-sm" };
-    
-    // 2. OVERREACHING (High output, low recovery)
-    if (drive >= 8 && recovery <= -1) return { msg: "⚡ Redlining. You're pushing hard but recovery is lagging. Watch for burnout—today's drive is tomorrow's debt.", color: "text-warning bg-warning/10 border-warning/20 shadow-glow-warning-sm" };
-    
-    // 3. UNDER-RECOVERED (Low energy/sleep, High stress)
-    if (sleep <= 2 && stress >= 4) return { msg: "🚑 Critical fatigue. Stress is high and sleep is missing. High injury risk—prioritize deloading or rest days immediately.", color: "text-danger bg-danger/10 border-danger/20 shadow-glow-danger-sm" };
-    
-    // 4. LOW DRIVE (Low energy/training)
-    if (drive <= 4 && recovery >= 2) return { msg: "🔋 Under-stimulated. You're well-rested but the engine isn't firing. Check your nutrition or motivation—you have the fuel to push harder.", color: "text-brand-400 bg-brand-950/40 border-brand-500/20 shadow-glow-brand-sm" };
-    
-    // 5. STRESS DOMINANT
-    if (stress >= 4 && drive >= 6) return { msg: "😤 Stress-fueled. You're getting the work done but at a high cost. Recovery is vital to prevent mid-week crashes.", color: "text-warning bg-warning/10 border-warning/20 shadow-glow-warning-sm" };
-    
-    // 6. SLEEP DEPREVIED BUT PUSHING
-    if (sleep <= 2 && training >= 4) return { msg: "☕ Adrenaline-driven. Training is high despite poor sleep. This is unsustainable—get to bed early tonight or performance will crater.", color: "text-warning bg-warning/10 border-warning/20 shadow-glow-warning-sm" };
-
-    // 7. BALANCED / SOLID
-    if (drive >= 6 && recovery >= 0) return { msg: "💪 Perfectly balanced. You're working efficiently and recovering well. Stay consistent—this is where the real progress happens.", color: "text-success bg-success/10 border-success/20 shadow-glow-success-sm" };
-
-    // 8. FLOW STATE
-    if (totalRatingScore(energy, sleep, stress, training) >= 16) return { msg: "✨ Momentum is building. All metrics are trending positively—stay disciplined to keep this rhythm.", color: "text-success bg-success/10 border-success/20 shadow-glow-success-sm" };
-
-    // 9. SURVIVAL MODE
-    if (energy <= 2 && training <= 2) return { msg: "🛑 Survival mode. Energy and training are both low. Focus on the bare minimum—just show up and move.", color: "text-fg-muted bg-surface-muted border-surface-border" };
-
-    return { msg: "📈 Keep pushing. Every rep recorded is data toward your goals. Focus on one metric to improve for next week.", color: "text-fg-muted bg-surface-muted border-surface-border" };
+function ratingChips(c: CheckIn, isSleepHidden?: boolean) {
+    return [
+        { l: "Sleep", v: isSleepHidden ? null : c.sleepRating },
+        { l: "Diet", v: c.dietRating },
+        { l: "Energy", v: c.energyRating },
+    ].filter((r) => r.v);
 }
 
-function totalRatingScore(e: number, s: number, st: number, t: number) {
-    return e + s + (6 - st) + t;
-}
-
+/* ─────────────────── Weight goal feedback ───────────────── */
 function getWeightGoalFeedback(current: number | null, previous: number | null, target?: number | null) {
     if (!current) {
         return {
@@ -285,12 +289,7 @@ function PrevCheckInCard({ prev, setViewerMedia, isWeightHidden, isSleepHidden }
                 <div className="px-4 pb-4 space-y-3 border-t border-surface-border/50 pt-3 animate-fade-in">
                     {/* Mini ratings */}
                     <div className="flex flex-wrap gap-2">
-                        {[
-                            { l: "Energy", v: prev.energyRating },
-                            { l: "Sleep", v: isSleepHidden ? null : prev.sleepRating },
-                            { l: "Stress", v: prev.stressRating },
-                            { l: "Training", v: prev.intensityRating },
-                        ].filter(r => r.v).map(r => (
+                        {ratingChips(prev, isSleepHidden).map(r => (
                             <div key={r.l} className="flex items-center gap-1.5 px-3 py-1 bg-surface-card rounded-xl border border-surface-border font-black text-fg">
                                 <span className="text-[10px] font-bold text-fg-subtle">{r.l}</span>
                                 <span className="text-[10px]">{r.v}/5</span>
@@ -453,12 +452,7 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highl
                 <div className="px-4 pb-5 border-t border-surface-border/40 pt-4 space-y-4 animate-fade-in text-sm">
                     {/* Ratings */}
                     <div className="flex flex-wrap gap-2">
-                        {[
-                            { l: "Energy", v: c.energyRating },
-                            { l: "Sleep", v: isSleepHidden ? null : c.sleepRating },
-                            { l: "Stress", v: c.stressRating },
-                            { l: "Training", v: c.intensityRating },
-                        ].filter(r => r.v).map(r => (
+                        {ratingChips(c, isSleepHidden).map(r => (
                             <div key={r.l} className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-muted rounded-xl border border-surface-border font-black text-fg">
                                 <span className="text-[10px] font-bold text-fg-subtle">{r.l}</span>
                                 <span className="text-[10px]">{r.v}/5</span>
@@ -531,12 +525,12 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highl
                                 const file = e.target.files?.[0];
                                 if (!file) return;
                                 setUploadingCoachV(true);
-                                const fd = new FormData();
-                                fd.append("file", file);
                                 try {
-                                    const res = await fetch("/api/upload", { method: "POST", body: fd });
-                                    const data = await res.json();
-                                    if (res.ok) setCoachVideo(data.url);
+                                    const url = await uploadMediaFile(file);
+                                    setCoachVideo(url);
+                                } catch (error) {
+                                    console.error("Coach video upload failed:", error);
+                                    alert(error instanceof Error ? error.message : "Failed to upload video");
                                 } finally {
                                     setUploadingCoachV(false);
                                 }
@@ -644,10 +638,9 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
     const [weeklyAverageEntries, setWeeklyAverageEntries] = useState(bodyweightWeeklyAverage.entries);
     const [previousWeeklyAverageWeight, setPreviousWeeklyAverageWeight] = useState(bodyweightWeeklyAverage.previousAverageWeightKg);
     const [loadingWeeklyAverage, setLoadingWeeklyAverage] = useState(false);
-    const [energy,   setEnergy]   = useState(0);
-    const [sleep,    setSleep]    = useState(0);
-    const [stress,   setStress]   = useState(0);
-    const [training, setTraining] = useState(0);
+    const [energy, setEnergy] = useState(0);
+    const [sleep, setSleep] = useState(0);
+    const [diet, setDiet] = useState(0);
     const [notes,    setNotes]    = useState("");
     const [frontImg, setFrontImg] = useState("");
     const [sideImg,  setSideImg]  = useState("");
@@ -657,11 +650,27 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
     const [viewerMedia, setViewerMedia] = useState<string | null>(null);
     const [isLogging, setIsLogging] = useState(false);
     const [statusFilter, setStatusFilter] = useState<"ALL" | "PENDING" | "REVIEWED">("ALL");
+    const [coachSortBy, setCoachSortBy] = useState<"WEEK" | "CLIENT">("WEEK");
     const filteredCheckIns = checkIns.filter(c => {
         if (statusFilter === "PENDING") return c.status === "PENDING";
         if (statusFilter === "REVIEWED") return c.status === "REVIEWED";
         return true;
     });
+    const displayCheckIns = useMemo(() => {
+        const items = [...filteredCheckIns];
+        items.sort((a, b) => {
+            if (isCoach && coachSortBy === "CLIENT") {
+                const byClient = (a.user?.name ?? a.user?.email ?? "").localeCompare(
+                    b.user?.name ?? b.user?.email ?? "",
+                    undefined,
+                    { sensitivity: "base" }
+                );
+                if (byClient !== 0) return byClient;
+            }
+            return b.weekNumber - a.weekNumber;
+        });
+        return items;
+    }, [filteredCheckIns, isCoach, coachSortBy]);
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
 
     useEffect(() => {
@@ -676,8 +685,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
             setCheckInId(existing.id);
             setEnergy(existing.energyRating || 0);
             setSleep(existing.sleepRating || 0);
-            setStress(existing.stressRating || 0);
-            setTraining(existing.intensityRating || 0);
+            setDiet(existing.dietRating || 0);
             setNotes(existing.feedback || "");
             setFrontImg(existing.frontImageUrl || "");
             setSideImg(existing.sideImageUrl || "");
@@ -767,12 +775,16 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
 
     const weightGoalFeedback = getWeightGoalFeedback(currentBw, prevWeight ?? null, targetWeightKg);
     const WeightTrendIcon = weightGoalFeedback.icon;
-    const smartMsg     = getSmartFeedback(
-        (editMode ? energy : currentWeekEntry?.energyRating) || 0,
-        isSleepHidden ? 3 : ((editMode ? sleep : currentWeekEntry?.sleepRating) || 0),
-        (editMode ? stress : currentWeekEntry?.stressRating) || 0,
-        (editMode ? training : currentWeekEntry?.intensityRating) || 0
-    );
+    const formActive = isLogging || editMode;
+    const metricsSleep = formActive ? sleep : (currentWeekEntry?.sleepRating ?? 0);
+    const metricsDiet = formActive ? diet : (currentWeekEntry?.dietRating ?? 0);
+    const metricsEnergy = formActive ? energy : (currentWeekEntry?.energyRating ?? 0);
+    const metricsFeedback = getPerformanceMetricsFeedback({
+        sleep: isSleepHidden ? 0 : metricsSleep,
+        diet: metricsDiet,
+        energy: metricsEnergy,
+        sleepHidden: isSleepHidden,
+    });
     const consistencyPct = workoutsTarget > 0 ? Math.round((workoutsThisWeek / workoutsTarget) * 100) : 100;
 
     const startLogging = () => {
@@ -780,8 +792,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
         setSelectedDate(new Date().toISOString().split("T")[0]);
         setEnergy(0);
         setSleep(0);
-        setStress(0);
-        setTraining(0);
+        setDiet(0);
         setNotes("");
         setFrontImg("");
         setSideImg("");
@@ -800,8 +811,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
         setSelectedDate(getDateFromWeek(c.weekNumber, year));
         setEnergy(c.energyRating || 0);
         setSleep(c.sleepRating || 0);
-        setStress(c.stressRating || 0);
-        setTraining(c.intensityRating || 0);
+        setDiet(c.dietRating || 0);
         setNotes(c.feedback || "");
         setFrontImg(c.frontImageUrl || "");
         setSideImg(c.sideImageUrl || "");
@@ -812,11 +822,14 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
     const uploadPhoto = async (file: File, setUrl: (u: string) => void, setLoading: (v: boolean) => void) => {
         setLoading(true);
         try {
-            const fd = new FormData();
-            fd.append("file", file);
-            const res = await fetch("/api/upload", { method: "POST", body: fd });
-            if (res.ok) { const d = await res.json(); setUrl(d.url); }
-        } finally { setLoading(false); }
+            const url = await uploadMediaFile(file);
+            setUrl(url);
+        } catch (error) {
+            console.error("Progress photo upload failed:", error);
+            alert(error instanceof Error ? error.message : "Failed to upload photo");
+        } finally {
+            setLoading(false);
+        }
     };
 
     const submit = async () => {
@@ -830,10 +843,9 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                 bodyweightKg: currentBw ?? undefined,
                 feedback: notes || "No additional notes.",
                 weekNumber: selectedWeek,
-                energyRating:    energy   || undefined,
-                sleepRating:     sleep    || undefined,
-                stressRating:    stress   || undefined,
-                intensityRating: training || undefined,
+                energyRating: energy || undefined,
+                sleepRating: sleep || undefined,
+                dietRating: diet || undefined,
                 frontImageUrl:   frontImg || undefined,
                 sideImageUrl:    sideImg  || undefined,
             }),
@@ -924,16 +936,37 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                             </button>
                         );
                     })}
+
+                    <div className="hidden sm:block w-px h-6 bg-surface-border mx-1" />
+
+                    <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle w-full sm:w-auto">Sort by</span>
+                    {(["WEEK", "CLIENT"] as const).map((sort) => {
+                        const labels = { WEEK: "Week", CLIENT: "Client" };
+                        return (
+                            <button
+                                key={sort}
+                                onClick={() => setCoachSortBy(sort)}
+                                className={cn(
+                                    "px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all select-none",
+                                    coachSortBy === sort
+                                        ? "bg-surface-elevated border-surface-border text-fg shadow-sm"
+                                        : "bg-surface-muted/30 border-surface-border text-fg-muted hover:text-fg hover:bg-surface-muted/50"
+                                )}
+                            >
+                                {labels[sort]}
+                            </button>
+                        );
+                    })}
                 </div>
 
-                {filteredCheckIns.length === 0 ? (
+                {displayCheckIns.length === 0 ? (
                     <div className="card p-12 text-center border-dashed">
                         <MessageSquare className="w-8 h-8 text-fg-subtle mx-auto mb-3 opacity-30" />
                         <p className="font-bold text-fg text-sm">
                             {checkIns.length === 0 ? "No check-ins yet" : `No ${statusFilter.toLowerCase()} check-ins`}
                         </p>
                     </div>
-                ) : filteredCheckIns.sort((a,b) => b.weekNumber - a.weekNumber).map(c => {
+                ) : displayCheckIns.map(c => {
                     const clientGoals = (c.user as any)?.hiddenGoals;
                     const isWeightHidden = Array.isArray(clientGoals) && clientGoals.includes("weight");
                     const isSleepHidden = Array.isArray(clientGoals) && clientGoals.includes("sleep");
@@ -1077,12 +1110,12 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                                 <p className="text-[10px] font-black uppercase tracking-widest text-success mb-1.5">Coach Response</p>
                                 <p className="text-sm text-fg leading-relaxed font-medium">{currentWeekEntry.coachResponse}</p>
                             </div>
-                        ) : smartMsg && (
-                            <div className={cn("p-4 rounded-2xl border transition-all animate-slide-up text-xs font-bold leading-relaxed", smartMsg.color)}>
-                                <p className="text-[8px] font-black uppercase tracking-[0.2em] mb-1 opacity-70">Automated Intelligence Review</p>
-                                {smartMsg.msg}
+                        ) : metricsFeedback.overall ? (
+                            <div className={cn("p-4 rounded-2xl border transition-all animate-slide-up text-xs font-bold leading-relaxed", METRIC_TONE_CLASSES[metricsFeedback.overall.tone])}>
+                                <p className="text-[8px] font-black uppercase tracking-[0.2em] mb-1 opacity-70">Weekly Performance Review</p>
+                                {metricsFeedback.overall.message}
                             </div>
-                        )}
+                        ) : null}
                     </div>
                 ) : (
                     /* Log CTA */
@@ -1175,7 +1208,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                         <div className="text-center py-8 text-xs text-fg-subtle bg-surface-muted/10 border border-surface-border/40 rounded-2xl border-dashed">
                             {checkIns.length === 0 ? "No check-in history yet" : `No ${statusFilter.toLowerCase()} check-ins`}
                         </div>
-                    ) : filteredCheckIns.sort((a,b) => b.weekNumber - a.weekNumber).map(c => (
+                    ) : displayCheckIns.map(c => (
                         <HistoryItem 
                             key={c.id} 
                             c={c} 
@@ -1326,18 +1359,18 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                     <Flame className="w-4 h-4 text-brand-400" />
                     <span className="text-sm font-black text-fg uppercase tracking-wide">Performance Metrics</span>
                 </div>
-                <RatingBar icon={Zap}      label="Energy"   sublabels={ENERGY_LABELS} value={energy}   onChange={setEnergy}   prevValue={prevCheckIn?.energyRating} />
                 {!isSleepHidden && (
-                    <RatingBar icon={Moon}     label="Sleep"    sublabels={SLEEP_LABELS}  value={sleep}    onChange={setSleep}    prevValue={prevCheckIn?.sleepRating} />
+                    <RatingBar icon={Moon} label="Sleep" sublabels={SLEEP_LABELS} value={sleep} onChange={setSleep} prevValue={prevCheckIn?.sleepRating} />
                 )}
-                <RatingBar icon={Brain}    label="Stress"   sublabels={STRESS_LABELS} value={stress}   onChange={setStress}   prevValue={prevCheckIn?.stressRating} inverse />
-                <RatingBar icon={Activity} label="Training" sublabels={TRAIN_LABELS}  value={training} onChange={setTraining} prevValue={prevCheckIn?.intensityRating} />
+                <RatingBar icon={UtensilsCrossed} label="Diet" sublabels={DIET_LABELS} value={diet} onChange={setDiet} prevValue={prevCheckIn?.dietRating} />
+                <RatingBar icon={Zap} label="Energy" sublabels={ENERGY_LABELS} value={energy} onChange={setEnergy} prevValue={prevCheckIn?.energyRating} />
 
-                {smartMsg && (
-                    <div className={cn("px-4 py-3 rounded-2xl text-[13px] font-bold border transition-all animate-slide-up", smartMsg.color)}>
-                        {smartMsg.msg}
-                    </div>
-                )}
+                <PerformanceMetricsFeedbackPanel
+                    sleep={sleep}
+                    diet={diet}
+                    energy={energy}
+                    sleepHidden={isSleepHidden}
+                />
             </div>
 
             {/* 3. Notes */}

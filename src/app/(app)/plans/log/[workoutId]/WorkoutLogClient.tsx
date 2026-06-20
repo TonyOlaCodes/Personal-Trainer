@@ -6,7 +6,7 @@ import {
     Timer, Flame, Check, HelpCircle,
     Trash2, Plus, InfoIcon, Award, Video, Play, Zap, X, ChevronLeft
 } from "lucide-react";
-import { cn, generateId } from "@/lib/utils";
+import { cn, generateId, formatDate, isSameCalendarDay, parseLogDate, toDateKey, toLoggedAtIso } from "@/lib/utils";
 import { isCardio, ExerciseAutocomplete } from "@/components/shared/ExerciseAutocomplete";
 
 interface Exercise {
@@ -17,6 +17,7 @@ interface Exercise {
     weightTargetKg?: number | null;
     notes?: string | null;
     order?: number;
+    muscleGroup?: string | null;
 }
 
 interface Workout {
@@ -48,11 +49,90 @@ interface ActiveLogSet {
     videoUrl?: string | null;
 }
 
+function buildInitialLogs(exercises: Exercise[]): Record<string, SetLog[]> {
+    const initialLogs: Record<string, SetLog[]> = {};
+    exercises.forEach((ex) => {
+        initialLogs[ex.id] = Array.from({ length: ex.sets }, (_, i) => ({
+            setNumber: i + 1,
+            reps: parseInt(ex.reps, 10) || 10,
+            weightKg: "",
+            rpe: "",
+            isCompleted: false,
+            isWarmup: false,
+        }));
+    });
+    return initialLogs;
+}
+
+interface InitialActiveLog {
+    id: string;
+    loggedAt: string;
+    duration?: number | null;
+    sets: ActiveLogSet[];
+}
+
+function restoreSessionState(
+    active: InitialActiveLog,
+    fallbackExercises: Exercise[],
+    localStorageKey: string
+) {
+    const restored: Record<string, SetLog[]> = {};
+    const reconstructedExercises: Exercise[] = [];
+
+    active.sets.forEach((s) => {
+        const ex = s.exercise;
+        if (ex && !reconstructedExercises.some((e) => e.id === ex.id)) {
+            reconstructedExercises.push({
+                id: ex.id,
+                name: ex.name,
+                sets: ex.sets || 1,
+                reps: ex.reps || "10",
+                weightTargetKg: ex.weightTargetKg,
+                notes: ex.notes,
+                order: ex.order ?? 0,
+                muscleGroup: ex.muscleGroup ?? null,
+            });
+        }
+
+        if (!restored[s.exerciseId]) restored[s.exerciseId] = [];
+        restored[s.exerciseId].push({
+            setNumber: s.setNumber,
+            reps: s.reps ?? 10,
+            weightKg: s.weightKg?.toString() ?? "",
+            rpe: s.rpe?.toString() ?? "",
+            isCompleted: s.isCompleted ?? true,
+            isWarmup: s.isWarmup ?? false,
+            videoUrl: s.videoUrl ?? undefined,
+        });
+    });
+
+    reconstructedExercises.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+    let startTime = Date.now();
+    if (active.duration) {
+        startTime = Date.now() - active.duration * 60000;
+    } else if (active.loggedAt) {
+        startTime = new Date(active.loggedAt).getTime();
+    }
+
+    if (typeof window !== "undefined") {
+        localStorage.setItem(localStorageKey, startTime.toString());
+    }
+
+    return {
+        logs: Object.keys(restored).length > 0 ? restored : buildInitialLogs(fallbackExercises),
+        exercises: reconstructedExercises.length > 0 ? reconstructedExercises : fallbackExercises,
+        startTime,
+        activeLogId: active.id,
+    };
+}
+
 interface Props {
     workout: Workout;
     exerciseMedia?: Record<string, ExercisePreviewMedia>;
-    logDate?: string; // ISO date string for retroactive logging (e.g. "2026-03-25")
+    logDate?: string;
     lastWorkoutLogSets?: Array<{ exerciseName: string; setNumber: number; weightKg: number | null }>;
+    initialActiveLog?: InitialActiveLog | null;
 }
 
 type ExercisePreviewMedia = {
@@ -82,37 +162,53 @@ function isDirectVideo(url: string) {
     return /\.(mp4|webm|ogg)(\?.*)?$/i.test(url);
 }
 
-export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWorkoutLogSets = [] }: Props) {
+export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWorkoutLogSets = [], initialActiveLog = null }: Props) {
     const router = useRouter();
-    const [logs, setLogs] = useState<Record<string, SetLog[]>>({});
-    const [startTime, setStartTime] = useState(Date.now());
-    const [elapsed, setElapsed] = useState(0);
-    const [saving, setSaving] = useState(false);
-    const [loading, setLoading] = useState(true);
-    const [hasStarted, setHasStarted] = useState(false);
+    const targetDateStr = logDate ? toDateKey(parseLogDate(logDate)) : toDateKey(new Date());
+    const localStorageKey = `workout_start_time_${workout.id}_${targetDateStr}`;
 
-    const isSameDay = (d1Str: string | number | Date, d2Str: string | number | Date) => {
-        const date1 = new Date(d1Str);
-        const date2 = new Date(d2Str);
-        return date1.getFullYear() === date2.getFullYear() &&
-               date1.getMonth() === date2.getMonth() &&
-               date1.getDate() === date2.getDate();
+    const getInitialSession = () => {
+        if (initialActiveLog) {
+            return restoreSessionState(initialActiveLog, workout.exercises, localStorageKey);
+        }
+        const now = Date.now();
+        if (typeof window !== "undefined") {
+            localStorage.setItem(localStorageKey, String(now));
+        }
+        return {
+            logs: buildInitialLogs(workout.exercises),
+            exercises: workout.exercises,
+            startTime: now,
+            activeLogId: null as string | null,
+        };
     };
 
-    const targetDateStr = logDate ? new Date(logDate).toISOString().split("T")[0] : new Date().toISOString().split("T")[0];
-    const localStorageKey = `workout_start_time_${workout.id}_${targetDateStr}`;
+    const [logs, setLogs] = useState<Record<string, SetLog[]>>(
+        () => getInitialSession().logs
+    );
+    const [startTime, setStartTime] = useState(
+        () => getInitialSession().startTime
+    );
+    const [elapsed, setElapsed] = useState(0);
+    const [saving, setSaving] = useState(false);
+
+    const isSameDay = isSameCalendarDay;
 
     const [showFinishModal, setShowFinishModal] = useState(false);
     const [manualDurationMinutes, setManualDurationMinutes] = useState("");
     const [workoutNotes, setWorkoutNotes] = useState("");
 
     // Active exercises state (allows adding/substituting)
-    const [activeExercises, setActiveExercises] = useState<Exercise[]>(workout.exercises);
+    const [activeExercises, setActiveExercises] = useState<Exercise[]>(
+        () => getInitialSession().exercises
+    );
     const [isSubstituting, setIsSubstituting] = useState<string | null>(null); // exerciseId
     const [isAddingExercise, setIsAddingExercise] = useState(false);
     const [editStartedAt, setEditStartedAt] = useState<number | null>(null); // Track when editing started
     const [searchQuery, setSearchQuery] = useState("");
-    const [activeLogId, setActiveLogId] = useState<string | null>(null);
+    const [activeLogId, setActiveLogId] = useState<string | null>(
+        () => getInitialSession().activeLogId
+    );
     const [isDiscarding, setIsDiscarding] = useState(false);
     const [previewExercise, setPreviewExercise] = useState<{ name: string; media: ExercisePreviewMedia } | null>(null);
     const [modalTouchStart, setModalTouchStart] = useState<number | null>(null);
@@ -130,95 +226,73 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
         return "";
     };
 
-    // Initialize logs from workout data or fetch existing IN_PROGRESS log
+    // Fallback sync for direct links without server-prepared session
     useEffect(() => {
-        const load = async () => {
-            setLoading(true);
+        if (initialActiveLog || activeLogId) return;
+
+        let cancelled = false;
+
+        const syncSession = async () => {
             try {
-                // Read from localStorage to keep timer on track across reloads/backgrounding
-                const savedStart = localStorage.getItem(localStorageKey);
-                let initialStartTime = savedStart ? parseInt(savedStart) : Date.now();
-                if (isNaN(initialStartTime)) {
-                    initialStartTime = Date.now();
-                }
-                setStartTime(initialStartTime);
-
-                const res = await fetch("/api/logs?active=true");
+                const params = new URLSearchParams({ active: "true", workoutId: workout.id, date: targetDateStr });
+                const res = await fetch(`/api/logs?${params}`);
                 const active = await res.json();
-                
-                const targetDate = logDate ? new Date(logDate) : new Date();
-                
+                const targetDate = logDate ? parseLogDate(logDate) : new Date();
+
+                if (cancelled) return;
+
                 if (active && active.workoutId === workout.id && isSameDay(active.loggedAt, targetDate)) {
-                    setActiveLogId(active.id);
-                    setHasStarted(true);
-                    const restored: Record<string, SetLog[]> = {};
-                    const reconstructedExercises: Exercise[] = [];
+                    const restored = restoreSessionState(active, workout.exercises, localStorageKey);
+                    setActiveLogId(restored.activeLogId);
+                    setActiveExercises(restored.exercises);
+                    setLogs(restored.logs);
+                    setStartTime(restored.startTime);
+                    return;
+                }
 
-                    let dbStartTime = initialStartTime;
-                    if (active.duration) {
-                        dbStartTime = Date.now() - (active.duration * 60000);
-                    } else if (active.loggedAt) {
-                        dbStartTime = new Date(active.loggedAt).getTime();
-                    }
+                const now = Date.now();
+                setStartTime(now);
+                localStorage.setItem(localStorageKey, now.toString());
 
-                    setStartTime(dbStartTime);
-                    localStorage.setItem(localStorageKey, dbStartTime.toString());
+                const initialLogs = buildInitialLogs(workout.exercises);
+                const flattenedSets = Object.entries(initialLogs).flatMap(([exId, sets]) => {
+                    const exInfo = workout.exercises.find((e) => e.id === exId);
+                    const exOrder = workout.exercises.findIndex((e) => e.id === exId);
+                    return sets.map((s) => ({
+                        exerciseId: exId,
+                        exerciseName: exInfo?.name || "Unknown",
+                        exerciseOrder: exOrder >= 0 ? exOrder : undefined,
+                        setNumber: s.setNumber,
+                        reps: s.reps,
+                        isWarmup: s.isWarmup,
+                        isCompleted: s.isCompleted,
+                    }));
+                });
 
-                    active.sets.forEach((s: ActiveLogSet) => {
-                        const ex = s.exercise;
-                        // Reconstruct exercises solely from the active log sets
-                        if (ex && !reconstructedExercises.some(e => e.id === ex.id)) {
-                            reconstructedExercises.push({
-                                id: ex.id,
-                                name: ex.name,
-                                sets: ex.sets || 1,
-                                reps: ex.reps || "10",
-                                weightTargetKg: ex.weightTargetKg,
-                                notes: ex.notes,
-                                order: ex.order ?? 0,
-                            });
-                        }
-
-                        if (!restored[s.exerciseId]) restored[s.exerciseId] = [];
-                        restored[s.exerciseId].push({
-                            setNumber: s.setNumber,
-                            reps: s.reps ?? 10,
-                            weightKg: s.weightKg?.toString() ?? "",
-                            rpe: s.rpe?.toString() ?? "",
-                            isCompleted: s.isCompleted ?? true,
-                            isWarmup: s.isWarmup ?? false,
-                            videoUrl: s.videoUrl ?? undefined,
-                        });
-                    });
-
-                    // Sort reconstructed exercises by order to match layout
-                    reconstructedExercises.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-
-                    setActiveExercises(reconstructedExercises);
-                    setLogs(restored);
-                } else {
-                    const initialLogs: Record<string, SetLog[]> = {};
-                    workout.exercises.forEach((ex) => {
-                        initialLogs[ex.id] = Array.from({ length: ex.sets }, (_, i) => ({
-                            setNumber: i + 1,
-                            reps: parseInt(ex.reps) || 10,
-                            weightKg: "",
-                            rpe: "",
-                            isCompleted: false,
-                            isWarmup: false,
-                        }));
-                    });
-                    setLogs(initialLogs);
-                    setHasStarted(false);
+                const createRes = await fetch("/api/logs", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        workoutId: workout.id,
+                        status: "IN_PROGRESS",
+                        loggedAt: toLoggedAtIso(logDate ?? now),
+                        sets: flattenedSets,
+                    }),
+                });
+                if (!cancelled && createRes.ok) {
+                    const saved = await createRes.json();
+                    if (saved.id) setActiveLogId(saved.id);
                 }
             } catch (e) {
-                console.error("Failed to load active log:", e);
-            } finally {
-                setLoading(false);
+                console.error("Failed to sync workout session:", e);
             }
         };
-        load();
-    }, [workout, logDate]);
+
+        syncSession();
+        return () => {
+            cancelled = true;
+        };
+    }, [activeLogId, initialActiveLog, isSameDay, localStorageKey, logDate, targetDateStr, workout.exercises, workout.id]);
 
     // Track when Swap/Add modal is open and adjust startTime when closed to pause timer
     useEffect(() => {
@@ -303,7 +377,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                 body: JSON.stringify({
                     workoutId: workout.id,
                     status: "IN_PROGRESS",
-                    loggedAt: logDate ? new Date(logDate).toISOString() : new Date(finalStartTime).toISOString(),
+                    loggedAt: toLoggedAtIso(logDate ?? finalStartTime),
                     sets: flattenedSets,
                 }),
             });
@@ -314,14 +388,6 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
         } catch (e) {
             console.error("Auto-save failed:", e);
         }
-    };
-
-    const startSession = () => {
-        const now = Date.now();
-        setStartTime(now);
-        localStorage.setItem(localStorageKey, now.toString());
-        setHasStarted(true);
-        saveProgress(logs, activeExercises, now);
     };
 
     const updateSet = (exId: string, setIdx: number, updates: Partial<SetLog>) => {
@@ -533,7 +599,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                     duration: finalDuration,
                     notes: workoutNotes.trim() || undefined,
                     status: "COMPLETED",
-                    loggedAt: logDate ? new Date(logDate).toISOString() : undefined,
+                    loggedAt: toLoggedAtIso(logDate),
                     sets: flattenedSets,
                 }),
             });
@@ -589,163 +655,9 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
         }
     };
 
-    if (loading) {
-        return (
-            <div className="min-h-screen bg-surface flex items-center justify-center pt-safe-area">
-                <div className="text-center space-y-4">
-                    <div className="w-12 h-12 border-4 border-brand-500/20 border-t-brand-500 rounded-full animate-spin mx-auto mb-4" />
-                    <p className="text-fg-subtle text-sm">Resuming session...</p>
-                </div>
-            </div>
-        );
-    }
-
-    if (!hasStarted) {
-        return (
-            <div className="min-h-screen bg-surface flex flex-col pt-safe-area">
-                {/* Header */}
-                <div className="flex items-center justify-between px-4 h-16 border-b border-surface-border glass fixed top-0 inset-x-0 z-40 md:pl-[var(--sidebar-width)]">
-                    <button 
-                        onClick={() => router.back()} 
-                        className="btn-icon text-fg-muted hover:text-fg hover:bg-surface-muted/50"
-                        title="Back"
-                    >
-                        <ChevronLeft className="w-5 h-5" />
-                    </button>
-                    <div className="text-center">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">Workout Preview</p>
-                        <h2 className="text-sm font-bold text-fg truncate max-w-[180px]">{workout.name}</h2>
-                    </div>
-                    <div className="w-9" /> {/* Spacer */}
-                </div>
-
-                <div className="flex-1 p-4 pt-20 pb-24 overflow-y-auto no-scrollbar md:pl-[var(--sidebar-width) + 1rem]">
-                    <div className="max-w-2xl mx-auto space-y-6">
-                        {workout.exercises.map((ex) => {
-                            const media = exerciseMedia[ex.name];
-                            const hasPreview = !!(media?.videoUrl || media?.instructions);
-
-                            return (
-                                <div key={ex.id} className="card p-4 space-y-3 animate-slide-up">
-                                    <div className="flex items-start justify-between gap-2">
-                                        <div>
-                                            <h3 className="font-bold text-fg text-base leading-tight">{ex.name}</h3>
-                                            {ex.notes && <p className="text-xs text-fg-muted mt-1">{ex.notes}</p>}
-                                        </div>
-                                        {hasPreview && (
-                                            <button
-                                                type="button"
-                                                onClick={() => setPreviewExercise({ name: ex.name, media })}
-                                                className="w-8 h-8 rounded-full bg-brand-500/10 text-brand-400 border border-brand-500/20 flex items-center justify-center hover:bg-brand-500 hover:text-white transition-colors shrink-0"
-                                                title="Exercise preview"
-                                            >
-                                                {media?.videoUrl ? <Play className="w-3.5 h-3.5 fill-current" /> : <HelpCircle className="w-4 h-4" />}
-                                            </button>
-                                        )}
-                                    </div>
-
-                                    <div className="pt-2 border-t border-surface-border/40 space-y-1">
-                                        {Array.from({ length: ex.sets }).map((_, idx) => (
-                                            <div key={idx} className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-surface-muted/30 text-xs">
-                                                <span className="font-semibold text-fg-muted">Set {idx + 1}</span>
-                                                <span className="font-bold text-fg">
-                                                    {isCardio(ex.name) 
-                                                        ? `${ex.reps} min`
-                                                        : `${ex.reps} reps`}
-                                                    {ex.weightTargetKg ? ` @ ${ex.weightTargetKg} kg` : ""}
-                                                </span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            );
-                        })}
-
-                        <div className="pt-6 pb-12 flex flex-col items-center gap-4">
-                            <button
-                                onClick={startSession}
-                                className="btn-primary w-full h-16 text-lg font-black uppercase tracking-widest shadow-glow-brand flex items-center justify-center gap-3 transition-all hover:scale-[1.02] active:scale-95 rounded-2xl"
-                            >
-                                <Flame className="w-6 h-6 text-brand-300 animate-pulse" />
-                                Start Session
-                            </button>
-                            <button 
-                                onClick={() => router.back()} 
-                                className="text-xs font-bold text-fg-subtle hover:text-fg uppercase tracking-widest"
-                            >
-                                Cancel & Go Back
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                {previewExercise && (
-                    <div
-                        className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/80 animate-fade-in sm:p-4 backdrop-blur-sm"
-                        onClick={() => setPreviewExercise(null)}
-                    >
-                        <div
-                            className="bg-surface-card w-full h-[92vh] sm:h-auto sm:max-h-[88vh] sm:max-w-2xl rounded-t-[2rem] sm:rounded-3xl border border-surface-border shadow-glow-brand-lg overflow-hidden animate-slide-up flex flex-col"
-                            onClick={(event) => event.stopPropagation()}
-                            onPointerDown={(event) => setModalTouchStart(event.clientY)}
-                            onPointerUp={(event) => {
-                                if (modalTouchStart !== null && event.clientY - modalTouchStart > 90) {
-                                    setPreviewExercise(null);
-                                }
-                                setModalTouchStart(null);
-                            }}
-                        >
-                            <div className="flex items-center justify-between gap-4 px-5 py-4 border-b border-surface-border">
-                                <div className="min-w-0">
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">Exercise Preview</p>
-                                    <h3 className="text-lg font-black text-fg truncate">{previewExercise.name}</h3>
-                                </div>
-                                <button
-                                    onClick={() => setPreviewExercise(null)}
-                                    className="btn-icon"
-                                    title="Close preview"
-                                >
-                                    <X className="w-5 h-5" />
-                                </button>
-                            </div>
-
-                            <div className="flex-1 overflow-y-auto p-5 space-y-4">
-                                {previewExercise.media.videoUrl && (
-                                    <div className="w-full overflow-hidden rounded-2xl border border-surface-border bg-black aspect-video">
-                                        {isDirectVideo(previewExercise.media.videoUrl) ? (
-                                            <video
-                                                src={previewExercise.media.videoUrl}
-                                                controls
-                                                playsInline
-                                                poster={previewExercise.media.thumbnailUrl || undefined}
-                                                className="w-full h-full object-contain"
-                                            />
-                                        ) : (
-                                            <iframe
-                                                src={getEmbedUrl(previewExercise.media.videoUrl)}
-                                                title={`${previewExercise.name} video preview`}
-                                                className="w-full h-full"
-                                                loading="lazy"
-                                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                                                allowFullScreen
-                                            />
-                                        )}
-                                    </div>
-                                )}
-
-                                {previewExercise.media.instructions && (
-                                    <div className="rounded-2xl border border-surface-border bg-surface-muted/30 p-4">
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle mb-2">Instructions</p>
-                                        <p className="text-sm text-fg-muted leading-relaxed whitespace-pre-wrap">{previewExercise.media.instructions}</p>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                )}
-            </div>
-        );
-    }
+    const scheduledDayLabel = logDate && !isSameCalendarDay(logDate, new Date())
+        ? formatDate(parseLogDate(logDate), { weekday: "long", day: "numeric", month: "long" })
+        : null;
 
     return (
         <div className="min-h-screen bg-surface flex flex-col pt-safe-area">
@@ -773,6 +685,12 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
 
             <div className="flex-1 p-4 pt-20 pb-24 overflow-y-auto no-scrollbar md:pl-[var(--sidebar-width) + 1rem]">
                 <div className="max-w-2xl mx-auto space-y-6">
+                    {scheduledDayLabel && (
+                        <div className="card p-3 border-brand-500/30 bg-brand-950/20 text-center">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">Logging for</p>
+                            <p className="text-sm font-bold text-fg mt-0.5">{scheduledDayLabel}</p>
+                        </div>
+                    )}
                     {activeExercises.map((ex) => {
                         const media = exerciseMedia[ex.name];
                         const hasPreview = !!(media?.videoUrl || media?.instructions);
@@ -823,9 +741,9 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
 
                             <div className="space-y-2">
                                 <div className="grid grid-cols-12 gap-2 text-[11px] font-black text-fg-subtle uppercase px-1 mb-1 tracking-wider">
-                                    <div className="col-span-1 text-center">{isCardio(ex.name) ? "Rd" : "Set"}</div>
-                                    <div className="col-span-3 text-center">{isCardio(ex.name) ? "Lvl/Spd" : "Weight"}</div>
-                                    <div className="col-span-2 text-center">{isCardio(ex.name) ? "Mins" : "Reps"}</div>
+                                    <div className="col-span-1 text-center">{isCardio(ex.name, ex.muscleGroup) ? "Rd" : "Set"}</div>
+                                    <div className="col-span-3 text-center">{isCardio(ex.name, ex.muscleGroup) ? "Lvl/Spd" : "Weight"}</div>
+                                    <div className="col-span-2 text-center">{isCardio(ex.name, ex.muscleGroup) ? "Mins" : "Reps"}</div>
                                     <div className="col-span-2 text-center">RPE</div>
                                     <div className="col-span-4 text-center">Actions</div>
                                 </div>
@@ -861,7 +779,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                                                     placeholder={getWeightPlaceholder(ex.name, set.setNumber, ex.weightTargetKg) || "0"}
                                                     onChange={(e) => updateSet(ex.id, sIdx, { weightKg: e.target.value })}
                                                 />
-                                                {!isCardio(ex.name) && (set.weightKg || getWeightPlaceholder(ex.name, set.setNumber, ex.weightTargetKg)) && (
+                                                {!isCardio(ex.name, ex.muscleGroup) && (set.weightKg || getWeightPlaceholder(ex.name, set.setNumber, ex.weightTargetKg)) && (
                                                     <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[9px] text-fg-subtle pointer-events-none">kg</span>
                                                 )}
                                             </div>

@@ -17,6 +17,7 @@ interface LocalExercise {
     reps: string;
     weightTargetKg?: number;
     order: number;
+    muscleGroup?: string | null;
 }
 
 interface LocalWorkout {
@@ -38,6 +39,7 @@ interface PlanExercisePayload {
     reps: string;
     weightTargetKg?: number | null;
     order?: number | null;
+    muscleGroup?: string | null;
 }
 
 interface PlanWorkoutPayload {
@@ -81,10 +83,10 @@ export function PlanCreateClient() {
     const [linearityStartWeekIdx, setLinearityStartWeekIdx] = useState(0);
 
     const [saving, setSaving] = useState(false);
+    const [saveNotice, setSaveNotice] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [lastAddedExerciseIdx, setLastAddedExerciseIdx] = useState<number | null>(null);
-    const [draggedWorkoutIdx, setDraggedWorkoutIdx] = useState<number | null>(null);
     const [draggedExerciseIdx, setDraggedExerciseIdx] = useState<number | null>(null);
     const [dragEnabledIdx, setDragEnabledIdx] = useState<number | null>(null);
 
@@ -124,7 +126,8 @@ export function PlanCreateClient() {
                                     sets: e.sets,
                                     reps: e.reps,
                                     weightTargetKg: e.weightTargetKg ?? undefined,
-                                    order: e.order ?? 0
+                                    order: e.order ?? 0,
+                                    muscleGroup: e.muscleGroup ?? null,
                                 }))
                             }))
                         })) || [];
@@ -253,22 +256,6 @@ export function PlanCreateClient() {
         if (nextActiveIdx !== -1) setActiveWorkoutIdx(nextActiveIdx);
     };
 
-    const handleDragStart = (idx: number) => setDraggedWorkoutIdx(idx);
-    const handleDragOver = (e: React.DragEvent) => e.preventDefault();
-    const handleDrop = (targetIdx: number) => {
-        if (draggedWorkoutIdx === null || draggedWorkoutIdx === targetIdx) return;
-        
-        const next = [...workouts];
-        const [moved] = next.splice(draggedWorkoutIdx, 1);
-        next.splice(targetIdx, 0, moved);
-        
-        // Update day numbers
-        const final = next.map((w, i) => ({ ...w, dayNumber: i + 1 }));
-        updateCurrentWorkouts(final);
-        setActiveWorkoutIdx(targetIdx);
-        setDraggedWorkoutIdx(null);
-    };
-
     const addWorkout = () => {
         if (workouts.length >= 7) {
             alert("A week can have a maximum of 7 training days.");
@@ -392,7 +379,8 @@ export function PlanCreateClient() {
                         sets: e.sets,
                         reps: e.reps,
                         weightTargetKg: e.weightTargetKg,
-                        order: e.order
+                        order: e.order,
+                        muscleGroup: e.muscleGroup ?? undefined,
                     }))
                 }))
             }))
@@ -409,14 +397,19 @@ export function PlanCreateClient() {
             
             if (res.ok) {
                 const savedPlan = await res.json();
-                
-                // If we have a clientId, auto-assign this plan to them
+
                 if (clientId) {
                     await fetch("/api/coach/clients/plan", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ clientId, planId: savedPlan.id }),
                     });
+                }
+
+                if (editId) {
+                    setSaveNotice("Plan saved");
+                    window.setTimeout(() => setSaveNotice(null), 3000);
+                } else if (clientId) {
                     router.push(`/coach/client/${clientId}`);
                 } else {
                     router.push("/plans");
@@ -477,6 +470,12 @@ export function PlanCreateClient() {
                 </div>
                 {!isViewOnly && (
                     <div className="flex items-center gap-2">
+                        {saveNotice && (
+                            <span className="hidden sm:flex items-center gap-1.5 text-xs font-semibold text-success animate-fade-in">
+                                <CheckCircle2 className="w-4 h-4" />
+                                {saveNotice}
+                            </span>
+                        )}
                         <button 
                             onClick={() => setIsLinearityMode(!isLinearityMode)}
                             className={cn(
@@ -495,8 +494,90 @@ export function PlanCreateClient() {
                 )}
             </div>
 
+            {/* Week + day switcher — sticky so days stay reachable while editing exercises */}
+            <div className="sticky top-16 z-20 -mx-4 px-4 sm:-mx-6 sm:px-6 py-3 bg-surface/95 backdrop-blur-md border-y border-surface-border space-y-3">
+                <div className="card p-3 flex items-center justify-between gap-3 border-brand-500/20 bg-gradient-brand/5">
+                    <button
+                        onClick={handlePrevWeek}
+                        disabled={activeWeekIdx === 0}
+                        className="btn-icon w-8 h-8 rounded-lg shrink-0 disabled:opacity-30 border bg-surface-elevated hover:bg-white/10"
+                    >
+                        <ArrowLeft className="w-4 h-4" />
+                    </button>
+                    <div className="text-center min-w-0">
+                        <p className="text-sm font-black text-fg uppercase tracking-widest">
+                            Week {currentWeek.weekNumber}
+                        </p>
+                        <p className="text-[9px] text-fg-muted uppercase tracking-widest font-bold">
+                            {workouts.length} session{workouts.length === 1 ? "" : "s"}
+                        </p>
+                    </div>
+                    <button
+                        onClick={handleNextWeek}
+                        className={cn(
+                            "btn-icon w-8 h-8 rounded-lg shrink-0 border",
+                            activeWeekIdx === weeks.length - 1 && !isViewOnly
+                                ? "bg-brand-500/10 text-brand-400 border-brand-500/30 hover:bg-brand-500/20"
+                                : "bg-surface-elevated hover:bg-white/10 disabled:opacity-30"
+                        )}
+                        title={activeWeekIdx === weeks.length - 1 && !isViewOnly ? "Clone & Add Next Week" : "Next Week"}
+                        disabled={activeWeekIdx === weeks.length - 1 && isViewOnly}
+                    >
+                        {activeWeekIdx === weeks.length - 1 && !isViewOnly ? <Plus className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
+                    </button>
+                </div>
+
+                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
+                    {workouts.map((w, i) => (
+                        <button
+                            key={i}
+                            onClick={() => setActiveWorkoutIdx(i)}
+                            className={cn(
+                                "shrink-0 flex items-center gap-2 px-3 py-2 rounded-xl border transition-all text-left min-w-[120px] max-w-[180px]",
+                                activeWorkoutIdx === i
+                                    ? "bg-brand-950/40 border-brand-700/60 shadow-glow-sm"
+                                    : "bg-surface-card border-surface-border hover:bg-surface-muted"
+                            )}
+                        >
+                            <div className={cn(
+                                "w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold shrink-0",
+                                activeWorkoutIdx === i ? "bg-brand-400 text-white" : "bg-surface-elevated text-fg-subtle"
+                            )}>
+                                {w.dayNumber}
+                            </div>
+                            <div className="min-w-0">
+                                <p className="text-xs font-bold text-fg truncate">{w.name}</p>
+                                <p className="text-[9px] text-fg-muted font-medium truncate">
+                                    {w.dayOfWeek !== null && w.dayOfWeek !== undefined ? DAYS[w.dayOfWeek] : "No day"} · {w.exercises.length} ex
+                                </p>
+                            </div>
+                        </button>
+                    ))}
+                    {!isViewOnly && workouts.length < 7 && (
+                        <button
+                            onClick={addWorkout}
+                            className="shrink-0 px-3 py-2 border-2 border-dashed border-surface-border rounded-xl text-xs font-bold text-fg-subtle hover:text-brand-400 hover:border-brand-600/40 transition-all flex items-center gap-1.5"
+                        >
+                            <Plus className="w-4 h-4" />
+                            Add day
+                        </button>
+                    )}
+                </div>
+
+                {!isViewOnly && (
+                    <div className="flex justify-end">
+                        <button
+                            onClick={handleDeleteWeek}
+                            className="py-1 px-2 text-[10px] uppercase tracking-widest font-bold text-danger/70 hover:text-danger hover:bg-danger/10 rounded-lg transition-all"
+                        >
+                            Delete week
+                        </button>
+                    </div>
+                )}
+            </div>
+
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                <div className="lg:col-span-4 space-y-4 order-2 lg:order-1">
+                <div className="lg:col-span-4 space-y-4">
                     <div className="card p-5 space-y-4">
                         <div className="space-y-4">
                             <div className="space-y-2">
@@ -527,110 +608,9 @@ export function PlanCreateClient() {
                             </div>
                         </div>
                     </div>
-
-                    <div className="space-y-2">
-                        <div className="flex items-center justify-between mb-2">
-                            <p className="label px-1 mb-0 flex-1">Training Calendar</p>
-                        </div>
-                        
-                        {/* Week Navigator */}
-                        <div className="card p-3 mb-4 flex flex-col gap-2 border-brand-500/30 shadow-glow-brand-sm bg-gradient-brand/5">
-                            <div className="flex items-center justify-between">
-                                <button 
-                                    onClick={handlePrevWeek} 
-                                    disabled={activeWeekIdx === 0}
-                                    className="btn-icon w-8 h-8 rounded-lg disabled:opacity-30 border bg-surface-elevated hover:bg-white/10"
-                                >
-                                    <ArrowLeft className="w-4 h-4" />
-                                </button>
-                                <div className="text-center">
-                                    <p className="text-sm font-black text-fg uppercase tracking-widest">
-                                        Week {currentWeek.weekNumber}
-                                    </p>
-                                    <p className="text-[9px] text-fg-muted uppercase tracking-widest font-bold">
-                                        {workouts.length} Sessions
-                                    </p>
-                                </div>
-                                <button 
-                                    onClick={handleNextWeek} 
-                                    className={cn(
-                                        "btn-icon w-8 h-8 rounded-lg border",
-                                        activeWeekIdx === weeks.length - 1 && !isViewOnly 
-                                            ? "bg-brand-500/10 text-brand-400 border-brand-500/30 hover:bg-brand-500/20"
-                                            : "bg-surface-elevated hover:bg-white/10 disabled:opacity-30"
-                                    )}
-                                    title={activeWeekIdx === weeks.length - 1 && !isViewOnly ? "Clone & Add Next Week" : "Next Week"}
-                                    disabled={activeWeekIdx === weeks.length - 1 && isViewOnly}
-                                >
-                                    {activeWeekIdx === weeks.length - 1 && !isViewOnly ? <Plus className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
-                                </button>
-                            </div>
-                            {!isViewOnly && (
-                                <button 
-                                    onClick={handleDeleteWeek}
-                                    className="w-full py-1.5 mt-1 text-[10px] uppercase tracking-widest font-bold text-danger/70 hover:text-danger hover:bg-danger/10 rounded-lg transition-all"
-                                >
-                                    Delete Week
-                                </button>
-                            )}
-                        </div>
-
-                        <div className="space-y-2">
-                            {workouts.map((w, i) => (
-                                <div
-                                    key={i}
-                                    draggable
-                                    onDragStart={() => handleDragStart(i)}
-                                    onDragOver={handleDragOver}
-                                    onDrop={() => handleDrop(i)}
-                                    className={cn(
-                                        "relative group rounded-xl transition-all duration-300",
-                                        draggedWorkoutIdx === i && "opacity-40 scale-95"
-                                    )}
-                                >
-                                    <button
-                                        onClick={() => setActiveWorkoutIdx(i)}
-                                        className={cn(
-                                            "w-full text-left flex items-center justify-between p-3 rounded-xl transition-all duration-200 border",
-                                            activeWorkoutIdx === i 
-                                                ? "bg-brand-950/40 border-brand-700/60 shadow-glow-sm" 
-                                                : "bg-surface-card border-surface-border hover:bg-surface-muted"
-                                        )}
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            <div className="text-fg-subtle/30 cursor-grab active:cursor-grabbing hover:text-brand-400 group-hover:opacity-100 opacity-0 transition-opacity">
-                                                <GripVertical className="w-4 h-4" />
-                                            </div>
-                                            <div className={cn("w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold",
-                                                activeWorkoutIdx === i ? "bg-brand-400 text-white" : "bg-surface-elevated text-fg-subtle"
-                                            )}>
-                                                {w.dayNumber}
-                                            </div>
-                                            <div className="min-w-0 flex-1">
-                                                <p className="text-xs font-bold text-fg truncate">{w.name}</p>
-                                                <p className="text-[10px] text-fg-muted font-medium">
-                                                    {w.dayOfWeek !== null && w.dayOfWeek !== undefined ? DAYS[w.dayOfWeek] : "No Day"} • {w.exercises.length} Exercises
-                                                </p>
-                                            </div>
-                                        </div>
-                                        {activeWorkoutIdx === i && <ChevronRight className="w-4 h-4 text-brand-400" />}
-                                    </button>
-                                </div>
-                            ))}
-                            {(!isViewOnly && workouts.length < 7) && (
-                                <button
-                                    onClick={addWorkout}
-                                    className="w-full py-3 border-2 border-dashed border-surface-border rounded-xl text-xs font-bold text-fg-subtle hover:text-brand-400 hover:border-brand-600/40 transition-all flex items-center justify-center gap-2"
-                                >
-                                    <Plus className="w-4 h-4" />
-                                    Add New Day
-                                </button>
-                            )}
-                        </div>
-                    </div>
                 </div>
 
-                <div className="lg:col-span-8 order-1 lg:order-2">
+                <div className="lg:col-span-8">
                     {workouts[activeWorkoutIdx] ? (
                         isLinearityMode ? (
                             <div className="space-y-4 animate-slide-up">
@@ -917,9 +897,16 @@ export function PlanCreateClient() {
                                                             ) : (
                                                                 <ExerciseAutocomplete
                                                                     value={ex.name}
-                                                                    onChange={(val) => {
+                                                                    onChange={(val, muscleGroup) => {
                                                                         const nameChanged = val !== ex.name;
-                                                                        updateExercise(activeWorkoutIdx, eIdx, nameChanged ? { name: val, reps: isCardio(val) ? "20" : ex.reps } : { name: val });
+                                                                        updateExercise(activeWorkoutIdx, eIdx, nameChanged ? {
+                                                                            name: val,
+                                                                            muscleGroup: muscleGroup ?? null,
+                                                                            reps: isCardio(val, muscleGroup) ? "20" : ex.reps,
+                                                                        } : {
+                                                                            name: val,
+                                                                            muscleGroup: muscleGroup ?? ex.muscleGroup ?? null,
+                                                                        });
                                                                     }}
                                                                     className="w-full bg-surface-muted border border-surface-border rounded-xl px-4 py-2 text-[16px] sm:text-sm text-fg"
                                                                     autoFocus={lastAddedExerciseIdx === eIdx}
@@ -928,7 +915,7 @@ export function PlanCreateClient() {
                                                         </div>
                                                         <div className="col-span-4 sm:col-span-2">
                                                             <label className="label-mini block text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1 px-1">
-                                                                {isCardio(ex.name) ? "Rounds" : "Sets"}
+                                                                {isCardio(ex.name, ex.muscleGroup) ? "Rounds" : "Sets"}
                                                             </label>
                                                             <input
                                                                 type="text"
@@ -945,11 +932,11 @@ export function PlanCreateClient() {
                                                         </div>
                                                         <div className="col-span-4 sm:col-span-2">
                                                             <label className="label-mini block text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1 px-1">
-                                                                {isCardio(ex.name) ? "Mins" : "Reps"}
+                                                                {isCardio(ex.name, ex.muscleGroup) ? "Mins" : "Reps"}
                                                             </label>
                                                             <input
                                                                 type="text"
-                                                                placeholder={isCardio(ex.name) ? "20" : "8-12"}
+                                                                placeholder={isCardio(ex.name, ex.muscleGroup) ? "20" : "8-12"}
                                                                 className="w-full bg-surface-muted border border-surface-border rounded-xl px-4 py-2 text-[16px] sm:text-sm text-fg text-center"
                                                                 value={ex.reps}
                                                                 onChange={(e) => updateExercise(activeWorkoutIdx, eIdx, { reps: e.target.value })}

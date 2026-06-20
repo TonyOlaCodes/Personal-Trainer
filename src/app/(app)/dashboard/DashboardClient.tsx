@@ -6,7 +6,7 @@ import Link from "next/link";
 import { Walkthrough } from "@/components/shared/Walkthrough";
 import { WorkoutSessionModal } from "@/components/shared/WorkoutSessionModal";
 import { Dumbbell, ChevronRight, Clock, Flame, Activity, Calendar, Ticket, Check, Edit3, Trash2, Scale, Utensils, Footprints, Moon, AlertCircle } from "lucide-react";
-import { formatDate, formatRelative, cn } from "@/lib/utils";
+import { formatDate, formatRelative, cn, toDateKey, parseLogDate } from "@/lib/utils";
 import { isCardio } from "@/components/shared/ExerciseAutocomplete";
 
 interface Exercise {
@@ -137,7 +137,10 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                 body: JSON.stringify({ status: "IN_PROGRESS" })
             });
             if (res.ok) {
-                router.push(`/plans/log/${workoutId}${loggedAt ? `?date=${encodeURIComponent(loggedAt)}` : ""}`);
+                const dateQuery = loggedAt
+                    ? `?date=${encodeURIComponent(toDateKey(parseLogDate(loggedAt)))}`
+                    : "";
+                router.push(`/plans/log/${workoutId}${dateQuery}`);
             }
         } catch (e) {
             console.error(e);
@@ -669,7 +672,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                                 <span className="hidden sm:inline">Discard</span>
                             </button>
                             <Link 
-                                href={`/plans/log/${localActiveSession.workoutId}${localActiveSession.loggedAt ? `?date=${encodeURIComponent(localActiveSession.loggedAt)}` : ""}`} 
+                                href={`/plans/log/${localActiveSession.workoutId}${localActiveSession.loggedAt ? `?date=${encodeURIComponent(toDateKey(parseLogDate(localActiveSession.loggedAt)))}` : ""}`} 
                                 className="btn-primary shadow-glow-brand px-6"
                             >
                                 {discarding ? "..." : "Resume"}
@@ -743,7 +746,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                         <h3 className="heading-3">Today&apos;s Workout</h3>
                         {(nextTrainingDay && (!todayWorkout || todayCompleted)) && (
                             <Link
-                                href={`/plans/log/${nextTrainingDay.id}?date=${encodeURIComponent(nextTrainingDay.date)}`}
+                                href={`/plans/log/${nextTrainingDay.id}?date=${encodeURIComponent(nextTrainingDay.date)}&start=1`}
                                 className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-brand-300 hover:text-brand-200 transition-colors"
                             >
                                 Next training day - {nextTrainingDay.name}, {nextTrainingDay.dayLabel} {formatDate(nextTrainingDay.date, { day: "numeric", month: "long" })}
@@ -803,13 +806,13 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                                     </div>
                                     <div className="text-right">
                                         <p className="text-sm font-semibold text-fg">
-                                            {isCardio(ex.name)
+                                            {isCardio(ex.name, ex.muscleGroup)
                                                 ? `${ex.sets > 1 ? `${ex.sets} × ` : ""}${ex.reps} min`
                                                 : `${ex.sets} × ${ex.reps}`}
                                         </p>
                                         {ex.weightTargetKg && (
                                             <p className="text-xs text-fg-muted">
-                                                {isCardio(ex.name) ? `Lvl ${ex.weightTargetKg}` : `${ex.weightTargetKg.toFixed(2)}kg`}
+                                                {isCardio(ex.name, ex.muscleGroup) ? `Lvl ${ex.weightTargetKg}` : `${ex.weightTargetKg.toFixed(2)}kg`}
                                             </p>
                                         )}
                                     </div>
@@ -826,7 +829,11 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                         {/* Centered Start / Resume CTA */}
                         <div className="mt-6 pt-4 border-t border-surface-border/50 flex justify-center">
                             <Link
-                                href={`/plans/log/${todayWorkout.id}`}
+                                href={
+                                    localActiveSession?.workoutId === todayWorkout.id
+                                        ? `/plans/log/${todayWorkout.id}`
+                                        : `/plans/log/${todayWorkout.id}?start=1`
+                                }
                                 className={cn(
                                     "btn-primary w-full max-w-md py-4 text-sm font-black uppercase tracking-widest flex items-center justify-center gap-2 rounded-2xl transition-all hover:scale-[1.02] active:scale-[0.98] shadow-glow-brand",
                                     localActiveSession?.workoutId === todayWorkout.id ? "shadow-glow-success bg-success border-success hover:bg-success-600" : ""
@@ -872,7 +879,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
 
                 {recentLogs.length > 0 ? (
                     <div className="card divide-y divide-surface-border">
-                        {recentLogs.slice(0, 5).map((log) => (
+                        {recentLogs.slice(0, 10).map((log) => (
                             <div
                                 onClick={() => setSelectedSessionId(log.id)}
                                 key={log.id}

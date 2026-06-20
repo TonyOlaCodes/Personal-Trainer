@@ -2,7 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
-import { getDayName, formatDate, getWeekNumber } from "@/lib/utils";
+import { getDayName, formatDate, getWeekNumber, isSameCalendarDay, toDateKey } from "@/lib/utils";
 import { cookies } from "next/headers";
 import { DashboardClient } from "./DashboardClient";
 import { getBodyweightSummary } from "@/lib/bodyweight";
@@ -45,8 +45,9 @@ export default async function DashboardPage() {
                         take: 1,
                     },
                     workoutLogs: {
+                        where: { status: "COMPLETED" },
                         orderBy: { loggedAt: "desc" },
-                        take: 20,
+                        take: 100,
                         include: { workout: true, sets: true },
                     },
                 },
@@ -164,27 +165,21 @@ export default async function DashboardPage() {
         const isTodayWorkoutCompleted = todayWorkout && user.workoutLogs.some(
             (l: any) => l.status === "COMPLETED" && 
                  l.workoutId === todayWorkout.id && 
-                 new Date(l.loggedAt).toDateString() === new Date().toDateString()
+                 isSameCalendarDay(l.loggedAt, now)
         );
 
-        const uniqueLogs: any[] = [];
-        const seenNames = new Set<string>();
-        
         let totalDuration = 0;
         let durationCount = 0;
-        
-        user.workoutLogs
-            .filter((l: any) => l.status === "COMPLETED")
-            .forEach((l: any) => {
-                if (l.duration) {
-                    totalDuration += l.duration;
-                    durationCount++;
-                }
-                if (l.workout && !seenNames.has(l.workout.name) && activeSession?.id !== l.id) {
-                    seenNames.add(l.workout.name);
-                    uniqueLogs.push(l);
-                }
-            });
+
+        const recentCompletedLogs = user.workoutLogs
+            .filter((l: any) => l.status === "COMPLETED" && l.workout && l.id !== activeSession?.id);
+
+        recentCompletedLogs.forEach((l: any) => {
+            if (l.duration) {
+                totalDuration += l.duration;
+                durationCount++;
+            }
+        });
 
         const avgDurationMin = durationCount > 0 ? Math.round(totalDuration / durationCount) : 0;
 
@@ -216,7 +211,7 @@ export default async function DashboardPage() {
                 nextTrainingDay = {
                     id: candidateWorkout.id,
                     name: candidateWorkout.name,
-                    date: candidateDate.toISOString(),
+                    date: toDateKey(candidateDate),
                     dayLabel: getDayName(candidateDate),
                 };
                 break;
@@ -247,9 +242,8 @@ export default async function DashboardPage() {
                                 workoutName: activeSession.workout.name,
                                 loggedAt: activeSession.loggedAt.toISOString(),
                             } : null}
-                            recentLogs={uniqueLogs
-                                .slice(0, 5)
-                                .filter((l: any) => l.workout)
+                            recentLogs={recentCompletedLogs
+                                .slice(0, 20)
                                 .map((l: any) => ({
                                     id: l.id,
                                     workoutId: l.workoutId,

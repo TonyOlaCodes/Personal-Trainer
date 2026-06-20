@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma, ensureDbSchema } from "@/lib/prisma";
+import { getLocalDayBounds, parseLogDate } from "@/lib/utils";
 import { z } from "zod";
 
 const logSchema = z.object({
@@ -64,13 +65,10 @@ export async function POST(req: Request) {
         }
     }
 
-    // Delete existing IN_PROGRESS log for this workout on the same day range to avoid duplicates
-    const targetDate = loggedAt ? new Date(loggedAt) : new Date();
-    const startOfDay = new Date(targetDate);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(targetDate);
-    endOfDay.setHours(23, 59, 59, 999);
+    const targetDate = loggedAt ? parseLogDate(loggedAt) : new Date();
+    const { start: startOfDay, end: endOfDay } = getLocalDayBounds(targetDate);
 
+    // Drop in-progress drafts for this workout/day — never delete completed history
     await prisma.workoutLog.deleteMany({
         where: {
             userId: user.id,
@@ -78,10 +76,23 @@ export async function POST(req: Request) {
             status: "IN_PROGRESS",
             loggedAt: {
                 gte: startOfDay,
-                lte: endOfDay
-            }
-        }
+                lte: endOfDay,
+            },
+        },
     });
+
+    const existingCompleted =
+        status === "COMPLETED"
+            ? await prisma.workoutLog.findFirst({
+                  where: {
+                      userId: user.id,
+                      workoutId,
+                      status: "COMPLETED",
+                      loggedAt: { gte: startOfDay, lte: endOfDay },
+                  },
+                  orderBy: { updatedAt: "desc" },
+              })
+            : null;
 
     // Process exercises to get real IDs safely (avoiding race conditions) and sync layout order
     const tempToRealId = new Map<string, string>();
@@ -134,28 +145,42 @@ export async function POST(req: Request) {
         exerciseId: tempToRealId.get(s.exerciseId) || s.exerciseId
     }));
 
+    const logPayload = {
+        duration,
+        notes,
+        feeling,
+        status: status as "IN_PROGRESS" | "COMPLETED",
+        loggedAt: loggedAt ? parseLogDate(loggedAt) : new Date(),
+    };
+
+    const setsCreate = setsWithRealIds.map((s) => ({
+        exerciseId: s.exerciseId,
+        setNumber: s.setNumber,
+        reps: s.reps,
+        weightKg: s.weightKg,
+        rpe: s.rpe,
+        isWarmup: s.isWarmup,
+        isCompleted: s.isCompleted,
+        isPR: prExerciseIds.has(s.exerciseId),
+        videoUrl: s.videoUrl,
+    }));
+
+    if (existingCompleted) {
+        await prisma.logSet.deleteMany({ where: { workoutLogId: existingCompleted.id } });
+        const workoutLog = await prisma.workoutLog.update({
+            where: { id: existingCompleted.id },
+            data: { ...logPayload, sets: { create: setsCreate } },
+            include: { sets: true },
+        });
+        return NextResponse.json(workoutLog, { status: 200 });
+    }
+
     const workoutLog = await prisma.workoutLog.create({
         data: {
             userId: user.id,
             workoutId,
-            duration,
-            notes,
-            feeling,
-            status: status as any,
-            ...(loggedAt ? { loggedAt: new Date(loggedAt) } : {}),
-            sets: {
-                create: setsWithRealIds.map((s) => ({
-                    exerciseId: s.exerciseId,
-                    setNumber: s.setNumber,
-                    reps: s.reps,
-                    weightKg: s.weightKg,
-                    rpe: s.rpe,
-                    isWarmup: s.isWarmup,
-                    isCompleted: s.isCompleted,
-                    isPR: prExerciseIds.has(s.exerciseId),
-                    videoUrl: s.videoUrl,
-                })),
-            },
+            ...logPayload,
+            sets: { create: setsCreate },
         },
         include: { sets: true },
     });
@@ -176,33 +201,53 @@ export async function GET(req: Request) {
     const limit = parseInt(url.searchParams.get("limit") ?? "20");
 
     if (activeOnly) {
+        const workoutId = url.searchParams.get("workoutId");
+        const dateParam = url.searchParams.get("date");
+
+        const activeInclude = {
+            workout: { select: { name: true, id: true } },
+            sets: {
+                include: {
+                    exercise: {
+                        select: {
+                            id: true,
+                            name: true,
+                            sets: true,
+                            reps: true,
+                            weightTargetKg: true,
+                            notes: true,
+                            order: true,
+                        },
+                    },
+                },
+                orderBy: { setNumber: "asc" as const },
+            },
+        };
+
+        if (workoutId && dateParam) {
+            const { start, end } = getLocalDayBounds(parseLogDate(dateParam));
+            const activeLog = await prisma.workoutLog.findFirst({
+                where: {
+                    userId: user.id,
+                    workoutId,
+                    status: "IN_PROGRESS",
+                    loggedAt: { gte: start, lte: end },
+                },
+                include: activeInclude,
+                orderBy: { updatedAt: "desc" },
+            });
+            return NextResponse.json(activeLog);
+        }
+
         const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
         const activeLog = await prisma.workoutLog.findFirst({
-            where: { 
-                userId: user.id, 
+            where: {
+                userId: user.id,
                 status: "IN_PROGRESS",
-                updatedAt: { gte: twentyFourHoursAgo }
+                updatedAt: { gte: twentyFourHoursAgo },
             },
-            include: {
-                workout: { select: { name: true, id: true } },
-                sets: {
-                    include: {
-                        exercise: {
-                            select: {
-                                id: true,
-                                name: true,
-                                sets: true,
-                                reps: true,
-                                weightTargetKg: true,
-                                notes: true,
-                                order: true,
-                            }
-                        }
-                    },
-                    orderBy: { setNumber: "asc" }
-                }
-            },
-            orderBy: { updatedAt: "desc" }
+            include: activeInclude,
+            orderBy: { updatedAt: "desc" },
         });
         return NextResponse.json(activeLog);
     }

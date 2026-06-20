@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Plus, Check, Search, Loader2, Dumbbell, Pencil, X } from "lucide-react";
+import { MUSCLE_GROUPS, muscleGroupBadgeClass } from "@/lib/muscleGroups";
 
 interface GlobalExercise {
     id: string;
@@ -42,13 +43,43 @@ function draftFromExercise(exercise: GlobalExercise): ExerciseDraft {
 export function AdminExercisesClient({ initialExercises }: { initialExercises: GlobalExercise[] }) {
     const [exercises, setExercises] = useState(initialExercises);
     const [search, setSearch] = useState("");
+    const [groupFilter, setGroupFilter] = useState<string>("All");
     const [isAdding, setIsAdding] = useState(false);
     const [newExercise, setNewExercise] = useState<ExerciseDraft>(emptyDraft);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editingExercise, setEditingExercise] = useState<ExerciseDraft>(emptyDraft);
     const [saving, setSaving] = useState(false);
 
-    const filtered = exercises.filter(e => e.name.toLowerCase().includes(search.toLowerCase()));
+    const filtered = exercises.filter((e) => {
+        const matchesSearch = e.name.toLowerCase().includes(search.toLowerCase());
+        const matchesGroup = groupFilter === "All" || (e.muscleGroup ?? "Uncategorized") === groupFilter;
+        return matchesSearch && matchesGroup;
+    });
+
+    const groupedExercises = useMemo(() => {
+        const groups = new Map<string, GlobalExercise[]>();
+        for (const ex of filtered) {
+            const key = ex.muscleGroup || "Uncategorized";
+            const list = groups.get(key) ?? [];
+            list.push(ex);
+            groups.set(key, list);
+        }
+        const orderedKeys = [
+            ...MUSCLE_GROUPS.filter((g) => groups.has(g)),
+            ...Array.from(groups.keys()).filter((k) => !MUSCLE_GROUPS.includes(k as typeof MUSCLE_GROUPS[number])).sort(),
+        ];
+        return orderedKeys.map((key) => ({ key, items: groups.get(key)!.sort((a, b) => a.name.localeCompare(b.name)) }));
+    }, [filtered]);
+
+    const groupCounts = useMemo(() => {
+        const counts = new Map<string, number>();
+        for (const ex of exercises) {
+            if (ex.isSuggestion) continue;
+            const key = ex.muscleGroup || "Uncategorized";
+            counts.set(key, (counts.get(key) ?? 0) + 1);
+        }
+        return counts;
+    }, [exercises]);
 
     const handleAdd = async () => {
         if (!newExercise.name.trim()) return;
@@ -140,13 +171,16 @@ export function AdminExercisesClient({ initialExercises }: { initialExercises: G
                                 if (e.key === "Enter") handleAdd();
                             }}
                         />
-                        <input
-                            type="text"
-                            placeholder="Muscle group"
+                        <select
                             className="input"
                             value={newExercise.muscleGroup}
                             onChange={(e) => setNewExercise(prev => ({ ...prev, muscleGroup: e.target.value }))}
-                        />
+                        >
+                            {MUSCLE_GROUPS.map((g) => (
+                                <option key={g} value={g}>{g}</option>
+                            ))}
+                            <option value="Uncategorized">Uncategorized</option>
+                        </select>
                         <input
                             type="url"
                             placeholder="Video URL"
@@ -185,8 +219,41 @@ export function AdminExercisesClient({ initialExercises }: { initialExercises: G
                 />
             </div>
 
-            <div className="space-y-3">
-                {filtered.map(ex => {
+            <div className="flex flex-wrap gap-2 mb-4">
+                <button
+                    type="button"
+                    onClick={() => setGroupFilter("All")}
+                    className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${groupFilter === "All" ? "bg-brand-500/20 text-brand-300 border-brand-500/30" : "bg-surface-muted text-fg-subtle border-surface-border hover:text-fg"}`}
+                >
+                    All ({exercises.filter(e => !e.isSuggestion).length})
+                </button>
+                {MUSCLE_GROUPS.map((g) => {
+                    const count = groupCounts.get(g) ?? 0;
+                    if (!count) return null;
+                    return (
+                        <button
+                            key={g}
+                            type="button"
+                            onClick={() => setGroupFilter(g)}
+                            className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${groupFilter === g ? muscleGroupBadgeClass(g) : "bg-surface-muted text-fg-subtle border-surface-border hover:text-fg"}`}
+                        >
+                            {g} ({count})
+                        </button>
+                    );
+                })}
+            </div>
+
+            <div className="space-y-6">
+                {groupedExercises.map(({ key, items }) => (
+                    <div key={key}>
+                        <div className="flex items-center gap-2 mb-3 px-1">
+                            <span className={`text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full border ${muscleGroupBadgeClass(key)}`}>
+                                {key}
+                            </span>
+                            <span className="text-xs text-fg-muted font-semibold">{items.length} exercises</span>
+                        </div>
+                        <div className="space-y-3">
+                {items.map(ex => {
                     const isEditing = editingId === ex.id;
                     return (
                     <div key={ex.id} className="card p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 fade-in">
@@ -198,7 +265,10 @@ export function AdminExercisesClient({ initialExercises }: { initialExercises: G
                                 {isEditing ? (
                                     <div className="grid sm:grid-cols-2 gap-2 w-full">
                                         <input className="input input-sm" value={editingExercise.name} onChange={(e) => setEditingExercise(prev => ({ ...prev, name: e.target.value }))} />
-                                        <input className="input input-sm" value={editingExercise.muscleGroup} onChange={(e) => setEditingExercise(prev => ({ ...prev, muscleGroup: e.target.value }))} />
+                                        <select className="input input-sm" value={editingExercise.muscleGroup} onChange={(e) => setEditingExercise(prev => ({ ...prev, muscleGroup: e.target.value }))}>
+                                            {MUSCLE_GROUPS.map((g) => <option key={g} value={g}>{g}</option>)}
+                                            <option value="Uncategorized">Uncategorized</option>
+                                        </select>
                                         <input type="url" className="input input-sm sm:col-span-2" placeholder="Video URL" value={editingExercise.videoUrl} onChange={(e) => setEditingExercise(prev => ({ ...prev, videoUrl: e.target.value }))} />
                                         <input type="url" className="input input-sm sm:col-span-2" placeholder="Thumbnail URL" value={editingExercise.thumbnailUrl} onChange={(e) => setEditingExercise(prev => ({ ...prev, thumbnailUrl: e.target.value }))} />
                                         <textarea className="input input-sm min-h-20 sm:col-span-2 resize-none" placeholder="Instructions" value={editingExercise.instructions} onChange={(e) => setEditingExercise(prev => ({ ...prev, instructions: e.target.value }))} />
@@ -218,7 +288,9 @@ export function AdminExercisesClient({ initialExercises }: { initialExercises: G
                                                 </span>
                                             )}
                                         </div>
-                                        <p className="text-xs text-fg-subtle">Muscle Group: {ex.muscleGroup}</p>
+                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wider ${muscleGroupBadgeClass(ex.muscleGroup)}`}>
+                                            {ex.muscleGroup || "Uncategorized"}
+                                        </span>
                                         {ex.instructions && <p className="text-xs text-fg-muted mt-1 line-clamp-2">{ex.instructions}</p>}
                                     </>
                                 )}
@@ -258,6 +330,9 @@ export function AdminExercisesClient({ initialExercises }: { initialExercises: G
                         )}
                     </div>
                 )})}
+                        </div>
+                    </div>
+                ))}
 
                 {filtered.length === 0 && (
                     <div className="card p-12 text-center text-fg-muted font-semibold bg-transparent border-dashed">

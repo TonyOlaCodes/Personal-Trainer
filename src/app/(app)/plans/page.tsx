@@ -54,6 +54,7 @@ export default async function PlansPage() {
             type: up.plan.type,
             shareCode: up.plan.shareCode,
             authorName,
+            isOwned: !isSomeoneElsesPlan,
             isActive: up.isActive,
             weekCount: up.plan._count.weeks,
             startedAt: up.startedAt.toISOString(),

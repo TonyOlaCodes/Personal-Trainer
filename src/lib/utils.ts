@@ -32,6 +32,53 @@ export function formatRelative(date: Date | string) {
     return formatDate(d);
 }
 
+/** Local calendar date as YYYY-MM-DD */
+export function toDateKey(date: Date): string {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+}
+
+/** Parse YYYY-MM-DD (or ISO) to a stable local noon Date for workout logging */
+export function parseLogDate(input: string | Date): Date {
+    if (input instanceof Date) {
+        const d = new Date(input);
+        d.setHours(12, 0, 0, 0);
+        return d;
+    }
+    const match = input.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+        const [, y, m, day] = match;
+        return new Date(Number(y), Number(m) - 1, Number(day), 12, 0, 0, 0);
+    }
+    const d = new Date(input);
+    d.setHours(12, 0, 0, 0);
+    return d;
+}
+
+/** Whether two values fall on the same local calendar day */
+export function isSameCalendarDay(a: string | Date, b: string | Date): boolean {
+    const da = a instanceof Date ? a : parseLogDate(a);
+    const db = b instanceof Date ? b : parseLogDate(b);
+    return toDateKey(da) === toDateKey(db);
+}
+
+/** Local start/end of day for a calendar date */
+export function getLocalDayBounds(date: Date) {
+    const start = new Date(date);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(date);
+    end.setHours(23, 59, 59, 999);
+    return { start, end };
+}
+
+/** ISO timestamp to store for a scheduled workout day */
+export function toLoggedAtIso(date?: string | Date | null): string {
+    if (!date) return new Date().toISOString();
+    return parseLogDate(date).toISOString();
+}
+
 /** Get initials from a name */
 export function getInitials(name?: string | null) {
     if (!name) return "?";

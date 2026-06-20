@@ -2,62 +2,60 @@
 
 import { useState, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { muscleGroupBadgeClass } from "@/lib/muscleGroups";
 
-const EXERCISES = [
-    // Chest
-    "Bench Press", "Barbell Bench Press", "Incline Bench Press", "Decline Bench Press", 
-    "Dumbbell Bench Press", "Incline Dumbbell Bench Press", "Decline Dumbbell Bench Press",
-    "Flat Dumbbell Fly", "Incline Dumbbell Press", "Cable Fly", "Pec Deck", "Push-Up", "Pushup",
-    "Incline Push-Up", "Decline Push-Up", "Wall Pushup", "Wall Pushups", "Dips", "Chest Dips",
-    // Back
-    "Deadlift", "Barbell Deadlift", "Romanian Deadlift", "Dumbbell Romanian Deadlift", 
-    "Sumo Deadlift", "Trap Bar Deadlift", "Barbell Row", "Barbell Rows", "Pull-Up", "Pull-Ups", 
-    "Chin-Up", "Chin-Ups", "Lat Pulldown", "Lat Pulldowns", "Close-Grip Lat Pulldown", 
-    "Seated Cable Row", "Seated Cable Rows", "T-Bar Row", "Single Arm Dumbbell Row", 
-    "Face Pull", "Face Pulls", "Good Morning", "Hyperextension", "Back Extension", "Shrugs",
-    // Shoulders
-    "Overhead Press", "Military Press", "Dumbbell Shoulder Press", "Arnold Press", 
-    "Lateral Raise", "Lateral Raises", "Cable Lateral Raise", "Front Raise", "Dumbbell Front Raise", 
-    "Rear Delt Fly", "Dumbbell Rear Delt Fly", "Cable Rear Delt Fly", "Upright Row",
-    // Biceps
-    "Barbell Curl", "Barbell Curls", "Dumbbell Curl", "Dumbbell Curls", "Hammer Curl", "Hammer Curls",
-    "Preacher Curl", "Incline Dumbbell Curl", "Cable Curl", "Concentration Curl", "EZ Bar Curl",
-    // Triceps
-    "Tricep Pushdown", "Tricep Pushdowns", "Tricep Rope Pushdown", "Skull Crushers", "Skull Crusher", 
-    "Close Grip Bench Press", "Overhead Tricep Extension", "Tricep Dips", "Tricep Kickback", 
-    "Cable Overhead Tricep Extension",
-    // Legs
-    "Squat", "Squats", "Back Squat", "Front Squat", "Goblet Squat", "Bulgarian Split Squat", 
-    "Bulgarian Split Squats", "Leg Press", "Hack Squat", "Lunges", "Walking Lunges", "Reverse Lunges", 
-    "Step Up", "Step Ups", "Romanian Deadlift", "Stiff Leg Deadlift", "Leg Curl", "Leg Curls", 
-    "Leg Extension", "Leg Extensions", "Hip Thrust", "Hip Thrusts", "Glute Bridge", 
-    "Calf Raise", "Calf Raises", "Standing Calf Raise", "Seated Calf Raise", "Seated Calf Raises",
-    // Core
-    "Plank", "Planks", "Side Plank", "Ab Wheel Rollout", "Cable Crunch", "Cable Crunches", 
-    "Decline Crunch", "Hanging Leg Raise", "Hanging Leg Raises", "Hanging Knee Raise", 
-    "Russian Twist", "Russian Twists", "Bicycle Crunch", "Crunch", "Crunches", "Sit-Up", 
-    "Sit Up", "Sit-Ups", "Sit Ups",
-    // Cardio / Compound
-    "Treadmill", "Stairmaster", "Elliptical", "Stationary Bike", "Rowing Machine",
-    "Running", "Cycling", "Swimming", "Jump Rope", "Farmers Walk", 
-    "Trap Bar Deadlift", "Sumo Deadlift", "Power Clean", "Hang Clean", 
-    "Snatch", "Box Jump", "Burpee", "Burpees", "Battle Ropes", "Sled Push", "Sled Pull",
-    "Kettlebell Swing",
+type ExerciseOption = { name: string; muscleGroup?: string | null };
+
+/** Full-name cardio exercises (single word) — avoids false positives like "Crunch" matching "run". */
+const EXACT_CARDIO_NAMES = new Set([
+    "walk", "walking", "jog", "jogging", "run", "running", "sprint", "sprints",
+    "swim", "swimming", "cycling", "skipping", "rower", "cardio",
+]);
+
+/** Multi-word or distinctive cardio phrases — safe to match with includes(). */
+const CARDIO_PHRASE_MATCHERS = [
+    "treadmill", "stairmaster", "stair climber", "stepmill", "elliptical",
+    "stationary bike", "spin bike", "assault bike", "air bike", "rowing machine",
+    "jump rope", "double unders", "ski erg", "versaclimber", "battle rope",
+    "sled push", "sled pull", "sled drag", "prowler push", "prowler pull",
+    "treadmill walk", "incline treadmill walk", "treadmill run",
+    "hill sprint", "interval run", "tempo run", "long run",
+    "outdoor cycling", "jumping jack", "jumping jacks", "high knees", "butt kicks",
+    "shadow boxing", "box step-over", "shuttle run", "agility ladder",
+    "bear crawl", "crab walk", "cross trainer", "burpee", "burpees",
 ];
 
-const CARDIO_MATCHERS = [
-    "treadmill", "stairmaster", "elliptical", "bike", "rowing", 
-    "run", "cycling", "swim", "jump rope", "cardio", "sprint"
-];
+function escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
-export function isCardio(name: string): boolean {
-    const n = name.toLowerCase();
-    return CARDIO_MATCHERS.some(m => n.includes(m));
+function matchesCardioPhrase(name: string, phrase: string): boolean {
+    const normalizedName = name.toLowerCase().trim();
+    const normalizedPhrase = phrase.toLowerCase().trim();
+    if (!normalizedPhrase) return false;
+
+    if (normalizedPhrase.includes(" ")) {
+        return normalizedName.includes(normalizedPhrase);
+    }
+
+    return new RegExp(`\\b${escapeRegExp(normalizedPhrase)}\\b`, "i").test(normalizedName);
+}
+
+export function isCardio(name: string, muscleGroup?: string | null): boolean {
+    const group = muscleGroup?.toLowerCase();
+    if (group === "cardio") return true;
+    if (group) return false;
+
+    const normalizedName = name.toLowerCase().trim();
+    if (!normalizedName) return false;
+    if (EXACT_CARDIO_NAMES.has(normalizedName)) return true;
+
+    return CARDIO_PHRASE_MATCHERS.some((phrase) => matchesCardioPhrase(normalizedName, phrase));
 }
 
 interface Props {
     value: string;
-    onChange: (val: string) => void;
+    onChange: (val: string, muscleGroup?: string | null) => void;
     placeholder?: string;
     className?: string;
     autoFocus?: boolean;
@@ -88,10 +86,8 @@ function scoreMatch(query: string, target: string): number {
     if (t.includes(q)) return 2;
 
     const qWords = q.split(/\s+/);
-    // Contains all words out of order (e.g. "press bench" -> "bench press")
-    if (qWords.length > 1 && qWords.every(w => t.includes(w))) return 3;
+    if (qWords.length > 1 && qWords.every((w) => t.includes(w))) return 3;
 
-    // Word-by-word typo allowance (e.g. "bnch pres" -> "bench press")
     const tWords = t.split(/\s+/);
     let totalDistance = 0;
     for (const qw of qWords) {
@@ -103,32 +99,30 @@ function scoreMatch(query: string, target: string): number {
         totalDistance += best;
     }
 
-    // Accept if total typos are small relative to word count
     if (totalDistance <= Math.max(1, qWords.length * 2)) {
         return 4 + totalDistance;
     }
 
-    return 999; // no match
+    return 999;
 }
 
-let globalExercisesCache: string[] | null = null;
-let globalExercisesPromise: Promise<string[]> | null = null;
+let globalExercisesCache: ExerciseOption[] | null = null;
+let globalExercisesPromise: Promise<ExerciseOption[]> | null = null;
 
-async function fetchGlobalExercises(): Promise<string[]> {
+async function fetchGlobalExercises(): Promise<ExerciseOption[]> {
     if (globalExercisesCache) return globalExercisesCache;
     if (globalExercisesPromise) return globalExercisesPromise;
 
     globalExercisesPromise = fetch("/api/exercises")
-        .then(res => {
+        .then((res) => {
             if (!res.ok) throw new Error("Failed to fetch");
             return res.json();
         })
-        .then((data: { name: string }[]) => {
-            const list = data.map(d => d.name);
-            globalExercisesCache = list;
-            return list;
+        .then((data: ExerciseOption[]) => {
+            globalExercisesCache = data;
+            return data;
         })
-        .catch(err => {
+        .catch((err) => {
             console.error("Failed to load exercises from API", err);
             return [];
         });
@@ -138,17 +132,15 @@ async function fetchGlobalExercises(): Promise<string[]> {
 
 export function ExerciseAutocomplete({ value, onChange, placeholder, className, autoFocus }: Props) {
     const [open, setOpen] = useState(false);
-    const [suggestions, setSuggestions] = useState<string[]>([]);
+    const [suggestions, setSuggestions] = useState<ExerciseOption[]>([]);
     const [activeIndex, setActiveIndex] = useState(-1);
-    const [dbExercises, setDbExercises] = useState<string[]>([]);
+    const [dbExercises, setDbExercises] = useState<ExerciseOption[]>([]);
     const containerRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
-        fetchGlobalExercises().then(list => {
-            if (list.length > 0) {
-                setDbExercises(list);
-            }
+        fetchGlobalExercises().then((list) => {
+            if (list.length > 0) setDbExercises(list);
         });
     }, []);
 
@@ -167,25 +159,19 @@ export function ExerciseAutocomplete({ value, onChange, placeholder, className, 
             return;
         }
 
-        const combinedList = Array.from(new Set([...dbExercises, ...EXERCISES]));
-        const matches = combinedList
-            .map(ex => ({ name: ex, score: scoreMatch(q, ex) }))
-            .filter(item => item.score < 999)
+        const matches = dbExercises
+            .map((ex) => ({ ...ex, score: scoreMatch(q, ex.name) }))
+            .filter((item) => item.score < 999)
             .sort((a, b) => a.score - b.score || a.name.length - b.name.length)
-            .map(item => item.name)
-            .slice(0, 3);
+            .slice(0, 6);
 
         setSuggestions(matches);
-        
-        // Only auto-open if the value is being typed (not just loaded)
-        // and if it's NOT an exact match yet (or we want to show alternatives)
-        // But the key is to ONLY open if we have focus.
+
         if (document.activeElement === inputRef.current && matches.length > 0) {
             setOpen(true);
         }
     }, [value, dbExercises]);
 
-    // Close on outside click
     useEffect(() => {
         const handler = (e: MouseEvent) => {
             if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
@@ -196,42 +182,35 @@ export function ExerciseAutocomplete({ value, onChange, placeholder, className, 
         return () => document.removeEventListener("mousedown", handler);
     }, []);
 
-    const pick = (ex: string) => {
-        onChange(ex);
+    const pick = (ex: ExerciseOption) => {
+        onChange(ex.name, ex.muscleGroup);
         setOpen(false);
         setActiveIndex(-1);
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (!open || suggestions.length === 0) {
-            if (e.key === "Enter" && value.trim()) {
-                setOpen(false);
-            }
+            if (e.key === "Enter" && value.trim()) setOpen(false);
             return;
         }
 
         switch (e.key) {
             case "ArrowDown":
                 e.preventDefault();
-                setActiveIndex(prev => (prev + 1) % suggestions.length);
+                setActiveIndex((prev) => (prev + 1) % suggestions.length);
                 break;
             case "ArrowUp":
                 e.preventDefault();
-                setActiveIndex(prev => (prev - 1 + suggestions.length) % suggestions.length);
+                setActiveIndex((prev) => (prev - 1 + suggestions.length) % suggestions.length);
                 break;
             case "Tab":
                 e.preventDefault();
-                setActiveIndex(prev => (prev + 1) % suggestions.length);
+                setActiveIndex((prev) => (prev + 1) % suggestions.length);
                 break;
             case "Enter":
                 if (activeIndex >= 0) {
                     e.preventDefault();
                     pick(suggestions[activeIndex]);
-                } else if (suggestions.length > 0) {
-                    // Optional: pick first suggestion on Enter even if not highlighted
-                    // e.preventDefault();
-                    // pick(suggestions[0]);
-                    setOpen(false);
                 } else {
                     setOpen(false);
                 }
@@ -247,10 +226,10 @@ export function ExerciseAutocomplete({ value, onChange, placeholder, className, 
             <input
                 ref={inputRef}
                 type="text"
-                placeholder={placeholder ?? "e.g. Incline Bench Press"}
+                placeholder={placeholder ?? "e.g. Lat Pullover"}
                 className={className}
                 value={value}
-                onChange={e => onChange(e.target.value)}
+                onChange={(e) => onChange(e.target.value)}
                 onFocus={() => {
                     if (suggestions.length > 0) setOpen(true);
                 }}
@@ -261,24 +240,34 @@ export function ExerciseAutocomplete({ value, onChange, placeholder, className, 
                 <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-surface-elevated border border-surface-border rounded-xl shadow-lg overflow-hidden animate-slide-up">
                     {suggestions.map((ex, i) => (
                         <button
-                            key={ex}
+                            key={ex.name}
                             type="button"
                             onClick={() => pick(ex)}
                             onMouseEnter={() => setActiveIndex(i)}
                             className={cn(
-                                "w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center gap-2 border-b border-surface-border/50 last:border-0",
-                                activeIndex === i 
-                                    ? "bg-brand-500/20 text-brand-300" 
+                                "w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center justify-between gap-3 border-b border-surface-border/50 last:border-0",
+                                activeIndex === i
+                                    ? "bg-brand-500/20 text-brand-300"
                                     : "text-fg hover:bg-brand-500/10 hover:text-brand-300"
                             )}
                         >
-                            <span className={cn(
-                                "w-4 h-4 rounded-md text-[9px] font-black flex items-center justify-center shrink-0 transition-colors",
-                                activeIndex === i ? "bg-brand-400 text-white" : "bg-brand-400/10 text-brand-400"
-                            )}>
-                                {i + 1}
+                            <span className="flex items-center gap-2 min-w-0">
+                                <span className={cn(
+                                    "w-4 h-4 rounded-md text-[9px] font-black flex items-center justify-center shrink-0 transition-colors",
+                                    activeIndex === i ? "bg-brand-400 text-white" : "bg-brand-400/10 text-brand-400"
+                                )}>
+                                    {i + 1}
+                                </span>
+                                <span className="truncate">{ex.name}</span>
                             </span>
-                            {ex}
+                            {ex.muscleGroup && (
+                                <span className={cn(
+                                    "text-[9px] font-bold px-1.5 py-0.5 rounded-full border uppercase tracking-wider shrink-0",
+                                    muscleGroupBadgeClass(ex.muscleGroup)
+                                )}>
+                                    {ex.muscleGroup}
+                                </span>
+                            )}
                         </button>
                     ))}
                     <div className="px-4 py-1.5 text-[10px] text-fg-subtle border-t border-surface-border/30 bg-surface-muted/30 flex justify-between font-bold uppercase tracking-wider">

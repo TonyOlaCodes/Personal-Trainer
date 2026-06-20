@@ -3,7 +3,7 @@
 import { Edit3 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { cn } from "@/lib/utils";
+import { cn, toDateKey, parseLogDate } from "@/lib/utils";
 
 interface Props {
     logId: string;
@@ -25,7 +25,10 @@ export function EditSessionButton({ logId, workoutId, loggedAt }: Props) {
                 body: JSON.stringify({ status: "IN_PROGRESS" })
             });
             if (res.ok) {
-                router.push(`/plans/log/${workoutId}${loggedAt ? `?date=${encodeURIComponent(loggedAt)}` : ""}`);
+                const dateQuery = loggedAt
+                    ? `?date=${encodeURIComponent(toDateKey(parseLogDate(loggedAt)))}`
+                    : "";
+                router.push(`/plans/log/${workoutId}${dateQuery}`);
                 router.refresh();
             } else {
                 alert("Failed to reopen session. Try again.");

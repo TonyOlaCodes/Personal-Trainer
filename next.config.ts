@@ -12,6 +12,17 @@ const nextConfig: NextConfig = {
     turbo: {
       rules: {},
     },
+    serverActions: {
+      bodySizeLimit: "12mb",
+    },
+  },
+  async rewrites() {
+    return [
+      {
+        source: "/uploads/:path*",
+        destination: "/api/uploads/:path*",
+      },
+    ];
   },
 };
 

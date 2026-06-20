@@ -125,6 +125,7 @@ export default async function CheckInsPage() {
                             coachResponse: c.coachResponse,
                             respondedAt: c.respondedAt?.toISOString() || null,
                             sleepRating: c.sleepRating,
+                            dietRating: c.dietRating,
                             stressRating: c.stressRating,
                             energyRating: c.energyRating,
                             intensityRating: c.intensityRating,

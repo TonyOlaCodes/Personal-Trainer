@@ -17,6 +17,7 @@ interface Plan {
     type: string;
     shareCode?: string | null;
     authorName?: string | null;
+    isOwned: boolean;
     isActive: boolean;
     weekCount: number;
     startedAt: string;
@@ -65,17 +66,18 @@ export function PlansClient({ plans }: Props) {
         window.location.reload();
     };
 
-    const deletePlan = async (planId: string) => {
+    const deletePlan = async (planId: string, isOwned: boolean) => {
         if (deletingId !== planId) {
             setDeletingId(planId);
             return;
         }
-        
+
         const res = await fetch(`/api/plans/${planId}`, { method: "DELETE" });
         if (res.ok) {
             window.location.reload();
         } else {
-            alert("Failed to delete plan");
+            const data = await res.json().catch(() => ({}));
+            alert(data.error ?? "Failed to remove plan");
             setDeletingId(null);
         }
     };
@@ -227,12 +229,16 @@ export function PlansClient({ plans }: Props) {
                                             </button>
                                         )}
                                         <button
-                                            onClick={() => deletePlan(plan.id)}
+                                            onClick={() => deletePlan(plan.id, plan.isOwned)}
                                             className={cn(
                                                 "btn-icon w-8 h-8 rounded-lg transition-all",
                                                 deletingId === plan.id ? "bg-danger text-white scale-110 shadow-glow-sm" : "hover:bg-danger/10 hover:text-danger text-fg-subtle"
                                             )}
-                                            title={deletingId === plan.id ? "Confirm Delete?" : "Delete Plan"}
+                                            title={
+                                                deletingId === plan.id
+                                                    ? plan.isOwned ? "Confirm delete?" : "Confirm remove?"
+                                                    : plan.isOwned ? "Delete plan" : "Remove from my plans"
+                                            }
                                         >
                                             <Trash2 className="w-4 h-4" />
                                         </button>

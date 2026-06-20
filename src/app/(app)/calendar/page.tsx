@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { CalendarClient } from "./CalendarClient";
+import { toDateKey } from "@/lib/utils";
 
 export const metadata = { title: "Calendar" };
 
@@ -33,6 +34,7 @@ export default async function CalendarPage() {
                 take: 1,
             },
             workoutLogs: {
+                where: { status: "COMPLETED" },
                 include: { 
                     workout: { 
                         select: { name: true, id: true } 
@@ -44,7 +46,7 @@ export default async function CalendarPage() {
                     }
                 },
                 orderBy: { loggedAt: "desc" },
-                take: 120, // Increased for better monthly snapshots
+                take: 365,
             },
         },
     });
@@ -78,9 +80,9 @@ export default async function CalendarPage() {
                         })),
                     } : null}
                     planStartedAt={userPlan?.startedAt ? userPlan.startedAt.toISOString() : null}
-                    loggedDates={logs.map((l) => ({
+                    loggedDates={logs.filter((l) => l.status === "COMPLETED").map((l) => ({
                         id: l.id,
-                        date: l.loggedAt.toISOString(),
+                        date: toDateKey(l.loggedAt),
                         workoutName: l.workout.name,
                         workoutId: (l as any).workoutId || l.workout?.id,
                         duration: (l as any).duration || null,

@@ -9,7 +9,7 @@ import {
     Zap, Hash
 } from "lucide-react";
 import Link from "next/link";
-import { cn } from "@/lib/utils";
+import { cn, toDateKey } from "@/lib/utils";
 
 /* ─────────────────────────── Types ─────────────────────────── */
 interface PlanExercise { name: string; sets: number; reps: string; }
@@ -26,7 +26,7 @@ interface LogSet {
 }
 interface LoggedDate { 
     id: string;
-    date: string; 
+    date: string; // YYYY-MM-DD
     workoutName: string; 
     workoutId: string;
     duration?: number | null;
@@ -50,15 +50,14 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates }: Props
     today.setHours(0, 0, 0, 0);
 
     const [view, setView] = useState({ year: today.getFullYear(), month: today.getMonth() });
-    const [selectedDateKey, setSelectedDateKey] = useState<string>(today.toDateString());
+    const [selectedDateKey, setSelectedDateKey] = useState<string>(toDateKey(today));
 
     /* ─── Data Mappers ─── */
     const logMap = useMemo(() => {
-        const map: Record<string, LoggedDate> = {};
+        const map: Record<string, LoggedDate[]> = {};
         loggedDates.forEach((l) => {
-            const d = new Date(l.date);
-            d.setHours(0, 0, 0, 0);
-            map[d.toDateString()] = l;
+            if (!map[l.date]) map[l.date] = [];
+            map[l.date].push(l);
         });
         return map;
     }, [loggedDates]);
@@ -106,8 +105,11 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates }: Props
     while (cells.length % 7 !== 0) cells.push(null);
 
     /* ─── Selected Day Helpers ─── */
-    const selectedDate = new Date(selectedDateKey);
-    const selectedLog = logMap[selectedDateKey];
+    const selectedDate = useMemo(() => {
+        const [y, m, d] = selectedDateKey.split("-").map(Number);
+        return new Date(y, m - 1, d);
+    }, [selectedDateKey]);
+    const selectedLogs = logMap[selectedDateKey] ?? [];
     const selectedPlanned = getPlannedWorkoutForDate(selectedDate);
     
     const calculateVolume = (sets: LogSet[]) => {
@@ -115,8 +117,8 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates }: Props
     };
 
     const getPreviousPerformance = (exerciseName: string, beforeDate: Date) => {
-        // Find logs before this date, sorted desc (already sorted desc from API)
-        const prevLogs = loggedDates.filter(l => new Date(l.date).getTime() < beforeDate.getTime());
+        const beforeKey = toDateKey(beforeDate);
+        const prevLogs = loggedDates.filter((l) => l.date < beforeKey);
         for (const log of prevLogs) {
             const exSets = log.sets.filter(s => s.exerciseName.toLowerCase() === exerciseName.toLowerCase());
             if (exSets.length > 0) {
@@ -179,8 +181,9 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates }: Props
                             const dateObj = day ? new Date(view.year, view.month, day) : null;
                             if (dateObj) dateObj.setHours(0,0,0,0);
                             
-                            const dateKey = dateObj ? dateObj.toDateString() : "";
-                            const log = day ? logMap[dateKey] : null;
+                            const dateKey = dateObj ? toDateKey(dateObj) : "";
+                            const dayLogs = day ? logMap[dateKey] : null;
+                            const log = dayLogs?.[0] ?? null;
                             const planned = dateObj ? getPlannedWorkoutForDate(dateObj) : null;
                             const isPast = dateObj ? dateObj < today : false;
                             const isTodayDay = dateObj ? dateObj.getTime() === today.getTime() : false;
@@ -188,7 +191,7 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates }: Props
 
                             // Status logic
                             let status: 'completed' | 'missed' | 'scheduled' | 'rest' = 'rest';
-                            if (log) status = 'completed';
+                            if (dayLogs && dayLogs.length > 0) status = 'completed';
                             else if (planned) {
                                 if (isPast) status = 'missed';
                                 else status = 'scheduled';
@@ -235,6 +238,7 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates }: Props
                                                         </div>
                                                         <span className="text-[9px] font-black uppercase tracking-tighter text-success truncate block">
                                                             {log.workoutName.replace(/workout/gi, '').trim()}
+                                                            {dayLogs && dayLogs.length > 1 ? ` +${dayLogs.length - 1}` : ""}
                                                         </span>
                                                     </div>
                                                 ) : planned ? (
@@ -277,7 +281,7 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates }: Props
                             </div>
                             <div>
                                 <h3 className="text-sm font-black text-fg uppercase tracking-widest leading-none mb-1">
-                                    {selectedDateKey === today.toDateString() ? "Today" : "Review"}
+                                    {selectedDateKey === toDateKey(today) ? "Today" : "Review"}
                                 </h3>
                                 <p className="text-[10px] text-fg-muted font-bold opacity-60 uppercase tracking-tighter">
                                     {selectedDate.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
@@ -287,30 +291,32 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates }: Props
                         <div className="flex gap-1">
                             <div className={cn(
                                 "w-2.5 h-2.5 rounded-full",
-                                selectedLog ? "bg-success" : (selectedPlanned ? (selectedDate < today ? "bg-danger" : "bg-brand-400") : "bg-surface-border")
+                                selectedLogs.length > 0 ? "bg-success" : (selectedPlanned ? (selectedDate < today ? "bg-danger" : "bg-brand-400") : "bg-surface-border")
                             )} />
                         </div>
                     </div>
 
                     <div className="space-y-6 animate-slide-up">
-                        {selectedLog ? (
+                        {selectedLogs.length > 0 ? (
                             <div className="space-y-6">
+                                {selectedLogs.map((sessionLog) => (
+                            <div key={sessionLog.id} className="space-y-6">
                                 {/* Header Info */}
                                 <div className="p-4 rounded-2xl bg-success-950/20 border border-success-500/20 shadow-glow-success-sm">
                                     <div className="flex items-start justify-between">
                                         <div>
                                             <p className="text-[10px] font-black text-success uppercase tracking-widest mb-1">Session Logged</p>
-                                            <p className="text-lg font-black text-fg tracking-tight">{selectedLog.workoutName}</p>
+                                            <p className="text-lg font-black text-fg tracking-tight">{sessionLog.workoutName}</p>
                                         </div>
                                         <div className="text-right">
                                             <p className="text-[10px] font-black text-fg-subtle uppercase">Volume</p>
-                                            <p className="text-sm font-black text-fg">{calculateVolume(selectedLog.sets).toLocaleString()}kg</p>
+                                            <p className="text-sm font-black text-fg">{calculateVolume(sessionLog.sets).toLocaleString()}kg</p>
                                         </div>
                                     </div>
-                                    {selectedLog.duration && (
+                                    {sessionLog.duration && (
                                         <div className="mt-4 flex items-center gap-2 text-xs text-fg-muted font-bold">
                                             <Clock className="w-3.5 h-3.5 text-success" />
-                                            {selectedLog.duration} minutes active
+                                            {sessionLog.duration} minutes active
                                         </div>
                                     )}
                                 </div>
@@ -321,9 +327,8 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates }: Props
                                         <Zap className="w-3 h-3 text-brand-400" /> PERFORMANCE
                                     </p>
                                     <div className="space-y-0.5">
-                                        {/* Group by exercise */}
-                                        {Array.from(new Set(selectedLog.sets.map(s => s.exerciseName))).map((exName, idx) => {
-                                            const exSets = selectedLog.sets.filter(s => s.exerciseName === exName);
+                                        {Array.from(new Set(sessionLog.sets.map(s => s.exerciseName))).map((exName, idx) => {
+                                            const exSets = sessionLog.sets.filter(s => s.exerciseName === exName);
                                             return (
                                                 <div key={idx} className="p-4 bg-surface-muted/20 border border-surface-border/50 rounded-2xl mb-2 group transition-all hover:border-brand-500/30">
                                                     <div className="flex items-center justify-between mb-2">
@@ -353,13 +358,15 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates }: Props
                                         })}
                                     </div>
                                     <Link 
-                                        href={`/plans/log/view/${selectedLog.id}`}
+                                        href={`/plans/log/view/${sessionLog.id}`}
                                         className="btn-primary w-full h-11 text-[10px] font-black uppercase tracking-[.2em] group flex items-center justify-center gap-2 mt-2 shadow-glow-brand"
                                     >
                                         <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                                         Review Session
                                     </Link>
                                 </div>
+                            </div>
+                                ))}
                             </div>
                         ) : selectedPlanned ? (
                             <div className="space-y-6">
@@ -410,7 +417,7 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates }: Props
 
                                 {selectedDate < today ? (
                                     <Link
-                                        href={`/plans/log/${selectedPlanned.id}?date=${selectedDate.toISOString().split("T")[0]}`}
+                                        href={`/plans/log/${selectedPlanned.id}?date=${selectedDateKey}&start=1`}
                                         className="btn-secondary w-full h-12 text-xs font-black uppercase tracking-[0.15em] group hover:scale-[1.02] transition-all"
                                     >
                                         <PlayCircle className="w-4 h-4 mr-2 group-hover:rotate-12 transition-transform" />
@@ -418,7 +425,7 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates }: Props
                                     </Link>
                                 ) : (
                                     <Link
-                                        href={`/plans/log/${selectedPlanned.id}?date=${selectedDate.toISOString().split("T")[0]}`}
+                                        href={`/plans/log/${selectedPlanned.id}?date=${selectedDateKey}&start=1`}
                                         className="btn-primary w-full h-14 text-xs font-black uppercase tracking-[0.2em] shadow-glow-brand group hover:scale-[1.02] transition-all"
                                     >
                                         <PlayCircle className="w-5 h-5 mr-3 group-hover:rotate-12 transition-transform" />
