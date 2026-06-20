@@ -95,7 +95,13 @@ export async function GET(req: Request) {
         // Coaches can see all their clients or a specific one
         if (["COACH", "SUPER_ADMIN"].includes(user.role)) {
             if (clientId) {
-                where = { userId: clientId, user: { coachId: user.id } };
+                if (user.role === "SUPER_ADMIN") {
+                    where = { userId: clientId };
+                } else {
+                    where = { userId: clientId, user: { coachId: user.id } };
+                }
+            } else if (user.role === "SUPER_ADMIN") {
+                where = {};
             } else {
                 where = { user: { coachId: user.id } };
             }

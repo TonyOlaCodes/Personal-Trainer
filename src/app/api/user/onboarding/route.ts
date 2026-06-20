@@ -5,6 +5,7 @@ import { redeemAccessCodeForUser } from "@/lib/accessCodes";
 import { anonymizeDeletedUserAccount } from "@/lib/accountDeletion";
 import { normalizeCalories, normalizeSleepHours, normalizeSteps, updateDailyMetricTargets } from "@/lib/dailyMetrics";
 import { getUserDeactivationStatusByClerkId } from "@/lib/userDeactivation";
+import { defaultHomeForRole } from "@/lib/roles";
 import { z } from "zod";
 
 const schema = z.object({
@@ -124,7 +125,16 @@ export async function POST(req: Request) {
             });
         }
 
-        return NextResponse.json({ success: true });
+        const finalUser = savedUserId
+            ? await prisma.user.findUnique({ where: { id: savedUserId }, select: { role: true } })
+            : null;
+        const role = finalUser?.role ?? "FREE";
+
+        return NextResponse.json({
+            success: true,
+            role,
+            redirectTo: defaultHomeForRole(role),
+        });
     } catch (err) {
         console.error("[Onboarding] Failed to save profile:", err);
         return NextResponse.json(

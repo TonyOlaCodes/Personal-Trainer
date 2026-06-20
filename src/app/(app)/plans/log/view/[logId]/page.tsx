@@ -7,6 +7,7 @@ import { Suspense } from "react";
 import { Dumbbell, Clock, Zap, Video, FileText, Smile } from "lucide-react";
 import { SessionActions } from "./SessionActions";
 import { BackButton } from "@/components/shared/BackButton";
+import { defaultHomeForRole } from "@/lib/roles";
 
 export default async function LogViewPage({ params }: { params: Promise<{ logId: string }> }) {
     const { logId } = await params;
@@ -36,7 +37,7 @@ export default async function LogViewPage({ params }: { params: Promise<{ logId:
     const isAdmin = ["SUPER_ADMIN"].includes(actor.role);
 
     if (!isOwner && !isCoachOfOwner && !isAdmin) {
-        redirect("/dashboard");
+        redirect(defaultHomeForRole(actor.role));
     }
 
     // Group sets by exercise
@@ -169,7 +170,6 @@ export default async function LogViewPage({ params }: { params: Promise<{ logId:
                                                         src={set.videoUrl} 
                                                         controls 
                                                         className="w-full aspect-video rounded-2xl bg-black shadow-inner"
-                                                        poster="/api/placeholder/400/225"
                                                     />
                                                 </div>
                                             </div>

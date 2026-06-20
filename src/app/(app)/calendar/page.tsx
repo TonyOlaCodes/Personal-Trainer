@@ -1,5 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { CalendarClient } from "./CalendarClient";
@@ -52,6 +53,12 @@ export default async function CalendarPage() {
     });
 
     if (!user) redirect("/sign-in");
+
+    const cookieStore = await cookies();
+    const isClientMode = cookieStore.get("viewMode")?.value === "CLIENT";
+    if ((user.role === "COACH" || user.role === "SUPER_ADMIN") && !isClientMode) {
+        redirect("/coach");
+    }
 
     const userPlan = user.plans[0] ?? null;
     const activePlan = userPlan?.plan ?? null;

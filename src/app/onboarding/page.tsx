@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { ensureAppSchema } from "@/lib/ensureAppSchema";
 import { getUserDeactivationStatusByClerkId } from "@/lib/userDeactivation";
 import { OnboardingPage as OnboardingClient } from "./OnboardingClient";
+import { defaultHomeForRole } from "@/lib/roles";
 
 export const metadata = { title: "Onboarding | FitCoach Pro" };
 
@@ -16,7 +17,7 @@ export default async function OnboardingServerPage() {
 
     const user = await prisma.user.findUnique({
         where: { clerkId: userId },
-        select: { onboardingDone: true },
+        select: { onboardingDone: true, role: true },
     });
 
     if (await getUserDeactivationStatusByClerkId(userId)) {
@@ -24,7 +25,7 @@ export default async function OnboardingServerPage() {
     }
 
     if (user?.onboardingDone) {
-        redirect("/dashboard");
+        redirect(defaultHomeForRole(user.role));
     }
 
     return <OnboardingClient />;

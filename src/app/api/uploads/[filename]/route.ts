@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { readFile } from "fs/promises";
 import path from "path";
 import fs from "fs";
+import { requireAuthUser } from "@/lib/apiAuth";
 
 export const runtime = "nodejs";
 
@@ -13,6 +14,9 @@ function safeFilename(filename: string): string | null {
 }
 
 export async function GET(req: Request, context: { params: Promise<{ filename: string }> }) {
+    const authResult = await requireAuthUser(req);
+    if (authResult.error) return authResult.error;
+
     try {
         const { filename } = await context.params;
         const safeName = safeFilename(filename);
@@ -44,7 +48,7 @@ export async function GET(req: Request, context: { params: Promise<{ filename: s
         return new NextResponse(buffer, {
             headers: {
                 "Content-Type": mime,
-                "Cache-Control": "public, max-age=31536000, immutable",
+                "Cache-Control": "private, max-age=3600",
             },
         });
     } catch (e) {

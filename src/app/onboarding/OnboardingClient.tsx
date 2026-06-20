@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Zap, ChevronRight, ChevronLeft, SkipForward, Check, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useClerk } from "@clerk/nextjs";
+import { defaultHomeForRole } from "@/lib/roles";
 
 // ── Step 1 data ─────────────────────────────────────────────────────────────
 const goals = [
@@ -143,7 +144,8 @@ export function OnboardingPage() {
                 body: JSON.stringify(form),
             });
             if (res.ok) {
-                router.push("/dashboard");
+                const data = await res.json();
+                router.push(data.redirectTo ?? defaultHomeForRole(data.role ?? "FREE"));
             } else {
                 const data = await res.json().catch(() => ({ error: "Failed to save profile." }));
                 alert(data.error || "Failed to save profile.");

@@ -415,9 +415,9 @@ export default function LandingPage() {
           </div>
           <p className="text-xs text-fg-subtle">© 2026 FitCoach Pro. All rights reserved.</p>
           <div className="flex gap-4 text-xs text-fg-subtle">
-            <Link href="#" className="hover:text-fg transition-colors">Privacy</Link>
-            <Link href="#" className="hover:text-fg transition-colors">Terms</Link>
-            <Link href="#" className="hover:text-fg transition-colors">Contact</Link>
+            <span className="text-fg-subtle/60">Privacy (coming soon)</span>
+            <span className="text-fg-subtle/60">Terms (coming soon)</span>
+            <a href="mailto:support@fitcoachpro.app" className="hover:text-fg transition-colors">Contact</a>
           </div>
         </div>
       </footer>

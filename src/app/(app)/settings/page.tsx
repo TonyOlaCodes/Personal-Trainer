@@ -1,5 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { SettingsClient } from "./SettingsClient";
@@ -48,11 +49,18 @@ export default async function SettingsPage() {
 
         const dailyMetricTargets = await getDailyMetricTargets(user.id);
         const hiddenGoals = (user as any).hiddenGoals ?? [];
+        const cookieStore = await cookies();
+        const isClientMode = cookieStore.get("viewMode")?.value === "CLIENT";
+        const realRole = user.role as "FREE" | "PREMIUM" | "COACH" | "SUPER_ADMIN";
 
         return (
             <>
                 <TopBar title="Settings" subtitle="Manage your account preferences" />
-                <SettingsClient user={{ ...user, hiddenGoals, ...dailyMetricTargets }} />
+                <SettingsClient
+                    user={{ ...user, hiddenGoals, ...dailyMetricTargets }}
+                    realRole={realRole}
+                    isClientMode={isClientMode}
+                />
             </>
         );
     } catch (e) {

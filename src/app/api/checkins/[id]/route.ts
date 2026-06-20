@@ -1,34 +1,36 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { canAccessClient, requireAuthUser } from "@/lib/apiAuth";
 
-// DELETE a check-in
 export async function DELETE(
     req: Request,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const { userId: clerkId } = await auth();
-    if (!clerkId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const authResult = await requireAuthUser(req);
+    if (authResult.error) return authResult.error;
+    const user = authResult.user;
 
     const { id } = await params;
-    const user = await prisma.user.findUnique({ where: { clerkId } });
-    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
     const checkIn = await prisma.checkIn.findUnique({
         where: { id },
     });
     if (!checkIn) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    const isCoach = ["COACH", "SUPER_ADMIN"].includes(user.role);
     const isOwner = checkIn.userId === user.id;
+    const isCoach = user.role === "COACH" || user.role === "SUPER_ADMIN";
 
-    if (!isCoach && !isOwner) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (isOwner) {
+        await prisma.checkIn.delete({ where: { id } });
+        return NextResponse.json({ success: true });
     }
 
-    await prisma.checkIn.delete({
-        where: { id },
-    });
+    if (isCoach) {
+        if (user.role === "SUPER_ADMIN" || (await canAccessClient(user, checkIn.userId))) {
+            await prisma.checkIn.delete({ where: { id } });
+            return NextResponse.json({ success: true });
+        }
+    }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 }

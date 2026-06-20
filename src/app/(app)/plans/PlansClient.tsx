@@ -180,7 +180,7 @@ export function PlansClient({ plans }: Props) {
                             <p className="font-semibold mb-1">No plans yet</p>
                             <p className="text-sm text-fg-muted mb-4">Create a custom plan or pick a template below.</p>
                             <div className="flex justify-center gap-3">
-                                <Link href="/" className="btn-secondary btn-sm">Main Menu</Link>
+                                <Link href="/dashboard" className="btn-secondary btn-sm">Go to Dashboard</Link>
                                 <Link href="/plans/create" className="btn-primary btn-sm">Create Plan</Link>
                             </div>
                         </div>

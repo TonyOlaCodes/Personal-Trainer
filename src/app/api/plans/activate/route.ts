@@ -1,26 +1,29 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import { requireAuthUser } from "@/lib/apiAuth";
 
 // POST /api/plans/activate  — set one plan as active, or pass null to deactivate all
 export async function POST(req: Request) {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const authResult = await requireAuthUser(req);
+    if (authResult.error) return authResult.error;
+    const user = authResult.user;
 
     const { planId } = z.object({ planId: z.string().nullable() }).parse(await req.json());
 
-    const user = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
-
-    // Always deactivate all first
     await prisma.userPlan.updateMany({
         where: { userId: user.id },
         data: { isActive: false },
     });
 
-    // If a planId was provided, activate it
     if (planId) {
+        const assignment = await prisma.userPlan.findUnique({
+            where: { userId_planId: { userId: user.id, planId } },
+        });
+        if (!assignment) {
+            return NextResponse.json({ error: "Plan is not in your library" }, { status: 404 });
+        }
+
         await prisma.userPlan.update({
             where: { userId_planId: { userId: user.id, planId } },
             data: { isActive: true },

@@ -18,6 +18,7 @@ import {
     Video,
     ChevronLeft,
     ChevronRight,
+    UserPlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -35,6 +36,7 @@ const navItems: NavItem[] = [
     { href: "/admin", label: "Admin", icon: ShieldCheck, roles: ["SUPER_ADMIN"], exact: true },
     { href: "/admin/exercises", label: "Exercises", icon: Video, roles: ["SUPER_ADMIN"] },
     { href: "/coach", label: "Coach Panel", icon: Users, roles: ["COACH", "SUPER_ADMIN"] },
+    { href: "/coach/invites", label: "Invites", icon: UserPlus, roles: ["COACH", "SUPER_ADMIN"] },
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, hideRoles: ["COACH", "SUPER_ADMIN"] },
     { href: "/plans", label: "Plans", icon: Dumbbell },
     { href: "/calendar", label: "Calendar", icon: Calendar, hideRoles: ["COACH", "SUPER_ADMIN"] },

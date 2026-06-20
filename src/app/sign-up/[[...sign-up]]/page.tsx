@@ -16,7 +16,7 @@ export default function SignUpPage() {
                 </span>
             </Link>
 
-            <SignUp />
+            <SignUp fallbackRedirectUrl="/onboarding" />
         </div>
     );
 }

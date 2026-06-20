@@ -9,6 +9,7 @@ import {
 import { useClerk } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { cn, getInitials } from "@/lib/utils";
+import { RoleSwitcher } from "@/components/shared/RoleSwitcher";
 
 interface Props {
     user: {
@@ -28,6 +29,8 @@ interface Props {
         targetSleepHours?: number | null;
         hiddenGoals: string[];
     };
+    realRole: "FREE" | "PREMIUM" | "COACH" | "SUPER_ADMIN";
+    isClientMode: boolean;
 }
 
 const GOAL_LABELS: Record<string, string> = {
@@ -46,7 +49,7 @@ const LOC_LABELS: Record<string, string> = {
     HOME: "Home / Home Gym",
 };
 
-export function SettingsClient({ user }: Props) {
+export function SettingsClient({ user, realRole, isClientMode }: Props) {
     const { signOut } = useClerk();
     const router = useRouter();
     const [activeTab, setActiveTab] = useState("profile");
@@ -166,13 +169,13 @@ export function SettingsClient({ user }: Props) {
         if (!secretCode.trim()) return;
         setRedeeming(true);
         try {
-            const res = await fetch("/api/user/profile", {
-                method: "PATCH",
+            const res = await fetch("/api/codes/redeem", {
+                method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ secretCode })
+                body: JSON.stringify({ code: secretCode.trim() }),
             });
             if (res.ok) {
-                alert("Success! Your role has been updated.");
+                alert("Success! Your access has been updated.");
                 window.location.reload();
             } else {
                 const data = await res.json();
@@ -184,6 +187,8 @@ export function SettingsClient({ user }: Props) {
             setRedeeming(false);
         }
     };
+
+    const supportEmail = process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? "support@fitcoachpro.app";
 
     return (
         <div className="max-w-4xl mx-auto p-6 flex flex-col md:flex-row gap-8 animate-fade-in pb-20">
@@ -207,6 +212,8 @@ export function SettingsClient({ user }: Props) {
                         {activeTab === s.id && <ChevronRight className="w-4 h-4 text-brand-400" />}
                     </button>
                 ))}
+
+                <RoleSwitcher realRole={realRole} isClientMode={isClientMode} />
 
                 <div className="pt-4 mt-4 border-t border-surface-border">
                     <button
@@ -260,7 +267,7 @@ export function SettingsClient({ user }: Props) {
                                 <input
                                     type="text"
                                     className="input h-12 text-sm font-bold"
-                                    placeholder="e.g. Tony Olajide"
+                                    placeholder="Your display name"
                                     value={name}
                                     onChange={(e) => setName(e.target.value)}
                                 />
@@ -270,6 +277,29 @@ export function SettingsClient({ user }: Props) {
                                 <input type="email" className="input h-12 bg-surface-muted/30 cursor-not-allowed text-fg-subtle" defaultValue={user.email} disabled />
                             </div>
                         </div>
+
+                        {user.role === "FREE" && (
+                            <div className="p-5 rounded-2xl bg-surface-muted/40 border border-surface-border space-y-3">
+                                <p className="text-sm font-bold text-fg">Redeem access code</p>
+                                <p className="text-xs text-fg-muted">Enter a code from your coach to unlock Premium features.</p>
+                                <div className="flex flex-col sm:flex-row gap-2">
+                                    <input
+                                        type="text"
+                                        className="input h-11 flex-1 font-mono uppercase tracking-widest text-sm"
+                                        placeholder="ACCESS CODE"
+                                        value={secretCode}
+                                        onChange={(e) => setSecretCode(e.target.value.toUpperCase())}
+                                    />
+                                    <button
+                                        onClick={handleRedeemCode}
+                                        disabled={redeeming || !secretCode.trim()}
+                                        className="btn-primary h-11 px-6 text-xs font-black uppercase tracking-widest"
+                                    >
+                                        {redeeming ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : "Redeem"}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
 
                         <div className="pt-4 border-t border-surface-border flex justify-end">
                             <button
@@ -495,21 +525,9 @@ export function SettingsClient({ user }: Props) {
                 {activeTab === "notifications" && (
                     <div className="card p-6 space-y-6 animate-slide-up">
                         <h3 className="heading-3">Activity Notifications</h3>
-                        <div className="space-y-4">
-                            {[
-                                { label: "Workout Reminders", desc: "Get notified if you miss a scheduled session." },
-                                { label: "Coach Messages", desc: "Instant alerts when your coach replies to you." },
-                                { label: "Community Updates", desc: "Stay tuned for platform updates." },
-                            ].map((n, i) => (
-                                <div key={i} className="flex items-center justify-between p-4 bg-surface-muted/30 rounded-2xl border border-surface-border">
-                                    <div>
-                                        <p className="text-sm font-semibold text-fg">{n.label}</p>
-                                        <p className="text-xs text-fg-muted">{n.desc}</p>
-                                    </div>
-                                    <div className="toggle-switch active" />
-                                </div>
-                            ))}
-                        </div>
+                        <p className="text-sm text-fg-muted">
+                            Notification preferences are not configurable yet. You will still receive important alerts for check-ins, plan updates, and coach messages.
+                        </p>
                     </div>
                 )}
 
@@ -563,7 +581,13 @@ export function SettingsClient({ user }: Props) {
                             <p className="text-sm text-fg-muted">Our support team is active 24/7 for you.</p>
                         </div>
                     </div>
-                    <button className="btn-secondary whitespace-nowrap">Contact Support</button>
+                    <button
+                        type="button"
+                        onClick={() => { window.location.href = `mailto:${supportEmail}`; }}
+                        className="btn-secondary whitespace-nowrap"
+                    >
+                        Contact Support
+                    </button>
                 </div>
             </div>
         </div>

@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma, ensureDbSchema } from "@/lib/prisma";
 import { getLocalDayBounds, parseLogDate } from "@/lib/utils";
+import { canLogWorkouts, requireAuthUser, workoutAssignedToUser } from "@/lib/apiAuth";
 import { z } from "zod";
 
 const logSchema = z.object({
@@ -28,14 +29,11 @@ const logSchema = z.object({
 // POST log a completed or in-progress workout
 export async function POST(req: Request) {
     await ensureDbSchema();
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const authResult = await requireAuthUser(req);
+    if (authResult.error) return authResult.error;
+    const user = authResult.user;
 
-    const user = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
-
-    // Coaches do not log workouts — they manage clients
-    if (user.role === "COACH") {
+    if (!canLogWorkouts(user, req)) {
         return NextResponse.json({ error: "Coaches cannot log workouts" }, { status: 403 });
     }
     const body = await req.json();
@@ -43,6 +41,10 @@ export async function POST(req: Request) {
     if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
     const { workoutId, duration, notes, feeling, sets, status, loggedAt } = parsed.data;
+
+    if (!(await workoutAssignedToUser(user.id, workoutId))) {
+        return NextResponse.json({ error: "Workout is not part of your assigned plans" }, { status: 403 });
+    }
 
     // Detect PRs: only for completed sets that aren't warmups
     const prExerciseIds = new Set<string>();

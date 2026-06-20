@@ -44,7 +44,7 @@ export default async function AdminExercisesPage() {
         const lowerName = ex.name.toLowerCase();
         if (!globalNames.has(lowerName) && !seenNames.has(lowerName)) {
             uniqueFromWorkouts.push({
-                id: `suggestion-${Math.random().toString(36).substr(2, 9)}`,
+                id: `suggestion-${lowerName.replace(/[^a-z0-9]+/g, "-")}`,
                 name: ex.name,
                 muscleGroup: ex.muscleGroup || "Uncategorized",
                 videoUrl: null,

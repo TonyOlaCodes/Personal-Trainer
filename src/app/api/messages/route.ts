@@ -1,34 +1,47 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { createNotification } from "@/lib/notifications";
+import {
+    canAccessTeamChat,
+    canDirectMessage,
+    isMessageParticipant,
+    parseTeamCoachId,
+    requireAuthUser,
+} from "@/lib/apiAuth";
 
 // GET messages
 export async function GET(req: Request) {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const authResult = await requireAuthUser(req);
+    if (authResult.error) return authResult.error;
+    const user = authResult.user;
 
-    const user = await prisma.user.update({
-        where: { clerkId: userId },
-        data: { updatedAt: new Date() }
+    await prisma.user.update({
+        where: { id: user.id },
+        data: { updatedAt: new Date() },
     });
-    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
     const url = new URL(req.url);
     const isGeneral = url.searchParams.get("general") === "true";
     const withUserId = url.searchParams.get("with");
     const limit = parseInt(url.searchParams.get("limit") ?? "80");
 
-    let where: Prisma.MessageWhereInput = {};
+    let where: Prisma.MessageWhereInput | null = null;
 
     if (isGeneral) {
         where = { isGeneral: true };
     } else if (withUserId) {
         if (withUserId.startsWith("team_")) {
+            const teamCoachId = parseTeamCoachId(withUserId);
+            if (!teamCoachId || !(await canAccessTeamChat(user, teamCoachId))) {
+                return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+            }
             where = { isGeneral: false, receiverId: withUserId };
         } else {
+            if (!(await canDirectMessage(user, withUserId))) {
+                return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+            }
             where = {
                 isGeneral: false,
                 OR: [
@@ -37,6 +50,8 @@ export async function GET(req: Request) {
                 ],
             };
         }
+    } else {
+        return NextResponse.json({ error: "Specify general=true or with=userId" }, { status: 400 });
     }
 
     const messages = await prisma.message.findMany({
@@ -97,17 +112,29 @@ const msgSchema = z.object({
 
 // POST send a message
 export async function POST(req: Request) {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const user = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+    const authResult = await requireAuthUser(req);
+    if (authResult.error) return authResult.error;
+    const user = authResult.user;
 
     const body = await req.json();
     const parsed = msgSchema.safeParse(body);
     if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
     const { content, receiverId, isGeneral, type, mediaUrl, replyToId, mentions } = parsed.data;
+
+    if (!isGeneral) {
+        if (!receiverId) {
+            return NextResponse.json({ error: "receiverId required for direct messages" }, { status: 400 });
+        }
+        if (receiverId.startsWith("team_")) {
+            const teamCoachId = parseTeamCoachId(receiverId);
+            if (!teamCoachId || !(await canAccessTeamChat(user, teamCoachId))) {
+                return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+            }
+        } else if (!(await canDirectMessage(user, receiverId))) {
+            return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        }
+    }
 
     const message = await prisma.message.create({
         data: {
@@ -165,11 +192,9 @@ export async function POST(req: Request) {
 
 // PATCH edit or update message
 export async function PATCH(req: Request) {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const user = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+    const authResult = await requireAuthUser(req);
+    if (authResult.error) return authResult.error;
+    const user = authResult.user;
 
     const body = await req.json();
     const { id, content, action, emoji } = body;
@@ -178,6 +203,10 @@ export async function PATCH(req: Request) {
 
     const msg = await prisma.message.findUnique({ where: { id } });
     if (!msg) return NextResponse.json({ error: "Message not found" }, { status: 404 });
+
+    if (!(await isMessageParticipant(user, msg))) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     // Mark as seen
     if (action === "markSeen") {
@@ -240,17 +269,19 @@ export async function PATCH(req: Request) {
 
 // DELETE a message
 export async function DELETE(req: Request) {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const user = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+    const authResult = await requireAuthUser(req);
+    if (authResult.error) return authResult.error;
+    const user = authResult.user;
 
     const { id } = await req.json();
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
 
     const msg = await prisma.message.findUnique({ where: { id } });
     if (!msg) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    if (!(await isMessageParticipant(user, msg))) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     const isOwner = msg.senderId === user.id;
     const isSuperAdmin = user.role === "SUPER_ADMIN";

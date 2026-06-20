@@ -15,7 +15,9 @@ export default function DeactivatedPage() {
                 <div className="space-y-2">
                     <h2 className="text-xl font-black text-fg uppercase tracking-tight">Account Deactivated</h2>
                     <p className="text-sm text-fg-muted leading-relaxed">
-                        Your account has been deactivated by your coach or administrator. Please contact them for support.
+                        Your account has been deactivated by your coach or administrator. Contact{" "}
+                        <a href="mailto:support@fitcoachpro.app" className="text-brand-400 underline">support@fitcoachpro.app</a>{" "}
+                        for help.
                     </p>
                 </div>
                 <button

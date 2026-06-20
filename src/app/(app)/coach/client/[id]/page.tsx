@@ -37,8 +37,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
 
         if (!target) notFound();
         if (actor.role === "COACH" && target.coachId !== actor.id) {
-            // Optional: check if the coach owns this client
-            // redirect("/coach");
+            redirect("/coach");
         }
         const isDeletedClient = target.email.endsWith("@deleted.local");
 
