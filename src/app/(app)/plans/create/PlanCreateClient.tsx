@@ -494,6 +494,38 @@ export function PlanCreateClient() {
                 )}
             </div>
 
+            {/* Plan name + notes */}
+            <div className="card p-5 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                        <label className="label">Plan Name</label>
+                        <input
+                            type="text"
+                            className="input text-[16px] sm:text-sm font-bold"
+                            placeholder="e.g. Hypertrophy Phase"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            readOnly={isViewOnly}
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <label className="label">Focus / Notes</label>
+                        <textarea
+                            className="input h-20 text-[16px] sm:text-xs py-3 resize-none"
+                            placeholder="Focus on progressive overload..."
+                            value={desc}
+                            onChange={(e) => setDesc(e.target.value)}
+                            readOnly={isViewOnly}
+                        />
+                        {creatorName && (
+                            <p className="text-[10px] text-fg-subtle font-medium">
+                                Created by {creatorName}
+                            </p>
+                        )}
+                    </div>
+                </div>
+            </div>
+
             {/* Week + day switcher — sticky so days stay reachable while editing exercises */}
             <div className="sticky top-16 z-20 -mx-4 px-4 sm:-mx-6 sm:px-6 py-3 bg-surface/95 backdrop-blur-md border-y border-surface-border space-y-3">
                 <div className="card p-3 flex items-center justify-between gap-3 border-brand-500/20 bg-gradient-brand/5">
@@ -576,41 +608,7 @@ export function PlanCreateClient() {
                 )}
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                <div className="lg:col-span-4 space-y-4">
-                    <div className="card p-5 space-y-4">
-                        <div className="space-y-4">
-                            <div className="space-y-2">
-                                <label className="label">Plan Name</label>
-                                <input
-                                    type="text"
-                                    className="input text-[16px] sm:text-sm font-bold"
-                                    placeholder="e.g. Hypertrophy Phase"
-                                    value={name}
-                                    onChange={(e) => setName(e.target.value)}
-                                    readOnly={isViewOnly}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <label className="label">Focus / Notes</label>
-                                <textarea
-                                    className="input h-20 text-[16px] sm:text-xs py-3 resize-none"
-                                    placeholder="Focus on progressive overload..."
-                                    value={desc}
-                                    onChange={(e) => setDesc(e.target.value)}
-                                    readOnly={isViewOnly}
-                                />
-                                {creatorName && (
-                                    <p className="text-[10px] text-fg-subtle font-medium mt-1">
-                                        Created by {creatorName}
-                                    </p>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="lg:col-span-8">
+            <div>
                     {workouts[activeWorkoutIdx] ? (
                         isLinearityMode ? (
                             <div className="space-y-4 animate-slide-up">
@@ -1025,7 +1023,6 @@ export function PlanCreateClient() {
                             {!isViewOnly && <button onClick={addWorkout} className="btn-primary">Add Your First Day</button>}
                         </div>
                     )}
-                </div>
             </div>
         </div>
     );
