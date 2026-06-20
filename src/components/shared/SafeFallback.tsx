@@ -1,5 +1,6 @@
 import { AlertTriangle } from "lucide-react";
 import Link from "next/link";
+import { unstable_rethrow } from "next/navigation";
 
 export function SafeFallback({ title }: { title: string }) {
     return (
@@ -21,6 +22,14 @@ export function SafeFallback({ title }: { title: string }) {
 export function isNextInternalError(err: any): boolean {
     if (!err) return false;
     
+    try {
+        if (unstable_rethrow) {
+            unstable_rethrow(err);
+        }
+    } catch (e) {
+        if (e === err) throw e;
+    }
+    
     if (typeof err.digest === "string") {
         if (err.digest.startsWith("NEXT_REDIRECT") || 
             err.digest === "NEXT_NOT_FOUND" || 
@@ -32,7 +41,7 @@ export function isNextInternalError(err: any): boolean {
     if (err instanceof Error) {
         if (err.name === "DynamicServerError" || 
             err.message.includes("Dynamic server usage") || 
-            err.message === "NEXT_REDIRECT" || 
+            err.message.includes("NEXT_REDIRECT") || 
             err.message === "NEXT_NOT_FOUND") {
             return true;
         }
