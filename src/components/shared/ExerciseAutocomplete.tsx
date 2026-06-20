@@ -61,69 +61,34 @@ interface Props {
     autoFocus?: boolean;
 }
 
-function getDistance(a: string, b: string): number {
-    if (!a.length) return b.length;
-    if (!b.length) return a.length;
-    const row = Array.from({ length: b.length + 1 }, (_, i) => i);
-    for (let i = 1; i <= a.length; i++) {
-        let prev = i;
-        for (let j = 1; j <= b.length; j++) {
-            const val = a[i - 1] === b[j - 1] ? row[j - 1] : Math.min(row[j - 1], prev, row[j]) + 1;
-            row[j - 1] = prev;
-            prev = val;
-        }
-        row[b.length] = prev;
-    }
-    return row[b.length];
-}
-
-function scoreMatch(query: string, target: string): number {
-    const q = query.toLowerCase().trim();
-    const t = target.toLowerCase();
-
-    if (t === q) return 0;
-    if (t.startsWith(q)) return 1;
-    if (t.includes(q)) return 2;
-
-    const qWords = q.split(/\s+/);
-    if (qWords.length > 1 && qWords.every((w) => t.includes(w))) return 3;
-
-    const tWords = t.split(/\s+/);
-    let totalDistance = 0;
-    for (const qw of qWords) {
-        let best = Infinity;
-        for (const tw of tWords) {
-            const dist = getDistance(qw, tw);
-            if (dist < best) best = dist;
-        }
-        totalDistance += best;
-    }
-
-    if (totalDistance <= Math.max(1, qWords.length * 2)) {
-        return 4 + totalDistance;
-    }
-
-    return 999;
-}
-
 let globalExercisesCache: ExerciseOption[] | null = null;
 let globalExercisesPromise: Promise<ExerciseOption[]> | null = null;
+
+function invalidateExerciseCache() {
+    globalExercisesCache = null;
+    globalExercisesPromise = null;
+}
+
+async function fetchExerciseSuggestions(query: string): Promise<ExerciseOption[]> {
+    const q = query.trim();
+    const url = q ? `/api/exercises?q=${encodeURIComponent(q)}` : "/api/exercises";
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("Failed to fetch");
+    return res.json();
+}
 
 async function fetchGlobalExercises(): Promise<ExerciseOption[]> {
     if (globalExercisesCache) return globalExercisesCache;
     if (globalExercisesPromise) return globalExercisesPromise;
 
-    globalExercisesPromise = fetch("/api/exercises")
-        .then((res) => {
-            if (!res.ok) throw new Error("Failed to fetch");
-            return res.json();
-        })
+    globalExercisesPromise = fetchExerciseSuggestions("")
         .then((data: ExerciseOption[]) => {
             globalExercisesCache = data;
             return data;
         })
         .catch((err) => {
             console.error("Failed to load exercises from API", err);
+            globalExercisesPromise = null;
             return [];
         });
 
@@ -134,14 +99,13 @@ export function ExerciseAutocomplete({ value, onChange, placeholder, className, 
     const [open, setOpen] = useState(false);
     const [suggestions, setSuggestions] = useState<ExerciseOption[]>([]);
     const [activeIndex, setActiveIndex] = useState(-1);
-    const [dbExercises, setDbExercises] = useState<ExerciseOption[]>([]);
+    const [loading, setLoading] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+    const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
-        fetchGlobalExercises().then((list) => {
-            if (list.length > 0) setDbExercises(list);
-        });
+        fetchGlobalExercises().catch(() => invalidateExerciseCache());
     }, []);
 
     useEffect(() => {
@@ -159,18 +123,25 @@ export function ExerciseAutocomplete({ value, onChange, placeholder, className, 
             return;
         }
 
-        const matches = dbExercises
-            .map((ex) => ({ ...ex, score: scoreMatch(q, ex.name) }))
-            .filter((item) => item.score < 999)
-            .sort((a, b) => a.score - b.score || a.name.length - b.name.length)
-            .slice(0, 6);
+        if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
 
-        setSuggestions(matches);
+        searchTimerRef.current = setTimeout(() => {
+            setLoading(true);
+            fetchExerciseSuggestions(q)
+                .then((matches) => {
+                    setSuggestions(matches);
+                    if (document.activeElement === inputRef.current && matches.length > 0) {
+                        setOpen(true);
+                    }
+                })
+                .catch(() => setSuggestions([]))
+                .finally(() => setLoading(false));
+        }, 120);
 
-        if (document.activeElement === inputRef.current && matches.length > 0) {
-            setOpen(true);
-        }
-    }, [value, dbExercises]);
+        return () => {
+            if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+        };
+    }, [value]);
 
     useEffect(() => {
         const handler = (e: MouseEvent) => {
@@ -231,13 +202,24 @@ export function ExerciseAutocomplete({ value, onChange, placeholder, className, 
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
                 onFocus={() => {
-                    if (suggestions.length > 0) setOpen(true);
+                    const q = value.trim();
+                    if (q.length > 0) {
+                        fetchExerciseSuggestions(q).then((matches) => {
+                            setSuggestions(matches);
+                            if (matches.length > 0) setOpen(true);
+                        });
+                    } else if (suggestions.length > 0) {
+                        setOpen(true);
+                    }
                 }}
                 onKeyDown={handleKeyDown}
                 autoComplete="off"
             />
+            {loading && value.trim().length > 0 && !open && (
+                <p className="absolute top-full left-0 mt-1 text-[10px] text-fg-subtle px-1">Searching exercises…</p>
+            )}
             {open && suggestions.length > 0 && (
-                <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-surface-elevated border border-surface-border rounded-xl shadow-lg overflow-hidden animate-slide-up">
+                <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-surface-elevated border border-surface-border rounded-xl shadow-lg overflow-hidden animate-slide-up max-h-72 overflow-y-auto">
                     {suggestions.map((ex, i) => (
                         <button
                             key={ex.name}
@@ -273,6 +255,11 @@ export function ExerciseAutocomplete({ value, onChange, placeholder, className, 
                     <div className="px-4 py-1.5 text-[10px] text-fg-subtle border-t border-surface-border/30 bg-surface-muted/30 flex justify-between font-bold uppercase tracking-wider">
                         <span>↑↓ to navigate • Ent to pick</span>
                     </div>
+                </div>
+            )}
+            {open && suggestions.length === 0 && value.trim().length > 0 && !loading && (
+                <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-surface-elevated border border-surface-border rounded-xl shadow-lg px-4 py-3 text-xs text-fg-muted">
+                    No dictionary match — press Enter to use &quot;{value.trim()}&quot; as a custom exercise.
                 </div>
             )}
         </div>
