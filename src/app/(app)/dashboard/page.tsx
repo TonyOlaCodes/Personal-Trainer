@@ -287,6 +287,7 @@ export default async function DashboardPage() {
     } catch (error) {
         if (isNextInternalError(error)) throw error;
         console.error("[DashboardPage] Error:", error);
-        return <SafeFallback title="Dashboard" />;
+        require('fs').writeFileSync('dashboard-error.txt', String(error?.stack || error));
+        return <SafeFallback title="Dashboard" errorDetails={String(error?.stack || error)} />;
     }
 }

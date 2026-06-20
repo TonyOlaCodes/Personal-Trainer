@@ -2,7 +2,7 @@ import { AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { unstable_rethrow } from "next/navigation";
 
-export function SafeFallback({ title }: { title: string }) {
+export function SafeFallback({ title, errorDetails }: { title: string, errorDetails?: string }) {
     return (
         <div className="min-h-screen bg-surface-base flex items-center justify-center p-6">
             <div className="card p-10 max-w-md text-center space-y-4">
@@ -11,6 +11,11 @@ export function SafeFallback({ title }: { title: string }) {
                 <p className="text-sm text-fg-muted">
                     We couldn&apos;t load your data right now. This might be a temporary issue. Please try again.
                 </p>
+                {errorDetails && (
+                    <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-left overflow-auto max-h-48">
+                        <p className="text-xs font-mono text-red-400 whitespace-pre-wrap">{errorDetails}</p>
+                    </div>
+                )}
                 <Link href="/dashboard" className="btn-primary inline-block">
                     Back to Dashboard
                 </Link>
@@ -22,12 +27,9 @@ export function SafeFallback({ title }: { title: string }) {
 export function isNextInternalError(err: any): boolean {
     if (!err) return false;
     
-    try {
-        if (unstable_rethrow) {
-            unstable_rethrow(err);
-        }
-    } catch (e) {
-        if (e === err) throw e;
+    // unstable_rethrow throws Next.js internal errors. We don't catch it so it bubbles up.
+    if (typeof unstable_rethrow === "function") {
+        unstable_rethrow(err);
     }
     
     if (typeof err.digest === "string") {
