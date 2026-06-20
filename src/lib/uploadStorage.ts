@@ -33,6 +33,50 @@ function isAllowedUpload(file: File): boolean {
     return /\.(jpe?g|png|gif|webp|heic|heif|mp4|webm|mov)$/i.test(lower);
 }
 
+function blobToken(): string | undefined {
+    return process.env.BLOB_READ_WRITE_TOKEN?.trim() || undefined;
+}
+
+function isVercelRuntime(): boolean {
+    return Boolean(process.env.VERCEL);
+}
+
+const BLOB_NOT_CONFIGURED_MESSAGE =
+    "Photo uploads need Vercel Blob storage. In the Vercel dashboard: Storage → Create Blob → connect it to this project, then redeploy.";
+
+async function storeInBlob(buffer: Buffer, filename: string, contentType: string) {
+    const token = blobToken();
+    if (!token) {
+        throw new Error(BLOB_NOT_CONFIGURED_MESSAGE);
+    }
+
+    const blob = await put(`uploads/${filename}`, buffer, {
+        access: "public",
+        contentType,
+        addRandomSuffix: false,
+        token,
+    });
+
+    return { url: blob.url, type: contentType };
+}
+
+async function storeLocally(buffer: Buffer, filename: string, contentType: string) {
+    const dir = path.join(process.cwd(), "public", "uploads");
+    try {
+        await mkdir(dir, { recursive: true });
+        await writeFile(path.join(dir, filename), buffer);
+    } catch (error) {
+        console.error("Local upload write failed:", error);
+        throw new Error(
+            isVercelRuntime()
+                ? BLOB_NOT_CONFIGURED_MESSAGE
+                : "Could not save upload on the server. Try a smaller photo or check server permissions."
+        );
+    }
+
+    return { url: `/api/uploads/${filename}`, type: contentType };
+}
+
 export async function storeUploadedFile(file: File): Promise<{ url: string; type: string }> {
     if (!isAllowedUpload(file)) {
         throw new Error("Only image and video uploads are supported.");
@@ -47,18 +91,9 @@ export async function storeUploadedFile(file: File): Promise<{ url: string; type
     const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}.${ext}`;
     const contentType = file.type || "application/octet-stream";
 
-    if (process.env.BLOB_READ_WRITE_TOKEN) {
-        const blob = await put(`uploads/${filename}`, buffer, {
-            access: "public",
-            contentType,
-            addRandomSuffix: false,
-        });
-        return { url: blob.url, type: contentType };
+    if (blobToken() || isVercelRuntime()) {
+        return storeInBlob(buffer, filename, contentType);
     }
 
-    const dir = path.join(process.cwd(), "public", "uploads");
-    await mkdir(dir, { recursive: true });
-    await writeFile(path.join(dir, filename), buffer);
-
-    return { url: `/api/uploads/${filename}`, type: contentType };
+    return storeLocally(buffer, filename, contentType);
 }
