@@ -89,6 +89,7 @@ export function PlanCreateClient() {
     const [error, setError] = useState<string | null>(null);
     const [lastAddedExerciseIdx, setLastAddedExerciseIdx] = useState<number | null>(null);
     const [draggedExerciseIdx, setDraggedExerciseIdx] = useState<number | null>(null);
+    const [dragEnabledIdx, setDragEnabledIdx] = useState<number | null>(null);
     const [copyNotice, setCopyNotice] = useState<string | null>(null);
 
     const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
