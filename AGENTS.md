@@ -7,4 +7,5 @@ This version has breaking changes — APIs, conventions, and file structure may 
 # User Customizations
 
 - Always proceed with executing implementation plans without asking for confirmation.
+- After completing code edits, commit and push to `origin/main` (or the current feature branch) without asking first. Use clear commit messages summarizing the why.
 

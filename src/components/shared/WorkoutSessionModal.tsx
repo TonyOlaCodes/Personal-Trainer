@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Activity, Dumbbell, Loader2, MessageSquare, X } from "lucide-react";
+import { Activity, Dumbbell, Loader2, MessageSquare, Trash2, X } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 
 interface SessionSet {
@@ -39,14 +39,17 @@ interface Props {
     sessionId: string | null;
     onClose: () => void;
     canAddCoachNote?: boolean;
+    canDelete?: boolean;
+    onDeleted?: () => void;
 }
 
-export function WorkoutSessionModal({ sessionId, onClose, canAddCoachNote = false }: Props) {
+export function WorkoutSessionModal({ sessionId, onClose, canAddCoachNote = false, canDelete = false, onDeleted }: Props) {
     const [session, setSession] = useState<SessionData | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const [note, setNote] = useState("");
     const [savingNote, setSavingNote] = useState(false);
+    const [deleting, setDeleting] = useState(false);
 
     useEffect(() => {
         if (!sessionId) return;
@@ -88,6 +91,26 @@ export function WorkoutSessionModal({ sessionId, onClose, canAddCoachNote = fals
     }, [session]);
 
     if (!sessionId) return null;
+
+    const deleteSession = async () => {
+        if (!sessionId || deleting) return;
+        if (!confirm("Delete this session permanently? All sets and notes will be lost.")) return;
+
+        setDeleting(true);
+        try {
+            const res = await fetch(`/api/logs/${sessionId}`, { method: "DELETE" });
+            if (res.ok) {
+                onDeleted?.();
+                onClose();
+            } else {
+                setError("Failed to delete session.");
+            }
+        } catch {
+            setError("Failed to delete session.");
+        } finally {
+            setDeleting(false);
+        }
+    };
 
     const addNote = async () => {
         if (!note.trim() || savingNote) return;
@@ -225,6 +248,18 @@ export function WorkoutSessionModal({ sessionId, onClose, canAddCoachNote = fals
                                         Add Feedback
                                     </button>
                                 </div>
+                            )}
+
+                            {canDelete && (
+                                <button
+                                    type="button"
+                                    onClick={deleteSession}
+                                    disabled={deleting}
+                                    className="btn-secondary w-full text-danger hover:bg-danger/10 hover:border-danger/30"
+                                >
+                                    {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                                    {deleting ? "Deleting..." : "Delete Session"}
+                                </button>
                             )}
                         </>
                     ) : null}

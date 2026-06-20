@@ -129,6 +129,22 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
         }
     }, []);
 
+    const deleteLog = async (logId: string) => {
+        if (!confirm("Delete this session permanently? All sets and notes will be lost.")) return;
+        try {
+            const res = await fetch(`/api/logs/${logId}`, { method: "DELETE" });
+            if (res.ok) {
+                if (selectedSessionId === logId) setSelectedSessionId(null);
+                router.refresh();
+            } else {
+                alert("Failed to delete session.");
+            }
+        } catch (e) {
+            console.error(e);
+            alert("Error deleting session.");
+        }
+    };
+
     const uncompleteLog = async (logId: string, workoutId: string, loggedAt?: string) => {
         try {
             const res = await fetch(`/api/logs/${logId}`, {
@@ -416,7 +432,15 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
 
     return (
         <div className="space-y-6 animate-fade-in pb-10">
-            <WorkoutSessionModal sessionId={selectedSessionId} onClose={() => setSelectedSessionId(null)} />
+            <WorkoutSessionModal
+                sessionId={selectedSessionId}
+                onClose={() => setSelectedSessionId(null)}
+                canDelete
+                onDeleted={() => {
+                    setSelectedSessionId(null);
+                    router.refresh();
+                }}
+            />
             {showTour && <Walkthrough steps={tourSteps} onComplete={() => setShowTour(false)} />}
 
             {/* Greeting */}
@@ -893,6 +917,18 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <p className="text-xs text-fg-muted">{formatRelative(log.loggedAt)}</p>
+                                    <button 
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            deleteLog(log.id);
+                                        }}
+                                        className="btn-icon w-7 h-7 bg-surface-elevated hover:bg-danger/10 hover:text-danger transition-all shadow-sm"
+                                        title="Delete session"
+                                    >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
                                     <button 
                                         type="button"
                                         onClick={(e) => {

@@ -5,7 +5,7 @@ import { TopBar } from "@/components/layout/TopBar";
 import { formatDate, cn } from "@/lib/utils";
 import Link from "next/link";
 import { ChevronLeft, Dumbbell, Clock, Zap, Video, FileText, Smile } from "lucide-react";
-import { EditSessionButton } from "./EditSessionButton";
+import { SessionActions } from "./SessionActions";
 
 export default async function LogViewPage({ params }: { params: Promise<{ logId: string }> }) {
     const { logId } = await params;
@@ -67,7 +67,7 @@ export default async function LogViewPage({ params }: { params: Promise<{ logId:
                             <span className="text-[10px] font-black uppercase tracking-widest text-brand-400 italic">{log.user.name}</span>
                         </div>
                         {isOwner && (
-                            <EditSessionButton logId={log.id} workoutId={log.workoutId} loggedAt={log.loggedAt.toISOString()} />
+                            <SessionActions logId={log.id} workoutId={log.workoutId} loggedAt={log.loggedAt.toISOString()} />
                         )}
                     </div>
                 </div>

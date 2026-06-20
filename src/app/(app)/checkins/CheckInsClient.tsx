@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import {
     Scale, Send, Check, Camera, TrendingUp, TrendingDown,
     Plus, Minus, Calendar, MessageSquare, CheckCircle2,
-    Zap, Moon, UtensilsCrossed, ChevronDown, AlertCircle,
+    Zap, Moon, UtensilsCrossed, Brain, Activity, ChevronDown, AlertCircle,
     Dumbbell, Flame, Edit2, Clock, Trash2, Loader2
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -17,6 +17,8 @@ import {
     SLEEP_VALUE_LABELS,
     DIET_VALUE_LABELS,
     ENERGY_VALUE_LABELS,
+    STRESS_VALUE_LABELS,
+    TRAINING_VALUE_LABELS,
 } from "@/lib/checkInMetricsFeedback";
 import { PremiumLockScreen } from "@/components/shared/PremiumLockScreen";
 import { MediaLightbox } from "@/components/shared/MediaLightbox";
@@ -58,14 +60,16 @@ interface Props {
 }
 
 /* ─────────────────── Rating bar component ───────────────────── */
-const SLEEP_LABELS  = [...SLEEP_VALUE_LABELS];
-const DIET_LABELS   = [...DIET_VALUE_LABELS];
-const ENERGY_LABELS = [...ENERGY_VALUE_LABELS];
+const SLEEP_LABELS    = [...SLEEP_VALUE_LABELS];
+const DIET_LABELS     = [...DIET_VALUE_LABELS];
+const ENERGY_LABELS   = [...ENERGY_VALUE_LABELS];
+const STRESS_LABELS   = [...STRESS_VALUE_LABELS];
+const TRAINING_LABELS = [...TRAINING_VALUE_LABELS];
 
-function PerformanceMetricsFeedbackPanel({ sleep, diet, energy, sleepHidden }: {
-    sleep: number; diet: number; energy: number; sleepHidden?: boolean;
+function PerformanceMetricsFeedbackPanel({ sleep, diet, energy, stress, training, sleepHidden }: {
+    sleep: number; diet: number; energy: number; stress: number; training: number; sleepHidden?: boolean;
 }) {
-    const feedback = getPerformanceMetricsFeedback({ sleep, diet, energy, sleepHidden });
+    const feedback = getPerformanceMetricsFeedback({ sleep, diet, energy, stress, training, sleepHidden });
     if (feedback.insights.length === 0) return null;
 
     return (
@@ -156,6 +160,8 @@ function ratingChips(c: CheckIn, isSleepHidden?: boolean) {
         { l: "Sleep", v: isSleepHidden ? null : c.sleepRating },
         { l: "Diet", v: c.dietRating },
         { l: "Energy", v: c.energyRating },
+        { l: "Stress", v: c.stressRating },
+        { l: "Training", v: c.intensityRating },
     ].filter((r) => r.v);
 }
 
@@ -641,6 +647,8 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
     const [energy, setEnergy] = useState(0);
     const [sleep, setSleep] = useState(0);
     const [diet, setDiet] = useState(0);
+    const [stress, setStress] = useState(0);
+    const [training, setTraining] = useState(0);
     const [notes,    setNotes]    = useState("");
     const [frontImg, setFrontImg] = useState("");
     const [sideImg,  setSideImg]  = useState("");
@@ -686,6 +694,8 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
             setEnergy(existing.energyRating || 0);
             setSleep(existing.sleepRating || 0);
             setDiet(existing.dietRating || 0);
+            setStress(existing.stressRating || 0);
+            setTraining(existing.intensityRating || 0);
             setNotes(existing.feedback || "");
             setFrontImg(existing.frontImageUrl || "");
             setSideImg(existing.sideImageUrl || "");
@@ -779,10 +789,14 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
     const metricsSleep = formActive ? sleep : (currentWeekEntry?.sleepRating ?? 0);
     const metricsDiet = formActive ? diet : (currentWeekEntry?.dietRating ?? 0);
     const metricsEnergy = formActive ? energy : (currentWeekEntry?.energyRating ?? 0);
+    const metricsStress = formActive ? stress : (currentWeekEntry?.stressRating ?? 0);
+    const metricsTraining = formActive ? training : (currentWeekEntry?.intensityRating ?? 0);
     const metricsFeedback = getPerformanceMetricsFeedback({
         sleep: isSleepHidden ? 0 : metricsSleep,
         diet: metricsDiet,
         energy: metricsEnergy,
+        stress: metricsStress,
+        training: metricsTraining,
         sleepHidden: isSleepHidden,
     });
     const consistencyPct = workoutsTarget > 0 ? Math.round((workoutsThisWeek / workoutsTarget) * 100) : 100;
@@ -793,6 +807,8 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
         setEnergy(0);
         setSleep(0);
         setDiet(0);
+        setStress(0);
+        setTraining(0);
         setNotes("");
         setFrontImg("");
         setSideImg("");
@@ -812,6 +828,8 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
         setEnergy(c.energyRating || 0);
         setSleep(c.sleepRating || 0);
         setDiet(c.dietRating || 0);
+        setStress(c.stressRating || 0);
+        setTraining(c.intensityRating || 0);
         setNotes(c.feedback || "");
         setFrontImg(c.frontImageUrl || "");
         setSideImg(c.sideImageUrl || "");
@@ -846,6 +864,8 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                 energyRating: energy || undefined,
                 sleepRating: sleep || undefined,
                 dietRating: diet || undefined,
+                stressRating: stress || undefined,
+                intensityRating: training || undefined,
                 frontImageUrl:   frontImg || undefined,
                 sideImageUrl:    sideImg  || undefined,
             }),
@@ -1364,11 +1384,15 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                 )}
                 <RatingBar icon={UtensilsCrossed} label="Diet" sublabels={DIET_LABELS} value={diet} onChange={setDiet} prevValue={prevCheckIn?.dietRating} />
                 <RatingBar icon={Zap} label="Energy" sublabels={ENERGY_LABELS} value={energy} onChange={setEnergy} prevValue={prevCheckIn?.energyRating} />
+                <RatingBar icon={Brain} label="Stress" sublabels={STRESS_LABELS} value={stress} onChange={setStress} prevValue={prevCheckIn?.stressRating} inverse />
+                <RatingBar icon={Activity} label="Training" sublabels={TRAINING_LABELS} value={training} onChange={setTraining} prevValue={prevCheckIn?.intensityRating} />
 
                 <PerformanceMetricsFeedbackPanel
                     sleep={sleep}
                     diet={diet}
                     energy={energy}
+                    stress={stress}
+                    training={training}
                     sleepHidden={isSleepHidden}
                 />
             </div>
