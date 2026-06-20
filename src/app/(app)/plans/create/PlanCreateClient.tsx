@@ -5,11 +5,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
     Plus, Minus, Save, ChevronLeft, Dumbbell,
     Settings, Layout, Calendar, CheckCircle2,
-    Trash2, ChevronRight, Copy, ChevronDown, ChevronUp, GripVertical, Loader2, CalendarRange, ArrowRight, ArrowLeft
+    Trash2, ChevronRight, Copy, CopyPlus, ChevronDown, ChevronUp, GripVertical, Loader2, CalendarRange, ArrowRight, ArrowLeft
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PLAN_TEMPLATES } from "@/lib/templates";
 import { ExerciseAutocomplete, isCardio } from "@/components/shared/ExerciseAutocomplete";
+import { formatPlanText, formatWorkoutText } from "@/lib/formatPlanText";
 
 interface LocalExercise {
     name: string;
@@ -88,7 +89,7 @@ export function PlanCreateClient() {
     const [error, setError] = useState<string | null>(null);
     const [lastAddedExerciseIdx, setLastAddedExerciseIdx] = useState<number | null>(null);
     const [draggedExerciseIdx, setDraggedExerciseIdx] = useState<number | null>(null);
-    const [dragEnabledIdx, setDragEnabledIdx] = useState<number | null>(null);
+    const [copyNotice, setCopyNotice] = useState<string | null>(null);
 
     const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
     const cloneWeeks = (source: LocalWeek[]): LocalWeek[] => source.map((week) => ({
@@ -98,6 +99,38 @@ export function PlanCreateClient() {
             exercises: workout.exercises.map((exercise) => ({ ...exercise })),
         })),
     }));
+
+    const copyText = async (text: string, message: string) => {
+        try {
+            await navigator.clipboard.writeText(text);
+            setCopyNotice(message);
+            setTimeout(() => setCopyNotice(null), 2200);
+        } catch {
+            alert("Could not copy to clipboard. Try selecting the text manually.");
+        }
+    };
+
+    const copyFullPlan = () => {
+        copyText(
+            formatPlanText({ name, description: desc, weeks }),
+            "Full plan copied!"
+        );
+    };
+
+    const copyCurrentDay = () => {
+        const workout = workouts[activeWorkoutIdx];
+        if (!workout) return;
+        copyText(formatWorkoutText(workout), "Day copied!");
+    };
+
+    const copyCurrentWeek = () => {
+        if (!currentWeek) return;
+        const weekHeader = currentWeek.name?.trim()
+            ? `${name || "Plan"} — Week ${currentWeek.weekNumber} (${currentWeek.name.trim()})`
+            : `${name || "Plan"} — Week ${currentWeek.weekNumber}`;
+        const body = currentWeek.workouts.map((w) => formatWorkoutText(w)).join("\n\n");
+        copyText(`${weekHeader}\n\n${body}`, "Week copied!");
+    };
 
     // Load data (Template or Edit)
     useEffect(() => {
@@ -468,14 +501,24 @@ export function PlanCreateClient() {
                         </p>
                     </div>
                 </div>
-                {!isViewOnly && (
-                    <div className="flex items-center gap-2">
-                        {saveNotice && (
+                <div className="flex items-center gap-2 flex-wrap justify-end">
+                        {(copyNotice || saveNotice) && (
                             <span className="hidden sm:flex items-center gap-1.5 text-xs font-semibold text-success animate-fade-in">
                                 <CheckCircle2 className="w-4 h-4" />
-                                {saveNotice}
+                                {copyNotice ?? saveNotice}
                             </span>
                         )}
+                        <button
+                            type="button"
+                            onClick={copyFullPlan}
+                            className="btn-secondary h-10 px-3 sm:px-4 gap-2"
+                            title="Copy all weeks, days, sets and reps"
+                        >
+                            <Copy className="w-4 h-4" />
+                            <span className="hidden sm:inline">Copy plan</span>
+                        </button>
+                {!isViewOnly && (
+                    <>
                         <button 
                             onClick={() => setIsLinearityMode(!isLinearityMode)}
                             className={cn(
@@ -490,8 +533,9 @@ export function PlanCreateClient() {
                             <Save className="w-4 h-4" />
                             {saving ? "Saving..." : editId ? "Update" : "Done"}
                         </button>
-                    </div>
+                    </>
                 )}
+                </div>
             </div>
 
             {/* Plan name + notes */}
@@ -536,7 +580,7 @@ export function PlanCreateClient() {
                     >
                         <ArrowLeft className="w-4 h-4" />
                     </button>
-                    <div className="text-center min-w-0">
+                    <div className="text-center min-w-0 flex-1">
                         <p className="text-sm font-black text-fg uppercase tracking-widest">
                             Week {currentWeek.weekNumber}
                         </p>
@@ -544,6 +588,15 @@ export function PlanCreateClient() {
                             {workouts.length} session{workouts.length === 1 ? "" : "s"}
                         </p>
                     </div>
+                    <button
+                        type="button"
+                        onClick={copyCurrentWeek}
+                        className="btn-secondary h-8 px-2.5 gap-1.5 text-[10px] font-black uppercase tracking-wide shrink-0"
+                        title="Copy this week's workouts"
+                    >
+                        <Copy className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Copy week</span>
+                    </button>
                     <button
                         onClick={handleNextWeek}
                         className={cn(
@@ -823,16 +876,26 @@ export function PlanCreateClient() {
                                             />
                                          </div>
                                     </div>
+                                    <div className="flex items-center gap-1 ml-4 shrink-0">
+                                        <button
+                                            type="button"
+                                            onClick={copyCurrentDay}
+                                            className="btn-icon w-8 h-8 rounded-lg"
+                                            title="Copy this day to clipboard"
+                                        >
+                                            <Copy className="w-3.5 h-3.5" />
+                                        </button>
                                     {!isViewOnly && (
-                                        <div className="flex items-center gap-1 ml-4">
-                                            <button onClick={() => duplicateWorkout(activeWorkoutIdx)} className="btn-icon w-8 h-8 rounded-lg" title="Duplicate Day">
-                                                <Copy className="w-3.5 h-3.5" />
+                                        <>
+                                            <button onClick={() => duplicateWorkout(activeWorkoutIdx)} className="btn-icon w-8 h-8 rounded-lg" title="Duplicate day in plan">
+                                                <CopyPlus className="w-3.5 h-3.5" />
                                             </button>
                                             <button onClick={() => removeWorkout(activeWorkoutIdx)} className="btn-icon w-8 h-8 rounded-lg text-danger/60 hover:text-danger hover:bg-danger/10" title="Delete Day">
                                                 <Trash2 className="w-3.5 h-3.5" />
                                             </button>
-                                        </div>
+                                        </>
                                     )}
+                                    </div>
                                 </div>
 
                                 <div className="space-y-3">
