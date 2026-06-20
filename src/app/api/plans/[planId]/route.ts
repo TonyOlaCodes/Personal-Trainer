@@ -2,6 +2,10 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma, ensureDbSchema } from "@/lib/prisma";
 import { createNotification } from "@/lib/notifications";
+import {
+    updatePlanPreservingHistory,
+    type PlanPatchPayload,
+} from "@/lib/planUpdate";
 
 interface PlanExercisePayload {
     name: string;
@@ -26,12 +30,6 @@ interface PlanWeekPayload {
     weekNumber: number;
     name?: string | null;
     workouts: PlanWorkoutPayload[];
-}
-
-interface PlanPatchPayload {
-    name: string;
-    description?: string | null;
-    weeks: PlanWeekPayload[];
 }
 
 export async function GET(
@@ -135,49 +133,7 @@ export async function PATCH(
     }
 
     try {
-        const updatedPlan = await prisma.$transaction(async (tx) => {
-            // Delete existing structure (Cascades handle workouts/exercises/logs)
-            await tx.week.deleteMany({ where: { planId } });
-
-            return await tx.plan.update({
-                where: { id: planId },
-                data: {
-                    name,
-                    description,
-                    weeks: {
-                        create: weeks.map((w) => ({
-                            weekNumber: w.weekNumber,
-                            name: w.name,
-                            workouts: {
-                                create: w.workouts.map((wd) => ({
-                                    dayNumber: wd.dayNumber,
-                                    dayOfWeek: wd.dayOfWeek,
-                                    name: wd.name,
-                                    notes: wd.notes,
-                                    exercises: {
-                                        create: wd.exercises.map((ex) => ({
-                                            name: ex.name,
-                                            sets: ex.sets,
-                                            reps: ex.reps,
-                                            weightTargetKg: ex.weightTargetKg ?? undefined,
-                                            restSeconds: ex.restSeconds ?? undefined,
-                                            notes: ex.notes ?? undefined,
-                                            order: ex.order ?? undefined,
-                                            muscleGroup: ex.muscleGroup ?? undefined,
-                                        })),
-                                    },
-                                })),
-                            },
-                        })),
-                    },
-                },
-                include: {
-                    weeks: {
-                        include: { workouts: { include: { exercises: { where: { isCustom: false }, orderBy: { order: "asc" } } } } },
-                    },
-                },
-            });
-        });
+        const updatedPlan = await updatePlanPreservingHistory(planId, name, description, weeks);
 
         const assignedUsers = await prisma.userPlan.findMany({
             where: { planId, isActive: true },
