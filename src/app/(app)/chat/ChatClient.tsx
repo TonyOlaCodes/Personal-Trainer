@@ -52,12 +52,13 @@ interface Props {
     currentUserId: string;
     currentUserRole: string;
     conversations: Conversation[];
+    canUseDirectChat?: boolean;
 }
 
 const REACTION_EMOJIS = ["👍", "🔥", "💪", "❤️", "😂", "🎯"];
 
 /* ─── Component ──────────────────────────────────────── */
-export function ChatClient({ currentUserId, currentUserRole, conversations }: Props) {
+export function ChatClient({ currentUserId, currentUserRole, conversations, canUseDirectChat = true }: Props) {
     const [tab, setTab] = useState<"direct" | "general">("general");
     const [selectedConv, setSelectedConv] = useState<Conversation | null>(conversations[0] ?? null);
     const [isHydrated, setIsHydrated] = useState(false);
@@ -443,7 +444,12 @@ export function ChatClient({ currentUserId, currentUserRole, conversations }: Pr
             {/* Conversation List */}
             {tab === "direct" && (
                 <div className="flex-1 overflow-y-auto p-2 space-y-0.5 no-scrollbar">
-                    {sortedConversations.length === 0 ? (
+                    {!canUseDirectChat ? (
+                        <div className="p-6 text-center space-y-3">
+                            <p className="text-sm font-bold text-fg">Direct coach chat is Premium</p>
+                            <p className="text-xs text-fg-muted">Redeem an access code from your coach in Settings to unlock 1-on-1 messaging. Global chat is still available.</p>
+                        </div>
+                    ) : sortedConversations.length === 0 ? (
                         <p className="text-xs text-fg-muted text-center p-6">No conversations yet</p>
                     ) : (
                         sortedConversations.map((conv) => (

@@ -417,7 +417,7 @@ export default function LandingPage() {
           <div className="flex gap-4 text-xs text-fg-subtle">
             <span className="text-fg-subtle/60">Privacy (coming soon)</span>
             <span className="text-fg-subtle/60">Terms (coming soon)</span>
-            <a href="mailto:support@fitcoachpro.app" className="hover:text-fg transition-colors">Contact</a>
+            <a href="mailto:tonyolajide@gmail.com" className="hover:text-fg transition-colors">Contact</a>
           </div>
         </div>
       </footer>

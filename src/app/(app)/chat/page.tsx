@@ -54,6 +54,7 @@ export default async function ChatPage() {
             currentUserId={user.id}
             currentUserRole={user.role}
             conversations={conversations}
+            canUseDirectChat={user.role !== "FREE"}
         />
     );
 }

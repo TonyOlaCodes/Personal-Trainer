@@ -32,6 +32,9 @@ export async function GET(req: Request) {
     if (isGeneral) {
         where = { isGeneral: true };
     } else if (withUserId) {
+        if (user.role === "FREE") {
+            return NextResponse.json({ error: "Direct coach chat requires Premium access" }, { status: 403 });
+        }
         if (withUserId.startsWith("team_")) {
             const teamCoachId = parseTeamCoachId(withUserId);
             if (!teamCoachId || !(await canAccessTeamChat(user, teamCoachId))) {
@@ -125,6 +128,9 @@ export async function POST(req: Request) {
     if (!isGeneral) {
         if (!receiverId) {
             return NextResponse.json({ error: "receiverId required for direct messages" }, { status: 400 });
+        }
+        if (user.role === "FREE") {
+            return NextResponse.json({ error: "Direct coach chat requires Premium access" }, { status: 403 });
         }
         if (receiverId.startsWith("team_")) {
             const teamCoachId = parseTeamCoachId(receiverId);

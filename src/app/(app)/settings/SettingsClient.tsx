@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { useClerk } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { cn, getInitials } from "@/lib/utils";
 import { RoleSwitcher } from "@/components/shared/RoleSwitcher";
 
@@ -188,7 +189,7 @@ export function SettingsClient({ user, realRole, isClientMode }: Props) {
         }
     };
 
-    const supportEmail = process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? "support@fitcoachpro.app";
+    const supportEmail = process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? "tonyolajide@gmail.com";
 
     return (
         <div className="max-w-4xl mx-auto p-6 flex flex-col md:flex-row gap-8 animate-fade-in pb-20">
@@ -578,16 +579,21 @@ export function SettingsClient({ user, realRole, isClientMode }: Props) {
                         </div>
                         <div>
                             <h4 className="font-bold text-fg">Need help?</h4>
-                            <p className="text-sm text-fg-muted">Our support team is active 24/7 for you.</p>
+                            <p className="text-sm text-fg-muted">Email {supportEmail} or support the app.</p>
                         </div>
                     </div>
-                    <button
-                        type="button"
-                        onClick={() => { window.location.href = `mailto:${supportEmail}`; }}
-                        className="btn-secondary whitespace-nowrap"
-                    >
-                        Contact Support
-                    </button>
+                    <div className="flex flex-wrap gap-2 justify-end">
+                        <Link href="/donate" className="btn-ghost whitespace-nowrap text-xs font-bold uppercase tracking-wide">
+                            Support the app
+                        </Link>
+                        <button
+                            type="button"
+                            onClick={() => { window.location.href = `mailto:${supportEmail}`; }}
+                            className="btn-secondary whitespace-nowrap"
+                        >
+                            Contact Support
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
