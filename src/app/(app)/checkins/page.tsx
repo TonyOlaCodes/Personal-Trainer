@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -108,6 +109,7 @@ export default async function CheckInsPage() {
                     subtitle={isCoach ? "Client submissions" : "Log your weekly progress"}
                 />
                 <div className="p-4 sm:p-6 max-w-2xl mx-auto pb-20">
+                    <Suspense fallback={<div className="min-h-[320px] animate-pulse rounded-2xl bg-surface-muted" />}>
                     <CheckInsClient
                         checkIns={checkIns.map((c: any) => withResolvedCheckInMedia({
                             id: c.id,
@@ -141,6 +143,7 @@ export default async function CheckInsPage() {
                         checkInSchedule={checkInSchedule ?? undefined}
                         hiddenGoals={user.hiddenGoals ?? []}
                     />
+                    </Suspense>
                 </div>
             </>
         );

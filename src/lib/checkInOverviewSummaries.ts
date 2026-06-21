@@ -112,8 +112,34 @@ export function buildOverviewKey(opts: {
     return `${r}${e}${s}${l}`;
 }
 
+function parseOverviewKey(key: OverviewKey): [OverviewTier, OverviewTier, OverviewTier, OverviewTier] {
+    const tiers: OverviewTier[] = [];
+    let rest = key;
+
+    while (rest.length > 0) {
+        if (rest.startsWith("decent")) {
+            tiers.push("decent");
+            rest = rest.slice(6);
+        } else if (rest.startsWith("good")) {
+            tiers.push("good");
+            rest = rest.slice(4);
+        } else if (rest.startsWith("bad")) {
+            tiers.push("bad");
+            rest = rest.slice(3);
+        } else {
+            throw new Error(`Invalid overview key: ${key}`);
+        }
+    }
+
+    if (tiers.length !== 4) {
+        throw new Error(`Invalid overview key: ${key}`);
+    }
+
+    return tiers as [OverviewTier, OverviewTier, OverviewTier, OverviewTier];
+}
+
 function overallTone(key: OverviewKey): OverviewTone {
-    const tiers = key.split("") as OverviewTier[];
+    const tiers = parseOverviewKey(key);
     const badCount = tiers.filter((t) => t === "bad").length;
     const goodCount = tiers.filter((t) => t === "good").length;
     if (badCount >= 2) return "bad";
@@ -124,7 +150,7 @@ function overallTone(key: OverviewKey): OverviewTone {
 }
 
 function buildMessage(key: OverviewKey): string {
-    const [r, e, s, l] = key.split("") as [OverviewTier, OverviewTier, OverviewTier, OverviewTier];
+    const [r, e, s, l] = parseOverviewKey(key);
     const headline =
         r === "good" && e === "good" && s === "good" && l === "good"
             ? "Excellent week overall."
