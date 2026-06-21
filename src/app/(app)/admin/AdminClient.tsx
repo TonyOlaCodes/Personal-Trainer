@@ -62,6 +62,7 @@ interface AdminCoach {
     name?: string | null;
     email: string;
     avatarUrl?: string | null;
+    role: string;
     activeClientCount: number;
     clients: {
         id: string;
@@ -124,6 +125,17 @@ function ProfileAvatar({ name, email, avatarUrl }: { name?: string | null; email
             )}
         </div>
     );
+}
+
+function codeStatusInput(code: AdminCode) {
+    return {
+        isActive: code.isActive,
+        usedById: code.usedById,
+        usedByName: code.usedBy,
+        usedByDeleted: code.usedByStatus === "DELETED",
+        expiresAt: code.expiresAt,
+        status: code.status,
+    };
 }
 
 export function AdminClient({ users: initialUsers, coaches, plans: initialPlans, codes: initialCodes, userRole }: Props) {
@@ -199,7 +211,8 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
             const res = await fetch(`/api/plans/${plan.id}`, { method: "DELETE" });
             const data = await res.json().catch(() => ({}));
             if (res.ok) {
-                setPlansList((current) => current.filter((p) => p.id !== plan.id));
+                const deletedIds = Array.isArray(data.deletedIds) ? data.deletedIds as string[] : [plan.id];
+                setPlansList((current) => current.filter((p) => !deletedIds.includes(p.id)));
                 return;
             }
             alert(typeof data.error === "string" ? data.error : "Could not delete plan.");
@@ -211,10 +224,11 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
     };
 
     const filteredCodes = codes.filter(c => {
+        const status = getAccessCodeStatus(codeStatusInput(c));
         if (codeFilter === "ALL") return true;
-        if (codeFilter === "ACTIVE") return c.isActive && (!c.expiresAt || new Date(c.expiresAt) > new Date());
-        if (codeFilter === "USED") return !!c.usedBy;
-        if (codeFilter === "EXPIRED") return c.expiresAt && new Date(c.expiresAt) < new Date();
+        if (codeFilter === "ACTIVE") return status.key === "active";
+        if (codeFilter === "USED") return status.key === "redeemed";
+        if (codeFilter === "EXPIRED") return status.key === "expired" || status.key === "inactive";
         return true;
     });
 
@@ -293,11 +307,13 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
         setAccountActionId(null);
     };
 
+    const activeUsers = users.filter((u) => !u.isDeleted);
+
     const stats = [
-        { label: "Total Users", val: users.length, icon: Users, color: "text-brand-400" },
+        { label: "Total Users", val: activeUsers.length, icon: Users, color: "text-brand-400" },
         { label: "Premium Users", val: users.filter(u => u.role === "PREMIUM" && !u.isDeactivated && !u.isDeleted).length, icon: Shield, color: "text-success" },
-        { label: "Coaches", val: users.filter(u => u.role === "COACH" && !u.isDeleted).length, icon: Users, color: "text-warning" },
-        { label: "Active Codes", val: codes.filter(c => c.isActive).length, icon: Ticket, color: "text-brand-300" },
+        { label: "Coaches", val: coaches.length, icon: Users, color: "text-warning" },
+        { label: "Active Codes", val: codes.filter(c => getAccessCodeStatus(codeStatusInput(c)).key === "active").length, icon: Ticket, color: "text-brand-300" },
     ];
 
     return (
@@ -340,7 +356,7 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
                 <div className="card overflow-hidden">
                     <div className="px-5 py-4 border-b border-surface-border flex items-center justify-between">
                         <h3 className="heading-3">All Users</h3>
-                        <p className="text-xs text-fg-muted">{users.length} total</p>
+                        <p className="text-xs text-fg-muted">{activeUsers.length} total</p>
                     </div>
                     <div className="divide-y divide-surface-border">
                         {users.map((u) => (
@@ -496,7 +512,14 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
                                     <div className="flex items-center gap-3 min-w-0">
                                         <ProfileAvatar name={coach.name} email={coach.email} avatarUrl={coach.avatarUrl} />
                                         <div className="min-w-0">
-                                            <p className="font-medium text-sm text-fg truncate">{coach.name ?? "No name"}</p>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <p className="font-medium text-sm text-fg truncate">{coach.name ?? "No name"}</p>
+                                                {coach.role === "SUPER_ADMIN" && (
+                                                    <span className="text-[9px] font-black uppercase tracking-widest border px-2 py-0.5 rounded text-brand-400 bg-brand-500/10 border-brand-500/20">
+                                                        Admin
+                                                    </span>
+                                                )}
+                                            </div>
                                             <p className="text-xs text-fg-muted truncate">{coach.email}</p>
                                         </div>
                                     </div>
@@ -739,13 +762,7 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
                                     <p className="text-sm text-fg-muted italic">No codes matching this status.</p>
                                 </div>
                             ) : filteredCodes.map((c) => {
-                                const codeStatus = getAccessCodeStatus({
-                                    isActive: c.isActive,
-                                    usedById: c.usedById,
-                                    usedByName: c.usedBy,
-                                    expiresAt: c.expiresAt,
-                                    status: c.status,
-                                });
+                                const codeStatus = getAccessCodeStatus(codeStatusInput(c));
                                 return (
                                 <div key={c.id} className="flex items-center justify-between px-5 py-4 group hover:bg-surface-muted/30 transition-colors">
                                     <div className="flex items-center gap-4">
@@ -783,7 +800,9 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
                                             </div>
                                             <p className="text-[10px] text-fg-muted font-bold uppercase tracking-widest mt-1">
                                                 {c.planName ? c.planName : "Open Entry"} · {formatDate(c.createdAt)}
-                                                {c.expiresAt && <span className="text-warning ml-2">Exp: {formatDate(c.expiresAt)}</span>}
+                                                {c.expiresAt && codeStatus.key === "active" && (
+                                                    <span className="text-warning ml-2">Exp: {formatDate(c.expiresAt)}</span>
+                                                )}
                                             </p>
                                             {c.usedBy && (
                                                 <div className="flex items-center gap-1.5 mt-1">

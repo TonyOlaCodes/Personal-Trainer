@@ -2,6 +2,7 @@ export type AccessCodeLike = {
     isActive: boolean;
     usedById?: string | null;
     usedByName?: string | null;
+    usedByDeleted?: boolean;
     expiresAt?: string | Date | null;
     status?: string | null;
 };
@@ -17,6 +18,14 @@ export function getAccessCodeStatus(code: AccessCodeLike): {
     const expiresAt = code.expiresAt ? new Date(code.expiresAt) : null;
     const expiredByDate = expiresAt != null && expiresAt.getTime() < Date.now();
     const storedStatus = code.status?.toLowerCase();
+
+    if (redeemed && code.usedByDeleted) {
+        return {
+            key: "expired",
+            label: "Expired",
+            badgeClass: "bg-warning/10 text-warning border-warning/20",
+        };
+    }
 
     if (redeemed) {
         return {

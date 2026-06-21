@@ -23,6 +23,39 @@ export async function countWorkoutLogsForPlan(planId: string, db?: DbClient): Pr
     });
 }
 
+/** Delete a plan when it has no logged sessions. */
+export async function deletePlanIfNoHistory(planId: string, db?: DbClient): Promise<"deleted" | "blocked"> {
+    const logCount = await countWorkoutLogsForPlan(planId, db);
+    if (logCount > 0) return "blocked";
+    await client(db).plan.delete({ where: { id: planId } });
+    return "deleted";
+}
+
+/** Remove all same-name plans for a creator (admin cleanup for duplicate rows). */
+export async function deleteDuplicatePlansByName(
+    plan: { id: string; name: string; creatorId: string | null },
+    db?: DbClient
+) {
+    const dbClient = client(db);
+    const siblings = plan.creatorId
+        ? await dbClient.plan.findMany({
+            where: { creatorId: plan.creatorId, name: plan.name },
+            select: { id: true },
+        })
+        : [{ id: plan.id }];
+
+    const deletedIds: string[] = [];
+    const blockedIds: string[] = [];
+
+    for (const sibling of siblings) {
+        const result = await deletePlanIfNoHistory(sibling.id, dbClient);
+        if (result === "deleted") deletedIds.push(sibling.id);
+        else blockedIds.push(sibling.id);
+    }
+
+    return { deletedIds, blockedIds };
+}
+
 export async function countWorkoutLogsForWorkout(workoutId: string, db?: DbClient): Promise<number> {
     return client(db).workoutLog.count({ where: { workoutId } });
 }

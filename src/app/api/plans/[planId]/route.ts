@@ -7,7 +7,7 @@ import {
     type PlanPatchPayload,
 } from "@/lib/planUpdate";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
-import { countWorkoutLogsForPlan, DataSafetyError } from "@/lib/dataSafety";
+import { DataSafetyError, deleteDuplicatePlansByName, deletePlanIfNoHistory } from "@/lib/dataSafety";
 import { isInactiveAccount } from "@/lib/userDeactivation";
 
 interface PlanExercisePayload {
@@ -199,12 +199,22 @@ export async function DELETE(
     const isAdmin = user.role === "SUPER_ADMIN";
 
     if (isOwner || isAdmin) {
-        const logCount = await countWorkoutLogsForPlan(planId);
-        if (logCount > 0) {
+        if (isAdmin) {
+            const { deletedIds, blockedIds } = await deleteDuplicatePlansByName(plan);
+            if (deletedIds.length === 0 && blockedIds.includes(planId)) {
+                return NextResponse.json({ error: DataSafetyError.planHasHistory }, { status: 409 });
+            }
+            if (deletedIds.length === 0) {
+                return NextResponse.json({ error: "Plan not found" }, { status: 404 });
+            }
+            return NextResponse.json({ success: true, removed: "deleted", deletedIds });
+        }
+
+        const result = await deletePlanIfNoHistory(planId);
+        if (result === "blocked") {
             return NextResponse.json({ error: DataSafetyError.planHasHistory }, { status: 409 });
         }
-        await prisma.plan.delete({ where: { id: planId } });
-        return NextResponse.json({ success: true, removed: "deleted" });
+        return NextResponse.json({ success: true, removed: "deleted", deletedIds: [planId] });
     }
 
     const assignment = await prisma.userPlan.findUnique({

@@ -17,11 +17,23 @@ interface Code {
     usedById?: string | null;
     usedByName: string | null;
     usedByEmail: string | null;
+    usedByDeleted?: boolean;
     isActive: boolean;
     status?: string | null;
     createdAt: string;
     expiresAt: string | null;
     upgradesTo: string;
+}
+
+function codeStatusInput(code: Code) {
+    return {
+        isActive: code.isActive,
+        usedById: code.usedById,
+        usedByName: code.usedByName,
+        usedByDeleted: code.usedByDeleted,
+        expiresAt: code.expiresAt,
+        status: code.status,
+    };
 }
 
 interface Plan {
@@ -178,7 +190,7 @@ export function CoachInvitesClient({ plans, initialCodes }: Props) {
                 <div className="flex items-center justify-between px-2">
                     <h3 className="heading-3">Invites History</h3>
                     <div className="flex items-center gap-2">
-                        <span className="badge-brand">{codes.filter((c) => getAccessCodeStatus(c).key === "active").length} Pending</span>
+                        <span className="badge-brand">{codes.filter((c) => getAccessCodeStatus(codeStatusInput(c)).key === "active").length} Pending</span>
                     </div>
                 </div>
 
@@ -197,12 +209,12 @@ export function CoachInvitesClient({ plans, initialCodes }: Props) {
                                 if (key === "expired") return 2;
                                 return 3;
                             };
-                            const rankDiff = rank(getAccessCodeStatus(a).key) - rank(getAccessCodeStatus(b).key);
+                            const rankDiff = rank(getAccessCodeStatus(codeStatusInput(a)).key) - rank(getAccessCodeStatus(codeStatusInput(b)).key);
                             if (rankDiff !== 0) return rankDiff;
                             return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
                         })
                         .map((c) => {
-                            const codeStatus = getAccessCodeStatus(c);
+                            const codeStatus = getAccessCodeStatus(codeStatusInput(c));
                             return (
                             <div key={c.id} className={cn(
                                 "card p-4 group transition-all",
@@ -243,6 +255,11 @@ export function CoachInvitesClient({ plans, initialCodes }: Props) {
                                             <div className="flex flex-col items-end">
                                                 <p className="text-xs font-bold text-fg">{c.usedByName}</p>
                                                 <p className="text-[10px] text-fg-subtle">{c.usedByEmail}</p>
+                                            </div>
+                                        ) : codeStatus.key === "expired" && c.usedByName ? (
+                                            <div className="flex flex-col items-end">
+                                                <p className="text-xs font-bold text-fg-subtle">{c.usedByName}</p>
+                                                <p className="text-[10px] text-warning font-black uppercase tracking-widest">Account deleted</p>
                                             </div>
                                         ) : codeStatus.key === "active" ? (
                                             <>

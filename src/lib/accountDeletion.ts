@@ -28,7 +28,7 @@ export async function anonymizeDeletedUserAccount(
 
         await tx.accessCode.updateMany({
             where: { usedById: user.id },
-            data: { isActive: false },
+            data: { isActive: false, status: "expired" },
         });
         await tx.accessCode.updateMany({
             where: { generatedBy: user.id },

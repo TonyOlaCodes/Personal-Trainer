@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { CoachInvitesClient } from "./CoachInvitesClient";
+import { getUserAccountStatusMap } from "@/lib/userDeactivation";
 import { dedupeCoachPlansByName } from "@/lib/coachPlans";
 
 export const metadata = { title: "Invite Clients" };
@@ -37,6 +38,9 @@ export default async function CoachInvitesPage() {
     ]);
 
     const plans = dedupeCoachPlansByName(rawPlans).map(({ updatedAt: _updatedAt, ...plan }) => plan);
+    const accountStatusMap = await getUserAccountStatusMap(
+        codes.flatMap((code) => code.usedBy?.id ? [code.usedBy.id] : [])
+    );
 
     return (
         <>
@@ -48,9 +52,18 @@ export default async function CoachInvitesPage() {
                         id: c.id,
                         code: c.code,
                         planName: c.plan?.name ?? null,
-                        usedByName: c.usedBy?.name ?? null,
-                        usedByEmail: c.usedBy?.email ?? null,
+                        usedByName: c.usedBy
+                            ? (accountStatusMap.get(c.usedBy.id)?.isDeleted
+                                ? accountStatusMap.get(c.usedBy.id)?.deletedName ?? c.usedBy.name
+                                : c.usedBy.name)
+                            : null,
+                        usedByEmail: c.usedBy
+                            ? (accountStatusMap.get(c.usedBy.id)?.isDeleted
+                                ? accountStatusMap.get(c.usedBy.id)?.deletedEmail ?? c.usedBy.email
+                                : c.usedBy.email)
+                            : null,
                         usedById: c.usedBy?.id ?? null,
+                        usedByDeleted: c.usedBy ? (accountStatusMap.get(c.usedBy.id)?.isDeleted ?? false) : false,
                         isActive: c.isActive,
                         status: c.status,
                         createdAt: c.createdAt.toISOString(),

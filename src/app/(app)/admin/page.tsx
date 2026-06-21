@@ -76,6 +76,7 @@ export default async function AdminPage() {
                 name: true,
                 email: true,
                 avatarUrl: true,
+                role: true,
                 clients: {
                     select: {
                         id: true,
@@ -132,6 +133,7 @@ export default async function AdminPage() {
                         name: c.name,
                         email: c.email,
                         avatarUrl: c.avatarUrl,
+                        role: c.role,
                         activeClientCount: c.clients.filter((client) => {
                             const status = accountStatusMap.get(client.id);
                             return client.role === "PREMIUM" && !status?.isDeactivated && !status?.isDeleted;
