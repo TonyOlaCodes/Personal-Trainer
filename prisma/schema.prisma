@@ -82,11 +82,17 @@ model User {
   // Presence
   lastActiveAt      DateTime?
 
-  // Coach preferences
+  // Notification preferences (coach-facing)
   defaultCheckInDay    Int?     // 0=Sun, 1=Mon … 6=Sat
   notifyOnWorkout      Boolean  @default(true)
   notifyOnCheckIn      Boolean  @default(true)
   notifyOnMetricUpdate Boolean  @default(true)
+
+  // Notification preferences (client-facing)
+  notifyOnCoachMessage    Boolean @default(true)
+  notifyOnPlanUpdate      Boolean @default(true)
+  notifyOnCheckInReview   Boolean @default(true)
+  notifyOnWorkoutFeedback Boolean @default(true)
 
   // Onboarding Step 1
   goal              Goal?

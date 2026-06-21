@@ -151,22 +151,9 @@ export const roleBadgeClass: Record<string, string> = {
     SUPER_ADMIN: "badge-warning",
 };
 
-/**
- * Calculate estimated One Rep Max (1RM) using the most accurate sports science formulas.
- * - If reps = 1, it is exactly the lifted weight.
- * - If reps <= 10, we use the highly accurate Brzycki formula.
- * - If reps > 10, we fall back to the robust Epley formula to avoid exponential overestimation.
- */
+/** Estimated one-rep max using the Epley formula: weight × (1 + reps / 30). */
 export function calculateOneRM(weight: number, reps: number): number {
     if (weight <= 0 || reps <= 0) return 0;
     if (reps === 1) return Math.round(weight);
-    
-    let oneRM = 0;
-    if (reps <= 10) {
-        oneRM = weight / (1.0278 - 0.0278 * reps);
-    } else {
-        oneRM = weight * (1 + reps / 30);
-    }
-    
-    return Math.round(oneRM);
+    return Math.round(weight * (1 + reps / 30));
 }

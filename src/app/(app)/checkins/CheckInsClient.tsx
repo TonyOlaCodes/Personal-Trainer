@@ -3,10 +3,9 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import {
-    Scale, Send, Check, Camera, TrendingUp, TrendingDown,
-    Plus, Minus, Calendar, MessageSquare, CheckCircle2,
+    Scale, Send, Check, Camera, Calendar, MessageSquare, CheckCircle2,
     Zap, Moon, UtensilsCrossed, Brain, Activity, ChevronDown, AlertCircle,
-    Dumbbell, Flame, Edit2, Clock, Trash2, Loader2
+    Dumbbell, Flame, Edit2, Clock, Trash2, Loader2, Plus
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { formatDate, getWeekNumber, cn } from "@/lib/utils";
@@ -22,10 +21,12 @@ import {
 } from "@/lib/checkInMetricsFeedback";
 import { PremiumLockScreen } from "@/components/shared/PremiumLockScreen";
 import { MediaLightbox } from "@/components/shared/MediaLightbox";
+import { CheckInPeriodSummaryPanel } from "@/components/shared/CheckInPeriodSummaryPanel";
+import type { CheckInPeriodSummary } from "@/lib/checkInPeriodSummary";
 
 /* ─────────────────────────── Types ─────────────────────────── */
 interface CheckIn {
-    id: string; createdAt: string; weekNumber: number;
+    id: string; userId?: string; createdAt: string; weekNumber: number;
     bodyweightKg?: number | null; feedback: string; notes?: string | null;
     status: "PENDING" | "REVIEWED"; coachResponse?: string | null;
     respondedAt?: string | null;
@@ -55,6 +56,12 @@ interface Props {
         daysUntilNext: number | null;
         dueDayLabel: string | null;
         frequencyWeeks: number | null;
+        startDate?: string | null;
+    };
+    checkInSchedule?: {
+        day: number | null;
+        frequencyWeeks: number | null;
+        startDate: string | null;
     };
     hiddenGoals?: string[] | null;
 }
@@ -165,101 +172,7 @@ function ratingChips(c: CheckIn, isSleepHidden?: boolean) {
     ].filter((r) => r.v);
 }
 
-/* ─────────────────── Weight goal feedback ───────────────── */
-function getWeightGoalFeedback(current: number | null, previous: number | null, target?: number | null) {
-    if (!current) {
-        return {
-            tone: "neutral",
-            label: "No weekly average yet",
-            detail: "Log daily bodyweight this week to calculate it.",
-            icon: Minus,
-            chipClass: "bg-surface-muted border-surface-border text-fg-muted",
-            textClass: "text-fg-muted",
-        };
-    }
-
-    if (!target || target <= 0) {
-        const delta = previous ? Math.round((current - previous) * 100) / 100 : null;
-        const icon = delta === null || delta === 0 ? Minus : delta > 0 ? TrendingUp : TrendingDown;
-        return {
-            tone: "neutral",
-            label: delta === null ? "Average logged" : delta === 0 ? "No weekly change" : `${delta > 0 ? "Up" : "Down"} ${Math.abs(delta).toFixed(2)}kg`,
-            detail: "Set a target weight to see if this is moving toward your goal.",
-            icon,
-            chipClass: "bg-surface-muted border-surface-border text-fg-muted",
-            textClass: "text-fg-muted",
-        };
-    }
-
-    const delta = previous ? Math.round((current - previous) * 100) / 100 : null;
-    const distancePct = Math.abs(((current - target) / target) * 100);
-    const previousDistance = previous ? Math.abs(previous - target) : null;
-    const currentDistance = Math.abs(current - target);
-    const progressPct = previousDistance && previousDistance > 0
-        ? Math.round(((previousDistance - currentDistance) / previousDistance) * 100)
-        : null;
-    const direction = delta === null || delta === 0 ? 0 : delta > 0 ? 1 : -1;
-    const desiredDirection = target === current ? 0 : target > current ? 1 : -1;
-    const movedTowardGoal = delta !== null && direction !== 0 && previousDistance !== null && currentDistance < previousDistance;
-    const movedAwayFromGoal = delta !== null && direction !== 0 && previousDistance !== null && currentDistance > previousDistance;
-    const icon = direction === 0 ? Minus : direction > 0 ? TrendingUp : TrendingDown;
-
-    if (distancePct <= 0.25) {
-        return {
-            tone: "good",
-            label: "At goal",
-            detail: "You are basically on target. Hold steady and keep logging.",
-            icon,
-            chipClass: "bg-success/10 border-success/30 text-success shadow-glow-success-sm",
-            textClass: "text-success",
-        };
-    }
-
-    if (distancePct <= 1) {
-        return {
-            tone: "good",
-            label: `${distancePct.toFixed(1)}% away`,
-            detail: "Almost at goal. Keep this pace and stay consistent.",
-            icon,
-            chipClass: "bg-success/10 border-success/30 text-success shadow-glow-success-sm",
-            textClass: "text-success",
-        };
-    }
-
-    if (movedTowardGoal) {
-        const kgAway = Math.abs(current - target).toFixed(1);
-        return {
-            tone: "good",
-            label: "On track",
-            detail: `Moving closer to goal! You are ${kgAway}kg away from your target of ${target}kg.`,
-            icon,
-            chipClass: "bg-success/10 border-success/30 text-success shadow-glow-success-sm",
-            textClass: "text-success",
-        };
-    }
-
-    if (movedAwayFromGoal) {
-        const kgAway = Math.abs(current - target).toFixed(1);
-        return {
-            tone: "bad",
-            label: "Off track",
-            detail: `Moving away from target. You are currently ${kgAway}kg away from your goal of ${target}kg.`,
-            icon,
-            chipClass: "bg-danger/10 border-danger/30 text-danger shadow-glow-danger-sm",
-            textClass: "text-danger",
-        };
-    }
-
-    return {
-        tone: desiredDirection === 0 ? "good" : "neutral",
-        label: `${distancePct.toFixed(1)}% away`,
-        detail: direction === 0 ? "Stable week. A small push next week gets you moving." : "New baseline set for this week.",
-        icon,
-        chipClass: "bg-surface-muted border-surface-border text-fg-muted",
-        textClass: "text-fg-muted",
-    };
-}
-
+/* ─────────────────── Previous check-in summary ─────────────── */
 function getDateFromWeek(week: number, year: number) {
     const d = new Date(year, 0, 1);
     const dayNum = d.getDay() || 7;
@@ -268,7 +181,6 @@ function getDateFromWeek(week: number, year: number) {
     return targetDate.toISOString().split("T")[0];
 }
 
-/* ─────────────────── Previous check-in summary ─────────────── */
 function PrevCheckInCard({ prev, setViewerMedia, isWeightHidden, isSleepHidden }: {
     prev: CheckIn;
     setViewerMedia: (url: string | null) => void;
@@ -378,6 +290,38 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highl
     const [saving, setSaving] = useState(false);
     const [deleting, setDeleting] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
+    const [periodSummary, setPeriodSummary] = useState<CheckInPeriodSummary | null>(null);
+    const [loadingSummary, setLoadingSummary] = useState(false);
+    const checkInDate = c.createdAt.slice(0, 10);
+
+    useEffect(() => {
+        if (!open) return;
+        let cancelled = false;
+
+        async function loadSummary() {
+            setLoadingSummary(true);
+            try {
+                const params = new URLSearchParams({
+                    date: checkInDate,
+                    ...(c.bodyweightKg != null ? { bodyweightKg: String(c.bodyweightKg) } : {}),
+                });
+                if (isCoach && c.userId) params.set("clientId", c.userId);
+
+                const res = await fetch(`/api/checkins/period-summary?${params.toString()}`);
+                const data = await res.json();
+                if (!cancelled && res.ok) setPeriodSummary(data);
+            } catch (e) {
+                console.error(e);
+                if (!cancelled) setPeriodSummary(null);
+            } finally {
+                if (!cancelled) setLoadingSummary(false);
+            }
+        }
+
+        loadSummary();
+        return () => { cancelled = true; };
+    }, [open, checkInDate, isCoach, c.userId, c.bodyweightKg]);
+
     const remove = async () => {
         if (!confirm("Delete this check-in? This cannot be undone.")) return;
         setDeleting(true);
@@ -456,6 +400,8 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highl
 
             {open && (
                 <div className="px-4 pb-5 border-t border-surface-border/40 pt-4 space-y-4 animate-fade-in text-sm">
+                    <CheckInPeriodSummaryPanel summary={periodSummary} loading={loadingSummary} compact />
+
                     {/* Ratings */}
                     <div className="flex flex-wrap gap-2">
                         {ratingChips(c, isSleepHidden).map(r => (
@@ -631,7 +577,7 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highl
 /* ═══════════════════════════════════════════════════════════════
    Main Component
    ═══════════════════════════════════════════════════════════════ */
-export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWeightKg, workoutsThisWeek, workoutsTarget, bodyweightWeeklyAverage, checkInDueState, hiddenGoals }: Props) {
+export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWeightKg, workoutsThisWeek, workoutsTarget, bodyweightWeeklyAverage, checkInDueState, checkInSchedule, hiddenGoals }: Props) {
     const searchParams = useSearchParams();
     const highlightedCheckInId = searchParams.get("highlight");
     const isPremium = ["PREMIUM", "COACH", "SUPER_ADMIN"].includes(userRole);
@@ -680,6 +626,8 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
         return items;
     }, [filteredCheckIns, isCoach, coachSortBy]);
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
+    const [periodSummary, setPeriodSummary] = useState<CheckInPeriodSummary | null>(null);
+    const [loadingPeriodSummary, setLoadingPeriodSummary] = useState(false);
 
     useEffect(() => {
         if (isLogging) return;
@@ -734,6 +682,39 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
         };
     }, [selectedDate, isCoach]);
 
+    useEffect(() => {
+        if (isCoach) return;
+        let cancelled = false;
+
+        async function loadPeriodSummary() {
+            setLoadingPeriodSummary(true);
+            try {
+                const todayWeek = getWeekNumber();
+                const currentEntry = checkIns.find((c) => c.weekNumber === todayWeek);
+                const dateForSummary = (isLogging || editMode)
+                    ? selectedDate
+                    : (currentEntry?.createdAt.slice(0, 10) ?? selectedDate);
+                const week = getWeekNumber(new Date(dateForSummary));
+                const entry = checkIns.find((c) => c.weekNumber === week);
+                const params = new URLSearchParams({ date: dateForSummary });
+                const bw = weeklyAverageWeight ?? entry?.bodyweightKg ?? currentEntry?.bodyweightKg;
+                if (bw != null) params.set("bodyweightKg", String(bw));
+
+                const res = await fetch(`/api/checkins/period-summary?${params.toString()}`);
+                const data = await res.json();
+                if (!cancelled && res.ok) setPeriodSummary(data);
+            } catch (e) {
+                console.error(e);
+                if (!cancelled) setPeriodSummary(null);
+            } finally {
+                if (!cancelled) setLoadingPeriodSummary(false);
+            }
+        }
+
+        loadPeriodSummary();
+        return () => { cancelled = true; };
+    }, [selectedDate, isCoach, weeklyAverageWeight, checkIns, isLogging, editMode]);
+
     if (!isPremium && !isCoach) {
         return (
             <div className="p-4 sm:p-10">
@@ -776,15 +757,10 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
 
     // Stats based on selection or defaults
     const prevCheckIn  = checkIns.find(c => c.weekNumber < (editMode ? selectedWeek : currentWeekReal));
-    const prevWeight   = previousWeeklyAverageWeight ?? prevCheckIn?.bodyweightKg;
     const currentBw    = weeklyAverageWeight ?? existingEntry?.bodyweightKg ?? (selectedWeek === currentWeekReal ? currentWeekEntry?.bodyweightKg : null) ?? null;
-    const weightDelta  = currentBw && prevWeight ? Math.round((currentBw - prevWeight) * 100) / 100 : null;
-    const weightPctChange = currentBw && prevWeight ? Math.round(((currentBw - prevWeight) / prevWeight) * 100 * 100) / 100 : null;
     const isWeightHidden = Array.isArray(hiddenGoals) && hiddenGoals.includes("weight");
     const isSleepHidden = Array.isArray(hiddenGoals) && hiddenGoals.includes("sleep");
 
-    const weightGoalFeedback = getWeightGoalFeedback(currentBw, prevWeight ?? null, targetWeightKg);
-    const WeightTrendIcon = weightGoalFeedback.icon;
     const formActive = isLogging || editMode;
     const metricsSleep = formActive ? sleep : (currentWeekEntry?.sleepRating ?? 0);
     const metricsDiet = formActive ? diet : (currentWeekEntry?.dietRating ?? 0);
@@ -799,7 +775,6 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
         training: metricsTraining,
         sleepHidden: isSleepHidden,
     });
-    const consistencyPct = workoutsTarget > 0 ? Math.round((workoutsThisWeek / workoutsTarget) * 100) : 100;
 
     const startLogging = () => {
         setCheckInId(null);
@@ -1061,12 +1036,16 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                                 <div className="flex-1">
                                     <div className="flex items-center gap-2">
                                         <p className="font-black text-fg">Week {currentWeekReal} Complete</p>
-                                        {!isWeightHidden && weightDelta !== null && (
+                                        {!isWeightHidden && periodSummary?.weight?.changeKg != null && (
                                             <span className={cn(
                                                 "text-[9px] font-black px-1.5 py-0.5 rounded-md border",
-                                                weightGoalFeedback.chipClass
+                                                periodSummary.weight.towardGoal
+                                                    ? "text-success bg-success/10 border-success/25"
+                                                    : periodSummary.weight.towardGoal === false
+                                                        ? "text-red-400 bg-red-400/10 border-red-400/25"
+                                                        : "text-fg-muted bg-surface-muted border-surface-border"
                                             )}>
-                                                {weightDelta > 0 ? "+" : ""}{weightDelta.toFixed(2)}kg
+                                                {periodSummary.weight.changeKg > 0 ? "+" : ""}{periodSummary.weight.changeKg.toFixed(1)}kg
                                             </span>
                                         )}
                                     </div>
@@ -1093,37 +1072,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                             </div>
                         </div>
 
-                        <div className={cn("grid gap-3 pt-2", isWeightHidden ? "grid-cols-1" : "grid-cols-2")}>
-                            {!isWeightHidden && (
-                                <div className="bg-surface-card/40 p-4 rounded-2xl border border-surface-border/50 flex flex-col justify-between">
-                                    <div>
-                                        <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1">Weekly Avg Weight</p>
-                                        <p className="text-xl font-black text-fg tracking-tight">{currentWeekEntry.bodyweightKg?.toFixed(2) ?? '--'}<span className="text-xs text-fg-muted ml-1">kg</span></p>
-                                        {weightDelta !== null && weightPctChange !== null && (
-                                            <p className={cn("text-[10px] font-bold mt-1", weightGoalFeedback.textClass)}>
-                                                {weightDelta > 0 ? "+" : ""}{weightDelta.toFixed(2)}kg ({weightPctChange >= 0 ? "+" : ""}{weightPctChange.toFixed(2)}%) since last
-                                            </p>
-                                        )}
-                                    </div>
-                                    {targetWeightKg && targetWeightKg > 0 && currentWeekEntry.bodyweightKg && (
-                                        <div className="mt-2 pt-2 border-t border-surface-border/30 text-[10px] font-bold text-fg-muted uppercase tracking-wider space-y-0.5">
-                                            <div className="flex justify-between">
-                                                <span>Goal: {targetWeightKg.toFixed(1)}kg</span>
-                                                <span className="text-brand-400">{Math.abs(((currentWeekEntry.bodyweightKg - targetWeightKg) / targetWeightKg) * 100).toFixed(1)}% away</span>
-                                            </div>
-                                            <div className="text-[9px] lowercase opacity-85">
-                                                {Math.abs(currentWeekEntry.bodyweightKg - targetWeightKg).toFixed(1)}kg {currentWeekEntry.bodyweightKg > targetWeightKg ? "above" : "below"} goal
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                            <div className="bg-surface-card/40 p-4 rounded-2xl border border-surface-border/50">
-                                <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1">Consistency</p>
-                                <p className="text-xl font-black text-fg tracking-tight">{workoutsThisWeek}<span className="text-xs text-fg-muted ml-0.5">/{workoutsTarget}</span></p>
-                                <p className="text-[10px] font-bold text-fg-muted mt-1 uppercase tracking-tighter">Sessions this week</p>
-                            </div>
-                        </div>
+                        <CheckInPeriodSummaryPanel summary={periodSummary} loading={loadingPeriodSummary} compact />
 
                         {currentWeekEntry.coachResponse ? (
                             <div className="p-4 rounded-2xl bg-success/10 border border-success/20 shadow-glow-success-sm animate-slide-up">
@@ -1301,12 +1250,16 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                 </div>
                 <div className={cn(
                     "px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider border inline-flex items-center gap-2",
-                    consistencyPct >= 80 ? "text-success bg-success/10 border-success/25 shadow-glow-success-sm"
-                        : consistencyPct >= 50 ? "text-warning bg-warning/10 border-warning/25"
-                        : "text-fg-muted bg-surface-muted border-surface-border"
+                    (periodSummary?.workouts.completed ?? workoutsThisWeek) >= (periodSummary?.workouts.target ?? workoutsTarget)
+                        ? "text-success bg-success/10 border-success/25 shadow-glow-success-sm"
+                        : (periodSummary?.workouts.completed ?? workoutsThisWeek) >= (periodSummary?.workouts.target ?? workoutsTarget) * 0.75
+                            ? "text-warning bg-warning/10 border-warning/25"
+                            : "text-fg-muted bg-surface-muted border-surface-border"
                 )}>
                     <Dumbbell className="w-3 h-3" />
-                    {workoutsThisWeek}/{workoutsTarget} sessions
+                    {periodSummary
+                        ? `${periodSummary.workouts.completed}/${periodSummary.workouts.target} sessions (${periodSummary.periodLabel})`
+                        : `${workoutsThisWeek}/${workoutsTarget} sessions`}
                 </div>
                 {!editMode && needsCheckIn && (
                     <div className={cn(
@@ -1319,58 +1272,36 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                 )}
             </div>
 
-            {/* 1. Weekly average bodyweight */}
+            <CheckInPeriodSummaryPanel summary={periodSummary} loading={loadingPeriodSummary} />
+
+            {/* Weight submitted with check-in */}
             {!isWeightHidden && (
-                <div className="card p-5 space-y-4 border-surface-border hover:border-brand-500/20 transition-all group">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <Scale className="w-4 h-4 text-brand-400 group-hover:scale-110 transition-transform" />
-                            <span className="text-sm font-black text-fg uppercase tracking-wide">Weekly Average Weight</span>
-                        </div>
-                    {prevWeight && (
-                        <span className="text-[10px] text-fg-subtle font-black uppercase tracking-widest">
-                            Last week avg: {prevWeight.toFixed(2)}kg
-                        </span>
-                    )}
-                </div>
-                <div className="flex items-center gap-3">
-                    <div className="flex-1 h-14 rounded-2xl bg-surface-muted/30 border border-surface-border/40 px-4 flex items-center justify-between">
+                <div className="card p-5 space-y-3 border-surface-border">
+                    <div className="flex items-center gap-2">
+                        <Scale className="w-4 h-4 text-brand-400" />
+                        <span className="text-sm font-black text-fg uppercase tracking-wide">Weight for this check-in</span>
+                    </div>
+                    <div className="flex items-center justify-between rounded-2xl bg-surface-muted/30 border border-surface-border/40 px-4 py-3">
                         <div>
                             <p className="text-2xl font-black text-fg leading-none">
-                                {loadingWeeklyAverage ? "..." : weeklyAverageWeight ? weeklyAverageWeight.toFixed(2) : "--"}
-                                <span className="text-sm font-black text-fg-subtle ml-1">kg</span>
+                                {loadingWeeklyAverage ? "..." : currentBw ? `${currentBw.toFixed(2)} kg` : "—"}
                             </p>
                             <p className="text-[10px] font-bold text-fg-muted mt-1 uppercase">
-                                {weeklyAverageEntries > 0 ? `${weeklyAverageEntries} daily log${weeklyAverageEntries === 1 ? "" : "s"} this week` : "Log daily bodyweight to fill this in"}
+                                {weeklyAverageEntries > 0
+                                    ? `${weeklyAverageEntries} log${weeklyAverageEntries === 1 ? "" : "s"} in ${periodSummary?.periodLabel ?? "this period"}`
+                                    : "Log weight on the dashboard to auto-fill"}
                             </p>
                         </div>
-                    </div>
-                    <div className={cn(
-                        "flex items-center gap-1.5 px-4 h-14 rounded-2xl font-black text-sm border shrink-0 transition-colors",
-                        weightGoalFeedback.chipClass
-                    )}>
-                        <WeightTrendIcon className="w-4 h-4" />
-                        {weightDelta !== null && weightDelta > 0 ? "+" : ""}{weightDelta || "0"}kg ({weightPctChange !== null && weightPctChange > 0 ? '+' : ''}{weightPctChange || "0"}%)
-                    </div>
-                </div>
-                {targetWeightKg && targetWeightKg > 0 && weeklyAverageWeight && (
-                    <div className="flex items-center justify-between text-xs font-bold text-fg-muted bg-surface-muted/10 border border-surface-border/40 rounded-xl px-4 py-2.5">
-                        <span className="uppercase tracking-widest text-[9px] font-black">Weight Goal Info</span>
-                        <span className="text-fg font-black">
-                            {targetWeightKg.toFixed(1)}kg ({Math.abs(weeklyAverageWeight - targetWeightKg).toFixed(1)}kg away)
-                        </span>
-                    </div>
-                )}
-                <div className={cn("rounded-2xl border px-4 py-3 text-xs font-bold leading-relaxed", weightGoalFeedback.chipClass)}>
-                    <div className="flex items-start gap-2">
-                        <WeightTrendIcon className="w-4 h-4 mt-0.5 shrink-0" />
-                        <div>
-                            <p className="font-black uppercase tracking-widest text-[10px]">{weightGoalFeedback.label}</p>
-                            <p className="mt-0.5 opacity-90">{weightGoalFeedback.detail}</p>
-                        </div>
+                        {periodSummary?.weight?.changeKg != null && (
+                            <span className={cn(
+                                "text-sm font-black px-3 py-1.5 rounded-xl border",
+                                periodSummary.weight.towardGoal ? "text-success bg-success/10 border-success/25" : periodSummary.weight.towardGoal === false ? "text-red-400 bg-red-400/10 border-red-400/25" : "text-fg-muted bg-surface-muted border-surface-border"
+                            )}>
+                                {periodSummary.weight.changeKg > 0 ? "+" : ""}{periodSummary.weight.changeKg.toFixed(1)} kg
+                            </span>
+                        )}
                     </div>
                 </div>
-            </div>
             )}
 
             {/* 2. Ratings */}

@@ -13,7 +13,35 @@ export interface NotificationItem {
     route: string;
 }
 
+export type CoachNotificationPref = "notifyOnWorkout" | "notifyOnCheckIn" | "notifyOnMetricUpdate";
+export type ClientNotificationPref =
+    | "notifyOnCoachMessage"
+    | "notifyOnPlanUpdate"
+    | "notifyOnCheckInReview"
+    | "notifyOnWorkoutFeedback";
+
 let notificationsReady = false;
+let notificationColumnsReady = false;
+
+export async function ensureNotificationPreferenceColumns() {
+    if (notificationColumnsReady) return;
+
+    const columns = [
+        `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notifyOnWorkout" BOOLEAN NOT NULL DEFAULT true`,
+        `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notifyOnCheckIn" BOOLEAN NOT NULL DEFAULT true`,
+        `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notifyOnMetricUpdate" BOOLEAN NOT NULL DEFAULT true`,
+        `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notifyOnCoachMessage" BOOLEAN NOT NULL DEFAULT true`,
+        `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notifyOnPlanUpdate" BOOLEAN NOT NULL DEFAULT true`,
+        `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notifyOnCheckInReview" BOOLEAN NOT NULL DEFAULT true`,
+        `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notifyOnWorkoutFeedback" BOOLEAN NOT NULL DEFAULT true`,
+    ];
+
+    for (const statement of columns) {
+        await prisma.$executeRawUnsafe(statement);
+    }
+
+    notificationColumnsReady = true;
+}
 
 export async function ensureNotificationsTable() {
     if (notificationsReady) return;
@@ -43,6 +71,29 @@ export async function ensureNotificationsTable() {
     notificationsReady = true;
 }
 
+export async function userWantsNotification(
+    userId: string,
+    pref: CoachNotificationPref | ClientNotificationPref
+): Promise<boolean> {
+    await ensureNotificationPreferenceColumns();
+
+    const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+            notifyOnWorkout: true,
+            notifyOnCheckIn: true,
+            notifyOnMetricUpdate: true,
+            notifyOnCoachMessage: true,
+            notifyOnPlanUpdate: true,
+            notifyOnCheckInReview: true,
+            notifyOnWorkoutFeedback: true,
+        },
+    });
+
+    if (!user) return false;
+    return user[pref] ?? true;
+}
+
 export async function createNotification(input: {
     userId: string;
     type: string;
@@ -65,11 +116,7 @@ export async function notifyCoachOfClientWorkout(input: {
     workoutName: string;
     workoutLogId: string;
 }) {
-    const coach = await prisma.user.findUnique({
-        where: { id: input.coachId },
-        select: { notifyOnWorkout: true },
-    });
-    if (!coach?.notifyOnWorkout) return;
+    if (!(await userWantsNotification(input.coachId, "notifyOnWorkout"))) return;
 
     await createNotification({
         userId: input.coachId,
@@ -78,6 +125,41 @@ export async function notifyCoachOfClientWorkout(input: {
         entityType: "WORKOUT_LOG",
         entityId: input.workoutLogId,
         route: `/plans/log/view/${input.workoutLogId}`,
+    });
+}
+
+export async function notifyCoachOfClientCheckIn(input: {
+    coachId: string;
+    clientName: string;
+    checkInId: string;
+}) {
+    if (!(await userWantsNotification(input.coachId, "notifyOnCheckIn"))) return;
+
+    await createNotification({
+        userId: input.coachId,
+        type: "CLIENT_CHECKIN",
+        message: `${input.clientName} submitted a check-in`,
+        entityType: "CHECK_IN",
+        entityId: input.checkInId,
+        route: `/checkins?highlight=${input.checkInId}`,
+    });
+}
+
+export async function notifyCoachOfClientBodyweight(input: {
+    coachId: string;
+    clientId: string;
+    clientName: string;
+    weightKg: number;
+}) {
+    if (!(await userWantsNotification(input.coachId, "notifyOnMetricUpdate"))) return;
+
+    await createNotification({
+        userId: input.coachId,
+        type: "CLIENT_BODYWEIGHT",
+        message: `${input.clientName} logged ${input.weightKg.toFixed(1)} kg`,
+        entityType: "BODYWEIGHT",
+        entityId: null,
+        route: `/coach/client/${input.clientId}`,
     });
 }
 

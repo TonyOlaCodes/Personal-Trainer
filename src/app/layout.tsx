@@ -13,10 +13,10 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: {
     template: "%s | FitCoach Pro",
-    default: "FitCoach Pro — Premium Fitness Coaching Platform",
+    default: "FitCoach Pro — Fitness Coaching Platform",
   },
   description:
-    "Transform your body with personalised coaching, AI-driven workout plans, and real-time progress tracking.",
+    "Workout plans, progress tracking, check-ins, and direct coach communication in one place.",
   keywords: ["fitness", "coaching", "workout", "gym", "personal trainer"],
   openGraph: {
     siteName: "FitCoach Pro",

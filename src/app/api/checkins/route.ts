@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { CheckInStatus, Prisma } from "@prisma/client";
 import { z } from "zod";
-import { createNotification } from "@/lib/notifications";
+import { createNotification, notifyCoachOfClientCheckIn, userWantsNotification } from "@/lib/notifications";
 import { isInactiveAccount } from "@/lib/userDeactivation";
 
 const checkInSchema = z.object({
@@ -54,22 +54,12 @@ export async function POST(req: Request) {
             },
         });
 
-        // Notify coach if they have a coach and notifications enabled
         if (user.coachId) {
-            const coach = await prisma.user.findUnique({
-                where: { id: user.coachId },
-                select: { notifyOnCheckIn: true },
+            await notifyCoachOfClientCheckIn({
+                coachId: user.coachId,
+                clientName: user.name ?? user.email,
+                checkInId: checkIn.id,
             });
-            if (coach?.notifyOnCheckIn) {
-                await createNotification({
-                    userId: user.coachId,
-                    type: "CLIENT_CHECKIN",
-                    message: `${user.name ?? user.email} submitted a check-in`,
-                    entityType: "CHECK_IN",
-                    entityId: checkIn.id,
-                    route: `/checkins?highlight=${checkIn.id}`,
-                });
-            }
         }
 
         return NextResponse.json(checkIn, { status: 201 });
@@ -215,7 +205,7 @@ export async function PATCH(req: Request) {
             data,
         });
 
-        if (isCoach) {
+        if (isCoach && (await userWantsNotification(existing.userId, "notifyOnCheckInReview"))) {
             await createNotification({
                 userId: existing.userId,
                 type: "CHECKIN_REVIEWED",

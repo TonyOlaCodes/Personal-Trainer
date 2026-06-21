@@ -2,7 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { createNotification } from "@/lib/notifications";
+import { createNotification, userWantsNotification } from "@/lib/notifications";
 import { createWorkoutNote, getWorkoutNotes } from "@/lib/workoutNotes";
 
 const postSchema = z.object({
@@ -59,14 +59,16 @@ export async function POST(req: Request) {
     }
 
     await createWorkoutNote(log.id, coach.id, parsed.data.text);
-    await createNotification({
-        userId: log.user.id,
-        type: "WORKOUT_FEEDBACK_ADDED",
-        message: "Your coach added feedback to your workout",
-        entityType: "WORKOUT_LOG",
-        entityId: log.id,
-        route: `/dashboard?sessionId=${log.id}`,
-    });
+    if (await userWantsNotification(log.user.id, "notifyOnWorkoutFeedback")) {
+        await createNotification({
+            userId: log.user.id,
+            type: "WORKOUT_FEEDBACK_ADDED",
+            message: "Your coach added feedback to your workout",
+            entityType: "WORKOUT_LOG",
+            entityId: log.id,
+            route: `/dashboard?sessionId=${log.id}`,
+        });
+    }
 
     return NextResponse.json({ success: true, notes: await getWorkoutNotes(log.id) }, { status: 201 });
 }

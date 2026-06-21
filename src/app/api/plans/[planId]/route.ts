@@ -1,7 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma, ensureDbSchema } from "@/lib/prisma";
-import { createNotification } from "@/lib/notifications";
+import { createNotification, userWantsNotification } from "@/lib/notifications";
 import {
     updatePlanPreservingHistory,
     type PlanPatchPayload,
@@ -161,14 +161,17 @@ export async function PATCH(
             where: { planId, isActive: true },
             select: { userId: true },
         });
-        await Promise.all(assignedUsers.map((assignment) => createNotification({
-            userId: assignment.userId,
-            type: "PLAN_UPDATED",
-            message: "Your plan has been updated",
-            entityType: "PLAN",
-            entityId: planId,
-            route: `/plans?highlight=${planId}`,
-        })));
+        await Promise.all(assignedUsers.map(async (assignment) => {
+            if (!(await userWantsNotification(assignment.userId, "notifyOnPlanUpdate"))) return;
+            await createNotification({
+                userId: assignment.userId,
+                type: "PLAN_UPDATED",
+                message: "Your plan has been updated",
+                entityType: "PLAN",
+                entityId: planId,
+                route: `/plans?highlight=${planId}`,
+            });
+        }));
 
         return NextResponse.json(updatedPlan);
     } catch (err: unknown) {

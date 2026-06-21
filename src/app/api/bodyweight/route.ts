@@ -9,6 +9,7 @@ import {
     normalizeBodyweightDate,
     saveBodyweightEntry,
 } from "@/lib/bodyweight";
+import { notifyCoachOfClientBodyweight } from "@/lib/notifications";
 
 const saveSchema = z.object({
     date: z.string(),
@@ -18,7 +19,10 @@ const saveSchema = z.object({
 async function getCurrentUser() {
     const { userId } = await auth();
     if (!userId) return null;
-    return prisma.user.findUnique({ where: { clerkId: userId }, select: { id: true } });
+    return prisma.user.findUnique({
+        where: { clerkId: userId },
+        select: { id: true, name: true, email: true, coachId: true },
+    });
 }
 
 export async function GET(req: Request) {
@@ -49,6 +53,15 @@ export async function POST(req: Request) {
         const date = normalizeBodyweightDate(parsed.date);
         const weightKg = normalizeBodyweight(parsed.weightKg);
         const summary = await saveBodyweightEntry(user.id, date, weightKg);
+
+        if (user.coachId) {
+            await notifyCoachOfClientBodyweight({
+                coachId: user.coachId,
+                clientId: user.id,
+                clientName: user.name ?? user.email,
+                weightKg,
+            });
+        }
 
         return NextResponse.json(summary);
     } catch (err) {

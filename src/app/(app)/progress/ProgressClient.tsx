@@ -235,8 +235,8 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
         return (
             <div className="p-4 sm:p-10">
                 <PremiumLockScreen
-                    title="Elite Progress Analytics"
-                    description="Advanced progress tracking is available to Premium members. Upgrade to get professional strength analysis, PR tracking, and historical session breakdowns."
+                    title="Progress Analytics"
+                    description="Advanced progress tracking is available to Premium members. Upgrade for strength charts, PR tracking, and session history."
                 />
             </div>
         );
@@ -246,7 +246,7 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[500px] gap-4">
                 <Loader2 className="w-10 h-10 text-brand-400 animate-spin" />
-                <p className="text-fg-muted animate-pulse font-medium">Analyzing your evolution...</p>
+                <p className="text-fg-muted animate-pulse font-medium">Loading progress...</p>
             </div>
         );
     }

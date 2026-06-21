@@ -9,7 +9,6 @@ import {
   Shield,
   ChevronRight,
   Check,
-  Star,
   Dumbbell,
   Target,
   TrendingUp,
@@ -20,8 +19,8 @@ import { cn } from "@/lib/utils";
 const features = [
   {
     icon: Dumbbell,
-    title: "Smart Workout Plans",
-    desc: "Weekly evolving programs built by expert coaches or auto-generated for your goals.",
+    title: "Workout Plans",
+    desc: "Follow coach-built programmes or create your own weekly splits.",
     color: "text-brand-400",
     bg: "bg-brand-950",
   },
@@ -56,7 +55,7 @@ const features = [
   {
     icon: TrendingUp,
     title: "Workout Logger",
-    desc: "Log every set, rep, and weight. See your PRs shatter in real time.",
+    desc: "Log sets, reps, and weight. Track PRs and estimated maxes over time.",
     color: "text-warning",
     bg: "bg-warning-muted",
   },
@@ -95,27 +94,6 @@ const plans = [
     cta: "Get Access Code",
     href: "/sign-up",
     highlight: true,
-  },
-];
-
-const testimonials = [
-  {
-    name: "James K.",
-    role: "Premium Client",
-    text: "Lost 18kg in 5 months. The weekly check-ins and direct access to my coach made all the difference.",
-    rating: 5,
-  },
-  {
-    name: "Sarah M.",
-    role: "Premium Client",
-    text: "The analytics section is incredible. I can see exactly how my lifts are progressing week by week.",
-    rating: 5,
-  },
-  {
-    name: "Marcus T.",
-    role: "Free User",
-    text: "Even the free version is better than any other app I've used. The PPL split is perfectly structured.",
-    rating: 5,
   },
 ];
 
@@ -173,8 +151,7 @@ export default function LandingPage() {
           </h1>
 
           <p className="text-lg sm:text-xl text-fg-muted max-w-2xl mx-auto mb-10 text-balance">
-            The all-in-one platform for serious athletes and their coaches.
-            Personalised plans, real-time analytics, and direct coach communication — all in one place.
+            A platform for athletes and coaches — plans, logging, check-ins, and messaging in one place.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -349,41 +326,14 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ─── Testimonials ─────────────────────────── */}
-      <section className="py-24 px-6 bg-surface-muted/30">
-        <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-16">
-            <p className="text-brand-400 font-semibold text-sm uppercase tracking-widest mb-3">Results</p>
-            <h2 className="heading-1 mb-4">Loved by athletes</h2>
-          </div>
-
-          <div className="grid sm:grid-cols-3 gap-6">
-            {testimonials.map((t, i) => (
-              <div key={i} className="card p-6">
-                <div className="flex gap-1 mb-4">
-                  {Array.from({ length: t.rating }).map((_, j) => (
-                    <Star key={j} className="w-4 h-4 fill-warning text-warning" />
-                  ))}
-                </div>
-                <p className="text-sm text-fg-muted leading-relaxed mb-4">&ldquo;{t.text}&rdquo;</p>
-                <div>
-                  <p className="font-semibold text-sm">{t.name}</p>
-                  <p className="text-xs text-fg-subtle">{t.role}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* ─── CTA ──────────────────────────────────── */}
       <section className="py-24 px-6">
         <div className="max-w-3xl mx-auto text-center">
           <div className="card p-12 relative overflow-hidden">
             <div className="absolute inset-0 bg-gradient-brand opacity-5 pointer-events-none" />
-            <h2 className="heading-1 mb-4">Ready to transform?</h2>
+            <h2 className="heading-1 mb-4">Ready to get started?</h2>
             <p className="subheading mb-8">
-              Join thousands of athletes already training smarter with FitCoach Pro.
+              Create a free account and start logging workouts today.
             </p>
             {!isLoaded ? (
               <div className="h-12 w-48 bg-surface-muted animate-pulse rounded-xl mx-auto" />

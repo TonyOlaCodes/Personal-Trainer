@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
-import { createNotification } from "@/lib/notifications";
+import { createNotification, userWantsNotification } from "@/lib/notifications";
 import {
     canAccessTeamChat,
     canDirectMessage,
@@ -213,14 +213,16 @@ export async function POST(req: Request) {
             select: { id: true, coachId: true },
         });
         if (receiver && (user.role === "SUPER_ADMIN" || receiver.coachId === user.id)) {
-            await createNotification({
-                userId: receiver.id,
-                type: "NEW_CHAT_MESSAGE",
-                message: "New message from your coach",
-                entityType: "CHAT_MESSAGE",
-                entityId: message.id,
-                route: `/chat?with=${user.id}`,
-            });
+            if (await userWantsNotification(receiver.id, "notifyOnCoachMessage")) {
+                await createNotification({
+                    userId: receiver.id,
+                    type: "NEW_CHAT_MESSAGE",
+                    message: "New message from your coach",
+                    entityType: "CHAT_MESSAGE",
+                    entityId: message.id,
+                    route: `/chat?with=${user.id}`,
+                });
+            }
         }
     }
 

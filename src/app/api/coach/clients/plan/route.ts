@@ -2,7 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
-import { createNotification } from "@/lib/notifications";
+import { createNotification, userWantsNotification } from "@/lib/notifications";
 import { requireCoachCanEditClient } from "@/lib/apiAuth";
 
 const planUpdateSchema = z.object({
@@ -56,14 +56,16 @@ export async function POST(req: Request) {
             }
         });
 
-        await createNotification({
-            userId: client.id,
-            type: "PLAN_UPDATED",
-            message: "Your plan has been updated",
-            entityType: "PLAN",
-            entityId: plan.id,
-            route: `/plans?highlight=${plan.id}`,
-        });
+        if (await userWantsNotification(client.id, "notifyOnPlanUpdate")) {
+            await createNotification({
+                userId: client.id,
+                type: "PLAN_UPDATED",
+                message: "Your coach assigned you a new plan",
+                entityType: "PLAN",
+                entityId: plan.id,
+                route: `/plans?highlight=${plan.id}`,
+            });
+        }
 
         return NextResponse.json({ success: true });
     } catch (err: unknown) {

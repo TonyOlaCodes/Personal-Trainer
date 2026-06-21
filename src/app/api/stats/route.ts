@@ -134,7 +134,7 @@ export async function GET() {
                 }
                 
                 const cur1RMVal = sbdByDate[dateStr][fieldKey1RM as "squat1RM"|"bench1RM"|"deadlift1RM"] ?? 0;
-                const set1RM = Math.round(sWeight * (1 + sReps / 30));
+                const set1RM = calculateOneRM(sWeight, sReps);
                 if (set1RM > cur1RMVal) {
                     sbdByDate[dateStr][fieldKey1RM as "squat1RM"|"bench1RM"|"deadlift1RM"] = set1RM;
                 }

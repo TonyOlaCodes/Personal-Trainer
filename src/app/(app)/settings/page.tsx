@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { SettingsClient } from "./SettingsClient";
 import { getDailyMetricTargets } from "@/lib/dailyMetrics";
+import { ensureNotificationPreferenceColumns } from "@/lib/notifications";
 import { SafeFallback, rethrowNextInternalErrors } from "@/components/shared/SafeFallback";
 import { formatErrorDetails } from "@/lib/ensureAppSchema";
 
@@ -26,6 +27,13 @@ export default async function SettingsPage() {
                     goal: true, trainingDaysPerWeek: true, experienceLevel: true, trainingLocation: true,
                     targetWeightKg: true, weightKg: true,
                     hiddenGoals: true,
+                    notifyOnWorkout: true,
+                    notifyOnCheckIn: true,
+                    notifyOnMetricUpdate: true,
+                    notifyOnCoachMessage: true,
+                    notifyOnPlanUpdate: true,
+                    notifyOnCheckInReview: true,
+                    notifyOnWorkoutFeedback: true,
                 },
             });
         } catch (dbErr) {
@@ -46,6 +54,8 @@ export default async function SettingsPage() {
         }
 
         if (!user) redirect("/sign-in");
+
+        await ensureNotificationPreferenceColumns();
 
         const dailyMetricTargets = await getDailyMetricTargets(user.id);
         const hiddenGoals = (user as any).hiddenGoals ?? [];

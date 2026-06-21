@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { normalizeCalories, normalizeSleepHours, normalizeSteps, updateDailyMetricTargets } from "@/lib/dailyMetrics";
+import { ensureNotificationPreferenceColumns } from "@/lib/notifications";
 import { z } from "zod";
 
 const profileSchema = z.object({
@@ -18,6 +19,13 @@ const profileSchema = z.object({
     targetSteps: z.number().nullable().optional(),
     targetSleepHours: z.number().nullable().optional(),
     hiddenGoals: z.array(z.string()).optional(),
+    notifyOnWorkout: z.boolean().optional(),
+    notifyOnCheckIn: z.boolean().optional(),
+    notifyOnMetricUpdate: z.boolean().optional(),
+    notifyOnCoachMessage: z.boolean().optional(),
+    notifyOnPlanUpdate: z.boolean().optional(),
+    notifyOnCheckInReview: z.boolean().optional(),
+    notifyOnWorkoutFeedback: z.boolean().optional(),
 });
 
 export async function PATCH(req: Request) {
@@ -27,6 +35,8 @@ export async function PATCH(req: Request) {
 
         const body = await req.json();
         const parsed = profileSchema.parse(body);
+
+        await ensureNotificationPreferenceColumns();
 
         let updated;
         try {
@@ -42,6 +52,13 @@ export async function PATCH(req: Request) {
                     ...(parsed.targetWeightKg !== undefined && { targetWeightKg: Math.round(parsed.targetWeightKg * 100) / 100 }),
                     ...(parsed.weightKg !== undefined && { weightKg: Math.round(parsed.weightKg * 100) / 100 }),
                     ...(parsed.hiddenGoals !== undefined && { hiddenGoals: parsed.hiddenGoals }),
+                    ...(parsed.notifyOnWorkout !== undefined && { notifyOnWorkout: parsed.notifyOnWorkout }),
+                    ...(parsed.notifyOnCheckIn !== undefined && { notifyOnCheckIn: parsed.notifyOnCheckIn }),
+                    ...(parsed.notifyOnMetricUpdate !== undefined && { notifyOnMetricUpdate: parsed.notifyOnMetricUpdate }),
+                    ...(parsed.notifyOnCoachMessage !== undefined && { notifyOnCoachMessage: parsed.notifyOnCoachMessage }),
+                    ...(parsed.notifyOnPlanUpdate !== undefined && { notifyOnPlanUpdate: parsed.notifyOnPlanUpdate }),
+                    ...(parsed.notifyOnCheckInReview !== undefined && { notifyOnCheckInReview: parsed.notifyOnCheckInReview }),
+                    ...(parsed.notifyOnWorkoutFeedback !== undefined && { notifyOnWorkoutFeedback: parsed.notifyOnWorkoutFeedback }),
                 },
             });
         } catch (dbErr) {

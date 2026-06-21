@@ -29,6 +29,13 @@ interface Props {
         targetSteps?: number | null;
         targetSleepHours?: number | null;
         hiddenGoals: string[];
+        notifyOnWorkout?: boolean;
+        notifyOnCheckIn?: boolean;
+        notifyOnMetricUpdate?: boolean;
+        notifyOnCoachMessage?: boolean;
+        notifyOnPlanUpdate?: boolean;
+        notifyOnCheckInReview?: boolean;
+        notifyOnWorkoutFeedback?: boolean;
     };
     realRole: "FREE" | "PREMIUM" | "COACH" | "SUPER_ADMIN";
     isClientMode: boolean;
@@ -75,6 +82,19 @@ export function SettingsClient({ user, realRole, isClientMode }: Props) {
     const [hiddenGoals, setHiddenGoals] = useState<string[]>(user.hiddenGoals || []);
     const [goalSaving, setGoalSaving] = useState(false);
     const [goalSaved, setGoalSaved] = useState(false);
+
+    const showCoachNotifications = (realRole === "COACH" || realRole === "SUPER_ADMIN") && !isClientMode;
+    const showClientNotifications = isClientMode || realRole === "FREE" || realRole === "PREMIUM";
+
+    const [notifyOnWorkout, setNotifyOnWorkout] = useState(user.notifyOnWorkout ?? true);
+    const [notifyOnCheckIn, setNotifyOnCheckIn] = useState(user.notifyOnCheckIn ?? true);
+    const [notifyOnMetricUpdate, setNotifyOnMetricUpdate] = useState(user.notifyOnMetricUpdate ?? true);
+    const [notifyOnCoachMessage, setNotifyOnCoachMessage] = useState(user.notifyOnCoachMessage ?? true);
+    const [notifyOnPlanUpdate, setNotifyOnPlanUpdate] = useState(user.notifyOnPlanUpdate ?? true);
+    const [notifyOnCheckInReview, setNotifyOnCheckInReview] = useState(user.notifyOnCheckInReview ?? true);
+    const [notifyOnWorkoutFeedback, setNotifyOnWorkoutFeedback] = useState(user.notifyOnWorkoutFeedback ?? true);
+    const [notifSaving, setNotifSaving] = useState(false);
+    const [notifSaved, setNotifSaved] = useState(false);
 
     // Access code state
     const [secretCode, setSecretCode] = useState("");
@@ -163,6 +183,42 @@ export function SettingsClient({ user, realRole, isClientMode }: Props) {
             alert("Connection error occurred while saving goals.");
         } finally {
             setGoalSaving(false);
+        }
+    };
+
+    const handleNotificationSave = async () => {
+        setNotifSaving(true);
+        try {
+            const payload: Record<string, boolean> = {};
+            if (showCoachNotifications) {
+                payload.notifyOnWorkout = notifyOnWorkout;
+                payload.notifyOnCheckIn = notifyOnCheckIn;
+                payload.notifyOnMetricUpdate = notifyOnMetricUpdate;
+            }
+            if (showClientNotifications) {
+                payload.notifyOnCoachMessage = notifyOnCoachMessage;
+                payload.notifyOnPlanUpdate = notifyOnPlanUpdate;
+                payload.notifyOnCheckInReview = notifyOnCheckInReview;
+                payload.notifyOnWorkoutFeedback = notifyOnWorkoutFeedback;
+            }
+
+            const res = await fetch("/api/user/profile", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            });
+            if (res.ok) {
+                setNotifSaved(true);
+                router.refresh();
+                setTimeout(() => setNotifSaved(false), 2500);
+            } else {
+                const data = await res.json();
+                alert(data.error || "Failed to save notification settings");
+            }
+        } catch {
+            alert("Connection error.");
+        } finally {
+            setNotifSaving(false);
         }
     };
 
@@ -525,10 +581,80 @@ export function SettingsClient({ user, realRole, isClientMode }: Props) {
 
                 {activeTab === "notifications" && (
                     <div className="card p-6 space-y-6 animate-slide-up">
-                        <h3 className="heading-3">Activity Notifications</h3>
-                        <p className="text-sm text-fg-muted">
-                            Notification preferences are not configurable yet. You will still receive important alerts for check-ins, plan updates, and coach messages.
-                        </p>
+                        <div>
+                            <h3 className="heading-3">Activity Notifications</h3>
+                            <p className="text-sm text-fg-muted mt-1">
+                                Choose which in-app alerts you receive. Changes apply immediately.
+                            </p>
+                        </div>
+
+                        {showCoachNotifications && (
+                            <div className="space-y-3">
+                                <p className="text-xs font-black uppercase tracking-widest text-fg-subtle">Coach alerts</p>
+                                <NotificationToggle
+                                    label="Client completes a workout"
+                                    description="When a client finishes a logged session."
+                                    checked={notifyOnWorkout}
+                                    onChange={setNotifyOnWorkout}
+                                />
+                                <NotificationToggle
+                                    label="Client submits a check-in"
+                                    description="When a client sends a weekly check-in."
+                                    checked={notifyOnCheckIn}
+                                    onChange={setNotifyOnCheckIn}
+                                />
+                                <NotificationToggle
+                                    label="Client logs bodyweight"
+                                    description="When a client records their weight on the dashboard."
+                                    checked={notifyOnMetricUpdate}
+                                    onChange={setNotifyOnMetricUpdate}
+                                />
+                            </div>
+                        )}
+
+                        {showClientNotifications && (
+                            <div className="space-y-3">
+                                <p className="text-xs font-black uppercase tracking-widest text-fg-subtle">Client alerts</p>
+                                <NotificationToggle
+                                    label="Coach sends a message"
+                                    description="When your coach messages you in chat."
+                                    checked={notifyOnCoachMessage}
+                                    onChange={setNotifyOnCoachMessage}
+                                />
+                                <NotificationToggle
+                                    label="Plan updated or assigned"
+                                    description="When your coach changes or assigns your programme."
+                                    checked={notifyOnPlanUpdate}
+                                    onChange={setNotifyOnPlanUpdate}
+                                />
+                                <NotificationToggle
+                                    label="Check-in reviewed"
+                                    description="When your coach responds to a check-in."
+                                    checked={notifyOnCheckInReview}
+                                    onChange={setNotifyOnCheckInReview}
+                                />
+                                <NotificationToggle
+                                    label="Workout feedback added"
+                                    description="When your coach leaves notes on a session."
+                                    checked={notifyOnWorkoutFeedback}
+                                    onChange={setNotifyOnWorkoutFeedback}
+                                />
+                            </div>
+                        )}
+
+                        <div className="pt-4 border-t border-surface-border flex justify-end">
+                            <button
+                                onClick={handleNotificationSave}
+                                disabled={notifSaving}
+                                className={cn(
+                                    "btn-primary w-full sm:w-auto px-10 h-12 flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest transition-all",
+                                    notifSaved && "bg-success border-success shadow-glow-success"
+                                )}
+                            >
+                                {notifSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : notifSaved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+                                {notifSaving ? "Saving..." : notifSaved ? "Saved!" : "Save Notifications"}
+                            </button>
+                        </div>
                     </div>
                 )}
 
@@ -597,5 +723,43 @@ export function SettingsClient({ user, realRole, isClientMode }: Props) {
                 </div>
             </div>
         </div>
+    );
+}
+
+function NotificationToggle({
+    label,
+    description,
+    checked,
+    onChange,
+}: {
+    label: string;
+    description: string;
+    checked: boolean;
+    onChange: (value: boolean) => void;
+}) {
+    return (
+        <label className="flex items-start justify-between gap-4 p-4 rounded-2xl border border-surface-border bg-surface-muted/30 cursor-pointer hover:border-brand-500/30 transition-colors">
+            <div>
+                <p className="text-sm font-bold text-fg">{label}</p>
+                <p className="text-xs text-fg-muted mt-0.5">{description}</p>
+            </div>
+            <button
+                type="button"
+                role="switch"
+                aria-checked={checked}
+                onClick={() => onChange(!checked)}
+                className={cn(
+                    "relative w-11 h-6 rounded-full shrink-0 transition-colors",
+                    checked ? "bg-brand-500" : "bg-surface-border"
+                )}
+            >
+                <span
+                    className={cn(
+                        "absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform",
+                        checked && "translate-x-5"
+                    )}
+                />
+            </button>
+        </label>
     );
 }

@@ -116,6 +116,7 @@ export default async function CheckInsPage() {
                     <CheckInsClient
                         checkIns={checkIns.map((c: any) => ({
                             id: c.id,
+                            userId: c.userId,
                             createdAt: c.createdAt.toISOString(),
                             weekNumber: c.weekNumber,
                             bodyweightKg: c.bodyweightKg,
@@ -142,6 +143,7 @@ export default async function CheckInsPage() {
                         workoutsTarget={workoutsTarget}
                         bodyweightWeeklyAverage={bodyweightWeeklyAverage}
                         checkInDueState={checkInDueState}
+                        checkInSchedule={checkInSchedule ?? undefined}
                         hiddenGoals={user.hiddenGoals ?? []}
                     />
                 </div>
