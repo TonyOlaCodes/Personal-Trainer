@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma, ensureDbSchema } from "@/lib/prisma";
 import { getLocalDayBounds, parseLogDate } from "@/lib/utils";
 import { canLogWorkouts, requireAuthUser, workoutAssignedToUser } from "@/lib/apiAuth";
+import { notifyCoachOfClientWorkout } from "@/lib/notifications";
 import { z } from "zod";
 
 const logSchema = z.object({
@@ -172,7 +173,7 @@ export async function POST(req: Request) {
         const workoutLog = await prisma.workoutLog.update({
             where: { id: existingCompleted.id },
             data: { ...logPayload, sets: { create: setsCreate } },
-            include: { sets: true },
+            include: { sets: true, workout: { select: { name: true } } },
         });
         return NextResponse.json(workoutLog, { status: 200 });
     }
@@ -184,8 +185,17 @@ export async function POST(req: Request) {
             ...logPayload,
             sets: { create: setsCreate },
         },
-        include: { sets: true },
+        include: { sets: true, workout: { select: { name: true } } },
     });
+
+    if (status === "COMPLETED" && user.coachId) {
+        await notifyCoachOfClientWorkout({
+            coachId: user.coachId,
+            clientName: user.name ?? user.email,
+            workoutName: workoutLog.workout.name,
+            workoutLogId: workoutLog.id,
+        });
+    }
 
     return NextResponse.json(workoutLog, { status: 201 });
 }

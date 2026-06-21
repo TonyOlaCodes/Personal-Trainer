@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { getDirectMessageActivity } from "@/lib/chatActivity";
 import { ChatClient } from "./ChatClient";
 
 export const metadata = { title: "Chat" };
@@ -16,7 +17,7 @@ export default async function ChatPage() {
     // For clients → their coach
     // For coaches → their clients
     // For admin → all coaches + clients
-    let conversations: { userId: string; name: string; role: string; avatarUrl: string | null; isDeleted?: boolean }[] = [];
+    let conversations: { userId: string; name: string; role: string; avatarUrl: string | null; isDeleted?: boolean; lastMessageAt?: string | null }[] = [];
 
     if (user.role === "PREMIUM") {
         // Show coach if assigned
@@ -49,12 +50,25 @@ export default async function ChatPage() {
         }));
     }
 
+    if (conversations.length > 0 && user.role !== "FREE") {
+        const activity = await getDirectMessageActivity(
+            user.id,
+            conversations.map((conversation) => conversation.userId)
+        );
+        conversations = conversations.map((conversation) => ({
+            ...conversation,
+            lastMessageAt: activity[conversation.userId] ?? null,
+        }));
+    }
+
     return (
-        <ChatClient
-            currentUserId={user.id}
-            currentUserRole={user.role}
-            conversations={conversations}
-            canUseDirectChat={user.role !== "FREE"}
-        />
+        <div className="-mb-20 h-0 overflow-hidden md:mb-0 md:h-auto md:overflow-visible">
+            <ChatClient
+                currentUserId={user.id}
+                currentUserRole={user.role}
+                conversations={conversations}
+                canUseDirectChat={user.role !== "FREE"}
+            />
+        </div>
     );
 }

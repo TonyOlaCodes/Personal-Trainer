@@ -4,8 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Walkthrough } from "@/components/shared/Walkthrough";
-import { WorkoutSessionModal } from "@/components/shared/WorkoutSessionModal";
-import { RecentSessionsListModal, PREVIEW_LIMIT } from "@/components/shared/RecentSessionsListModal";
+import { RecentSessionsExplorer, PREVIEW_LIMIT } from "@/components/shared/RecentSessionsExplorer";
 import { ReturnLink } from "@/components/shared/ReturnLink";
 import { Dumbbell, ChevronRight, Clock, Flame, Activity, Calendar, Ticket, Check, Edit3, Trash2, Scale, Utensils, Footprints, Moon, AlertCircle } from "lucide-react";
 import { formatDate, formatRelative, cn, toDateKey, parseLogDate } from "@/lib/utils";
@@ -115,8 +114,8 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
     const [metricsMsg, setMetricsMsg] = useState("");
     const [savingMetrics, setSavingMetrics] = useState(false);
     const [localActiveSession, setLocalActiveSession] = useState(activeSession);
-    const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
-    const [showAllSessions, setShowAllSessions] = useState(false);
+    const [sessionsExplorerOpen, setSessionsExplorerOpen] = useState(false);
+    const [sessionsExplorerInitialId, setSessionsExplorerInitialId] = useState<string | null>(null);
 
     useEffect(() => {
         setLocalActiveSession(activeSession);
@@ -130,7 +129,8 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
         }
         const sessionId = urlParams.get("sessionId");
         if (sessionId) {
-            setSelectedSessionId(sessionId);
+            setSessionsExplorerInitialId(sessionId);
+            setSessionsExplorerOpen(true);
             window.history.replaceState({}, document.title, window.location.pathname);
         }
     }, []);
@@ -140,7 +140,10 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
         try {
             const res = await fetch(`/api/logs/${logId}`, { method: "DELETE" });
             if (res.ok) {
-                if (selectedSessionId === logId) setSelectedSessionId(null);
+                if (sessionsExplorerInitialId === logId) {
+                    setSessionsExplorerOpen(false);
+                    setSessionsExplorerInitialId(null);
+                }
                 router.refresh();
             } else {
                 alert("Failed to delete session.");
@@ -438,25 +441,25 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
 
     return (
         <div className="space-y-6 animate-fade-in pb-10">
-            <WorkoutSessionModal
-                sessionId={selectedSessionId}
-                onClose={() => setSelectedSessionId(null)}
-                canDelete
-                onDeleted={() => {
-                    setSelectedSessionId(null);
-                    router.refresh();
+            <RecentSessionsExplorer
+                open={sessionsExplorerOpen}
+                onClose={() => {
+                    setSessionsExplorerOpen(false);
+                    setSessionsExplorerInitialId(null);
                 }}
-            />
-            <RecentSessionsListModal
-                open={showAllSessions}
-                onClose={() => setShowAllSessions(false)}
                 title="All Sessions"
                 sessions={recentLogs.map((log) => ({
                     id: log.id,
                     workoutName: log.workoutName,
                     date: log.loggedAt,
                 }))}
-                onSelect={setSelectedSessionId}
+                initialSessionId={sessionsExplorerInitialId}
+                canDelete
+                onDeleted={() => {
+                    setSessionsExplorerOpen(false);
+                    setSessionsExplorerInitialId(null);
+                    router.refresh();
+                }}
             />
             {showTour && <Walkthrough steps={tourSteps} onComplete={() => setShowTour(false)} />}
 
@@ -915,7 +918,10 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                     {recentLogs.length > 0 && (
                         <button
                             type="button"
-                            onClick={() => setShowAllSessions(true)}
+                            onClick={() => {
+                                setSessionsExplorerInitialId(null);
+                                setSessionsExplorerOpen(true);
+                            }}
                             className="btn-ghost btn-sm text-brand-400"
                         >
                             View all
@@ -928,7 +934,10 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                     <div className="card divide-y divide-surface-border">
                         {recentLogs.slice(0, PREVIEW_LIMIT).map((log) => (
                             <div
-                                onClick={() => setSelectedSessionId(log.id)}
+                                onClick={() => {
+                                    setSessionsExplorerInitialId(log.id);
+                                    setSessionsExplorerOpen(true);
+                                }}
                                 key={log.id}
                                 className="w-full flex items-center justify-between px-4 py-3 hover:bg-surface-muted/30 transition-colors text-left cursor-pointer"
                             >

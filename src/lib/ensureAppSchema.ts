@@ -1,4 +1,4 @@
-import { ensureDbSchema } from "@/lib/prisma";
+import { ensureDbSchema, prisma } from "@/lib/prisma";
 import { ensureBodyweightTable } from "@/lib/bodyweight";
 import { ensureCheckInScheduleColumns } from "@/lib/checkInSchedule";
 import { ensureDailyMetricsTable, ensureDailyMetricTargetColumns } from "@/lib/dailyMetrics";
@@ -7,22 +7,31 @@ import { ensureExerciseDictionary } from "@/lib/exerciseDictionary";
 import { ensureUnitSystemColumn } from "@/lib/units";
 
 let appSchemaReady = false;
+let appSchemaPromise: Promise<void> | null = null;
 
 export async function ensureAppSchema() {
     if (appSchemaReady) return;
+    if (appSchemaPromise) return appSchemaPromise;
 
-    await Promise.all([
-        ensureDbSchema(),
-        ensureUserAccountStatusColumns(),
-        ensureCheckInScheduleColumns(),
-        ensureDailyMetricTargetColumns(),
-        ensureDailyMetricsTable(),
-        ensureBodyweightTable(),
-        ensureExerciseDictionary(),
-        ensureUnitSystemColumn(prisma),
-    ]);
+    appSchemaPromise = (async () => {
+        await Promise.all([
+            ensureDbSchema(),
+            ensureUserAccountStatusColumns(),
+            ensureCheckInScheduleColumns(),
+            ensureDailyMetricTargetColumns(),
+            ensureDailyMetricsTable(),
+            ensureBodyweightTable(),
+            ensureExerciseDictionary(),
+            ensureUnitSystemColumn(prisma),
+        ]);
+        appSchemaReady = true;
+    })();
 
-    appSchemaReady = true;
+    try {
+        await appSchemaPromise;
+    } finally {
+        appSchemaPromise = null;
+    }
 }
 
 export function formatErrorDetails(error: unknown): string {

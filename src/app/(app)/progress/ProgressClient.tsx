@@ -23,13 +23,87 @@ interface Props {
     hiddenGoals: string[];
 }
 
+type BodyweightHistoryPoint = { date: string; dateKey: string; weight: number };
+
+const BW_TIMEFRAMES = [
+    { days: 7 as const, label: "Week", periodLabel: "this week" },
+    { days: 30 as const, label: "Month", periodLabel: "this month" },
+    { days: 365 as const, label: "Year", periodLabel: "this year" },
+];
+
+function filterBodyweightHistory(history: BodyweightHistoryPoint[], days: number) {
+    const cutoff = new Date();
+    cutoff.setHours(0, 0, 0, 0);
+    cutoff.setDate(cutoff.getDate() - days);
+    return history.filter((entry) => new Date(entry.dateKey) >= cutoff);
+}
+
+function getBodyweightPeriodChange(history: BodyweightHistoryPoint[], days: number) {
+    if (history.length === 0) return null;
+
+    const cutoff = new Date();
+    cutoff.setHours(0, 0, 0, 0);
+    cutoff.setDate(cutoff.getDate() - days);
+
+    const inPeriod = history.filter((entry) => new Date(entry.dateKey) >= cutoff);
+    if (inPeriod.length === 0) return null;
+
+    const endWeight = inPeriod[inPeriod.length - 1].weight;
+    const beforePeriod = history.filter((entry) => new Date(entry.dateKey) < cutoff);
+    const startWeight = inPeriod.length >= 2
+        ? inPeriod[0].weight
+        : beforePeriod.length > 0
+            ? beforePeriod[beforePeriod.length - 1].weight
+            : inPeriod[0].weight;
+
+    const change = endWeight - startWeight;
+    const periodLabel = BW_TIMEFRAMES.find((frame) => frame.days === days)?.periodLabel ?? "in this period";
+
+    return { change, startWeight, endWeight, periodLabel };
+}
+
+function isWeightChangeTowardGoal(
+    changeKg: number,
+    goal: string | null | undefined,
+    target: number | null | undefined,
+    startWeight: number,
+    endWeight: number
+) {
+    if (changeKg === 0) return true;
+
+    if (target != null && target > 0) {
+        const startDistance = Math.abs(startWeight - target);
+        const endDistance = Math.abs(endWeight - target);
+        if (endDistance < startDistance) return true;
+        if (endDistance > startDistance) return false;
+    }
+
+    switch (goal) {
+        case "LOSE_WEIGHT":
+            return changeKg < 0;
+        case "GAIN_MUSCLE":
+        case "STRENGTH":
+            return changeKg > 0;
+        case "RECOMPOSITION":
+            if (target != null && target > 0) {
+                return Math.abs(endWeight - target) <= Math.abs(startWeight - target);
+            }
+            return changeKg < 0;
+        default:
+            if (target != null && target > 0) {
+                return Math.abs(endWeight - target) < Math.abs(startWeight - target);
+            }
+            return changeKg < 0;
+    }
+}
+
 export function ProgressClient({ userRole, hiddenGoals }: Props) {
     const isPremium = ["PREMIUM", "COACH", "SUPER_ADMIN"].includes(userRole);
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [selectedExercise, setSelectedExercise] = useState<string>("");
     const [exerciseSearchQuery, setExerciseSearchQuery] = useState("");
-    const [bwDays, setBwDays] = useState<7 | 30 | 90>(30);
+    const [bwDays, setBwDays] = useState<7 | 30 | 365>(30);
     const [showExerciseModal, setShowExerciseModal] = useState(false);
     const [volTimeframe, setVolTimeframe] = useState<"daily" | "weekly" | "monthly" | "yearly">("weekly");
     const [isHydrated, setIsHydrated] = useState(false);
@@ -121,6 +195,40 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
         return { currentMax, estimatedMax };
     }, [data, selectedExercise]);
 
+    const bodyweightHistory = useMemo(
+        () => (data?.bodyweight?.history ?? []) as BodyweightHistoryPoint[],
+        [data]
+    );
+
+    const filteredBodyweightHistory = useMemo(
+        () => filterBodyweightHistory(bodyweightHistory, bwDays),
+        [bodyweightHistory, bwDays]
+    );
+
+    const bodyweightPeriodStats = useMemo(() => {
+        const period = getBodyweightPeriodChange(bodyweightHistory, bwDays);
+        if (!period) return null;
+
+        return {
+            ...period,
+            towardGoal: isWeightChangeTowardGoal(
+                period.change,
+                data?.bodyweight?.goal,
+                data?.bodyweight?.target,
+                period.startWeight,
+                period.endWeight
+            ),
+        };
+    }, [bodyweightHistory, bwDays, data?.bodyweight?.goal, data?.bodyweight?.target]);
+
+    const bodyweightData = useMemo(
+        () => filteredBodyweightHistory.map((d) => ({
+            ...d,
+            target: data?.bodyweight?.target ?? null,
+        })),
+        [filteredBodyweightHistory, data?.bodyweight?.target]
+    );
+
     if (!isHydrated) return null;
 
     if (!isPremium) {
@@ -153,11 +261,6 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
             </div>
         );
     }
-
-    const bodyweightData = (data?.bodyweight?.history ?? []).slice(-bwDays).map((d: any) => ({
-        ...d,
-        target: data?.bodyweight?.target ?? null
-    }));
 
     const consistencyPct = (data?.consistency?.target ?? 0) > 0
         ? Math.min(Math.round(((data?.consistency?.thisWeek ?? 0) / (data?.consistency?.target ?? 4)) * 100), 100) : 0;
@@ -331,18 +434,19 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                                         {data?.bodyweight?.current ? data.bodyweight.current.toFixed(1) : "--"}
                                         <span className="text-lg font-bold text-fg-muted ml-1">kg</span>
                                     </h3>
-                                    {/* Week delta badge */}
-                                    {(data?.bodyweight?.changeWeek ?? 0) !== 0 && (
+                                    {/* Period delta badge */}
+                                    {bodyweightPeriodStats && bodyweightPeriodStats.change !== 0 && (
                                         <span className={cn(
                                             "inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-black mb-1",
-                                            (data?.bodyweight?.changeWeek ?? 0) > 0
-                                                ? "bg-red-500/10 text-red-400"
-                                                : "bg-success/10 text-success"
+                                            bodyweightPeriodStats.towardGoal
+                                                ? "bg-success/10 text-success"
+                                                : "bg-red-500/10 text-red-400"
                                         )}>
-                                            {(data?.bodyweight?.changeWeek ?? 0) > 0
+                                            {bodyweightPeriodStats.change > 0
                                                 ? <TrendingUp className="w-3 h-3" />
                                                 : <TrendingDown className="w-3 h-3" />}
-                                            {(data?.bodyweight?.changeWeek ?? 0) > 0 ? "+" : ""}{(data?.bodyweight?.changeWeek ?? 0).toFixed(1)} kg this week
+                                            {bodyweightPeriodStats.change > 0 ? "+" : ""}
+                                            {bodyweightPeriodStats.change.toFixed(1)} kg {bodyweightPeriodStats.periodLabel}
                                         </span>
                                     )}
                                 </div>
@@ -360,24 +464,33 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                         </div>
                         <div className="flex flex-col items-end gap-3">
                             <div className="flex bg-surface-muted p-1 rounded-xl self-start sm:self-auto">
-                                {[7, 30, 90].map((d) => (
+                                {BW_TIMEFRAMES.map(({ days, label }) => (
                                     <button
-                                        key={d}
-                                        onClick={() => setBwDays(d as any)}
+                                        key={days}
+                                        onClick={() => setBwDays(days)}
                                         className={cn(
                                             "px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
-                                            bwDays === d ? "bg-surface-card text-brand-400 shadow-sm" : "text-fg-subtle hover:text-fg"
+                                            bwDays === days ? "bg-surface-card text-brand-400 shadow-sm" : "text-fg-subtle hover:text-fg"
                                         )}
                                     >
-                                        {d}D
+                                        {label}
                                     </button>
                                 ))}
                             </div>
-                            {/* Total change pill */}
+                            {/* Period change */}
                             <div className="text-right">
-                                <p className="text-[9px] font-black text-fg-subtle uppercase tracking-widest">Total change</p>
-                                <p className={cn("text-sm font-black", (data?.bodyweight?.totalChange ?? 0) < 0 ? "text-success" : "text-fg")}>
-                                    {(data?.bodyweight?.totalChange ?? 0) > 0 ? "+" : ""}{(data?.bodyweight?.totalChange ?? 0).toFixed(1)} kg
+                                <p className="text-[9px] font-black text-fg-subtle uppercase tracking-widest">
+                                    {BW_TIMEFRAMES.find((frame) => frame.days === bwDays)?.label ?? "Period"} change
+                                </p>
+                                <p className={cn(
+                                    "text-sm font-black",
+                                    bodyweightPeriodStats
+                                        ? bodyweightPeriodStats.towardGoal ? "text-success" : "text-red-400"
+                                        : "text-fg"
+                                )}>
+                                    {bodyweightPeriodStats
+                                        ? `${bodyweightPeriodStats.change > 0 ? "+" : ""}${bodyweightPeriodStats.change.toFixed(1)} kg`
+                                        : "—"}
                                 </p>
                             </div>
                         </div>

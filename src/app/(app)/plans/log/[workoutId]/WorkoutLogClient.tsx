@@ -296,7 +296,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                     body: JSON.stringify({
                         workoutId: workout.id,
                         status: "IN_PROGRESS",
-                        loggedAt: toLoggedAtIso(logDate ?? now),
+                        loggedAt: toLoggedAtIso(logDate ?? new Date(now)),
                         sets: flattenedSets,
                     }),
                 });
@@ -398,7 +398,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                 body: JSON.stringify({
                     workoutId: workout.id,
                     status: "IN_PROGRESS",
-                    loggedAt: toLoggedAtIso(logDate ?? finalStartTime),
+                    loggedAt: toLoggedAtIso(logDate ?? new Date(finalStartTime)),
                     sets: flattenedSets,
                 }),
             });

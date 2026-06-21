@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Activity, Dumbbell, Loader2, MessageSquare, Trash2, X } from "lucide-react";
+import { Activity, ChevronLeft, ChevronRight, Dumbbell, Loader2, MessageSquare, Trash2, X } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 
 interface SessionSet {
@@ -37,13 +37,25 @@ interface SessionData {
 
 interface Props {
     sessionId: string | null;
+    sessionIds?: string[];
     onClose: () => void;
+    onBackToList?: () => void;
+    onNavigate?: (sessionId: string) => void;
     canAddCoachNote?: boolean;
     canDelete?: boolean;
     onDeleted?: () => void;
 }
 
-export function WorkoutSessionModal({ sessionId, onClose, canAddCoachNote = false, canDelete = false, onDeleted }: Props) {
+export function WorkoutSessionModal({
+    sessionId,
+    sessionIds,
+    onClose,
+    onBackToList,
+    onNavigate,
+    canAddCoachNote = false,
+    canDelete = false,
+    onDeleted,
+}: Props) {
     const [session, setSession] = useState<SessionData | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
@@ -90,6 +102,27 @@ export function WorkoutSessionModal({ sessionId, onClose, canAddCoachNote = fals
         return Array.from(map.values());
     }, [session]);
 
+    const currentIndex = sessionId && sessionIds ? sessionIds.indexOf(sessionId) : -1;
+    const hasOlder = currentIndex >= 0 && sessionIds != null && currentIndex < sessionIds.length - 1;
+    const hasNewer = currentIndex > 0;
+    const showSessionNav = Boolean(sessionIds && sessionIds.length > 1 && onNavigate);
+
+    useEffect(() => {
+        if (!sessionId || !showSessionNav || !onNavigate || !sessionIds) return;
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "ArrowLeft" && hasOlder) {
+                onNavigate(sessionIds[currentIndex + 1]);
+            }
+            if (event.key === "ArrowRight" && hasNewer) {
+                onNavigate(sessionIds[currentIndex - 1]);
+            }
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [sessionId, showSessionNav, onNavigate, sessionIds, currentIndex, hasOlder, hasNewer]);
+
     if (!sessionId) return null;
 
     const deleteSession = async () => {
@@ -134,20 +167,57 @@ export function WorkoutSessionModal({ sessionId, onClose, canAddCoachNote = fals
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-6">
+        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-6">
             <div className="w-full sm:max-w-3xl max-h-[92vh] bg-surface-card border border-surface-border rounded-t-3xl sm:rounded-2xl shadow-modal overflow-hidden animate-slide-up">
                 <div className="p-5 border-b border-surface-border flex items-start justify-between gap-4">
-                    <div>
+                    <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                            {onBackToList && (
+                                <button
+                                    type="button"
+                                    onClick={onBackToList}
+                                    className="btn-ghost btn-sm text-brand-400 px-2"
+                                >
+                                    <ChevronLeft className="w-4 h-4" />
+                                    All sessions
+                                </button>
+                            )}
+                            {showSessionNav && (
+                                <div className="flex items-center gap-1 ml-auto sm:ml-0">
+                                    <button
+                                        type="button"
+                                        disabled={!hasOlder}
+                                        onClick={() => onNavigate?.(sessionIds![currentIndex + 1])}
+                                        className="btn-icon disabled:opacity-30"
+                                        title="Older session"
+                                    >
+                                        <ChevronLeft className="w-4 h-4" />
+                                    </button>
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle px-1">
+                                        {currentIndex + 1} / {sessionIds!.length}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        disabled={!hasNewer}
+                                        onClick={() => onNavigate?.(sessionIds![currentIndex - 1])}
+                                        className="btn-icon disabled:opacity-30"
+                                        title="Newer session"
+                                    >
+                                        <ChevronRight className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                         <p className="text-[10px] font-black text-brand-400 uppercase tracking-widest">Workout Session</p>
-                        <h3 className="heading-3 mt-1">{session?.workoutName || "Session Details"}</h3>
+                        <h3 className="heading-3 mt-1 truncate">{session?.workoutName || "Session Details"}</h3>
                         {session && (
                             <p className="text-xs text-fg-muted mt-1">
-                                {session.clientName ? `${session.clientName} - ` : ""}{formatDate(session.loggedAt)}
-                                {session.duration ? ` - ${session.duration} min` : ""}
+                                {session.clientName ? `${session.clientName} · ` : ""}{formatDate(session.loggedAt)}
+                                {session.duration ? ` · ${session.duration} min` : ""}
                             </p>
                         )}
                     </div>
-                    <button onClick={onClose} className="btn-icon shrink-0">
+                    <button onClick={onClose} className="btn-icon shrink-0" title="Close">
                         <X className="w-4 h-4" />
                     </button>
                 </div>

@@ -59,6 +59,28 @@ export async function createNotification(input: {
     `;
 }
 
+export async function notifyCoachOfClientWorkout(input: {
+    coachId: string;
+    clientName: string;
+    workoutName: string;
+    workoutLogId: string;
+}) {
+    const coach = await prisma.user.findUnique({
+        where: { id: input.coachId },
+        select: { notifyOnWorkout: true },
+    });
+    if (!coach?.notifyOnWorkout) return;
+
+    await createNotification({
+        userId: input.coachId,
+        type: "CLIENT_WORKOUT",
+        message: `${input.clientName} completed ${input.workoutName}`,
+        entityType: "WORKOUT_LOG",
+        entityId: input.workoutLogId,
+        route: `/plans/log/view/${input.workoutLogId}`,
+    });
+}
+
 export async function getNotifications(userId: string, limit = 20) {
     await ensureNotificationsTable();
 

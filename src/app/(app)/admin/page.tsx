@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { AdminClient } from "./AdminClient";
 import { getUserAccountStatusMap } from "@/lib/userDeactivation";
+import { dedupeAdminPlansByName } from "@/lib/coachPlans";
 
 export const metadata = { title: "Admin Panel" };
 
@@ -48,6 +49,8 @@ export default async function AdminPage() {
                 id: true,
                 name: true,
                 type: true,
+                creatorId: true,
+                updatedAt: true,
                 userPlans: {
                     where: { isActive: true },
                     select: {
@@ -55,7 +58,7 @@ export default async function AdminPage() {
                     },
                 },
             },
-            orderBy: { createdAt: "desc" },
+            orderBy: { updatedAt: "desc" },
             take: 100,
         }),
         prisma.accessCode.findMany({
@@ -152,10 +155,12 @@ export default async function AdminPage() {
                                 (a.name ?? a.email).localeCompare(b.name ?? b.email)
                             ),
                     }))}
-                    plans={plans.map((p) => ({
+                    plans={dedupeAdminPlansByName(plans.map((p) => ({
                         id: p.id,
                         name: p.name,
                         type: p.type,
+                        creatorId: p.creatorId,
+                        updatedAt: p.updatedAt,
                         userCount: p.userPlans.filter((assignment) => {
                             const status = accountStatusMap.get(assignment.user.id);
                             return !status?.isDeactivated && !status?.isDeleted;
@@ -178,7 +183,7 @@ export default async function AdminPage() {
                                 accountSortRank(a) - accountSortRank(b) ||
                                 (a.name ?? a.email).localeCompare(b.name ?? b.email)
                             ),
-                    }))}
+                    }))).map(({ updatedAt: _updatedAt, creatorId: _creatorId, ...plan }) => plan)}
                     codes={recentCodes.map((c) => ({
                         id: c.id,
                         code: c.code,

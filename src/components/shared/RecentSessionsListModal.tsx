@@ -104,10 +104,9 @@ export function RecentSessionsListModal({
                                     key={session.id}
                                     type="button"
                                     className={className}
-                                    onClick={() => {
-                                        onSelect?.(session.id);
-                                        onClose();
-                                    }}
+                            onClick={() => {
+                                onSelect?.(session.id);
+                            }}
                                 >
                                     {row}
                                 </button>

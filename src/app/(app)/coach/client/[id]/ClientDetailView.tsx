@@ -12,7 +12,7 @@ import {
 } from "recharts";
 import Link from "next/link";
 import { ReturnLink } from "@/components/shared/ReturnLink";
-import { RecentSessionsListModal, PREVIEW_LIMIT } from "@/components/shared/RecentSessionsListModal";
+import { RecentSessionsExplorer, PREVIEW_LIMIT } from "@/components/shared/RecentSessionsExplorer";
 import { cn, formatDate, getInitials } from "@/lib/utils";
 import { formatCoachPlanLabel } from "@/lib/coachPlans";
 
@@ -145,6 +145,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
     const [sendingChat, setSendingChat] = useState(false);
     const chatBottomRef = useRef<HTMLDivElement>(null);
     const [showAllSessions, setShowAllSessions] = useState(false);
+    const [sessionsInitialId, setSessionsInitialId] = useState<string | null>(null);
 
     const router = useRouter();
 
@@ -450,13 +451,17 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
 
     return (
         <div className="space-y-8 animate-fade-in">
-            <RecentSessionsListModal
+            <RecentSessionsExplorer
                 open={showAllSessions}
-                onClose={() => setShowAllSessions(false)}
+                onClose={() => {
+                    setShowAllSessions(false);
+                    setSessionsInitialId(null);
+                }}
                 title={`${client.name ?? "Client"} Sessions`}
                 subtitle="Full workout history"
                 sessions={logs}
-                sessionHref={(id) => `/plans/log/view/${id}`}
+                initialSessionId={sessionsInitialId}
+                canAddCoachNote={canEdit}
             />
             {readOnly && (
                 <div className="card p-4 border-warning/30 bg-warning/5 flex items-start gap-3">
@@ -867,7 +872,9 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                         <div>
                                             <p className="text-[8px] font-black uppercase tracking-widest text-fg-subtle">Check-in Day</p>
                                             <p className="text-xs font-black text-fg">
-                                                {CHECK_IN_DAYS[client.checkInSchedule.day] || "Not Set"}
+                                                {client.checkInSchedule.day != null
+                                                    ? CHECK_IN_DAYS[client.checkInSchedule.day]
+                                                    : "Not Set"}
                                             </p>
                                         </div>
                                     </div>
@@ -1230,7 +1237,10 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                             {logs.length > 0 && (
                                 <button
                                     type="button"
-                                    onClick={() => setShowAllSessions(true)}
+                                    onClick={() => {
+                                        setSessionsInitialId(null);
+                                        setShowAllSessions(true);
+                                    }}
                                     className="btn-ghost btn-sm text-brand-400 text-[10px] font-black uppercase tracking-widest"
                                 >
                                     View all
@@ -1243,7 +1253,15 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                 <p className="text-sm text-fg-muted px-2 italic">No sessions logged yet.</p>
                             ) : (
                                 logs.slice(0, PREVIEW_LIMIT).map((l) => (
-                                    <ReturnLink key={l.id} href={`/plans/log/view/${l.id}`} className="card p-4 flex items-center justify-between group hover:border-brand-500/40 transition-all cursor-pointer">
+                                    <button
+                                        key={l.id}
+                                        type="button"
+                                        onClick={() => {
+                                            setSessionsInitialId(l.id);
+                                            setShowAllSessions(true);
+                                        }}
+                                        className="card p-4 flex items-center justify-between group hover:border-brand-500/40 transition-all cursor-pointer w-full text-left"
+                                    >
                                         <div>
                                             <h5 className="font-black text-fg text-sm tracking-tight group-hover:text-brand-400">{l.workoutName}</h5>
                                             <p className="text-[10px] text-fg-muted font-bold uppercase tracking-widest">{l.setCount} sets verified</p>
@@ -1252,7 +1270,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                             <p className="text-[10px] text-fg-subtle font-black uppercase tracking-widest">{formatDate(l.date)}</p>
                                             <ChevronRight className="w-4 h-4 text-fg-subtle ml-auto mt-1 opacity-0 group-hover:opacity-100 transition-all transform group-hover:translate-x-1" />
                                         </div>
-                                    </ReturnLink>
+                                    </button>
                                 ))
                             )}
                         </div>

@@ -11,6 +11,7 @@ import {
     requireAuthUser,
 } from "@/lib/apiAuth";
 import { isInactiveAccount } from "@/lib/userDeactivation";
+import { getDirectMessageActivity } from "@/lib/chatActivity";
 
 // GET messages
 export async function GET(req: Request) {
@@ -26,7 +27,28 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const isGeneral = url.searchParams.get("general") === "true";
     const withUserId = url.searchParams.get("with");
+    const activityOnly = url.searchParams.get("activity") === "true";
     const limit = parseInt(url.searchParams.get("limit") ?? "80");
+
+    if (activityOnly) {
+        if (user.role === "FREE") {
+            return NextResponse.json({ activity: {} });
+        }
+
+        let peerIds: string[] = [];
+        if (user.role === "PREMIUM" && user.coachId) {
+            peerIds = [user.coachId];
+        } else if (["COACH", "SUPER_ADMIN"].includes(user.role)) {
+            const clients = await prisma.user.findMany({
+                where: { coachId: user.id },
+                select: { id: true },
+            });
+            peerIds = clients.map((client) => client.id);
+        }
+
+        const activity = await getDirectMessageActivity(user.id, peerIds);
+        return NextResponse.json({ activity });
+    }
 
     let where: Prisma.MessageWhereInput | null = null;
 

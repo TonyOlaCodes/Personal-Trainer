@@ -6,6 +6,7 @@ import {
     Check, MoreVertical, Reply, Pin, SmilePlus, CheckCheck, ChevronDown, AtSign
 } from "lucide-react";
 import { getInitials, formatRelative, cn, roleLabels } from "@/lib/utils";
+import { sortConversationsByActivity } from "@/lib/chatActivity";
 import { MediaLightbox } from "@/components/shared/MediaLightbox";
 
 /* ─── Types ──────────────────────────────────────────── */
@@ -46,6 +47,7 @@ interface Conversation {
     role: string;
     avatarUrl?: string | null;
     isDeleted?: boolean;
+    lastMessageAt?: string | null;
 }
 
 interface Props {
@@ -56,11 +58,33 @@ interface Props {
 }
 
 const REACTION_EMOJIS = ["👍", "🔥", "💪", "❤️", "😂", "🎯"];
+const LAST_CHAT_TAB_KEY = "lastChatTab";
+const LAST_CHAT_CONVERSATION_KEY = "lastChatConversationId";
+
+function findConversation(conversations: Conversation[], userId: string | null | undefined) {
+    if (!userId) return null;
+    return conversations.find((c) => c.userId === userId) ?? null;
+}
+
+function resolveDirectConversation(
+    conversations: Conversation[],
+    preferredUserId?: string | null,
+    fallback?: Conversation | null,
+    activity: Record<string, string> = {}
+) {
+    const sorted = sortConversationsByActivity(
+        conversations.map((conversation) => ({
+            ...conversation,
+            lastMessageAt: activity[conversation.userId] ?? conversation.lastMessageAt ?? null,
+        }))
+    );
+    return findConversation(sorted, preferredUserId) ?? fallback ?? sorted[0] ?? null;
+}
 
 /* ─── Component ──────────────────────────────────────── */
 export function ChatClient({ currentUserId, currentUserRole, conversations, canUseDirectChat = true }: Props) {
     const [tab, setTab] = useState<"direct" | "general">("general");
-    const [selectedConv, setSelectedConv] = useState<Conversation | null>(conversations[0] ?? null);
+    const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
     const [isHydrated, setIsHydrated] = useState(false);
     const [viewerMedia, setViewerMedia] = useState<{ src: string; type: "IMAGE" | "VIDEO" } | null>(null);
 
@@ -82,41 +106,115 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
     const [mentionQuery, setMentionQuery] = useState("");
     const [showPinned, setShowPinned] = useState(false);
     const [mobileShowChat, setMobileShowChat] = useState(true);
+    const [conversationActivity, setConversationActivity] = useState<Record<string, string>>({});
 
-    const bottomRef = useRef<HTMLDivElement>(null);
+    const messagesScrollRef = useRef<HTMLDivElement>(null);
     const fileRef = useRef<HTMLInputElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const isFetchingRef = useRef(false);
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-    // Tab persistence
+    const persistChatSelection = useCallback((nextTab: "direct" | "general", conversation?: Conversation | null) => {
+        localStorage.setItem(LAST_CHAT_TAB_KEY, nextTab);
+        if (nextTab === "direct" && conversation) {
+            localStorage.setItem(LAST_CHAT_CONVERSATION_KEY, conversation.userId);
+        }
+    }, []);
+
+    const selectConversation = useCallback((conversation: Conversation) => {
+        setSelectedConv(conversation);
+        setTab("direct");
+        setMobileShowChat(true);
+        persistChatSelection("direct", conversation);
+    }, [persistChatSelection]);
+
+    // Restore last opened chat (global or direct)
     useEffect(() => {
-        const saved = localStorage.getItem("lastChatTab");
+        const initialActivity: Record<string, string> = {};
+        conversations.forEach((conversation) => {
+            if (conversation.lastMessageAt) {
+                initialActivity[conversation.userId] = conversation.lastMessageAt;
+            }
+        });
+        setConversationActivity(initialActivity);
+
+        const savedTab = localStorage.getItem(LAST_CHAT_TAB_KEY);
+        const savedConversationId = localStorage.getItem(LAST_CHAT_CONVERSATION_KEY);
         const requestedConversation = new URLSearchParams(window.location.search).get("with");
-        const matchedConversation = conversations.find(c => c.userId === requestedConversation);
+        const matchedConversation = findConversation(conversations, requestedConversation);
 
         if (matchedConversation) {
             setTab("direct");
             setSelectedConv(matchedConversation);
-            localStorage.setItem("lastChatTab", "direct");
-        } else if (saved === "direct" || saved === "general") {
-            setTab(saved);
-            if (saved !== "direct") setMobileShowChat(true);
+            setMobileShowChat(true);
+            persistChatSelection("direct", matchedConversation);
+        } else if (savedTab === "direct" && canUseDirectChat) {
+            const conversation = resolveDirectConversation(conversations, savedConversationId, null, initialActivity);
+            setTab("direct");
+            setSelectedConv(conversation);
+            setMobileShowChat(Boolean(conversation));
+            if (conversation) persistChatSelection("direct", conversation);
+        } else if (savedTab === "general" || !savedTab) {
+            setTab("general");
+            setSelectedConv(null);
+            setMobileShowChat(true);
+            persistChatSelection("general");
+        } else {
+            setTab("general");
+            setSelectedConv(null);
+            setMobileShowChat(true);
+            persistChatSelection("general");
         }
+
         setIsHydrated(true);
-    }, [conversations]);
+    }, [conversations, canUseDirectChat, persistChatSelection]);
 
     const handleTabChange = (newTab: "direct" | "general") => {
         setTab(newTab);
         setReplyTo(null);
         setShowPinned(false);
-        localStorage.setItem("lastChatTab", newTab);
-        
-        // Auto-open chat for full-room modes (Team and Global) when tapped
-        if (newTab !== "direct") {
+        persistChatSelection(newTab, newTab === "direct" ? selectedConv : null);
+
+        if (newTab === "general") {
             setMobileShowChat(true);
+            return;
         }
+
+        if (!canUseDirectChat) {
+            setMobileShowChat(true);
+            return;
+        }
+
+        const savedConversationId = localStorage.getItem(LAST_CHAT_CONVERSATION_KEY);
+        const conversation = resolveDirectConversation(conversations, savedConversationId, selectedConv, conversationActivity);
+        setSelectedConv(conversation);
+        setMobileShowChat(Boolean(conversation));
+        if (conversation) persistChatSelection("direct", conversation);
     };
+
+    useEffect(() => {
+        if (!isHydrated || !canUseDirectChat) return;
+
+        const fetchActivity = async () => {
+            try {
+                const res = await fetch("/api/messages?activity=true");
+                if (!res.ok) return;
+                const data = await res.json();
+                if (data.activity) {
+                    setConversationActivity((prev) => ({ ...prev, ...data.activity }));
+                }
+            } catch {
+                // ignore polling errors
+            }
+        };
+
+        fetchActivity();
+        const interval = setInterval(() => {
+            if (document.visibilityState === "visible") fetchActivity();
+        }, 3000);
+
+        return () => clearInterval(interval);
+    }, [isHydrated, canUseDirectChat]);
 
     /* ─── Fetch Messages ────────────────────────────── */
     const fetchMessages = useCallback(async () => {
@@ -132,6 +230,14 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
             if (res.ok) {
                 const data = await res.json();
                 setMessages(data);
+
+                if (tab === "direct" && selectedConv && data.length > 0) {
+                    const lastMessage = data[data.length - 1] as Message;
+                    setConversationActivity((prev) => ({
+                        ...prev,
+                        [selectedConv.userId]: lastMessage.createdAt,
+                    }));
+                }
 
                 // Mark seen for messages visible
                 const unseenIds = data
@@ -169,8 +275,12 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
     }, [fetchMessages]);
 
     useEffect(() => {
-        bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, [messages]);
+        const container = messagesScrollRef.current;
+        if (!container) return;
+        requestAnimationFrame(() => {
+            container.scrollTop = container.scrollHeight;
+        });
+    }, [messages, tab, selectedConv?.userId, mobileShowChat]);
 
     // Edit window tracker
     useEffect(() => {
@@ -201,12 +311,13 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
     }, [mentionableUsers, mentionQuery]);
 
     const sortedConversations = useMemo(() => {
-        return [...conversations].sort((a, b) => {
-            if (a.isDeleted && !b.isDeleted) return 1;
-            if (!a.isDeleted && b.isDeleted) return -1;
-            return 0;
-        });
-    }, [conversations]);
+        return sortConversationsByActivity(
+            conversations.map((conversation) => ({
+                ...conversation,
+                lastMessageAt: conversationActivity[conversation.userId] ?? conversation.lastMessageAt ?? null,
+            }))
+        );
+    }, [conversations, conversationActivity]);
 
     /* ─── Input Handling ────────────────────────────── */
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -278,6 +389,13 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
         };
         
         setMessages(prev => [...prev, newMsg]);
+
+        if (tab === "direct" && selectedConv) {
+            setConversationActivity((prev) => ({
+                ...prev,
+                [selectedConv.userId]: newMsg.createdAt,
+            }));
+        }
 
         // Instantly clear inputs for zero latency feel
         setInput("");
@@ -420,7 +538,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
 
     /* ─── Sidebar Content ────────────────────────────── */
     const renderSidebar = () => (
-        <div className="w-full sm:w-72 border-r border-surface-border flex flex-col bg-surface-card h-full">
+        <div className="w-full sm:w-72 border-r border-surface-border flex flex-col bg-surface-card h-full min-h-0">
             {/* Tab Switcher */}
             <div className="p-3 border-b border-surface-border">
                 <div className="flex gap-1 bg-surface-muted p-1 rounded-xl">
@@ -455,7 +573,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                         sortedConversations.map((conv) => (
                             <button
                                 key={conv.userId}
-                                onClick={() => { setSelectedConv(conv); setMobileShowChat(true); }}
+                                onClick={() => selectConversation(conv)}
                                 className={cn("w-full text-left flex items-center gap-3 p-3 rounded-xl transition-all relative",
                                     selectedConv?.userId === conv.userId
                                         ? "bg-brand-500/10 border border-brand-500/20"
@@ -504,7 +622,10 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
     if (!isHydrated) return null;
 
     return (
-        <div className="flex h-[calc(100dvh-5rem)] lg:h-[calc(100dvh-4rem)] animate-fade-in" onClick={() => { setMenuOpenId(null); setReactionPickerId(null); }}>
+        <div
+            className="flex overflow-hidden bg-surface animate-fade-in fixed inset-x-0 top-0 bottom-20 z-40 md:static md:z-auto md:h-[calc(100dvh-4rem)] md:bottom-auto"
+            onClick={() => { setMenuOpenId(null); setReactionPickerId(null); }}
+        >
             
             {viewerMedia && (
                 <MediaLightbox 
@@ -521,27 +642,19 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
 
             {/* Mobile: Show sidebar or chat */}
             {!mobileShowChat && (
-                <div className="sm:hidden flex-1 flex flex-col min-w-0">
-                    <div className="flex flex-col h-full">
-                        {renderSidebar()}
-                    </div>
+                <div className="sm:hidden flex-1 flex flex-col min-w-0 min-h-0">
+                    {renderSidebar()}
                 </div>
             )}
 
             {/* Chat Area */}
-            <div className={cn("flex-1 flex flex-col min-w-0", !mobileShowChat && "hidden sm:flex")}>
+            <div className={cn("flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden", !mobileShowChat && "hidden sm:flex")}>
                 {/* ── Header ── */}
-                <div className="h-14 flex items-center justify-between px-5 border-b border-surface-border bg-surface-card/80 backdrop-blur-md shrink-0">
+                <div className="h-14 flex items-center justify-between px-5 border-b border-surface-border bg-surface-card/95 backdrop-blur-md shrink-0 z-10">
                     <div className="flex items-center gap-3">
                         <button 
                             className="sm:hidden flex items-center gap-1 text-brand-400 font-bold hover:text-brand-300 transition-colors bg-brand-400/10 hover:bg-brand-400/20 px-2 py-1.5 rounded-lg -ml-2" 
-                            onClick={() => {
-                                setMobileShowChat(false);
-                                if (tab !== "direct") {
-                                    setTab("direct");
-                                    localStorage.setItem("lastChatTab", "direct");
-                                }
-                            }}
+                            onClick={() => setMobileShowChat(false)}
                         >
                             <ChevronDown className="w-5 h-5 rotate-90" />
                         </button>
@@ -585,7 +698,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
 
                 {/* ── Pinned Messages Banner ── */}
                 {showPinned && pinnedMessages.length > 0 && (
-                    <div className="border-b border-surface-border bg-brand-500/5 px-5 py-3 space-y-2 animate-slide-up max-h-40 overflow-y-auto no-scrollbar">
+                    <div className="border-b border-surface-border bg-brand-500/5 px-5 py-3 space-y-2 animate-slide-up max-h-40 overflow-y-auto no-scrollbar shrink-0">
                         <div className="flex items-center gap-2 mb-1">
                             <Pin className="w-3 h-3 text-brand-400" />
                             <span className="text-[10px] font-black text-brand-400 uppercase tracking-widest">Pinned Messages</span>
@@ -600,7 +713,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                 )}
 
                 {/* ── Messages ── */}
-                <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3 no-scrollbar">
+                <div ref={messagesScrollRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 py-4 space-y-3 no-scrollbar">
                     {messages.length === 0 ? (
                         <div className="flex items-center justify-center h-full">
                             <div className="text-center">
@@ -840,7 +953,6 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                             );
                         })
                     )}
-                    <div ref={bottomRef} />
                 </div>
 
                 {/* ── Input Area ── */}
@@ -850,7 +962,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                         <p className="text-[10px] text-fg-subtle mt-0.5">This user&apos;s account has been deleted. You cannot send new messages.</p>
                     </div>
                 ) : (
-                    <div className="px-5 py-3 border-t border-surface-border bg-surface-card shrink-0">
+                    <div className="px-4 sm:px-5 py-3 border-t border-surface-border bg-surface-card shrink-0">
                         {/* Reply preview */}
                         {replyTo && (
                             <div className="flex items-center justify-between gap-3 mb-2 px-3 py-2 bg-surface-muted/50 rounded-xl border-l-2 border-l-brand-500 animate-slide-up">

@@ -76,9 +76,12 @@ export async function ensureUnitSystemColumn(db: { $executeRawUnsafe: (query: st
     if (unitSystemColumnReady) return;
     await db.$executeRawUnsafe(`
         DO $$ BEGIN
-            CREATE TYPE "UnitSystem" AS ENUM ('METRIC', 'IMPERIAL');
+            IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'UnitSystem') THEN
+                CREATE TYPE "UnitSystem" AS ENUM ('METRIC', 'IMPERIAL');
+            END IF;
         EXCEPTION
             WHEN duplicate_object THEN null;
+            WHEN unique_violation THEN null;
         END $$;
     `);
     await db.$executeRawUnsafe(`

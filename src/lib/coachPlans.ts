@@ -2,29 +2,94 @@ export type CoachPlanRecord = {
     id: string;
     name: string;
     type?: string;
-    updatedAt: Date | string;
+    updatedAt?: Date | string;
+    creatorId?: string | null;
 };
 
-/** Keep the most recently updated plan for each programme name. */
+function planDedupeKey(plan: Pick<CoachPlanRecord, "name" | "creatorId">) {
+    const nameKey = plan.name.trim().toLowerCase();
+    return plan.creatorId ? `${plan.creatorId}:${nameKey}` : nameKey;
+}
+
+/** Keep the most recently updated plan for each programme name (per creator when available). */
 export function dedupeCoachPlansByName<T extends CoachPlanRecord>(plans: T[]): T[] {
-    const byName = new Map<string, T>();
+    const byKey = new Map<string, T>();
 
     for (const plan of plans) {
-        const key = plan.name.trim().toLowerCase();
-        const existing = byName.get(key);
+        const key = planDedupeKey(plan);
+        const existing = byKey.get(key);
         if (!existing) {
-            byName.set(key, plan);
+            byKey.set(key, plan);
             continue;
         }
-        const existingTs = new Date(existing.updatedAt).getTime();
-        const planTs = new Date(plan.updatedAt).getTime();
+        const existingTs = existing.updatedAt ? new Date(existing.updatedAt).getTime() : 0;
+        const planTs = plan.updatedAt ? new Date(plan.updatedAt).getTime() : 0;
         if (planTs >= existingTs) {
-            byName.set(key, plan);
+            byKey.set(key, plan);
         }
     }
 
-    return [...byName.values()].sort(
-        (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    return [...byKey.values()].sort(
+        (a, b) => new Date(b.updatedAt ?? 0).getTime() - new Date(a.updatedAt ?? 0).getTime()
+    );
+}
+
+export type AdminPlanUser = {
+    id: string;
+    name: string | null;
+    email: string;
+    avatarUrl: string | null;
+    role: string;
+    isDeactivated: boolean;
+    isDeleted: boolean;
+};
+
+export type AdminPlanSummary = CoachPlanRecord & {
+    type: string;
+    userCount: number;
+    users: AdminPlanUser[];
+};
+
+function mergeAdminPlanUsers(userGroups: AdminPlanUser[][]) {
+    const byId = new Map<string, AdminPlanUser>();
+    for (const users of userGroups) {
+        for (const user of users) {
+            if (!byId.has(user.id)) byId.set(user.id, user);
+        }
+    }
+    return [...byId.values()].sort((a, b) => {
+        const rank = (user: AdminPlanUser) => (user.isDeleted ? 2 : user.isDeactivated ? 1 : 0);
+        const rankDiff = rank(a) - rank(b);
+        if (rankDiff !== 0) return rankDiff;
+        return (a.name ?? a.email).localeCompare(b.name ?? b.email);
+    });
+}
+
+/** Dedupe admin plan rows by creator + name, keeping the latest version and merged active users. */
+export function dedupeAdminPlansByName(plans: AdminPlanSummary[]): AdminPlanSummary[] {
+    const byKey = new Map<string, AdminPlanSummary>();
+
+    for (const plan of plans) {
+        const key = planDedupeKey(plan);
+        const existing = byKey.get(key);
+        if (!existing) {
+            byKey.set(key, { ...plan, users: [...plan.users] });
+            continue;
+        }
+
+        const mergedUsers = mergeAdminPlanUsers([existing.users, plan.users]);
+        const mergedCount = mergedUsers.filter((user) => !user.isDeactivated && !user.isDeleted).length;
+        const latest = new Date(plan.updatedAt ?? 0).getTime() >= new Date(existing.updatedAt ?? 0).getTime() ? plan : existing;
+
+        byKey.set(key, {
+            ...latest,
+            users: mergedUsers,
+            userCount: mergedCount,
+        });
+    }
+
+    return [...byKey.values()].sort(
+        (a, b) => new Date(b.updatedAt ?? 0).getTime() - new Date(a.updatedAt ?? 0).getTime()
     );
 }
 
@@ -43,7 +108,7 @@ export function normalizePlanIdForPicker(
     if (!assigned) return "";
 
     const latest = options.find(
-        (plan) => plan.name.trim().toLowerCase() === assigned.name.trim().toLowerCase()
+        (plan) => planDedupeKey(plan) === planDedupeKey(assigned)
     );
     return latest?.id ?? "";
 }

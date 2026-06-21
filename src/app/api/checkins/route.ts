@@ -67,7 +67,7 @@ export async function POST(req: Request) {
                     message: `${user.name ?? user.email} submitted a check-in`,
                     entityType: "CHECK_IN",
                     entityId: checkIn.id,
-                    route: `/coach/client/${user.id}?tab=checkins`,
+                    route: `/checkins?highlight=${checkIn.id}`,
                 });
             }
         }

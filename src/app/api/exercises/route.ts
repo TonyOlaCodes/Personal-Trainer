@@ -27,7 +27,16 @@ export async function GET(req: Request) {
             return NextResponse.json(exercises.slice(0, limit));
         }
 
-        return NextResponse.json(searchDictionary(q, exercises, limit));
+        return NextResponse.json(
+            searchDictionary(
+                q,
+                exercises.map((exercise) => ({
+                    name: exercise.name,
+                    muscleGroup: exercise.muscleGroup ?? "",
+                })),
+                limit
+            )
+        );
     } catch (error) {
         console.error("[Exercises GET] Failed to fetch:", error);
         return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
