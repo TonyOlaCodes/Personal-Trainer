@@ -5,8 +5,10 @@ import { TopBar } from "@/components/layout/TopBar";
 import { CheckInsClient } from "./CheckInsClient";
 import { startOfWeek, endOfWeek } from "date-fns";
 import { getBodyweightWeeklyAverage } from "@/lib/bodyweight";
+import { getWorkoutsTargetFromUserPlan } from "@/lib/planTrainingTarget";
 import { getCheckInDueState, getUserCheckInSchedule } from "@/lib/checkInSchedule";
 import { SafeFallback, rethrowNextInternalErrors } from "@/components/shared/SafeFallback";
+import { withResolvedCheckInMedia } from "@/lib/uploadUrls";
 import { formatErrorDetails } from "@/lib/ensureAppSchema";
 
 export const metadata = { title: "Check-ins" };
@@ -26,7 +28,11 @@ export default async function CheckInsPage() {
                             include: {
                                 weeks: {
                                     orderBy: { weekNumber: "asc" },
-                                    include: { workouts: true },
+                                    include: {
+                                        workouts: {
+                                            include: { exercises: { select: { id: true }, take: 1 } },
+                                        },
+                                    },
                                 },
                             },
                         },
@@ -47,23 +53,12 @@ export default async function CheckInsPage() {
         });
         if (!user) redirect("/sign-in");
 
-        // Calculate workouts target from active plan if available
-        let workoutsTarget = user.trainingDaysPerWeek ?? 4;
-        const activeUserPlan = user.plans[0];
-        if (activeUserPlan) {
-            const weeks = activeUserPlan.plan.weeks;
-            const startedAt = new Date(activeUserPlan.startedAt);
-            const now = new Date();
-            const diffTime = Math.abs(now.getTime() - startedAt.getTime());
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            let currentWeekIndex = Math.floor(diffDays / 7);
-            if (currentWeekIndex >= weeks.length) currentWeekIndex = weeks.length - 1;
-            
-            const currentWeekPlan = weeks[currentWeekIndex];
-            if (currentWeekPlan) {
-                workoutsTarget = currentWeekPlan.workouts.length;
-            }
-        }
+        const workoutsTarget = getWorkoutsTargetFromUserPlan(
+            user.trainingDaysPerWeek,
+            user.plans[0]
+                ? { startedAt: user.plans[0].startedAt, plan: user.plans[0].plan }
+                : null
+        );
 
         const isCoach = ["COACH", "SUPER_ADMIN"].includes(user.role);
 
@@ -114,7 +109,7 @@ export default async function CheckInsPage() {
                 />
                 <div className="p-4 sm:p-6 max-w-2xl mx-auto pb-20">
                     <CheckInsClient
-                        checkIns={checkIns.map((c: any) => ({
+                        checkIns={checkIns.map((c: any) => withResolvedCheckInMedia({
                             id: c.id,
                             userId: c.userId,
                             createdAt: c.createdAt.toISOString(),

@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { readFile } from "fs/promises";
 import path from "path";
 import fs from "fs";
-import { requireAuthUser } from "@/lib/apiAuth";
 
 export const runtime = "nodejs";
 
@@ -13,10 +12,8 @@ function safeFilename(filename: string): string | null {
     return base;
 }
 
-export async function GET(req: Request, context: { params: Promise<{ filename: string }> }) {
-    const authResult = await requireAuthUser(req);
-    if (authResult.error) return authResult.error;
-
+/** Legacy fallback for old `/api/uploads/...` URLs — serves files from public/uploads without auth. */
+export async function GET(_req: Request, context: { params: Promise<{ filename: string }> }) {
     try {
         const { filename } = await context.params;
         const safeName = safeFilename(filename);
@@ -48,7 +45,7 @@ export async function GET(req: Request, context: { params: Promise<{ filename: s
         return new NextResponse(buffer, {
             headers: {
                 "Content-Type": mime,
-                "Cache-Control": "private, max-age=3600",
+                "Cache-Control": "public, max-age=86400, immutable",
             },
         });
     } catch (e) {

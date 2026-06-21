@@ -7,6 +7,8 @@ import {
 } from "lucide-react";
 import { getInitials, formatRelative, cn, roleLabels } from "@/lib/utils";
 import { sortConversationsByActivity } from "@/lib/chatActivity";
+import { resolveUploadUrl } from "@/lib/uploadUrls";
+import { uploadMediaFile } from "@/lib/compressImage";
 import { MediaLightbox } from "@/components/shared/MediaLightbox";
 
 /* ─── Types ──────────────────────────────────────────── */
@@ -481,20 +483,12 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
         const file = e.target.files?.[0];
         if (!file || uploading) return;
         setUploading(true);
-        const fd = new FormData();
-        fd.append("file", file);
         try {
-            const res = await fetch("/api/upload", { method: "POST", body: fd });
-            const data = await res.json();
-            if (res.ok) {
-                const isVideo = data.type?.startsWith("video/");
-                setStagedMedia({ url: data.url, type: isVideo ? "VIDEO" : "IMAGE" });
-            } else {
-                alert("Upload failed: " + (data.error || "Unknown server error"));
-            }
-        } catch (e: unknown) {
-            const message = e instanceof Error ? e.message : "Upload failed";
-            alert("Network error: " + message);
+            const url = await uploadMediaFile(file);
+            const isVideo = file.type.startsWith("video/");
+            setStagedMedia({ url, type: isVideo ? "VIDEO" : "IMAGE" });
+        } catch (error) {
+            alert(error instanceof Error ? error.message : "Upload failed");
         } finally {
             setUploading(false);
             if (fileRef.current) fileRef.current.value = "";
@@ -807,9 +801,9 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                                             ) : msg.type === "VIDEO" ? (
                                                 <div 
                                                     className="relative max-w-xs cursor-pointer rounded-2xl overflow-hidden shadow-sm"
-                                                    onClick={() => msg.mediaUrl && setViewerMedia({ src: msg.mediaUrl, type: "VIDEO" })}
+                                                    onClick={() => msg.mediaUrl && setViewerMedia({ src: resolveUploadUrl(msg.mediaUrl), type: "VIDEO" })}
                                                 >
-                                                    <video src={msg.mediaUrl ?? ""} className="w-full pointer-events-none" />
+                                                    <video src={resolveUploadUrl(msg.mediaUrl)} className="w-full pointer-events-none" />
                                                     <div className="absolute inset-0 bg-black/20 flex items-center justify-center transition-colors hover:bg-black/10">
                                                         <div className="w-12 h-12 bg-white/30 backdrop-blur-md rounded-full flex items-center justify-center text-white">
                                                             <div className="w-0 h-0 border-t-8 border-t-transparent border-l-[12px] border-l-white border-b-8 border-b-transparent ml-1" />
@@ -818,10 +812,10 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                                                 </div>
                                             ) : (
                                                 <img 
-                                                    src={msg.mediaUrl ?? ""} 
+                                                    src={resolveUploadUrl(msg.mediaUrl)} 
                                                     alt="media" 
                                                     className="max-w-xs rounded-2xl cursor-pointer hover:opacity-90 transition-opacity shadow-sm" 
-                                                    onClick={() => msg.mediaUrl && setViewerMedia({ src: msg.mediaUrl, type: "IMAGE" })}
+                                                    onClick={() => msg.mediaUrl && setViewerMedia({ src: resolveUploadUrl(msg.mediaUrl), type: "IMAGE" })}
                                                 />
                                             )}
 
@@ -981,9 +975,9 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                             <div className="mb-3 relative inline-block animate-slide-up">
                                 <div className="relative rounded-2xl overflow-hidden border border-brand-500/30 max-w-[200px]">
                                     {stagedMedia.type === "IMAGE" ? (
-                                        <img src={stagedMedia.url} alt="Staged" className="w-full h-auto object-cover max-h-32" />
+                                        <img src={resolveUploadUrl(stagedMedia.url)} alt="Staged" className="w-full h-auto object-cover max-h-32" />
                                     ) : (
-                                        <video src={stagedMedia.url} className="w-full h-auto max-h-32" muted />
+                                        <video src={resolveUploadUrl(stagedMedia.url)} className="w-full h-auto max-h-32" muted />
                                     )}
                                 </div>
                                 <button onClick={() => setStagedMedia(null)} className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-danger rounded-full flex items-center justify-center text-white shadow-lg hover:bg-danger-600 transition-colors">

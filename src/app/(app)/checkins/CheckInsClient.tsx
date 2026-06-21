@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { formatDate, getWeekNumber, cn } from "@/lib/utils";
-import { uploadMediaFile } from "@/lib/compressImage";
+import { uploadMediaFile, resolveUploadUrl } from "@/lib/compressImage";
 import {
     getPerformanceMetricsFeedback,
     METRIC_TONE_CLASSES,
@@ -77,27 +77,12 @@ function PerformanceMetricsFeedbackPanel({ sleep, diet, energy, stress, training
     sleep: number; diet: number; energy: number; stress: number; training: number; sleepHidden?: boolean;
 }) {
     const feedback = getPerformanceMetricsFeedback({ sleep, diet, energy, stress, training, sleepHidden });
-    if (feedback.insights.length === 0) return null;
+    if (!feedback.overall) return null;
 
     return (
-        <div className="space-y-2.5 pt-1">
-            {feedback.insights.map((item) => (
-                <div
-                    key={item.metric}
-                    className={cn("px-3.5 py-2.5 rounded-xl border text-xs font-medium leading-relaxed transition-all animate-slide-up", METRIC_TONE_CLASSES[item.tone])}
-                >
-                    <p className="text-[9px] font-black uppercase tracking-widest opacity-70 mb-0.5">
-                        {item.label} · {item.valueLabel}
-                    </p>
-                    {item.message}
-                </div>
-            ))}
-            {feedback.overall && (
-                <div className={cn("px-4 py-3 rounded-2xl border text-[13px] font-bold leading-relaxed transition-all animate-slide-up", METRIC_TONE_CLASSES[feedback.overall.tone])}>
-                    <p className="text-[9px] font-black uppercase tracking-[0.2em] opacity-70 mb-1">Overall</p>
-                    {feedback.overall.message}
-                </div>
-            )}
+        <div className={cn("px-4 py-3 rounded-2xl border text-[13px] font-bold leading-relaxed transition-all animate-slide-up", METRIC_TONE_CLASSES[feedback.overall.tone])}>
+            <p className="text-[9px] font-black uppercase tracking-[0.2em] opacity-70 mb-1">Weekly overview</p>
+            {feedback.overall.message}
         </div>
     );
 }
@@ -225,7 +210,9 @@ function PrevCheckInCard({ prev, setViewerMedia, isWeightHidden, isSleepHidden }
                         <div className="flex gap-2">
                             {[prev.frontImageUrl, prev.sideImageUrl].filter(Boolean).map((url, i) => (
                                 <img 
-                                    key={i} src={url!} alt="Progress" 
+                                    key={i}
+                                    src={resolveUploadUrl(url!)} 
+                                    alt="Progress"
                                     className="w-16 h-20 object-cover rounded-lg border border-surface-border cursor-pointer hover:opacity-80 transition-opacity" 
                                     onClick={() => setViewerMedia(url!)}
                                 />
@@ -235,7 +222,7 @@ function PrevCheckInCard({ prev, setViewerMedia, isWeightHidden, isSleepHidden }
                                     className="relative w-16 h-20 rounded-lg overflow-hidden cursor-pointer group border border-surface-border"
                                     onClick={() => setViewerMedia(prev.videoUrl!)}
                                 >
-                                    <video src={prev.videoUrl} className="w-full h-full object-cover" />
+                                    <video src={resolveUploadUrl(prev.videoUrl)} className="w-full h-full object-cover" />
                                     <div className="absolute inset-0 flex items-center justify-center bg-black/20">
                                         <div className="w-5 h-5 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center text-white">
                                             <div className="w-0 h-0 border-t-2.5 border-t-transparent border-l-4 border-l-white border-b-2.5 border-b-transparent ml-0.5" />
@@ -255,7 +242,7 @@ function PrevCheckInCard({ prev, setViewerMedia, isWeightHidden, isSleepHidden }
                                     className="relative w-full max-w-[200px] aspect-video rounded-xl overflow-hidden cursor-pointer group"
                                     onClick={() => setViewerMedia(prev.coachVideoUrl!)}
                                 >
-                                    <video src={prev.coachVideoUrl} className="w-full h-full object-cover" />
+                                    <video src={resolveUploadUrl(prev.coachVideoUrl)} className="w-full h-full object-cover" />
                                     <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
                                         <div className="w-10 h-10 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center text-white group-hover:scale-110 transition-transform">
                                             <div className="w-0 h-0 border-t-6 border-t-transparent border-l-10 border-l-white border-b-6 border-b-transparent ml-1" />
@@ -427,7 +414,7 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highl
                                 {[c.frontImageUrl, c.sideImageUrl].filter(Boolean).map((url, i) => (
                                     <img 
                                         key={i} 
-                                        src={url!} 
+                                        src={resolveUploadUrl(url!)} 
                                         alt="Progress" 
                                         className="w-24 h-32 object-cover rounded-xl border border-surface-border cursor-pointer hover:opacity-80 transition-opacity" 
                                         onClick={(e) => { e.stopPropagation(); setViewerMedia(url!); }}
@@ -438,7 +425,7 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highl
                                         className="relative w-24 h-32 rounded-xl overflow-hidden cursor-pointer group border border-brand-500/20 shadow-glow-brand-sm"
                                         onClick={(e) => { e.stopPropagation(); setViewerMedia(c.videoUrl!); }}
                                     >
-                                        <video src={c.videoUrl} className="w-full h-full object-cover" />
+                                        <video src={resolveUploadUrl(c.videoUrl)} className="w-full h-full object-cover" />
                                         <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/10 transition-colors">
                                             <div className="w-10 h-10 bg-brand-500/80 backdrop-blur-md rounded-full flex items-center justify-center text-white shadow-lg">
                                                 <div className="w-0 h-0 border-t-4 border-t-transparent border-l-7 border-l-white border-b-4 border-b-transparent ml-1" />
@@ -535,7 +522,7 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highl
                                         className="relative mt-3 w-full max-w-[240px] aspect-video rounded-xl overflow-hidden cursor-pointer group shadow-lg border border-surface-border/50"
                                         onClick={() => setViewerMedia(c.coachVideoUrl!)}
                                     >
-                                        <video src={c.coachVideoUrl} className="w-full h-full object-cover" />
+                                        <video src={resolveUploadUrl(c.coachVideoUrl)} className="w-full h-full object-cover" />
                                         <div className="absolute inset-0 bg-black/20 flex items-center justify-center transition-colors group-hover:bg-black/10">
                                             <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center text-white group-hover:scale-110 transition-transform">
                                                 <div className="w-0 h-0 border-t-8 border-t-transparent border-l-[12px] border-l-white border-b-8 border-b-transparent ml-1" />
@@ -552,7 +539,7 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highl
                         )}
                         {(isCoach && (c.status === "PENDING" || isEditing) && coachVideo) && (
                             <div className="relative w-full max-w-[240px] aspect-video rounded-xl overflow-hidden border-2 border-brand-500/30 group shadow-lg">
-                                <video src={coachVideo} className="w-full h-full object-cover" />
+                                <video src={resolveUploadUrl(coachVideo)} className="w-full h-full object-cover" />
                                 <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button 
                                         onClick={() => setCoachVideo("")}
@@ -757,7 +744,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
 
     // Stats based on selection or defaults
     const prevCheckIn  = checkIns.find(c => c.weekNumber < (editMode ? selectedWeek : currentWeekReal));
-    const currentBw    = weeklyAverageWeight ?? existingEntry?.bodyweightKg ?? (selectedWeek === currentWeekReal ? currentWeekEntry?.bodyweightKg : null) ?? null;
+    const currentBw    = periodSummary?.weight?.currentKg ?? weeklyAverageWeight ?? existingEntry?.bodyweightKg ?? (selectedWeek === currentWeekReal ? currentWeekEntry?.bodyweightKg : null) ?? null;
     const isWeightHidden = Array.isArray(hiddenGoals) && hiddenGoals.includes("weight");
     const isSleepHidden = Array.isArray(hiddenGoals) && hiddenGoals.includes("sleep");
 
@@ -980,7 +967,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                 })}
                 {viewerMedia && (
                     <MediaLightbox 
-                        src={viewerMedia} 
+                        src={resolveUploadUrl(viewerMedia)} 
                         type={viewerMedia.toLowerCase().includes(".mp4") || viewerMedia.toLowerCase().includes(".webm") || viewerMedia.toLowerCase().includes(".mov") ? "VIDEO" : "IMAGE"} 
                         onClose={() => setViewerMedia(null)} 
                     />
@@ -995,7 +982,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
             <div className="space-y-6 animate-fade-in pb-10">
                 {viewerMedia && (
                     <MediaLightbox 
-                        src={viewerMedia} 
+                        src={resolveUploadUrl(viewerMedia)} 
                         type={viewerMedia.toLowerCase().includes(".mp4") || viewerMedia.toLowerCase().includes(".webm") || viewerMedia.toLowerCase().includes(".mov") ? "VIDEO" : "IMAGE"} 
                         onClose={() => setViewerMedia(null)} 
                     />
@@ -1287,8 +1274,10 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                                 {loadingWeeklyAverage ? "..." : currentBw ? `${currentBw.toFixed(2)} kg` : "—"}
                             </p>
                             <p className="text-[10px] font-bold text-fg-muted mt-1 uppercase">
-                                {weeklyAverageEntries > 0
-                                    ? `${weeklyAverageEntries} log${weeklyAverageEntries === 1 ? "" : "s"} in ${periodSummary?.periodLabel ?? "this period"}`
+                                {(periodSummary?.weight?.entries ?? 0) > 0
+                                    ? `${periodSummary?.weight?.entries} log${periodSummary?.weight?.entries === 1 ? "" : "s"} in ${periodSummary?.periodLabel ?? "this period"}`
+                                    : weeklyAverageEntries > 0
+                                    ? `${weeklyAverageEntries} log${weeklyAverageEntries === 1 ? "" : "s"} this week`
                                     : "Log weight on the dashboard to auto-fill"}
                             </p>
                         </div>
@@ -1362,7 +1351,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                         )}>
                             {p.url ? (
                                 <>
-                                    <img src={p.url} alt={p.label} className="absolute inset-0 w-full h-full object-cover" />
+                                    <img src={resolveUploadUrl(p.url)} alt={p.label} className="absolute inset-0 w-full h-full object-cover" />
                                     <div className="absolute inset-0 bg-black/70 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
                                         <button
                                             type="button"
@@ -1450,7 +1439,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
             
             {viewerMedia && (
                 <MediaLightbox 
-                    src={viewerMedia} 
+                    src={resolveUploadUrl(viewerMedia)} 
                     type={viewerMedia.toLowerCase().includes(".mp4") || viewerMedia.toLowerCase().includes(".webm") || viewerMedia.toLowerCase().includes(".mov") ? "VIDEO" : "IMAGE"} 
                     onClose={() => setViewerMedia(null)} 
                 />

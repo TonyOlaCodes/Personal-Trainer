@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { ensureBodyweightTable } from "@/lib/bodyweight";
 import { ensureDailyMetricsTable, getDailyMetricTargets } from "@/lib/dailyMetrics";
 import { getUserCheckInSchedule, type CheckInSchedule } from "@/lib/checkInSchedule";
+import { getWorkoutsTargetFromUserPlan } from "@/lib/planTrainingTarget";
+import { startOfWeek, endOfWeek } from "date-fns";
 
 export type CheckInPeriodSummary = {
     periodDays: number;
@@ -264,7 +266,11 @@ export async function getWorkoutsTargetPerWeek(userId: string): Promise<number> 
                         include: {
                             weeks: {
                                 orderBy: { weekNumber: "asc" },
-                                include: { workouts: true },
+                                include: {
+                                    workouts: {
+                                        include: { exercises: { select: { id: true }, take: 1 } },
+                                    },
+                                },
                             },
                         },
                     },
@@ -276,20 +282,15 @@ export async function getWorkoutsTargetPerWeek(userId: string): Promise<number> 
 
     if (!user) return 4;
 
-    let target = user.trainingDaysPerWeek ?? 4;
-    const activeUserPlan = user.plans[0];
-    if (activeUserPlan) {
-        const weeks = activeUserPlan.plan.weeks;
-        const startedAt = new Date(activeUserPlan.startedAt);
-        const now = new Date();
-        const diffDays = Math.max(0, Math.ceil((now.getTime() - startedAt.getTime()) / 86400000));
-        let currentWeekIndex = Math.floor(diffDays / 7);
-        if (currentWeekIndex >= weeks.length) currentWeekIndex = weeks.length - 1;
-        const currentWeekPlan = weeks[currentWeekIndex];
-        if (currentWeekPlan) target = currentWeekPlan.workouts.length;
-    }
-
-    return target;
+    return getWorkoutsTargetFromUserPlan(
+        user.trainingDaysPerWeek,
+        user.plans[0]
+            ? {
+                startedAt: user.plans[0].startedAt,
+                plan: user.plans[0].plan,
+            }
+            : null
+    );
 }
 
 export async function getCheckInPeriodSummary(
@@ -323,32 +324,54 @@ export async function getCheckInPeriodSummary(
     const periodDays = getCheckInPeriodDays(schedule);
     const periodLabel = getCheckInPeriodLabel(frequencyWeeks);
 
-    const end = new Date(`${referenceDate}T12:00:00`);
-    const periodStart = new Date(end);
-    periodStart.setDate(periodStart.getDate() - periodDays);
-    periodStart.setHours(0, 0, 0, 0);
+    const end = new Date(`${referenceDate}T23:59:59.999`);
+    const referenceMidday = new Date(`${referenceDate}T12:00:00`);
+
+    let periodStart: Date;
+    let effectiveStart: Date;
+    let startDateStr: string;
+    let endDateStr = referenceDate;
+
+    if (frequencyWeeks <= 1) {
+        periodStart = startOfWeek(referenceMidday, { weekStartsOn: 1 });
+        const weekEnd = endOfWeek(referenceMidday, { weekStartsOn: 1 });
+        if (weekEnd.getTime() < end.getTime()) {
+            end.setTime(weekEnd.getTime());
+            end.setHours(23, 59, 59, 999);
+        }
+    } else {
+        periodStart = new Date(referenceMidday);
+        periodStart.setDate(periodStart.getDate() - periodDays);
+        periodStart.setHours(0, 0, 0, 0);
+    }
 
     const accountStart = new Date(user.createdAt);
     accountStart.setHours(0, 0, 0, 0);
-    const effectiveStart = accountStart > periodStart ? accountStart : periodStart;
+    effectiveStart = accountStart > periodStart ? accountStart : periodStart;
+    startDateStr = effectiveStart.toISOString().slice(0, 10);
 
-    const endDateStr = referenceDate;
-    const startDateStr = effectiveStart.toISOString().slice(0, 10);
-    const baselineDate = new Date(periodStart);
-    baselineDate.setHours(0, 0, 0, 0);
-    const baselineDateStr = (accountStart > periodStart ? accountStart : periodStart).toISOString().slice(0, 10);
-
+    const baselineDateStr = startDateStr;
     const accountAgeMs = end.getTime() - accountStart.getTime();
     const accountYoungerThanPeriod = accountAgeMs < periodDays * 86400000;
 
     let weightSummary: CheckInPeriodSummary["weight"] = null;
     if (!isWeightHidden) {
-        const periodRows = await prisma.$queryRaw<Array<{ averageWeightKg: number | null; entries: bigint }>>`
-            SELECT AVG("weightKg")::float AS "averageWeightKg", COUNT(*)::bigint AS "entries"
+        const periodRows = await prisma.$queryRaw<Array<{ entries: bigint }>>`
+            SELECT COUNT(*)::bigint AS "entries"
             FROM "bodyweight_logs"
             WHERE "userId" = ${userId}
                 AND "loggedDate" >= ${startDateStr}::date
                 AND "loggedDate" <= ${endDateStr}::date
+        `;
+
+        const latestInPeriod = await prisma.$queryRaw<Array<{ weightKg: number }>>`
+            SELECT "weightKg"
+            FROM "bodyweight_logs"
+            WHERE "userId" = ${userId}
+                AND "loggedDate" >= ${startDateStr}::date
+                AND "loggedDate" <= ${endDateStr}::date
+            ORDER BY "loggedDate" DESC
+            LIMIT 1
         `;
 
         const baselineRows = accountYoungerThanPeriod
@@ -357,10 +380,20 @@ export async function getCheckInPeriodSummary(
                 SELECT "weightKg"
                 FROM "bodyweight_logs"
                 WHERE "userId" = ${userId}
-                    AND "loggedDate" <= ${baselineDateStr}::date
+                    AND "loggedDate" < ${baselineDateStr}::date
                 ORDER BY "loggedDate" DESC
                 LIMIT 1
             `;
+
+        const firstInPeriod = await prisma.$queryRaw<Array<{ weightKg: number }>>`
+            SELECT "weightKg"
+            FROM "bodyweight_logs"
+            WHERE "userId" = ${userId}
+                AND "loggedDate" >= ${startDateStr}::date
+                AND "loggedDate" <= ${endDateStr}::date
+            ORDER BY "loggedDate" ASC
+            LIMIT 1
+        `;
 
         const earliestRows = await prisma.$queryRaw<Array<{ weightKg: number }>>`
             SELECT "weightKg"
@@ -370,16 +403,18 @@ export async function getCheckInPeriodSummary(
             LIMIT 1
         `;
 
-        const currentKg = periodRows[0]?.averageWeightKg != null
-            ? round2(periodRows[0].averageWeightKg)
+        const currentKg = latestInPeriod[0]?.weightKg != null
+            ? round2(latestInPeriod[0].weightKg)
             : options?.fallbackBodyweightKg ?? null;
         const baselineKg = accountYoungerThanPeriod
             ? (earliestRows[0]?.weightKg != null ? round2(earliestRows[0].weightKg) : null)
             : baselineRows[0]?.weightKg != null
                 ? round2(baselineRows[0].weightKg)
-                : earliestRows[0]?.weightKg != null
-                    ? round2(earliestRows[0].weightKg)
-                    : null;
+                : firstInPeriod[0]?.weightKg != null
+                    ? round2(firstInPeriod[0].weightKg)
+                    : earliestRows[0]?.weightKg != null
+                        ? round2(earliestRows[0].weightKg)
+                        : null;
 
         const changeKg = currentKg != null && baselineKg != null ? round2(currentKg - baselineKg) : null;
         const towardGoal = changeKg != null && baselineKg != null && currentKg != null

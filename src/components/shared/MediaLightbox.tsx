@@ -2,6 +2,8 @@ import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
+import { resolveUploadUrl } from "@/lib/uploadUrls";
+
 interface MediaLightboxProps {
     src: string;
     type: "IMAGE" | "VIDEO";
@@ -10,6 +12,7 @@ interface MediaLightboxProps {
 
 export function MediaLightbox({ src, type, onClose }: MediaLightboxProps) {
     const [isVisible, setIsVisible] = useState(false);
+    const mediaSrc = resolveUploadUrl(src);
 
     useEffect(() => {
         setIsVisible(true);
@@ -53,13 +56,13 @@ export function MediaLightbox({ src, type, onClose }: MediaLightboxProps) {
             >
                 {type === "IMAGE" ? (
                     <img 
-                        src={src} 
+                        src={mediaSrc} 
                         alt="Fullscreen media" 
                         className="max-w-full max-h-[90vh] object-contain rounded-xl shadow-2xl" 
                     />
                 ) : (
                     <video 
-                        src={src} 
+                        src={mediaSrc} 
                         controls 
                         autoPlay 
                         className="max-w-full max-h-[90vh] rounded-xl shadow-2xl"

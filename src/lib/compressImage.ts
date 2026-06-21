@@ -1,3 +1,5 @@
+import { resolveUploadUrl } from "@/lib/uploadUrls";
+
 /** Resize/compress photos before upload so mobile shots stay under server limits. */
 export async function compressImageForUpload(file: File, maxWidth = 1600): Promise<File> {
     if (!file.type.startsWith("image/") || file.type === "image/gif") {
@@ -52,15 +54,7 @@ export async function uploadMediaFile(file: File): Promise<string> {
         throw new Error("Upload failed: no file URL returned");
     }
 
-    return data.url as string;
+    return resolveUploadUrl(data.url as string);
 }
 
-/** Normalize legacy `/uploads/...` paths to the API route that serves them. */
-export function resolveUploadUrl(url: string | null | undefined): string {
-    if (!url) return "";
-    if (url.startsWith("http://") || url.startsWith("https://")) return url;
-    if (url.startsWith("/uploads/")) {
-        return `/api/uploads/${url.slice("/uploads/".length)}`;
-    }
-    return url;
-}
+export { resolveUploadUrl } from "@/lib/uploadUrls";

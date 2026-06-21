@@ -12,6 +12,7 @@ import {
 } from "@/lib/apiAuth";
 import { isInactiveAccount } from "@/lib/userDeactivation";
 import { getDirectMessageActivity } from "@/lib/chatActivity";
+import { withResolvedUpload } from "@/lib/uploadUrls";
 
 // GET messages
 export async function GET(req: Request) {
@@ -113,7 +114,7 @@ export async function GET(req: Request) {
         });
     }
 
-    const mappedMessages = messages.map(m => ({
+    const mappedMessages = messages.map(m => withResolvedUpload({
         ...m,
         sender: {
             id: m.sender.id,
@@ -197,7 +198,7 @@ export async function POST(req: Request) {
         },
     });
 
-    const mappedMessage = {
+    const mappedMessage = withResolvedUpload({
         ...message,
         sender: {
             id: message.sender.id,
@@ -205,7 +206,7 @@ export async function POST(req: Request) {
             avatarUrl: (message.sender as any).isDeleted ? null : message.sender.avatarUrl,
             role: message.sender.role
         }
-    };
+    });
 
     if (!isGeneral && receiverId && ["COACH", "SUPER_ADMIN"].includes(user.role)) {
         const receiver = await prisma.user.findUnique({

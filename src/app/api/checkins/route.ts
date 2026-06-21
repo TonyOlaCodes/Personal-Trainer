@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { CheckInStatus, Prisma } from "@prisma/client";
 import { z } from "zod";
 import { createNotification, notifyCoachOfClientCheckIn, userWantsNotification } from "@/lib/notifications";
+import { withResolvedCheckInMedia } from "@/lib/uploadUrls";
 import { isInactiveAccount } from "@/lib/userDeactivation";
 
 const checkInSchema = z.object({
@@ -62,7 +63,7 @@ export async function POST(req: Request) {
             });
         }
 
-        return NextResponse.json(checkIn, { status: 201 });
+        return NextResponse.json(withResolvedCheckInMedia(checkIn), { status: 201 });
     } catch (error) {
         console.error("Error in POST /api/checkins:", error);
         return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
@@ -122,7 +123,7 @@ export async function GET(req: Request) {
             orderBy: { weekNumber: "desc" },
         });
 
-        return NextResponse.json(checkIns);
+        return NextResponse.json(checkIns.map(withResolvedCheckInMedia));
     } catch (error) {
         console.error("Error in GET /api/checkins:", error);
         return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
@@ -216,7 +217,7 @@ export async function PATCH(req: Request) {
             });
         }
 
-        return NextResponse.json(updated);
+        return NextResponse.json(withResolvedCheckInMedia(updated));
     } catch (error) {
         console.error("Error in PATCH /api/checkins:", error);
         return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });

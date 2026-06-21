@@ -34,7 +34,11 @@ function isAllowedUpload(file: File): boolean {
 }
 
 function blobToken(): string | undefined {
-    return process.env.BLOB_READ_WRITE_TOKEN?.trim() || undefined;
+    return (
+        process.env.BLOB_READ_WRITE_TOKEN?.trim() ||
+        process.env.BLOB2_READ_WRITE_TOKEN?.trim() ||
+        undefined
+    );
 }
 
 function isVercelRuntime(): boolean {
@@ -74,7 +78,7 @@ async function storeLocally(buffer: Buffer, filename: string, contentType: strin
         );
     }
 
-    return { url: `/api/uploads/${filename}`, type: contentType };
+    return { url: `/uploads/${filename}`, type: contentType };
 }
 
 export async function storeUploadedFile(file: File): Promise<{ url: string; type: string }> {

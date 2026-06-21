@@ -65,7 +65,7 @@ export function CheckInPeriodSummaryPanel({
                         </div>
                         <p className="text-xl font-black text-fg">
                             {summary.weight.currentKg != null ? `${summary.weight.currentKg.toFixed(1)} kg` : "—"}
-                            <span className="text-[10px] font-bold text-fg-muted ml-2">avg</span>
+                            <span className="text-[10px] font-bold text-fg-muted ml-2">latest</span>
                         </p>
                         {summary.weight.changeKg != null && (
                             <p className={cn("text-xs font-bold flex items-center gap-1", summary.weight.towardGoal ? "text-success" : summary.weight.towardGoal === false ? "text-red-400" : "text-fg-muted")}>
