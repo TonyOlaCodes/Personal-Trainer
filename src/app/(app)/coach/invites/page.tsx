@@ -50,7 +50,9 @@ export default async function CoachInvitesPage() {
                         planName: c.plan?.name ?? null,
                         usedByName: c.usedBy?.name ?? null,
                         usedByEmail: c.usedBy?.email ?? null,
+                        usedById: c.usedBy?.id ?? null,
                         isActive: c.isActive,
+                        status: c.status,
                         createdAt: c.createdAt.toISOString(),
                         expiresAt: c.expiresAt?.toISOString() ?? null,
                         upgradesTo: c.upgradesTo

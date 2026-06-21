@@ -203,6 +203,7 @@ export default async function AdminPage() {
                             : null,
                         upgradesTo: c.upgradesTo,
                         isActive: c.isActive,
+                        status: c.status,
                         createdAt: c.createdAt.toISOString(),
                         expiresAt: c.expiresAt?.toISOString() ?? null,
                     }))}

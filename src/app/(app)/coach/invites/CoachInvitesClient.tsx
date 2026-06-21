@@ -7,15 +7,18 @@ import {
 } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import { formatCoachPlanLabel } from "@/lib/coachPlans";
+import { getAccessCodeStatus } from "@/lib/accessCodeStatus";
 import Link from "next/link";
 
 interface Code {
     id: string;
     code: string;
     planName: string | null;
+    usedById?: string | null;
     usedByName: string | null;
     usedByEmail: string | null;
     isActive: boolean;
+    status?: string | null;
     createdAt: string;
     expiresAt: string | null;
     upgradesTo: string;
@@ -61,9 +64,11 @@ export function CoachInvitesClient({ plans, initialCodes }: Props) {
                         id: c.id,
                         code: c.code,
                         planName: c.planName,
+                        usedById: c.usedById ?? null,
                         usedByName: c.usedByName,
                         usedByEmail: c.usedByEmail,
                         isActive: c.isActive,
+                        status: c.status ?? null,
                         createdAt: c.createdAt,
                         expiresAt: c.expiresAt ?? null,
                         upgradesTo: c.upgradesTo
@@ -173,7 +178,7 @@ export function CoachInvitesClient({ plans, initialCodes }: Props) {
                 <div className="flex items-center justify-between px-2">
                     <h3 className="heading-3">Invites History</h3>
                     <div className="flex items-center gap-2">
-                        <span className="badge-brand">{codes.filter(c => c.isActive && !c.usedByName).length} Pending</span>
+                        <span className="badge-brand">{codes.filter((c) => getAccessCodeStatus(c).key === "active").length} Pending</span>
                     </div>
                 </div>
 
@@ -186,85 +191,82 @@ export function CoachInvitesClient({ plans, initialCodes }: Props) {
                     ) : (
                         [...codes]
                         .sort((a, b) => {
-                            // Deployed (active + used) first
-                            const aDeployed = a.isActive && a.usedByName;
-                            const bDeployed = b.isActive && b.usedByName;
-                            if (aDeployed && !bDeployed) return -1;
-                            if (!aDeployed && bDeployed) return 1;
-                            
-                            // Then Active (active + not used)
-                            const aActive = a.isActive && !a.usedByName;
-                            const bActive = b.isActive && !b.usedByName;
-                            if (aActive && !bActive) return -1;
-                            if (!aActive && bActive) return 1;
-                            
-                            // Then everything else (inactive)
+                            const rank = (key: ReturnType<typeof getAccessCodeStatus>["key"]) => {
+                                if (key === "active") return 0;
+                                if (key === "redeemed") return 1;
+                                if (key === "expired") return 2;
+                                return 3;
+                            };
+                            const rankDiff = rank(getAccessCodeStatus(a).key) - rank(getAccessCodeStatus(b).key);
+                            if (rankDiff !== 0) return rankDiff;
                             return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
                         })
-                        .map((c) => (
+                        .map((c) => {
+                            const codeStatus = getAccessCodeStatus(c);
+                            return (
                             <div key={c.id} className={cn(
                                 "card p-4 group transition-all",
-                                c.isActive ? "hover:border-brand-600/20" : "opacity-60 grayscale-[0.5]"
+                                codeStatus.key === "active" ? "hover:border-brand-600/20" : "opacity-80"
                             )}>
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-4">
                                         <div className={cn(
                                             "w-10 h-10 rounded-xl flex items-center justify-center border",
-                                            c.isActive 
-                                                ? (c.usedByName ? "bg-success-500/10 border-success-500/20 text-success" : "bg-brand-500/10 border-brand-500/20 text-brand-400")
-                                                : "bg-surface-muted border-surface-border text-fg-subtle"
+                                            codeStatus.key === "redeemed"
+                                                ? "bg-success-500/10 border-success-500/20 text-success"
+                                                : codeStatus.key === "active"
+                                                    ? "bg-brand-500/10 border-brand-500/20 text-brand-400"
+                                                    : codeStatus.key === "expired"
+                                                        ? "bg-warning/10 border-warning/20 text-warning"
+                                                        : "bg-surface-muted border-surface-border text-fg-subtle"
                                         )}>
                                             <Shield className="w-5 h-5 opacity-80" />
                                         </div>
                                         <div>
                                             <div className="flex items-center gap-2">
                                                 <p className="font-mono font-bold text-fg tracking-widest">{c.code}</p>
-                                                {c.isActive ? (
-                                                    c.usedByName ? (
-                                                        <span className="badge-success text-[9px]">Deployed</span>
-                                                    ) : (
-                                                        <span className="badge-brand text-[9px]">Active</span>
-                                                    )
-                                                ) : (
-                                                    <span className="badge-muted text-[9px] bg-danger/10 text-danger border-danger/20">Revoked</span>
-                                                )}
+                                                <span className={cn("text-[9px] font-black uppercase tracking-widest border px-2 py-0.5 rounded-full", codeStatus.badgeClass)}>
+                                                    {codeStatus.label}
+                                                </span>
                                             </div>
                                             <p className="text-[10px] text-fg-muted font-bold uppercase tracking-widest mt-0.5">
                                                 {c.planName ? `Plan: ${c.planName}` : "General Invite"} • {formatDate(c.createdAt)}
+                                                {c.expiresAt && codeStatus.key === "active" && (
+                                                    <span className="text-warning ml-2">Expires {formatDate(c.expiresAt)}</span>
+                                                )}
                                             </p>
                                         </div>
                                     </div>
 
                                     <div className="text-right flex items-center gap-4">
-                                        {c.usedByName ? (
+                                        {codeStatus.key === "redeemed" ? (
                                             <div className="flex flex-col items-end">
                                                 <p className="text-xs font-bold text-fg">{c.usedByName}</p>
                                                 <p className="text-[10px] text-fg-subtle">{c.usedByEmail}</p>
                                             </div>
-                                        ) : (
-                                            c.isActive ? (
-                                                <>
-                                                    <p className="text-[10px] text-brand-400/60 font-black uppercase tracking-widest">
-                                                        Waiting for claim...
-                                                    </p>
-                                                    <button 
-                                                        onClick={() => deleteCode(c.id)}
-                                                        className="btn-icon w-8 h-8 rounded-lg text-danger/50 hover:text-danger hover:bg-danger/10 transition-all ml-2"
-                                                        title="Cancel Code"
-                                                    >
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </button>
-                                                </>
-                                            ) : (
-                                                <p className="text-[10px] text-fg-subtle font-black uppercase tracking-widest italic">
-                                                    Invite Expired
+                                        ) : codeStatus.key === "active" ? (
+                                            <>
+                                                <p className="text-[10px] text-brand-400/60 font-black uppercase tracking-widest">
+                                                    Waiting for claim...
                                                 </p>
-                                            )
+                                                <button 
+                                                    onClick={() => deleteCode(c.id)}
+                                                    className="btn-icon w-8 h-8 rounded-lg text-danger/50 hover:text-danger hover:bg-danger/10 transition-all ml-2"
+                                                    title="Delete code"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <p className="text-[10px] text-fg-subtle font-black uppercase tracking-widest">
+                                                {codeStatus.key === "expired" ? "Past expiry date" : "No longer valid"}
+                                            </p>
                                         )}
                                     </div>
                                 </div>
                             </div>
-                        ))
+                            );
+                        })
                     )}
                 </div>
             </div>

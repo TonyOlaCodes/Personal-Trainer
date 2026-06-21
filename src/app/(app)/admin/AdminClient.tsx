@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Users, Dumbbell, Ticket, Shield, Copy, Check, ChevronRight, Plus, Trash2, UserX, RotateCcw } from "lucide-react";
 import { cn, formatDate, getInitials, roleLabels, roleBadgeClass } from "@/lib/utils";
+import { getAccessCodeStatus } from "@/lib/accessCodeStatus";
 import { PLAN_TEMPLATES } from "@/lib/templates";
 
 interface AdminUser {
@@ -47,6 +48,7 @@ interface AdminCode {
     usedByStatus?: "ACTIVE" | "DEACTIVATED" | "DELETED" | null;
     upgradesTo: string;
     isActive: boolean;
+    status?: string | null;
     createdAt: string;
     expiresAt?: string | null;
 }
@@ -124,13 +126,15 @@ function ProfileAvatar({ name, email, avatarUrl }: { name?: string | null; email
     );
 }
 
-export function AdminClient({ users: initialUsers, coaches, plans, codes: initialCodes, userRole }: Props) {
+export function AdminClient({ users: initialUsers, coaches, plans: initialPlans, codes: initialCodes, userRole }: Props) {
     const [tab, setTab] = useState<Tab>("users");
     const [users, setUsers] = useState<AdminUser[]>(sortAdminUsers(initialUsers));
+    const [plansList, setPlansList] = useState<AdminPlan[]>(initialPlans);
     const [codes, setCodes] = useState<AdminCode[]>(initialCodes.map(normalizeCode));
     const [codeFilter, setCodeFilter] = useState<CodeFilter>("ALL");
     const [generatingCode, setGeneratingCode] = useState(false);
     const [deletingCodeId, setDeletingCodeId] = useState<string | null>(null);
+    const [deletingPlanId, setDeletingPlanId] = useState<string | null>(null);
     const [newCode, setNewCode] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
     const [selectedPlanId, setSelectedPlanId] = useState<string>("");
@@ -180,6 +184,30 @@ export function AdminClient({ users: initialUsers, coaches, plans, codes: initia
             setCodes(codes.filter(c => c.id !== id));
         }
         setDeletingCodeId(null);
+    };
+
+    const deletePlan = async (plan: AdminPlan) => {
+        const activeNote = plan.userCount > 0
+            ? `${plan.userCount} user${plan.userCount === 1 ? " has" : "s have"} this as their active plan. `
+            : "";
+        if (!confirm(`Delete "${plan.name}"?\n\n${activeNote}This permanently removes the plan and cannot be undone.`)) {
+            return;
+        }
+
+        setDeletingPlanId(plan.id);
+        try {
+            const res = await fetch(`/api/plans/${plan.id}`, { method: "DELETE" });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok) {
+                setPlansList((current) => current.filter((p) => p.id !== plan.id));
+                return;
+            }
+            alert(typeof data.error === "string" ? data.error : "Could not delete plan.");
+        } catch {
+            alert("Connection error while deleting plan.");
+        } finally {
+            setDeletingPlanId(null);
+        }
     };
 
     const filteredCodes = codes.filter(c => {
@@ -543,18 +571,31 @@ export function AdminClient({ users: initialUsers, coaches, plans, codes: initia
                         <h3 className="heading-3">All Plans</h3>
                     </div>
                     <div className="divide-y divide-surface-border">
-                        {plans.map((p) => (
+                        {plansList.map((p) => (
                             <div key={p.id} className="px-5 py-4">
                                 <div className="flex items-start justify-between gap-4">
                                     <Link href={`/plans/create?id=${p.id}&view=true`} className="min-w-0 group">
                                         <p className="font-medium text-sm text-fg group-hover:text-brand-400 truncate">{p.name}</p>
                                         <p className="text-xs text-fg-muted">{p.type.replace("_", " ")}</p>
                                     </Link>
-                                    <div className="flex items-center gap-3 shrink-0">
+                                    <div className="flex items-center gap-2 shrink-0">
                                         <span className="text-xs text-fg-muted">{p.userCount} active {p.userCount === 1 ? "user" : "users"}</span>
                                         <Link href={`/plans/create?id=${p.id}&view=true`} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-surface-muted">
                                             <ChevronRight className="w-4 h-4 text-fg-subtle" />
                                         </Link>
+                                        <button
+                                            type="button"
+                                            onClick={() => deletePlan(p)}
+                                            disabled={deletingPlanId === p.id}
+                                            className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-danger/10 text-fg-subtle hover:text-danger transition-colors disabled:opacity-50"
+                                            title="Delete plan"
+                                        >
+                                            {deletingPlanId === p.id ? (
+                                                <div className="w-4 h-4 border-2 border-danger border-t-transparent rounded-full animate-spin" />
+                                            ) : (
+                                                <Trash2 className="w-4 h-4" />
+                                            )}
+                                        </button>
                                     </div>
                                 </div>
 
@@ -636,7 +677,7 @@ export function AdminClient({ users: initialUsers, coaches, plans, codes: initia
                             >
                                 <option value="">No specific plan (Open)</option>
                                 <optgroup label="Saved plans">
-                                    {plans.map((p) => (
+                                    {plansList.map((p) => (
                                         <option key={p.id} value={p.id}>{p.name}</option>
                                     ))}
                                 </optgroup>
@@ -697,12 +738,26 @@ export function AdminClient({ users: initialUsers, coaches, plans, codes: initia
                                 <div className="p-10 text-center">
                                     <p className="text-sm text-fg-muted italic">No codes matching this status.</p>
                                 </div>
-                            ) : filteredCodes.map((c) => (
+                            ) : filteredCodes.map((c) => {
+                                const codeStatus = getAccessCodeStatus({
+                                    isActive: c.isActive,
+                                    usedById: c.usedById,
+                                    usedByName: c.usedBy,
+                                    expiresAt: c.expiresAt,
+                                    status: c.status,
+                                });
+                                return (
                                 <div key={c.id} className="flex items-center justify-between px-5 py-4 group hover:bg-surface-muted/30 transition-colors">
                                     <div className="flex items-center gap-4">
                                         <div className={cn(
                                             "w-10 h-10 rounded-xl flex items-center justify-center border shadow-sm",
-                                            c.isActive ? "bg-brand-500/10 border-brand-500/20 text-brand-400" : "bg-surface-muted border-surface-border text-fg-subtle"
+                                            codeStatus.key === "active"
+                                                ? "bg-brand-500/10 border-brand-500/20 text-brand-400"
+                                                : codeStatus.key === "redeemed"
+                                                    ? "bg-success/10 border-success/20 text-success"
+                                                    : codeStatus.key === "expired"
+                                                        ? "bg-warning/10 border-warning/20 text-warning"
+                                                        : "bg-surface-muted border-surface-border text-fg-subtle"
                                         )}>
                                             <Ticket className="w-5 h-5" />
                                         </div>
@@ -757,13 +812,12 @@ export function AdminClient({ users: initialUsers, coaches, plans, codes: initia
                                     </div>
                                     <div className="flex items-center gap-3">
                                         <div className="text-right flex flex-col items-end">
-                                            {c.isActive && (!c.expiresAt || new Date(c.expiresAt) > new Date()) ? (
-                                                <span className="text-[10px] font-black bg-brand-500/10 text-brand-400 px-2 py-0.5 rounded uppercase tracking-tighter">Authorized</span>
-                                            ) : c.usedBy ? (
-                                                <span className="text-[10px] font-black bg-success-500/10 text-success px-2 py-0.5 rounded uppercase tracking-tighter">Deployed</span>
-                                            ) : (
-                                                <span className="text-[10px] font-black bg-danger-500/10 text-danger px-2 py-0.5 rounded uppercase tracking-tighter">Expired/Revoked</span>
-                                            )}
+                                            <span className={cn(
+                                                "text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-tighter border",
+                                                codeStatus.badgeClass
+                                            )}>
+                                                {codeStatus.label}
+                                            </span>
                                         </div>
                                         <button
                                             onClick={() => deleteCode(c.id)}
@@ -775,7 +829,8 @@ export function AdminClient({ users: initialUsers, coaches, plans, codes: initia
                                         </button>
                                     </div>
                                 </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     </div>
                 </div>
