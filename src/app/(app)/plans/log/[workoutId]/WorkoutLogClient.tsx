@@ -72,6 +72,40 @@ interface InitialActiveLog {
     sets: ActiveLogSet[];
 }
 
+function readStoredStartTime(localStorageKey: string): number | null {
+    if (typeof window === "undefined") return null;
+    const stored = localStorage.getItem(localStorageKey);
+    if (!stored) return null;
+    const parsed = Number(stored);
+    if (!Number.isFinite(parsed) || parsed <= 0) return null;
+    return parsed;
+}
+
+function persistStartTime(localStorageKey: string, startTime: number) {
+    if (typeof window !== "undefined") {
+        localStorage.setItem(localStorageKey, String(startTime));
+    }
+}
+
+/** loggedAt is the scheduled calendar day (noon), not when the user started — never use it for the timer. */
+function resolveWorkoutStartTime(
+    localStorageKey: string,
+    opts?: { durationMinutes?: number | null }
+): number {
+    const stored = readStoredStartTime(localStorageKey);
+    if (stored) return stored;
+
+    if (opts?.durationMinutes && opts.durationMinutes > 0) {
+        const fromDuration = Date.now() - opts.durationMinutes * 60000;
+        persistStartTime(localStorageKey, fromDuration);
+        return fromDuration;
+    }
+
+    const now = Date.now();
+    persistStartTime(localStorageKey, now);
+    return now;
+}
+
 function restoreSessionState(
     active: InitialActiveLog,
     fallbackExercises: Exercise[],
@@ -109,16 +143,9 @@ function restoreSessionState(
 
     reconstructedExercises.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
-    let startTime = Date.now();
-    if (active.duration) {
-        startTime = Date.now() - active.duration * 60000;
-    } else if (active.loggedAt) {
-        startTime = new Date(active.loggedAt).getTime();
-    }
-
-    if (typeof window !== "undefined") {
-        localStorage.setItem(localStorageKey, startTime.toString());
-    }
+    const startTime = resolveWorkoutStartTime(localStorageKey, {
+        durationMinutes: active.duration,
+    });
 
     return {
         logs: Object.keys(restored).length > 0 ? restored : buildInitialLogs(fallbackExercises),
@@ -188,28 +215,21 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
     const targetDateStr = logDate ? toDateKey(parseLogDate(logDate)) : toDateKey(new Date());
     const localStorageKey = `workout_start_time_${workout.id}_${targetDateStr}`;
 
-    const getInitialSession = () => {
+    const [initialSession] = useState(() => {
         if (initialActiveLog) {
             return restoreSessionState(initialActiveLog, workout.exercises, localStorageKey);
         }
-        const now = Date.now();
-        if (typeof window !== "undefined") {
-            localStorage.setItem(localStorageKey, String(now));
-        }
+        const startTime = resolveWorkoutStartTime(localStorageKey);
         return {
             logs: buildInitialLogs(workout.exercises),
             exercises: workout.exercises,
-            startTime: now,
+            startTime,
             activeLogId: null as string | null,
         };
-    };
+    });
 
-    const [logs, setLogs] = useState<Record<string, SetLog[]>>(
-        () => getInitialSession().logs
-    );
-    const [startTime, setStartTime] = useState(
-        () => getInitialSession().startTime
-    );
+    const [logs, setLogs] = useState<Record<string, SetLog[]>>(initialSession.logs);
+    const [startTime, setStartTime] = useState(initialSession.startTime);
     const [elapsed, setElapsed] = useState(0);
     const [saving, setSaving] = useState(false);
 
@@ -220,16 +240,12 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
     const [workoutNotes, setWorkoutNotes] = useState("");
 
     // Active exercises state (allows adding/substituting)
-    const [activeExercises, setActiveExercises] = useState<Exercise[]>(
-        () => getInitialSession().exercises
-    );
+    const [activeExercises, setActiveExercises] = useState<Exercise[]>(initialSession.exercises);
     const [isSubstituting, setIsSubstituting] = useState<string | null>(null); // exerciseId
     const [isAddingExercise, setIsAddingExercise] = useState(false);
     const [editStartedAt, setEditStartedAt] = useState<number | null>(null); // Track when editing started
     const [searchQuery, setSearchQuery] = useState("");
-    const [activeLogId, setActiveLogId] = useState<string | null>(
-        () => getInitialSession().activeLogId
-    );
+    const [activeLogId, setActiveLogId] = useState<string | null>(initialSession.activeLogId);
     const [isDiscarding, setIsDiscarding] = useState(false);
     const [previewExercise, setPreviewExercise] = useState<{ name: string; media: ExercisePreviewMedia } | null>(null);
     const [modalTouchStart, setModalTouchStart] = useState<number | null>(null);
@@ -271,9 +287,8 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                     return;
                 }
 
-                const now = Date.now();
+                const now = resolveWorkoutStartTime(localStorageKey);
                 setStartTime(now);
-                localStorage.setItem(localStorageKey, now.toString());
 
                 const initialLogs = buildInitialLogs(workout.exercises);
                 const flattenedSets = Object.entries(initialLogs).flatMap(([exId, sets]) => {
@@ -327,7 +342,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                 const editDuration = Date.now() - editStartedAt;
                 setStartTime(prev => {
                     const nextStart = prev + editDuration;
-                    localStorage.setItem(localStorageKey, nextStart.toString());
+                    persistStartTime(localStorageKey, nextStart);
                     saveProgress(logs, activeExercises, nextStart);
                     return nextStart;
                 });
@@ -392,12 +407,14 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
 
         try {
             const finalStartTime = startTimeOverride ?? startTime;
+            const elapsedMinutes = Math.max(0, Math.floor((Date.now() - finalStartTime) / 60000));
             const res = await fetch("/api/logs", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     workoutId: workout.id,
                     status: "IN_PROGRESS",
+                    duration: elapsedMinutes,
                     loggedAt: toLoggedAtIso(logDate ?? new Date(finalStartTime)),
                     sets: flattenedSets,
                 }),

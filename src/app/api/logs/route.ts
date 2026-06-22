@@ -71,18 +71,33 @@ export async function POST(req: Request) {
     const targetDate = loggedAt ? parseLogDate(loggedAt) : new Date();
     const { start: startOfDay, end: endOfDay } = getLocalDayBounds(targetDate);
 
-    // Drop in-progress drafts for this workout/day — never delete completed history
-    await prisma.workoutLog.deleteMany({
-        where: {
-            userId: user.id,
-            workoutId,
-            status: "IN_PROGRESS",
-            loggedAt: {
-                gte: startOfDay,
-                lte: endOfDay,
+    const existingInProgress =
+        status === "IN_PROGRESS"
+            ? await prisma.workoutLog.findFirst({
+                  where: {
+                      userId: user.id,
+                      workoutId,
+                      status: "IN_PROGRESS",
+                      loggedAt: { gte: startOfDay, lte: endOfDay },
+                  },
+                  orderBy: { updatedAt: "desc" },
+              })
+            : null;
+
+    // Drop stale in-progress drafts only when starting a fresh session
+    if (status === "IN_PROGRESS" && !existingInProgress) {
+        await prisma.workoutLog.deleteMany({
+            where: {
+                userId: user.id,
+                workoutId,
+                status: "IN_PROGRESS",
+                loggedAt: {
+                    gte: startOfDay,
+                    lte: endOfDay,
+                },
             },
-        },
-    });
+        });
+    }
 
     const existingCompleted =
         status === "COMPLETED"
@@ -172,6 +187,16 @@ export async function POST(req: Request) {
         await prisma.logSet.deleteMany({ where: { workoutLogId: existingCompleted.id } });
         const workoutLog = await prisma.workoutLog.update({
             where: { id: existingCompleted.id },
+            data: { ...logPayload, sets: { create: setsCreate } },
+            include: { sets: true, workout: { select: { name: true } } },
+        });
+        return NextResponse.json(workoutLog, { status: 200 });
+    }
+
+    if (existingInProgress) {
+        await prisma.logSet.deleteMany({ where: { workoutLogId: existingInProgress.id } });
+        const workoutLog = await prisma.workoutLog.update({
+            where: { id: existingInProgress.id },
             data: { ...logPayload, sets: { create: setsCreate } },
             include: { sets: true, workout: { select: { name: true } } },
         });
