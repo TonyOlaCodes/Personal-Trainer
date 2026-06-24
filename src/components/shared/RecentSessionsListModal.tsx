@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, ChevronRight, X } from "lucide-react";
+import { Activity, ChevronRight, Loader2, X } from "lucide-react";
 import Link from "next/link";
 import { formatDate, formatRelative } from "@/lib/utils";
 
@@ -20,6 +20,8 @@ interface Props {
     onSelect?: (sessionId: string) => void;
     sessionHref?: (sessionId: string) => string;
     emptyMessage?: string;
+    loading?: boolean;
+    error?: string;
 }
 
 const PREVIEW_LIMIT = 5;
@@ -29,12 +31,14 @@ export { PREVIEW_LIMIT };
 export function RecentSessionsListModal({
     open,
     onClose,
-    title = "All Sessions",
+    title = "Workout History",
     subtitle,
     sessions,
     onSelect,
     sessionHref,
-    emptyMessage = "No sessions logged yet.",
+    emptyMessage = "No workouts logged yet.",
+    loading = false,
+    error = "",
 }: Props) {
     if (!open) return null;
 
@@ -58,8 +62,15 @@ export function RecentSessionsListModal({
                     </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto divide-y divide-surface-border">
-                    {sessions.length === 0 ? (
+                <div className="flex-1 overflow-y-auto divide-y divide-surface-border min-h-0">
+                    {loading ? (
+                        <div className="p-12 text-center">
+                            <Loader2 className="w-6 h-6 mx-auto animate-spin text-brand-400" />
+                            <p className="text-sm text-fg-muted mt-3">Loading workout history...</p>
+                        </div>
+                    ) : error ? (
+                        <p className="p-8 text-center text-sm text-danger">{error}</p>
+                    ) : sessions.length === 0 ? (
                         <p className="p-8 text-center text-sm text-fg-muted">{emptyMessage}</p>
                     ) : (
                         sessions.map((session) => {
@@ -72,12 +83,13 @@ export function RecentSessionsListModal({
                                         <div className="min-w-0">
                                             <p className="text-sm font-semibold text-fg truncate">{session.workoutName}</p>
                                             <p className="text-[10px] text-fg-muted font-bold uppercase tracking-widest">
-                                                {session.setCount != null ? `${session.setCount} sets` : formatDate(session.date)}
+                                                {formatDate(session.date)}
+                                                {session.setCount != null ? ` · ${session.setCount} sets` : ""}
                                             </p>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2 shrink-0">
-                                        <p className="text-xs text-fg-muted hidden sm:block">{formatRelative(session.date)}</p>
+                                        <p className="text-xs text-fg-muted">{formatRelative(session.date)}</p>
                                         <ChevronRight className="w-4 h-4 text-fg-subtle" />
                                     </div>
                                 </>

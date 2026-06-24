@@ -14,6 +14,7 @@ import Link from "next/link";
 import { ReturnLink } from "@/components/shared/ReturnLink";
 import { RecentSessionsExplorer, PREVIEW_LIMIT } from "@/components/shared/RecentSessionsExplorer";
 import { cn, formatDate, getInitials } from "@/lib/utils";
+import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { formatCoachPlanLabel } from "@/lib/coachPlans";
 
 const CHECK_IN_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -490,8 +491,10 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                     setShowAllSessions(false);
                     setSessionsInitialId(null);
                 }}
-                title={`${client.name ?? "Client"} Sessions`}
+                title={`${client.name ?? "Client"} Workouts`}
                 subtitle="Full workout history"
+                fetchHistoryOnOpen
+                historyUserId={client.id}
                 sessions={logs}
                 initialSessionId={sessionsInitialId}
                 canAddCoachNote={canEdit}
@@ -511,7 +514,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
             <div className="card p-6 flex flex-col sm:flex-row items-center gap-6 justify-between text-center sm:text-left">
                 <div className="flex flex-col sm:flex-row items-center gap-6">
                     <div className="w-20 h-20 rounded-3xl bg-gradient-brand flex items-center justify-center text-xl font-bold text-white shadow-glow-brand shrink-0">
-                        {client.avatarUrl ? <img src={client.avatarUrl} alt="avatar" className="w-full h-full object-cover rounded-3xl" /> : getInitials(client.name)}
+                        {client.avatarUrl ? <img src={resolveUploadUrl(client.avatarUrl)} alt="avatar" className="w-full h-full object-cover rounded-3xl" /> : getInitials(client.name)}
                     </div>
                     <div>
                         <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 justify-center sm:justify-start">
@@ -1557,7 +1560,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                         <div className="p-4 border-b border-surface-border flex items-center justify-between bg-surface-muted/30">
                             <div className="flex items-center gap-3">
                                 <div className="w-9 h-9 rounded-xl bg-gradient-brand flex items-center justify-center text-sm font-bold text-white shadow-glow-brand-sm shrink-0">
-                                    {client.avatarUrl ? <img src={client.avatarUrl} alt="avatar" className="w-full h-full object-cover rounded-xl" /> : getInitials(client.name)}
+                                    {client.avatarUrl ? <img src={resolveUploadUrl(client.avatarUrl)} alt="avatar" className="w-full h-full object-cover rounded-xl" /> : getInitials(client.name)}
                                 </div>
                                 <div className="min-w-0">
                                     <p className="font-bold text-sm text-fg truncate">{client.name}</p>

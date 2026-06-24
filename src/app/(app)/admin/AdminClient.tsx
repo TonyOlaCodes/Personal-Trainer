@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Users, Dumbbell, Ticket, Shield, Copy, Check, ChevronRight, Plus, Trash2, UserX, RotateCcw } from "lucide-react";
 import { cn, formatDate, getInitials, roleLabels, roleBadgeClass } from "@/lib/utils";
+import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { getAccessCodeStatus } from "@/lib/accessCodeStatus";
 import { PLAN_TEMPLATES } from "@/lib/templates";
 
@@ -117,7 +118,7 @@ function ProfileAvatar({ name, email, avatarUrl }: { name?: string | null; email
         <div className="w-9 h-9 rounded-full overflow-hidden bg-brand-500/10 border border-surface-border flex items-center justify-center shrink-0">
             {avatarUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={avatarUrl} alt={label} className="w-full h-full object-cover" />
+                <img src={resolveUploadUrl(avatarUrl)} alt={label} className="w-full h-full object-cover" />
             ) : (
                 <span className="text-[11px] font-black text-brand-400 uppercase">
                     {getInitials(label)}

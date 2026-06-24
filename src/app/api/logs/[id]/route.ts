@@ -1,7 +1,15 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getWorkoutNotes } from "@/lib/workoutNotes";
+import { withResolvedLogSetMedia } from "@/lib/uploadUrls";
+import { z } from "zod";
+
+const patchLogSchema = z.object({
+    status: z.enum(["IN_PROGRESS", "COMPLETED"]).optional(),
+    feeling: z.number().int().min(1).max(5).optional(),
+}).refine((data) => data.status !== undefined || data.feeling !== undefined, {
+    message: "Provide status or feeling to update",
+});
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
     const { userId } = await auth();
@@ -39,7 +47,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         notes: log.notes,
         feeling: log.feeling,
         status: log.status,
-        sets: log.sets.map((set) => ({
+        sets: log.sets.map((set) => withResolvedLogSetMedia({
             id: set.id,
             setNumber: set.setNumber,
             reps: set.reps,
@@ -47,6 +55,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
             rpe: set.rpe,
             isWarmup: set.isWarmup,
             isCompleted: set.isCompleted,
+            videoUrl: set.videoUrl,
             exercise: set.exercise,
         })),
         coachNotes: await getWorkoutNotes(log.id),
@@ -62,10 +71,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
     const body = await req.json();
-    const { status } = body;
-
-    if (!["IN_PROGRESS", "COMPLETED"].includes(status)) {
-        return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+    const parsed = patchLogSchema.safeParse(body);
+    if (!parsed.success) {
+        return NextResponse.json({ error: parsed.error.flatten().formErrors[0] || "Invalid update" }, { status: 400 });
     }
 
     const existing = await prisma.workoutLog.findFirst({
@@ -73,9 +81,22 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     });
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+    const data: { status?: "IN_PROGRESS" | "COMPLETED"; feeling?: number } = {};
+
+    if (parsed.data.status !== undefined) {
+        data.status = parsed.data.status;
+    }
+
+    if (parsed.data.feeling !== undefined) {
+        if (existing.status !== "COMPLETED") {
+            return NextResponse.json({ error: "Can only update feeling on completed workouts" }, { status: 400 });
+        }
+        data.feeling = parsed.data.feeling;
+    }
+
     const updated = await prisma.workoutLog.update({
         where: { id },
-        data: { status }
+        data,
     });
 
     return NextResponse.json(updated);

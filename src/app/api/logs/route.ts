@@ -4,6 +4,7 @@ import { prisma, ensureDbSchema } from "@/lib/prisma";
 import { getLocalDayBounds, parseLogDate } from "@/lib/utils";
 import { canLogWorkouts, requireAuthUser, workoutAssignedToUser } from "@/lib/apiAuth";
 import { notifyCoachOfClientWorkout } from "@/lib/notifications";
+import { normalizeStoredUploadUrl } from "@/lib/uploadUrls";
 import { z } from "zod";
 
 const logSchema = z.object({
@@ -180,7 +181,7 @@ export async function POST(req: Request) {
         isWarmup: s.isWarmup,
         isCompleted: s.isCompleted,
         isPR: prExerciseIds.has(s.exerciseId),
-        videoUrl: s.videoUrl,
+        videoUrl: s.videoUrl ? normalizeStoredUploadUrl(s.videoUrl) ?? s.videoUrl : undefined,
     }));
 
     if (existingCompleted) {
@@ -287,6 +288,48 @@ export async function GET(req: Request) {
             orderBy: { updatedAt: "desc" },
         });
         return NextResponse.json(activeLog);
+    }
+
+    const history = url.searchParams.get("history") === "true";
+    if (history) {
+        let targetUserId = user.id;
+        const requestedUserId = url.searchParams.get("userId");
+        if (requestedUserId && requestedUserId !== user.id) {
+            const target = await prisma.user.findUnique({
+                where: { id: requestedUserId },
+                select: { id: true, coachId: true },
+            });
+            if (!target) {
+                return NextResponse.json({ error: "User not found" }, { status: 404 });
+            }
+            const isCoachForClient =
+                user.role === "COACH" && target.coachId === user.id;
+            const isAdmin = user.role === "SUPER_ADMIN";
+            if (!isCoachForClient && !isAdmin) {
+                return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+            }
+            targetUserId = target.id;
+        }
+
+        const historyLogs = await prisma.workoutLog.findMany({
+            where: { userId: targetUserId, status: "COMPLETED" },
+            select: {
+                id: true,
+                loggedAt: true,
+                workout: { select: { name: true } },
+                sets: { where: { isCompleted: true }, select: { id: true } },
+            },
+            orderBy: { loggedAt: "desc" },
+        });
+
+        return NextResponse.json(
+            historyLogs.map((log) => ({
+                id: log.id,
+                workoutName: log.workout.name,
+                loggedAt: log.loggedAt.toISOString(),
+                setCount: log.sets.length,
+            }))
+        );
     }
 
     const logs = await prisma.workoutLog.findMany({

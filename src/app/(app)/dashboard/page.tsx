@@ -2,7 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
-import { getDayName, formatDate, getWeekNumber, isSameCalendarDay, toDateKey } from "@/lib/utils";
+import { getDayName, getWeekNumber, isSameCalendarDay, toDateKey } from "@/lib/utils";
 import { cookies } from "next/headers";
 import { DashboardClient } from "./DashboardClient";
 import { getBodyweightSummary } from "@/lib/bodyweight";
@@ -49,7 +49,7 @@ export default async function DashboardPage() {
                     workoutLogs: {
                         where: { status: "COMPLETED" },
                         orderBy: { loggedAt: "desc" },
-                        take: 100,
+                        take: 20,
                         include: { workout: true, sets: true },
                     },
                 },
@@ -229,7 +229,7 @@ export default async function DashboardPage() {
 
         return (
             <>
-                <TopBar title={getDayName()} subtitle={formatDate(new Date())} streak={streak} hideSearch={true} />
+                <TopBar showToday streak={streak} hideSearch={true} />
                 <div className="p-6 max-w-5xl mx-auto">
                         <DashboardClient
                             user={{ name: user.name, role: user.role, weightKg: user.weightKg, targetWeightKg: user.targetWeightKg, hiddenGoals: user.hiddenGoals ?? [] }}

@@ -3,11 +3,21 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { normalizeCalories, normalizeSleepHours, normalizeSteps, updateDailyMetricTargets } from "@/lib/dailyMetrics";
 import { ensureNotificationPreferenceColumns } from "@/lib/notifications";
+import { normalizeStoredUploadUrl, withResolvedAvatar } from "@/lib/uploadUrls";
 import { z } from "zod";
+
+const storedUploadUrlSchema = z.string().refine(
+    (val) =>
+        val.startsWith("http://") ||
+        val.startsWith("https://") ||
+        val.startsWith("/uploads/") ||
+        val.startsWith("/api/uploads/"),
+    { message: "Invalid avatar URL" }
+);
 
 const profileSchema = z.object({
     name: z.string().min(1).max(50).optional(),
-    avatarUrl: z.string().url().optional().or(z.literal("")),
+    avatarUrl: z.union([storedUploadUrlSchema, z.literal("")]).optional(),
     // Goals fields
     goal: z.enum(["GAIN_MUSCLE", "LOSE_WEIGHT", "RECOMPOSITION", "STRENGTH"]).optional(),
     trainingDaysPerWeek: z.number().int().min(1).max(7).optional(),
@@ -26,6 +36,8 @@ const profileSchema = z.object({
     notifyOnPlanUpdate: z.boolean().optional(),
     notifyOnCheckInReview: z.boolean().optional(),
     notifyOnWorkoutFeedback: z.boolean().optional(),
+    notifyOnMissedCheckIn: z.boolean().optional(),
+    notifyOnMissedWorkout: z.boolean().optional(),
 });
 
 export async function PATCH(req: Request) {
@@ -35,6 +47,12 @@ export async function PATCH(req: Request) {
 
         const body = await req.json();
         const parsed = profileSchema.parse(body);
+        const normalizedAvatar =
+            parsed.avatarUrl !== undefined
+                ? parsed.avatarUrl === ""
+                    ? null
+                    : normalizeStoredUploadUrl(parsed.avatarUrl)
+                : undefined;
 
         await ensureNotificationPreferenceColumns();
 
@@ -44,7 +62,7 @@ export async function PATCH(req: Request) {
                 where: { clerkId: userId },
                 data: {
                     ...(parsed.name !== undefined && { name: parsed.name }),
-                    ...(parsed.avatarUrl !== undefined && { avatarUrl: parsed.avatarUrl === "" ? null : parsed.avatarUrl }),
+                    ...(parsed.avatarUrl !== undefined && { avatarUrl: normalizedAvatar }),
                     ...(parsed.goal !== undefined && { goal: parsed.goal }),
                     ...(parsed.trainingDaysPerWeek !== undefined && { trainingDaysPerWeek: parsed.trainingDaysPerWeek }),
                     ...(parsed.experienceLevel !== undefined && { experienceLevel: parsed.experienceLevel }),
@@ -59,6 +77,8 @@ export async function PATCH(req: Request) {
                     ...(parsed.notifyOnPlanUpdate !== undefined && { notifyOnPlanUpdate: parsed.notifyOnPlanUpdate }),
                     ...(parsed.notifyOnCheckInReview !== undefined && { notifyOnCheckInReview: parsed.notifyOnCheckInReview }),
                     ...(parsed.notifyOnWorkoutFeedback !== undefined && { notifyOnWorkoutFeedback: parsed.notifyOnWorkoutFeedback }),
+                    ...(parsed.notifyOnMissedCheckIn !== undefined && { notifyOnMissedCheckIn: parsed.notifyOnMissedCheckIn }),
+                    ...(parsed.notifyOnMissedWorkout !== undefined && { notifyOnMissedWorkout: parsed.notifyOnMissedWorkout }),
                 },
             });
         } catch (dbErr) {
@@ -67,7 +87,7 @@ export async function PATCH(req: Request) {
                 where: { clerkId: userId },
                 data: {
                     ...(parsed.name !== undefined && { name: parsed.name }),
-                    ...(parsed.avatarUrl !== undefined && { avatarUrl: parsed.avatarUrl === "" ? null : parsed.avatarUrl }),
+                    ...(parsed.avatarUrl !== undefined && { avatarUrl: normalizedAvatar }),
                     ...(parsed.goal !== undefined && { goal: parsed.goal }),
                     ...(parsed.trainingDaysPerWeek !== undefined && { trainingDaysPerWeek: parsed.trainingDaysPerWeek }),
                     ...(parsed.experienceLevel !== undefined && { experienceLevel: parsed.experienceLevel }),
@@ -90,7 +110,7 @@ export async function PATCH(req: Request) {
             });
         }
 
-        return NextResponse.json(updated);
+        return NextResponse.json(withResolvedAvatar(updated));
     } catch (err) {
         console.error(err);
         if (err instanceof z.ZodError) {

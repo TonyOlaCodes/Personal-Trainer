@@ -12,7 +12,7 @@ import {
 } from "@/lib/apiAuth";
 import { isInactiveAccount } from "@/lib/userDeactivation";
 import { getDirectMessageActivity } from "@/lib/chatActivity";
-import { withResolvedUpload } from "@/lib/uploadUrls";
+import { withResolvedUpload, withResolvedAvatar, normalizeStoredUploadUrl } from "@/lib/uploadUrls";
 
 // GET messages
 export async function GET(req: Request) {
@@ -116,12 +116,12 @@ export async function GET(req: Request) {
 
     const mappedMessages = messages.map(m => withResolvedUpload({
         ...m,
-        sender: {
+        sender: withResolvedAvatar({
             id: m.sender.id,
             name: (m.sender as any).isDeleted ? ((m.sender as any).deletedName ?? "Deleted User") : (m.sender.name ?? "User"),
             avatarUrl: (m.sender as any).isDeleted ? null : m.sender.avatarUrl,
             role: m.sender.role
-        }
+        }),
     }));
 
     return NextResponse.json(mappedMessages);
@@ -181,7 +181,7 @@ export async function POST(req: Request) {
             content,
             isGeneral,
             type,
-            mediaUrl,
+            mediaUrl: mediaUrl ? normalizeStoredUploadUrl(mediaUrl) ?? mediaUrl : undefined,
             replyToId: replyToId || null,
             mentions: mentions || [],
             status: "SENT",
@@ -200,12 +200,12 @@ export async function POST(req: Request) {
 
     const mappedMessage = withResolvedUpload({
         ...message,
-        sender: {
+        sender: withResolvedAvatar({
             id: message.sender.id,
             name: (message.sender as any).isDeleted ? ((message.sender as any).deletedName ?? "Deleted User") : (message.sender.name ?? "User"),
             avatarUrl: (message.sender as any).isDeleted ? null : message.sender.avatarUrl,
             role: message.sender.role
-        }
+        }),
     });
 
     if (!isGeneral && receiverId && ["COACH", "SUPER_ADMIN"].includes(user.role)) {
@@ -301,7 +301,10 @@ export async function PATCH(req: Request) {
             data: { content: content.trim(), updatedAt: new Date() },
             include: { sender: { select: { id: true, name: true, avatarUrl: true, role: true } } },
         });
-        return NextResponse.json(updated);
+        return NextResponse.json(withResolvedUpload({
+            ...updated,
+            sender: withResolvedAvatar(updated.sender),
+        }));
     }
 
     return NextResponse.json({ error: "No action specified" }, { status: 400 });
@@ -319,28 +322,19 @@ export async function DELETE(req: Request) {
     const msg = await prisma.message.findUnique({ where: { id } });
     if (!msg) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    if (!(await isMessageParticipant(user, msg))) {
+    const isSuperAdmin = user.role === "SUPER_ADMIN";
+
+    if (!isSuperAdmin && !(await isMessageParticipant(user, msg))) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const isOwner = msg.senderId === user.id;
-    const isSuperAdmin = user.role === "SUPER_ADMIN";
     const isCoach = user.role === "COACH";
 
-    let canDelete = isOwner;
-
-    // Admins can delete any message in the global chat
-    if (isSuperAdmin && msg.isGeneral) {
-        canDelete = true;
-    }
+    let canDelete = isOwner || isSuperAdmin;
 
     // Coaches can delete any message in their own team chat
     if (isCoach && msg.receiverId === `team_${user.id}`) {
-        canDelete = true;
-    }
-
-    // Super Admins acting as coaches can also delete in their team chat
-    if (isSuperAdmin && msg.receiverId === `team_${user.id}`) {
         canDelete = true;
     }
 

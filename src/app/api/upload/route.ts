@@ -1,7 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { storeUploadedFile } from "@/lib/uploadStorage";
-import { resolveUploadUrl } from "@/lib/uploadUrls";
+import { normalizeStoredUploadUrl, resolveUploadUrl } from "@/lib/uploadUrls";
 
 export const runtime = "nodejs";
 
@@ -20,7 +20,8 @@ export async function POST(req: Request) {
         }
 
         const stored = await storeUploadedFile(file);
-        return NextResponse.json({ url: resolveUploadUrl(stored.url), type: stored.type });
+        const url = normalizeStoredUploadUrl(stored.url) ?? stored.url;
+        return NextResponse.json({ url, displayUrl: resolveUploadUrl(url), type: stored.type });
     } catch (error) {
         console.error("Upload error:", error);
         const message = error instanceof Error ? error.message : "Upload failed";

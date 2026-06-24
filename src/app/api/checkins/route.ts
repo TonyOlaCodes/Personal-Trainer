@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { CheckInStatus, Prisma } from "@prisma/client";
 import { z } from "zod";
 import { createNotification, notifyCoachOfClientCheckIn, userWantsNotification } from "@/lib/notifications";
-import { withResolvedCheckInMedia } from "@/lib/uploadUrls";
+import { withResolvedCheckInMedia, normalizeStoredUploadUrl } from "@/lib/uploadUrls";
 import { isInactiveAccount } from "@/lib/userDeactivation";
 
 const checkInSchema = z.object({
@@ -51,6 +51,9 @@ export async function POST(req: Request) {
                 ...parsed.data,
                 bodyweightKg: parsed.data.bodyweightKg ? Math.round(parsed.data.bodyweightKg * 100) / 100 : undefined,
                 feedback: parsed.data.feedback || "Check-in completed.",
+                frontImageUrl: normalizeStoredUploadUrl(parsed.data.frontImageUrl) ?? undefined,
+                sideImageUrl: normalizeStoredUploadUrl(parsed.data.sideImageUrl) ?? undefined,
+                videoUrl: normalizeStoredUploadUrl(parsed.data.videoUrl) ?? undefined,
                 status: "PENDING",
             },
         });
@@ -176,7 +179,7 @@ export async function PATCH(req: Request) {
         if (isCoach) {
             data = {
                 coachResponse,
-                coachVideoUrl: body.coachVideoUrl,
+                coachVideoUrl: normalizeStoredUploadUrl(body.coachVideoUrl) ?? undefined,
                 status: parsedStatus as CheckInStatus,
                 respondedAt: new Date(),
                 coachLastSeenAt: new Date(),
@@ -186,7 +189,7 @@ export async function PATCH(req: Request) {
             data = {
                 feedback: feedback || "Check-in updated.",
                 notes,
-                videoUrl,
+                videoUrl: normalizeStoredUploadUrl(videoUrl) ?? undefined,
                 bodyweightKg: bodyweightKg ? Math.round(parseFloat(bodyweightKg) * 100) / 100 : undefined,
                 sleepRating,
                 dietRating,
@@ -194,8 +197,8 @@ export async function PATCH(req: Request) {
                 injuryRating,
                 energyRating,
                 intensityRating,
-                frontImageUrl,
-                sideImageUrl,
+                frontImageUrl: normalizeStoredUploadUrl(frontImageUrl) ?? undefined,
+                sideImageUrl: normalizeStoredUploadUrl(sideImageUrl) ?? undefined,
                 lastUpdatedByClientAt: new Date(),
                 status: "PENDING",
             };

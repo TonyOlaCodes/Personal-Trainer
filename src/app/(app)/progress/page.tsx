@@ -6,9 +6,9 @@ import { ProgressClient } from "./ProgressClient";
 import { SafeFallback, rethrowNextInternalErrors } from "@/components/shared/SafeFallback";
 import { formatErrorDetails } from "@/lib/ensureAppSchema";
 
-export const metadata = { 
-    title: "Progress & Analytics | Performance Tracker",
-    description: "Track bodyweight, strength PRs, workout consistency, and training volume with premium analytics."
+export const metadata = {
+    title: "Progress",
+    description: "Track bodyweight, strength PRs, workout consistency, and training volume.",
 };
 
 export default async function ProgressPage() {

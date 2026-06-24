@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Activity, ChevronLeft, ChevronRight, Dumbbell, Loader2, MessageSquare, Trash2, X } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
+import { WorkoutFeelingEditor } from "@/components/shared/WorkoutFeelingEditor";
+import { workoutFeelingEmoji } from "@/lib/workoutFeeling";
 
 interface SessionSet {
     id: string;
@@ -43,6 +45,7 @@ interface Props {
     onNavigate?: (sessionId: string) => void;
     canAddCoachNote?: boolean;
     canDelete?: boolean;
+    canEditFeeling?: boolean;
     onDeleted?: () => void;
 }
 
@@ -54,6 +57,7 @@ export function WorkoutSessionModal({
     onNavigate,
     canAddCoachNote = false,
     canDelete = false,
+    canEditFeeling = false,
     onDeleted,
 }: Props) {
     const [session, setSession] = useState<SessionData | null>(null);
@@ -183,13 +187,13 @@ export function WorkoutSessionModal({
                                 </button>
                             )}
                             {showSessionNav && (
-                                <div className="flex items-center gap-1 ml-auto sm:ml-0">
+                                <div className="hidden sm:flex items-center gap-1 ml-auto sm:ml-0">
                                     <button
                                         type="button"
                                         disabled={!hasOlder}
                                         onClick={() => onNavigate?.(sessionIds![currentIndex + 1])}
                                         className="btn-icon disabled:opacity-30"
-                                        title="Older session"
+                                        title="Previous workout"
                                     >
                                         <ChevronLeft className="w-4 h-4" />
                                     </button>
@@ -201,7 +205,7 @@ export function WorkoutSessionModal({
                                         disabled={!hasNewer}
                                         onClick={() => onNavigate?.(sessionIds![currentIndex - 1])}
                                         className="btn-icon disabled:opacity-30"
-                                        title="Newer session"
+                                        title="Next workout"
                                     >
                                         <ChevronRight className="w-4 h-4" />
                                     </button>
@@ -222,7 +226,7 @@ export function WorkoutSessionModal({
                     </button>
                 </div>
 
-                <div className="overflow-y-auto max-h-[calc(92vh-88px)] p-5 space-y-5">
+                <div className="overflow-y-auto max-h-[calc(92vh-88px)] p-5 space-y-5 pb-24 sm:pb-5">
                     {loading ? (
                         <div className="p-12 text-center">
                             <Loader2 className="w-6 h-6 mx-auto animate-spin text-brand-400" />
@@ -252,6 +256,25 @@ export function WorkoutSessionModal({
                                     <p className="stat-label">Coach Notes</p>
                                 </div>
                             </div>
+
+                            {(session.feeling || canEditFeeling) && (
+                                <div className="card p-4 bg-surface-muted/30">
+                                    {canEditFeeling ? (
+                                        <WorkoutFeelingEditor
+                                            logId={session.id}
+                                            initialFeeling={session.feeling ?? null}
+                                            canEdit
+                                            align="left"
+                                            onSaved={(feeling) => setSession((prev) => prev ? { ...prev, feeling } : prev)}
+                                        />
+                                    ) : session.feeling ? (
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Feeling</span>
+                                            <span className="text-xl leading-none">{workoutFeelingEmoji(session.feeling)}</span>
+                                        </div>
+                                    ) : null}
+                                </div>
+                            )}
 
                             {session.notes && (
                                 <div className="card p-4 bg-surface-muted/30">
@@ -334,6 +357,32 @@ export function WorkoutSessionModal({
                         </>
                     ) : null}
                 </div>
+
+                {showSessionNav && session && !loading && !error && (
+                    <div className="border-t border-surface-border bg-surface-card p-4 flex items-center justify-between gap-3 shrink-0">
+                        <button
+                            type="button"
+                            disabled={!hasOlder}
+                            onClick={() => onNavigate?.(sessionIds![currentIndex + 1])}
+                            className="btn-secondary btn-sm flex items-center gap-1.5 disabled:opacity-40"
+                        >
+                            <ChevronLeft className="w-4 h-4" />
+                            Previous
+                        </button>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle text-center">
+                            {currentIndex + 1} of {sessionIds!.length}
+                        </span>
+                        <button
+                            type="button"
+                            disabled={!hasNewer}
+                            onClick={() => onNavigate?.(sessionIds![currentIndex - 1])}
+                            className="btn-secondary btn-sm flex items-center gap-1.5 disabled:opacity-40"
+                        >
+                            Next
+                            <ChevronRight className="w-4 h-4" />
+                        </button>
+                    </div>
+                )}
             </div>
         </div>
     );

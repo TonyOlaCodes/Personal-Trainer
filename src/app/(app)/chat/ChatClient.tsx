@@ -3,8 +3,9 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
     Send, Image as ImageIcon, Globe, MessageSquare, Star, X, Pencil, Trash2,
-    Check, MoreVertical, Reply, Pin, SmilePlus, CheckCheck, ChevronDown, AtSign
+    Check, MoreVertical, Reply, Pin, SmilePlus, CheckCheck, ChevronDown, AtSign, Settings
 } from "lucide-react";
+import Link from "next/link";
 import { getInitials, formatRelative, cn, roleLabels } from "@/lib/utils";
 import { sortConversationsByActivity } from "@/lib/chatActivity";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
@@ -475,12 +476,18 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
 
     const deleteMessage = async (id: string) => {
         setMenuOpenId(null);
+        if (!confirm("Delete this message?")) return;
         const res = await fetch("/api/messages", {
             method: "DELETE",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ id }),
         });
-        if (res.ok) setMessages(prev => prev.filter(m => m.id !== id));
+        if (res.ok) {
+            setMessages(prev => prev.filter(m => m.id !== id));
+        } else {
+            const data = await res.json().catch(() => ({}));
+            alert(data.error ?? "Could not delete message");
+        }
     };
 
     const toggleReaction = async (messageId: string, emoji: string) => {
@@ -528,6 +535,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
     /* ─── Derived ────────────────────────────────────── */
     const pinnedMessages = messages.filter(m => m.isPinned);
     const canPin = ["COACH", "SUPER_ADMIN"].includes(currentUserRole) || tab === "direct";
+    const isAdmin = currentUserRole === "SUPER_ADMIN";
 
     // Group reactions for display
     const groupReactions = (reactions: ReactionData[]) => {
@@ -564,8 +572,8 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
     const renderSidebar = () => (
         <div className="w-full sm:w-72 border-r border-surface-border flex flex-col bg-surface-card h-full min-h-0">
             {/* Tab Switcher */}
-            <div className="p-3 border-b border-surface-border">
-                <div className="flex gap-1 bg-surface-muted p-1 rounded-xl">
+            <div className="p-3 border-b border-surface-border flex items-center gap-2">
+                <div className="flex gap-1 bg-surface-muted p-1 rounded-xl flex-1">
                     <button
                         onClick={() => handleTabChange("direct")}
                         className={cn("flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[11px] font-bold transition-all",
@@ -581,6 +589,9 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                         <Globe className="w-3 h-3" /> Global
                     </button>
                 </div>
+                <Link href="/settings" className="btn-icon shrink-0 sm:hidden" aria-label="Settings">
+                    <Settings className="w-4 h-4" />
+                </Link>
             </div>
 
             {/* Conversation List */}
@@ -607,7 +618,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                             >
                                 <div className="w-10 h-10 rounded-full bg-gradient-brand flex items-center justify-center text-xs font-bold text-white flex-shrink-0 overflow-hidden">
                                     {conv.avatarUrl
-                                        ? <img src={conv.avatarUrl} alt={conv.name} className="w-full h-full object-cover" />
+                                        ? <img src={resolveUploadUrl(conv.avatarUrl)} alt={conv.name} className="w-full h-full object-cover" />
                                         : getInitials(conv.name)}
                                 </div>
                                 <div className="min-w-0 flex-1">
@@ -694,7 +705,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                             <>
                                 <div className="w-8 h-8 rounded-full bg-gradient-brand flex items-center justify-center text-xs font-bold text-white overflow-hidden">
                                     {selectedConv.avatarUrl
-                                        ? <img src={selectedConv.avatarUrl} alt={selectedConv.name} className="w-full h-full object-cover" />
+                                        ? <img src={resolveUploadUrl(selectedConv.avatarUrl)} alt={selectedConv.name} className="w-full h-full object-cover" />
                                         : getInitials(selectedConv.name)}
                                 </div>
                                 <div>
@@ -707,6 +718,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                         )}
                     </div>
 
+                    <div className="flex items-center gap-1">
                     {pinnedMessages.length > 0 && (
                         <button
                             onClick={(e) => { e.stopPropagation(); setShowPinned(!showPinned); }}
@@ -718,6 +730,10 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                             </span>
                         </button>
                     )}
+                    <Link href="/settings" className="btn-icon sm:hidden" aria-label="Settings">
+                        <Settings className="w-4 h-4" />
+                    </Link>
+                    </div>
                 </div>
 
                 {/* ── Pinned Messages Banner ── */}
@@ -773,7 +789,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                                         {!isMine && (
                                             <div className="w-7 h-7 rounded-full bg-gradient-brand flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0 overflow-hidden mb-5">
                                                 {msg.sender.avatarUrl
-                                                    ? <img src={msg.sender.avatarUrl} alt={msg.sender.name ?? ""} className="w-full h-full object-cover" />
+                                                    ? <img src={resolveUploadUrl(msg.sender.avatarUrl)} alt={msg.sender.name ?? ""} className="w-full h-full object-cover" />
                                                     : getInitials(msg.sender.name)}
                                             </div>
                                         )}
@@ -919,7 +935,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                                                 </div>
 
                                                 {/* More Menu */}
-                                                {(isMine || canPin || (currentUserRole === "SUPER_ADMIN" && msg.isGeneral)) && (
+                                                {(isMine || canPin || isAdmin) && (
                                                     <div className="relative">
                                                         <button
                                                             onClick={e => { e.stopPropagation(); setMenuOpenId(menuOpenId === msg.id ? null : msg.id); }}
@@ -949,23 +965,17 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                                                                         <Pencil className="w-3.5 h-3.5 text-brand-400" /> Edit
                                                                     </button>
                                                                 )}
-                                                                {(() => {
-                                                                    const isOwner = msg.sender.id === currentUserId;
-                                                                    let canModerate = false;
-                                                                    if (currentUserRole === "SUPER_ADMIN" && msg.isGeneral) canModerate = true;
-
-                                                                    if (isOwner || canModerate) {
-                                                                        return (
-                                                                            <button
-                                                                                onClick={() => deleteMessage(msg.id)}
-                                                                                className={cn("w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-danger hover:bg-danger/5 transition-colors border-t border-surface-border", !isOwner && "border-t-0")}
-                                                                            >
-                                                                                <Trash2 className="w-3.5 h-3.5" /> Delete
-                                                                            </button>
-                                                                        );
-                                                                    }
-                                                                    return null;
-                                                                })()}
+                                                                {(isMine || isAdmin) && (
+                                                                    <button
+                                                                        onClick={() => deleteMessage(msg.id)}
+                                                                        className={cn(
+                                                                            "w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-danger hover:bg-danger/5 transition-colors",
+                                                                            (canPin || (isMine && canEdit)) && "border-t border-surface-border"
+                                                                        )}
+                                                                    >
+                                                                        <Trash2 className="w-3.5 h-3.5" /> Delete
+                                                                    </button>
+                                                                )}
                                                             </div>
                                                         )}
                                                     </div>

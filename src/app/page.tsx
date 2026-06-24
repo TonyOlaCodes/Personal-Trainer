@@ -146,8 +146,8 @@ export default function LandingPage() {
           </div>
 
           <h1 className="text-5xl sm:text-7xl font-extrabold tracking-tight mb-6 leading-[1.05]">
-            Train smarter.<br />
-            <span className="text-gradient">Progress faster.</span>
+            Train with purpose.<br />
+            <span className="text-gradient">Track every session.</span>
           </h1>
 
           <p className="text-lg sm:text-xl text-fg-muted max-w-2xl mx-auto mb-10 text-balance">

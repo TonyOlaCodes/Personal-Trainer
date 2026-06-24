@@ -34,6 +34,8 @@ export default async function SettingsPage() {
                     notifyOnPlanUpdate: true,
                     notifyOnCheckInReview: true,
                     notifyOnWorkoutFeedback: true,
+                    notifyOnMissedCheckIn: true,
+                    notifyOnMissedWorkout: true,
                 },
             });
         } catch (dbErr) {

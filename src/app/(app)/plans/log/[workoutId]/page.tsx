@@ -5,6 +5,7 @@ import { prisma, ensureDbSchema } from "@/lib/prisma";
 import { WorkoutLogClient } from "./WorkoutLogClient";
 import { getExerciseMediaByNames } from "@/lib/exerciseMedia";
 import { getLocalDayBounds, parseLogDate, toDateKey } from "@/lib/utils";
+import { withResolvedLogSetMedia } from "@/lib/uploadUrls";
 
 export const metadata = { title: "Logging session" };
 
@@ -33,14 +34,14 @@ export default async function WorkoutLogPage({
     searchParams,
 }: {
     params: Promise<{ workoutId: string }>;
-    searchParams: Promise<{ date?: string; start?: string }>;
+    searchParams: Promise<{ date?: string }>;
 }) {
     await ensureDbSchema();
     const { userId } = await auth();
     if (!userId) redirect("/sign-in");
 
     const { workoutId } = await params;
-    const { date, start } = await searchParams;
+    const { date } = await searchParams;
 
     const user = await prisma.user.findUnique({
         where: { clerkId: userId },
@@ -68,53 +69,45 @@ export default async function WorkoutLogPage({
         include: activeLogInclude,
     });
 
-    if (!activeLog && start === "1") {
-        activeLog = await prisma.workoutLog.create({
-            data: {
-                userId: user.id,
-                workoutId: workout.id,
-                status: "IN_PROGRESS",
-                loggedAt: parseLogDate(dateKey),
-                sets: {
-                    create: workout.exercises.flatMap((ex) =>
-                        Array.from({ length: ex.sets }, (_, i) => ({
-                            exerciseId: ex.id,
-                            setNumber: i + 1,
-                            reps: Number.parseInt(ex.reps, 10) || 10,
-                            isCompleted: false,
-                            isWarmup: false,
-                        }))
-                    ),
-                },
-            },
-            include: activeLogInclude,
-        });
-    }
-
-    const lastLog = await prisma.workoutLog.findFirst({
+    const recentCompletedSets = await prisma.logSet.findMany({
         where: {
-            userId: user.id,
-            workoutId: workout.id,
-            status: "COMPLETED",
-        },
-        orderBy: { loggedAt: "desc" },
-        include: {
-            sets: {
-                orderBy: { setNumber: "asc" },
-                include: {
-                    exercise: { select: { name: true } },
-                },
+            isCompleted: true,
+            workoutLog: {
+                userId: user.id,
+                status: "COMPLETED",
             },
         },
+        include: {
+            exercise: { select: { name: true } },
+            workoutLog: { select: { loggedAt: true } },
+        },
+        orderBy: { workoutLog: { loggedAt: "desc" } },
+        take: 1000,
     });
 
-    const lastWorkoutLogSets = lastLog
-        ? lastLog.sets.map((s) => ({
-              exerciseName: s.exercise?.name || "",
-              setNumber: s.setNumber,
-              weightKg: s.weightKg,
-          }))
-        : [];
+    const seenSetKeys = new Set<string>();
+    const lastWorkoutLogSets: Array<{
+        exerciseName: string;
+        setNumber: number;
+        weightKg: number | null;
+        reps: number | null;
+        rpe: number | null;
+    }> = [];
+
+    for (const set of recentCompletedSets) {
+        const exerciseName = set.exercise?.name;
+        if (!exerciseName) continue;
+        const key = `${exerciseName.toLowerCase()}::${set.setNumber}`;
+        if (seenSetKeys.has(key)) continue;
+        seenSetKeys.add(key);
+        lastWorkoutLogSets.push({
+            exerciseName,
+            setNumber: set.setNumber,
+            weightKg: set.weightKg,
+            reps: set.reps,
+            rpe: set.rpe,
+        });
+    }
 
     const mediaByName = await getExerciseMediaByNames(workout.exercises.map((exercise) => exercise.name));
     const exerciseMedia = Object.fromEntries(mediaByName.entries());
@@ -124,7 +117,7 @@ export default async function WorkoutLogPage({
               id: activeLog.id,
               loggedAt: activeLog.loggedAt.toISOString(),
               duration: activeLog.duration,
-              sets: activeLog.sets.map((set) => ({
+              sets: activeLog.sets.map((set) => withResolvedLogSetMedia({
                   exerciseId: set.exerciseId,
                   setNumber: set.setNumber,
                   reps: set.reps,

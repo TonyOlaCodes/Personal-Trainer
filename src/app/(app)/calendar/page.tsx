@@ -66,6 +66,12 @@ export default async function CalendarPage() {
     const activePlan = userPlan?.plan ?? null;
     const logs = user.workoutLogs;
 
+    const inProgressLogs = await prisma.workoutLog.findMany({
+        where: { userId: user.id, status: "IN_PROGRESS" },
+        include: { workout: { select: { name: true, id: true } } },
+        orderBy: { updatedAt: "desc" },
+    });
+
     return (
         <>
             <TopBar title="Calendar" subtitle="Your training schedule" />
@@ -102,6 +108,12 @@ export default async function CalendarPage() {
                             weightKg: s.weightKg,
                             rpe: (s as any).rpe
                         }))
+                    }))}
+                    inProgressSessions={inProgressLogs.map((l) => ({
+                        id: l.id,
+                        date: toDateKey(l.loggedAt),
+                        workoutId: l.workoutId,
+                        workoutName: l.workout.name,
                     }))}
                 />
             </div>

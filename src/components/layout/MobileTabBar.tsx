@@ -10,7 +10,6 @@ import {
     MessageSquare,
     Users,
     ClipboardList,
-    Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -30,7 +29,6 @@ const mobileNavItems: MobileNavItem[] = [
     { href: "/checkins", label: "Check-ins", icon: ClipboardList },
     { href: "/progress", label: "Progress", icon: BarChart3, hideRoles: ["COACH", "SUPER_ADMIN"] },
     { href: "/chat", label: "Chat", icon: MessageSquare },
-    { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 interface MobileTabBarProps {

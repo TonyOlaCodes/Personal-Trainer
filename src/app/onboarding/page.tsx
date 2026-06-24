@@ -6,7 +6,7 @@ import { getUserDeactivationStatusByClerkId } from "@/lib/userDeactivation";
 import { OnboardingPage as OnboardingClient } from "./OnboardingClient";
 import { defaultHomeForRole } from "@/lib/roles";
 
-export const metadata = { title: "Onboarding | FitCoach Pro" };
+export const metadata = { title: "Onboarding" };
 
 export default async function OnboardingServerPage() {
     await ensureAppSchema();

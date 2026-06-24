@@ -10,6 +10,7 @@ import { useClerk } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { cn, getInitials } from "@/lib/utils";
+import { resolveUploadUrl, uploadMediaFile } from "@/lib/compressImage";
 import { RoleSwitcher } from "@/components/shared/RoleSwitcher";
 
 interface Props {
@@ -36,6 +37,8 @@ interface Props {
         notifyOnPlanUpdate?: boolean;
         notifyOnCheckInReview?: boolean;
         notifyOnWorkoutFeedback?: boolean;
+        notifyOnMissedCheckIn?: boolean;
+        notifyOnMissedWorkout?: boolean;
     };
     realRole: "FREE" | "PREMIUM" | "COACH" | "SUPER_ADMIN";
     isClientMode: boolean;
@@ -93,6 +96,8 @@ export function SettingsClient({ user, realRole, isClientMode }: Props) {
     const [notifyOnPlanUpdate, setNotifyOnPlanUpdate] = useState(user.notifyOnPlanUpdate ?? true);
     const [notifyOnCheckInReview, setNotifyOnCheckInReview] = useState(user.notifyOnCheckInReview ?? true);
     const [notifyOnWorkoutFeedback, setNotifyOnWorkoutFeedback] = useState(user.notifyOnWorkoutFeedback ?? true);
+    const [notifyOnMissedCheckIn, setNotifyOnMissedCheckIn] = useState(user.notifyOnMissedCheckIn ?? true);
+    const [notifyOnMissedWorkout, setNotifyOnMissedWorkout] = useState(user.notifyOnMissedWorkout ?? true);
     const [notifSaving, setNotifSaving] = useState(false);
     const [notifSaved, setNotifSaved] = useState(false);
 
@@ -118,14 +123,14 @@ export function SettingsClient({ user, realRole, isClientMode }: Props) {
         const file = e.target.files?.[0];
         if (!file || uploading) return;
         setUploading(true);
-        const fd = new FormData();
-        fd.append("file", file);
         try {
-            const res = await fetch("/api/upload", { method: "POST", body: fd });
-            const data = await res.json();
-            if (res.ok) setAvatarUrl(data.url);
+            const url = await uploadMediaFile(file);
+            setAvatarUrl(url);
+        } catch (error) {
+            alert(error instanceof Error ? error.message : "Upload failed");
         } finally {
             setUploading(false);
+            if (fileRef.current) fileRef.current.value = "";
         }
     };
 
@@ -194,6 +199,8 @@ export function SettingsClient({ user, realRole, isClientMode }: Props) {
                 payload.notifyOnWorkout = notifyOnWorkout;
                 payload.notifyOnCheckIn = notifyOnCheckIn;
                 payload.notifyOnMetricUpdate = notifyOnMetricUpdate;
+                payload.notifyOnMissedCheckIn = notifyOnMissedCheckIn;
+                payload.notifyOnMissedWorkout = notifyOnMissedWorkout;
             }
             if (showClientNotifications) {
                 payload.notifyOnCoachMessage = notifyOnCoachMessage;
@@ -292,7 +299,7 @@ export function SettingsClient({ user, realRole, isClientMode }: Props) {
                             <div className="relative group">
                                 <div className="w-24 h-24 rounded-3xl bg-surface-muted overflow-hidden border-2 border-surface-border shadow-glow-sm flex items-center justify-center">
                                     {avatarUrl ? (
-                                        <img src={avatarUrl} alt="Profile" className="w-full h-full object-cover" />
+                                        <img src={resolveUploadUrl(avatarUrl)} alt="Profile" className="w-full h-full object-cover" />
                                     ) : (
                                         <div className="w-full h-full bg-gradient-brand flex items-center justify-center text-2xl font-black text-white">
                                             {getInitials(name || user.email)}
@@ -608,6 +615,18 @@ export function SettingsClient({ user, realRole, isClientMode }: Props) {
                                     description="When a client records their weight on the dashboard."
                                     checked={notifyOnMetricUpdate}
                                     onChange={setNotifyOnMetricUpdate}
+                                />
+                                <NotificationToggle
+                                    label="Client misses a scheduled check-in"
+                                    description="End-of-day alert when a client has not submitted their due check-in."
+                                    checked={notifyOnMissedCheckIn}
+                                    onChange={setNotifyOnMissedCheckIn}
+                                />
+                                <NotificationToggle
+                                    label="Client misses a scheduled workout"
+                                    description="End-of-day alert when a client did not complete today's planned session."
+                                    checked={notifyOnMissedWorkout}
+                                    onChange={setNotifyOnMissedWorkout}
                                 />
                             </div>
                         )}

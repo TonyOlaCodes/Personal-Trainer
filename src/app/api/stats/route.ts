@@ -40,7 +40,7 @@ export async function GET() {
     
     // Volume Aggregations
     const dailyVolumeMap: Record<string, number> = {};
-    const weeklyVolumeMap: Record<string, number> = {};
+    const weeklyVolumeMap: Record<string, { label: string; volume: number }> = {};
     const monthlyVolumeMap: Record<string, number> = {};
     const yearlyVolumeMap: Record<string, number> = {};
 
@@ -68,6 +68,7 @@ export async function GET() {
     logs.forEach(log => {
         const dateStr = format(log.loggedAt, "MMM dd");
         const dayKey = format(log.loggedAt, "yyyy-MM-dd");
+        const weekStartKey = format(startOfWeek(log.loggedAt, { weekStartsOn: 1 }), "yyyy-MM-dd");
         const weekKey = format(startOfWeek(log.loggedAt, { weekStartsOn: 1 }), "MMM dd");
         const monthKey = format(startOfMonth(log.loggedAt), "MMM yyyy");
         const yearKey = format(startOfYear(log.loggedAt), "yyyy");
@@ -98,7 +99,10 @@ export async function GET() {
             muscleVolume[mg] = (muscleVolume[mg] || 0) + sVol;
             
             dailyVolumeMap[dayKey] = (dailyVolumeMap[dayKey] || 0) + sVol;
-            weeklyVolumeMap[weekKey] = (weeklyVolumeMap[weekKey] || 0) + sVol;
+            if (!weeklyVolumeMap[weekStartKey]) {
+                weeklyVolumeMap[weekStartKey] = { label: weekKey, volume: 0 };
+            }
+            weeklyVolumeMap[weekStartKey].volume += sVol;
             monthlyVolumeMap[monthKey] = (monthlyVolumeMap[monthKey] || 0) + sVol;
             yearlyVolumeMap[yearKey] = (yearlyVolumeMap[yearKey] || 0) + sVol;
 
@@ -134,7 +138,7 @@ export async function GET() {
                 }
                 
                 const cur1RMVal = sbdByDate[dateStr][fieldKey1RM as "squat1RM"|"bench1RM"|"deadlift1RM"] ?? 0;
-                const set1RM = calculateOneRM(sWeight, sReps);
+                const set1RM = calculateOneRM(sWeight, sReps, set.rpe);
                 if (set1RM > cur1RMVal) {
                     sbdByDate[dateStr][fieldKey1RM as "squat1RM"|"bench1RM"|"deadlift1RM"] = set1RM;
                 }
@@ -154,7 +158,7 @@ export async function GET() {
 
             if (!exerciseHistory[exName]) exerciseHistory[exName] = [];
             const existingSession = exerciseHistory[exName].find((h: any) => h.date === dateStr);
-            const currentOneRM = calculateOneRM(sWeight, sReps);
+            const currentOneRM = calculateOneRM(sWeight, sReps, set.rpe);
 
             if (existingSession) {
                 if (sWeight > existingSession.weight) { 
@@ -326,13 +330,18 @@ export async function GET() {
         .sort((a, b) => b.sessions - a.sessions);
 
     const topExercises = exerciseFrequency.slice(0, 6).map(e => e.name);
-    const volumeChange = totalVolumeLastWeek > 0 ? Math.round(((totalVolumeThisWeek - totalVolumeLastWeek) / totalVolumeLastWeek) * 100) : 0;
+    const volumeChangeKg = Math.round(totalVolumeThisWeek - totalVolumeLastWeek);
+    const volumeChange = totalVolumeLastWeek > 0
+        ? Math.round((volumeChangeKg / totalVolumeLastWeek) * 100)
+        : null;
 
     const weeklySummary = {
         workouts: workoutsThisWeek,
         target: user.trainingDaysPerWeek || 4,
         totalVolume: Math.round(totalVolumeThisWeek),
+        lastWeekVolume: Math.round(totalVolumeLastWeek),
         volumeChange,
+        volumeChangeKg,
         weightChange: Math.round(weightChangeWeek * 10) / 10,
         currentWeight,
         prsThisWeek: prList.filter(pr => pr.improvement > 0).length
@@ -365,7 +374,14 @@ export async function GET() {
 
     const volumes = {
         daily: Object.entries(dailyVolumeMap).map(([label, volume]) => ({ label, volume: Math.round(volume as number) })).slice(-30),
-        weekly: Object.entries(weeklyVolumeMap).map(([label, volume]) => ({ label, volume: Math.round(volume as number) })).slice(-12),
+        weekly: Object.entries(weeklyVolumeMap)
+            .map(([weekStart, entry]) => ({
+                label: entry.label,
+                weekStart,
+                volume: Math.round(entry.volume),
+            }))
+            .sort((a, b) => a.weekStart.localeCompare(b.weekStart))
+            .slice(-12),
         monthly: Object.entries(monthlyVolumeMap).map(([label, volume]) => ({ label, volume: Math.round(volume as number) })).slice(-12),
         yearly: Object.entries(yearlyVolumeMap).map(([label, volume]) => ({ label, volume: Math.round(volume as number) }))
     };

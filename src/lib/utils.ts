@@ -108,6 +108,13 @@ export function getDayName(date = new Date()) {
     return new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(date);
 }
 
+/** Milliseconds until the next local midnight */
+export function getMsUntilNextMidnight(from = new Date()) {
+    const next = new Date(from);
+    next.setHours(24, 0, 0, 0);
+    return next.getTime() - from.getTime();
+}
+
 /** Pluralise helper */
 export function plural(count: number, word: string) {
     return count === 1 ? `${count} ${word}` : `${count} ${word}s`;
@@ -151,9 +158,4 @@ export const roleBadgeClass: Record<string, string> = {
     SUPER_ADMIN: "badge-warning",
 };
 
-/** Estimated one-rep max using the Epley formula: weight × (1 + reps / 30). */
-export function calculateOneRM(weight: number, reps: number): number {
-    if (weight <= 0 || reps <= 0) return 0;
-    if (reps === 1) return Math.round(weight);
-    return Math.round(weight * (1 + reps / 30));
-}
+export { calculateOneRM } from "@/lib/oneRepMax";

@@ -1,16 +1,17 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import {
     ChevronLeft, ChevronRight,
     Info, Clock,
     Layout, History,
     PlayCircle,
-    Zap, Hash
+    Zap, Hash, Flame
 } from "lucide-react";
 import Link from "next/link";
 import { ReturnLink } from "@/components/shared/ReturnLink";
 import { cn, toDateKey } from "@/lib/utils";
+import { useCurrentDate } from "@/hooks/useCurrentDate";
 
 /* ─────────────────────────── Types ─────────────────────────── */
 interface PlanExercise { name: string; sets: number; reps: string; }
@@ -34,10 +35,18 @@ interface LoggedDate {
     sets: LogSet[]; 
 }
 
+interface InProgressSession {
+    id: string;
+    date: string;
+    workoutId: string;
+    workoutName: string;
+}
+
 interface Props {
     activePlan: ActivePlan | null;
     planStartedAt: string | null;
     loggedDates: LoggedDate[];
+    inProgressSessions: InProgressSession[];
 }
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -46,12 +55,32 @@ const MONTHS = [
     "July", "August", "September", "October", "November", "December",
 ];
 
-export function CalendarClient({ activePlan, planStartedAt, loggedDates }: Props) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+export function CalendarClient({ activePlan, planStartedAt, loggedDates, inProgressSessions }: Props) {
+    const now = useCurrentDate();
+    const today = useMemo(() => {
+        const d = new Date(now);
+        d.setHours(0, 0, 0, 0);
+        return d;
+    }, [now]);
+    const todayKey = toDateKey(today);
+    const prevTodayKeyRef = useRef(todayKey);
 
     const [view, setView] = useState({ year: today.getFullYear(), month: today.getMonth() });
-    const [selectedDateKey, setSelectedDateKey] = useState<string>(toDateKey(today));
+    const [selectedDateKey, setSelectedDateKey] = useState<string>(todayKey);
+
+    useEffect(() => {
+        const prevTodayKey = prevTodayKeyRef.current;
+        if (prevTodayKey === todayKey) return;
+        prevTodayKeyRef.current = todayKey;
+        setSelectedDateKey((current) => (current === prevTodayKey ? todayKey : current));
+        setView((current) => {
+            const [prevYear, prevMonth] = prevTodayKey.split("-").map(Number);
+            if (current.year === prevYear && current.month === prevMonth - 1) {
+                return { year: today.getFullYear(), month: today.getMonth() };
+            }
+            return current;
+        });
+    }, [todayKey, today]);
 
     /* ─── Data Mappers ─── */
     const logMap = useMemo(() => {
@@ -62,6 +91,15 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates }: Props
         });
         return map;
     }, [loggedDates]);
+
+    const inProgressByDate = useMemo(() => {
+        const map: Record<string, InProgressSession[]> = {};
+        inProgressSessions.forEach((session) => {
+            if (!map[session.date]) map[session.date] = [];
+            map[session.date].push(session);
+        });
+        return map;
+    }, [inProgressSessions]);
 
     const getPlannedWorkoutForDate = (date: Date): PlanWorkout | null => {
         if (!activePlan || !planStartedAt) return null;
@@ -112,6 +150,12 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates }: Props
     }, [selectedDateKey]);
     const selectedLogs = logMap[selectedDateKey] ?? [];
     const selectedPlanned = getPlannedWorkoutForDate(selectedDate);
+    const resumeSession = selectedPlanned
+        ? inProgressByDate[selectedDateKey]?.find((s) => s.workoutId === selectedPlanned.id) ?? null
+        : null;
+    const workoutLogHref = selectedPlanned
+        ? `/plans/log/${selectedPlanned.id}?date=${selectedDateKey}`
+        : "";
     
     const calculateVolume = (sets: LogSet[]) => {
         return Math.round(sets.reduce((acc, s) => acc + ((s.reps || 0) * (s.weightKg || 1)), 0)); // weight 1 if bodyweight
@@ -185,14 +229,16 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates }: Props
                             const dateKey = dateObj ? toDateKey(dateObj) : "";
                             const dayLogs = day ? logMap[dateKey] : null;
                             const log = dayLogs?.[0] ?? null;
+                            const dayInProgress = !dayLogs?.length ? inProgressByDate[dateKey]?.[0] ?? null : null;
                             const planned = dateObj ? getPlannedWorkoutForDate(dateObj) : null;
                             const isPast = dateObj ? dateObj < today : false;
                             const isTodayDay = dateObj ? dateObj.getTime() === today.getTime() : false;
                             const selected = dateKey === selectedDateKey;
 
                             // Status logic
-                            let status: 'completed' | 'missed' | 'scheduled' | 'rest' = 'rest';
+                            let status: 'completed' | 'in-progress' | 'missed' | 'scheduled' | 'rest' = 'rest';
                             if (dayLogs && dayLogs.length > 0) status = 'completed';
+                            else if (dayInProgress) status = 'in-progress';
                             else if (planned) {
                                 if (isPast) status = 'missed';
                                 else status = 'scheduled';
@@ -224,6 +270,7 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates }: Props
                                                 <div className={cn(
                                                     "w-1.5 h-1.5 rounded-full mt-1.5 mr-1",
                                                     status === 'completed' ? "bg-success shadow-glow-success animate-pulse" :
+                                                    status === 'in-progress' ? "bg-warning shadow-glow-warning animate-pulse" :
                                                     status === 'missed' ? "bg-danger shadow-glow-danger" :
                                                     status === 'scheduled' ? "bg-brand-400 shadow-glow-brand" :
                                                     "bg-surface-border"
@@ -240,6 +287,15 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates }: Props
                                                         <span className="text-[9px] font-black uppercase tracking-tighter text-success truncate block">
                                                             {log.workoutName.replace(/workout/gi, '').trim()}
                                                             {dayLogs && dayLogs.length > 1 ? ` +${dayLogs.length - 1}` : ""}
+                                                        </span>
+                                                    </div>
+                                                ) : dayInProgress ? (
+                                                    <div className="space-y-1">
+                                                        <div className="h-1 rounded-full bg-warning/20 overflow-hidden">
+                                                            <div className="w-2/3 h-full bg-warning animate-pulse" />
+                                                        </div>
+                                                        <span className="text-[9px] font-black uppercase tracking-tighter text-warning truncate block">
+                                                            {dayInProgress.workoutName.replace(/workout/gi, '').trim()}
                                                         </span>
                                                     </div>
                                                 ) : planned ? (
@@ -282,7 +338,7 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates }: Props
                             </div>
                             <div>
                                 <h3 className="text-sm font-black text-fg uppercase tracking-widest leading-none mb-1">
-                                    {selectedDateKey === toDateKey(today) ? "Today" : "Review"}
+                                    {selectedDateKey === todayKey ? "Today" : "Review"}
                                 </h3>
                                 <p className="text-[10px] text-fg-muted font-bold opacity-60 uppercase tracking-tighter">
                                     {selectedDate.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
@@ -292,7 +348,9 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates }: Props
                         <div className="flex gap-1">
                             <div className={cn(
                                 "w-2.5 h-2.5 rounded-full",
-                                selectedLogs.length > 0 ? "bg-success" : (selectedPlanned ? (selectedDate < today ? "bg-danger" : "bg-brand-400") : "bg-surface-border")
+                                selectedLogs.length > 0 ? "bg-success" :
+                                resumeSession ? "bg-warning animate-pulse" :
+                                (selectedPlanned ? (selectedDate < today ? "bg-danger" : "bg-brand-400") : "bg-surface-border")
                             )} />
                         </div>
                     </div>
@@ -373,19 +431,38 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates }: Props
                             <div className="space-y-6">
                                 <div className={cn(
                                     "p-4 rounded-2xl border",
-                                    selectedDate < today ? "bg-danger-950/20 border-danger-500/20" : "bg-brand-950/20 border-brand-500/20 shadow-glow-brand-sm"
+                                    resumeSession
+                                        ? "bg-warning-950/20 border-warning-500/20 shadow-glow-warning-sm"
+                                        : selectedDate < today
+                                            ? "bg-danger-950/20 border-danger-500/20"
+                                            : "bg-brand-950/20 border-brand-500/20 shadow-glow-brand-sm"
                                 )}>
                                     <div className="flex items-start justify-between">
                                         <div>
                                             <p className={cn(
                                                 "text-[10px] font-black uppercase tracking-widest mb-1",
-                                                selectedDate < today ? "text-danger" : "text-brand-400"
+                                                resumeSession
+                                                    ? "text-warning"
+                                                    : selectedDate < today
+                                                        ? "text-danger"
+                                                        : "text-brand-400"
                                             )}>
-                                                {selectedDate < today ? "Missed Session" : "Upcoming Session"}
+                                                {resumeSession
+                                                    ? "Session In Progress"
+                                                    : selectedDate < today
+                                                        ? "Missed Session"
+                                                        : "Upcoming Session"}
                                             </p>
                                             <p className="text-lg font-black text-fg tracking-tight">{selectedPlanned.name}</p>
                                         </div>
-                                        <Layout className={cn("w-5 h-5", selectedDate < today ? "text-danger opacity-40" : "text-brand-400")} />
+                                        <Layout className={cn(
+                                            "w-5 h-5",
+                                            resumeSession
+                                                ? "text-warning opacity-60"
+                                                : selectedDate < today
+                                                    ? "text-danger opacity-40"
+                                                    : "text-brand-400"
+                                        )} />
                                     </div>
                                 </div>
 
@@ -418,19 +495,35 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates }: Props
 
                                 {selectedDate < today ? (
                                     <ReturnLink
-                                        href={`/plans/log/${selectedPlanned.id}?date=${selectedDateKey}&start=1`}
-                                        className="btn-secondary w-full h-12 text-xs font-black uppercase tracking-[0.15em] group hover:scale-[1.02] transition-all"
+                                        href={workoutLogHref}
+                                        className={cn(
+                                            "w-full h-12 text-xs font-black uppercase tracking-[0.15em] group hover:scale-[1.02] transition-all flex items-center justify-center",
+                                            resumeSession
+                                                ? "btn-primary shadow-glow-success bg-success border-success hover:bg-success-600"
+                                                : "btn-secondary"
+                                        )}
                                     >
-                                        <PlayCircle className="w-4 h-4 mr-2 group-hover:rotate-12 transition-transform" />
-                                        Log Past Session
+                                        {resumeSession ? (
+                                            <Flame className="w-4 h-4 mr-2 animate-pulse group-hover:scale-110 transition-transform" />
+                                        ) : (
+                                            <PlayCircle className="w-4 h-4 mr-2 group-hover:rotate-12 transition-transform" />
+                                        )}
+                                        {resumeSession ? "Resume Session" : "Start Session"}
                                     </ReturnLink>
                                 ) : (
                                     <ReturnLink
-                                        href={`/plans/log/${selectedPlanned.id}?date=${selectedDateKey}&start=1`}
-                                        className="btn-primary w-full h-14 text-xs font-black uppercase tracking-[0.2em] shadow-glow-brand group hover:scale-[1.02] transition-all"
+                                        href={workoutLogHref}
+                                        className={cn(
+                                            "btn-primary w-full h-14 text-xs font-black uppercase tracking-[0.2em] shadow-glow-brand group hover:scale-[1.02] transition-all flex items-center justify-center",
+                                            resumeSession && "shadow-glow-success bg-success border-success hover:bg-success-600"
+                                        )}
                                     >
-                                        <PlayCircle className="w-5 h-5 mr-3 group-hover:rotate-12 transition-transform" />
-                                        Start Session
+                                        {resumeSession ? (
+                                            <Flame className="w-5 h-5 mr-3 animate-pulse group-hover:scale-110 transition-transform" />
+                                        ) : (
+                                            <PlayCircle className="w-5 h-5 mr-3 group-hover:rotate-12 transition-transform" />
+                                        )}
+                                        {resumeSession ? "Resume Session" : "Start Session"}
                                     </ReturnLink>
                                 )}
                             </div>
@@ -458,6 +551,10 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates }: Props
                     <div className="flex items-center gap-1.5">
                         <div className="w-1.5 h-1.5 rounded-full bg-danger" />
                         <span className="text-[8px] font-black uppercase tracking-tighter text-fg-subtle">Missed</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                        <div className="w-1.5 h-1.5 rounded-full bg-warning" />
+                        <span className="text-[8px] font-black uppercase tracking-tighter text-fg-subtle">In Progress</span>
                     </div>
                     <div className="flex items-center gap-1.5">
                         <div className="w-1.5 h-1.5 rounded-full bg-brand-400" />

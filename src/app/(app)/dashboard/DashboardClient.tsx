@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Walkthrough } from "@/components/shared/Walkthrough";
@@ -10,6 +10,7 @@ import { Dumbbell, ChevronRight, Clock, Flame, Activity, Calendar, Ticket, Check
 import { formatDate, formatRelative, cn, toDateKey, parseLogDate } from "@/lib/utils";
 import { appendReturnTo } from "@/lib/navigation";
 import { useCurrentPath } from "@/hooks/useNavigation";
+import { useCurrentDate } from "@/hooks/useCurrentDate";
 import { isCardio } from "@/components/shared/ExerciseAutocomplete";
 
 interface Exercise {
@@ -90,6 +91,9 @@ interface Props {
 export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDay, todayCompleted, activeSession, recentLogs, avgDurationMin, currentCheckin, checkInDueState, bodyweight, dailyMetrics }: Props) {
     const router = useRouter();
     const currentPath = useCurrentPath();
+    const now = useCurrentDate();
+    const todayDate = toDateKey(now);
+    const prevTodayDateRef = useRef(todayDate);
     const [code, setCode] = useState("");
     const [codeStatus, setCodeStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
     const [codeMsg, setCodeMsg] = useState("");
@@ -120,6 +124,14 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
     useEffect(() => {
         setLocalActiveSession(activeSession);
     }, [activeSession]);
+
+    useEffect(() => {
+        const prevToday = prevTodayDateRef.current;
+        if (prevToday === todayDate) return;
+        prevTodayDateRef.current = todayDate;
+        setWeightDate((current) => (current === prevToday ? todayDate : current));
+        router.refresh();
+    }, [todayDate, router]);
 
     useEffect(() => {
         const urlParams = new URLSearchParams(window.location.search);
@@ -329,8 +341,6 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
         }
     }
 
-    const nowLocal = new Date();
-    const todayDate = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, "0")}-${String(nowLocal.getDate()).padStart(2, "0")}`;
     const isWeightDateToday = weightDate === todayDate;
 
     const bodyweightStatus = () => {
@@ -367,7 +377,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
     };
 
     const greeting = () => {
-        const h = new Date().getHours();
+        const h = now.getHours();
         if (h < 12) return "Good morning";
         if (h < 18) return "Good afternoon";
         return "Good evening";
@@ -447,7 +457,9 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                     setSessionsExplorerOpen(false);
                     setSessionsExplorerInitialId(null);
                 }}
-                title="All Sessions"
+                title="Workout History"
+                subtitle="All completed workouts"
+                fetchHistoryOnOpen
                 sessions={recentLogs.map((log) => ({
                     id: log.id,
                     workoutName: log.workoutName,
@@ -790,7 +802,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                         <h3 className="heading-3">Today&apos;s Workout</h3>
                         {(nextTrainingDay && (!todayWorkout || todayCompleted)) && (
                             <ReturnLink
-                                href={`/plans/log/${nextTrainingDay.id}?date=${encodeURIComponent(nextTrainingDay.date)}&start=1`}
+                                href={`/plans/log/${nextTrainingDay.id}?date=${encodeURIComponent(nextTrainingDay.date)}`}
                                 className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-brand-300 hover:text-brand-200 transition-colors"
                             >
                                 Next training day - {nextTrainingDay.name}, {nextTrainingDay.dayLabel} {formatDate(nextTrainingDay.date, { day: "numeric", month: "long" })}
@@ -873,18 +885,14 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                         {/* Centered Start / Resume CTA */}
                         <div className="mt-6 pt-4 border-t border-surface-border/50 flex justify-center">
                             <ReturnLink
-                                href={
-                                    localActiveSession?.workoutId === todayWorkout.id
-                                        ? `/plans/log/${todayWorkout.id}`
-                                        : `/plans/log/${todayWorkout.id}?start=1`
-                                }
+                                href={`/plans/log/${todayWorkout.id}`}
                                 className={cn(
                                     "btn-primary w-full max-w-md py-4 text-sm font-black uppercase tracking-widest flex items-center justify-center gap-2 rounded-2xl transition-all hover:scale-[1.02] active:scale-[0.98] shadow-glow-brand",
                                     localActiveSession?.workoutId === todayWorkout.id ? "shadow-glow-success bg-success border-success hover:bg-success-600" : ""
                                 )}
                             >
                                 <Flame className={cn("w-4.5 h-4.5", localActiveSession?.workoutId === todayWorkout.id && "animate-pulse")} />
-                                {localActiveSession?.workoutId === todayWorkout.id ? "Resume Workout Session" : "Start Workout"}
+                                {localActiveSession?.workoutId === todayWorkout.id ? "Resume Workout Session" : "Open Workout"}
                             </ReturnLink>
                         </div>
                     </div>
@@ -911,10 +919,10 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                 )}
             </div>
 
-            {/* Recent Activity */}
+            {/* Recent Workouts */}
             <div id="recent-sessions">
                 <div className="flex items-center justify-between mb-3">
-                    <h3 className="heading-3">Recent Sessions</h3>
+                    <h3 className="heading-3">Recent Workouts</h3>
                     {recentLogs.length > 0 && (
                         <button
                             type="button"
@@ -924,7 +932,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                             }}
                             className="btn-ghost btn-sm text-brand-400"
                         >
-                            View all
+                            View All
                             <ChevronRight className="w-3.5 h-3.5" />
                         </button>
                     )}

@@ -3,9 +3,11 @@ import { redirect, notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { formatDate, cn } from "@/lib/utils";
+import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { Suspense } from "react";
-import { Dumbbell, Clock, Zap, Video, FileText, Smile } from "lucide-react";
+import { Dumbbell, Clock, Zap, Video, FileText } from "lucide-react";
 import { SessionActions } from "./SessionActions";
+import { WorkoutFeelingEditor } from "@/components/shared/WorkoutFeelingEditor";
 import { BackButton } from "@/components/shared/BackButton";
 import { defaultHomeForRole } from "@/lib/roles";
 
@@ -102,13 +104,13 @@ export default async function LogViewPage({ params }: { params: Promise<{ logId:
                             <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Sets</p>
                             <p className="text-xl font-black text-fg italic">{log.sets.length}</p>
                         </div>
-                        <div className="space-y-1 text-right">
-                            <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Feeling</p>
-                            <div className="flex justify-end gap-0.5">
-                                {[1,2,3,4,5].map(i => (
-                                    <Smile key={i} className={cn("w-3.5 h-3.5", i <= (log.feeling || 0) ? "text-success fill-success/20" : "text-fg-subtle/20")} />
-                                ))}
-                            </div>
+                        <div className="space-y-1">
+                            <WorkoutFeelingEditor
+                                logId={log.id}
+                                initialFeeling={log.feeling}
+                                canEdit={isOwner && log.status === "COMPLETED"}
+                                align="right"
+                            />
                         </div>
                     </div>
                 </div>
@@ -167,7 +169,7 @@ export default async function LogViewPage({ params }: { params: Promise<{ logId:
                                             <div className="px-1">
                                                 <div className="card p-1 bg-surface-muted rounded-3xl overflow-hidden border-2 border-surface-border">
                                                     <video 
-                                                        src={set.videoUrl} 
+                                                        src={resolveUploadUrl(set.videoUrl)} 
                                                         controls 
                                                         className="w-full aspect-video rounded-2xl bg-black shadow-inner"
                                                     />

@@ -54,7 +54,7 @@ export async function uploadMediaFile(file: File): Promise<string> {
         throw new Error("Upload failed: no file URL returned");
     }
 
-    return resolveUploadUrl(data.url as string);
+    return data.url as string;
 }
 
 export { resolveUploadUrl } from "@/lib/uploadUrls";

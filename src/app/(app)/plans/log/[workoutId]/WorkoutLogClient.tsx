@@ -7,6 +7,8 @@ import {
     Trash2, Plus, InfoIcon, Award, Video, Play, Zap, X, ChevronLeft
 } from "lucide-react";
 import { cn, generateId, formatDate, isSameCalendarDay, parseLogDate, toDateKey, toLoggedAtIso } from "@/lib/utils";
+import { uploadMediaFile } from "@/lib/compressImage";
+import { calculateOneRM } from "@/lib/oneRepMax";
 import { appendReturnTo, getReturnToFromSearchParams } from "@/lib/navigation";
 import { isCardio, ExerciseAutocomplete } from "@/components/shared/ExerciseAutocomplete";
 
@@ -55,7 +57,7 @@ function buildInitialLogs(exercises: Exercise[]): Record<string, SetLog[]> {
     exercises.forEach((ex) => {
         initialLogs[ex.id] = Array.from({ length: ex.sets }, (_, i) => ({
             setNumber: i + 1,
-            reps: parseInt(ex.reps, 10) || 10,
+            reps: 0,
             weightKg: "",
             rpe: "",
             isCompleted: false,
@@ -132,7 +134,7 @@ function restoreSessionState(
         if (!restored[s.exerciseId]) restored[s.exerciseId] = [];
         restored[s.exerciseId].push({
             setNumber: s.setNumber,
-            reps: s.reps ?? 10,
+            reps: s.reps ?? 0,
             weightKg: s.weightKg?.toString() ?? "",
             rpe: s.rpe?.toString() ?? "",
             isCompleted: s.isCompleted ?? true,
@@ -159,7 +161,13 @@ interface Props {
     workout: Workout;
     exerciseMedia?: Record<string, ExercisePreviewMedia>;
     logDate?: string;
-    lastWorkoutLogSets?: Array<{ exerciseName: string; setNumber: number; weightKg: number | null }>;
+    lastWorkoutLogSets?: Array<{
+        exerciseName: string;
+        setNumber: number;
+        weightKg: number | null;
+        reps?: number | null;
+        rpe?: number | null;
+    }>;
     initialActiveLog?: InitialActiveLog | null;
 }
 
@@ -190,24 +198,6 @@ function isDirectVideo(url: string) {
     return /\.(mp4|webm|ogg)(\?.*)?$/i.test(url);
 }
 
-function getVideoThumbnail(url: string, thumbnailUrl?: string | null) {
-    if (thumbnailUrl) return thumbnailUrl;
-    try {
-        const parsed = new URL(url);
-        if (parsed.hostname.includes("youtube.com")) {
-            const id = parsed.searchParams.get("v");
-            if (id) return `https://img.youtube.com/vi/${id}/hqdefault.jpg`;
-        }
-        if (parsed.hostname.includes("youtu.be")) {
-            const id = parsed.pathname.replace("/", "");
-            if (id) return `https://img.youtube.com/vi/${id}/hqdefault.jpg`;
-        }
-    } catch {
-        return null;
-    }
-    return null;
-}
-
 export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWorkoutLogSets = [], initialActiveLog = null }: Props) {
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -219,11 +209,10 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
         if (initialActiveLog) {
             return restoreSessionState(initialActiveLog, workout.exercises, localStorageKey);
         }
-        const startTime = resolveWorkoutStartTime(localStorageKey);
         return {
             logs: buildInitialLogs(workout.exercises),
             exercises: workout.exercises,
-            startTime,
+            startTime: Date.now(),
             activeLogId: null as string | null,
         };
     });
@@ -247,14 +236,22 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
     const [searchQuery, setSearchQuery] = useState("");
     const [activeLogId, setActiveLogId] = useState<string | null>(initialSession.activeLogId);
     const [isDiscarding, setIsDiscarding] = useState(false);
+    const [isStarting, setIsStarting] = useState(false);
+    const [isCheckingSession, setIsCheckingSession] = useState(!initialActiveLog);
+    const sessionActive = Boolean(activeLogId);
     const [previewExercise, setPreviewExercise] = useState<{ name: string; media: ExercisePreviewMedia } | null>(null);
     const [modalTouchStart, setModalTouchStart] = useState<number | null>(null);
 
-    const getWeightPlaceholder = (exerciseName: string, setNumber: number, weightTargetKg?: number | null) => {
-        const lastSet = lastWorkoutLogSets.find(
-            (s) => s.exerciseName.toLowerCase() === exerciseName.toLowerCase() && s.setNumber === setNumber
+    const findLastCompletedSet = (exerciseName: string, setNumber: number) =>
+        lastWorkoutLogSets.find(
+            (s) =>
+                s.exerciseName.toLowerCase() === exerciseName.toLowerCase() &&
+                s.setNumber === setNumber
         );
-        if (lastSet && lastSet.weightKg !== null && lastSet.weightKg !== undefined) {
+
+    const getWeightPlaceholder = (exerciseName: string, setNumber: number, weightTargetKg?: number | null) => {
+        const lastSet = findLastCompletedSet(exerciseName, setNumber);
+        if (lastSet?.weightKg !== null && lastSet?.weightKg !== undefined) {
             return lastSet.weightKg.toString();
         }
         if (weightTargetKg !== undefined && weightTargetKg !== null) {
@@ -263,13 +260,33 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
         return "";
     };
 
-    // Fallback sync for direct links without server-prepared session
+    const getRepsPlaceholder = (exerciseName: string, setNumber: number, planReps?: string) => {
+        const lastSet = findLastCompletedSet(exerciseName, setNumber);
+        if (lastSet?.reps != null && lastSet.reps > 0) {
+            return String(lastSet.reps);
+        }
+        const planned = parseInt(planReps || "", 10);
+        if (planned > 0) return String(planned);
+        return "";
+    };
+
+    const getRpePlaceholder = (exerciseName: string, setNumber: number) => {
+        const lastSet = findLastCompletedSet(exerciseName, setNumber);
+        if (lastSet?.rpe != null) return String(lastSet.rpe);
+        return "";
+    };
+
+    // Restore an in-progress session if one exists — never auto-start a new one.
     useEffect(() => {
-        if (initialActiveLog || activeLogId) return;
+        if (initialActiveLog || activeLogId) {
+            setIsCheckingSession(false);
+            return;
+        }
 
         let cancelled = false;
 
         const syncSession = async () => {
+            setIsCheckingSession(true);
             try {
                 const params = new URLSearchParams({ active: "true", workoutId: workout.id, date: targetDateStr });
                 const res = await fetch(`/api/logs?${params}`);
@@ -284,43 +301,11 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                     setActiveExercises(restored.exercises);
                     setLogs(restored.logs);
                     setStartTime(restored.startTime);
-                    return;
-                }
-
-                const now = resolveWorkoutStartTime(localStorageKey);
-                setStartTime(now);
-
-                const initialLogs = buildInitialLogs(workout.exercises);
-                const flattenedSets = Object.entries(initialLogs).flatMap(([exId, sets]) => {
-                    const exInfo = workout.exercises.find((e) => e.id === exId);
-                    const exOrder = workout.exercises.findIndex((e) => e.id === exId);
-                    return sets.map((s) => ({
-                        exerciseId: exId,
-                        exerciseName: exInfo?.name || "Unknown",
-                        exerciseOrder: exOrder >= 0 ? exOrder : undefined,
-                        setNumber: s.setNumber,
-                        reps: s.reps,
-                        isWarmup: s.isWarmup,
-                        isCompleted: s.isCompleted,
-                    }));
-                });
-
-                const createRes = await fetch("/api/logs", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        workoutId: workout.id,
-                        status: "IN_PROGRESS",
-                        loggedAt: toLoggedAtIso(logDate ?? new Date(now)),
-                        sets: flattenedSets,
-                    }),
-                });
-                if (!cancelled && createRes.ok) {
-                    const saved = await createRes.json();
-                    if (saved.id) setActiveLogId(saved.id);
                 }
             } catch (e) {
                 console.error("Failed to sync workout session:", e);
+            } finally {
+                if (!cancelled) setIsCheckingSession(false);
             }
         };
 
@@ -351,9 +336,9 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
         }
     }, [isSubstituting, isAddingExercise]);
 
-    // Timer
+    // Timer — only runs once a session has been explicitly started
     useEffect(() => {
-        if (editStartedAt !== null) return;
+        if (!sessionActive || editStartedAt !== null) return;
 
         const updateElapsed = () => {
             setElapsed(Math.max(0, Math.floor((Date.now() - startTime) / 1000)));
@@ -374,7 +359,57 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
             clearInterval(timer);
             document.removeEventListener("visibilitychange", handleVisibilityChange);
         };
-    }, [startTime, editStartedAt]);
+    }, [startTime, editStartedAt, sessionActive]);
+
+    const handleStartWorkout = async () => {
+        if (sessionActive || isStarting || isCheckingSession) return;
+        setIsStarting(true);
+
+        try {
+            const now = Date.now();
+            persistStartTime(localStorageKey, now);
+            setStartTime(now);
+
+            const initialLogs = buildInitialLogs(workout.exercises);
+            const flattenedSets = Object.entries(initialLogs).flatMap(([exId, sets]) => {
+                const exInfo = workout.exercises.find((e) => e.id === exId);
+                const exOrder = workout.exercises.findIndex((e) => e.id === exId);
+                return sets.map((s) => ({
+                    exerciseId: exId,
+                    exerciseName: exInfo?.name || "Unknown",
+                    exerciseOrder: exOrder >= 0 ? exOrder : undefined,
+                    setNumber: s.setNumber,
+                    reps: s.reps,
+                    isWarmup: s.isWarmup,
+                    isCompleted: s.isCompleted,
+                }));
+            });
+
+            const createRes = await fetch("/api/logs", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    workoutId: workout.id,
+                    status: "IN_PROGRESS",
+                    loggedAt: toLoggedAtIso(logDate ?? new Date(now)),
+                    sets: flattenedSets,
+                }),
+            });
+
+            if (!createRes.ok) {
+                alert("Could not start workout session.");
+                return;
+            }
+
+            const saved = await createRes.json();
+            if (saved.id) setActiveLogId(saved.id);
+        } catch (e) {
+            console.error("Failed to start workout session:", e);
+            alert("Could not start workout session.");
+        } finally {
+            setIsStarting(false);
+        }
+    };
 
     const formatTime = (s: number) => {
         const mins = Math.floor(s / 60);
@@ -387,6 +422,8 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
         currentExercises?: Exercise[],
         startTimeOverride?: number
     ) => {
+        if (!activeLogId) return;
+
         const exList = currentExercises || activeExercises;
         const flattenedSets = Object.entries(currentLogs).flatMap(([exId, sets]) => {
             const exInfo = exList.find(e => e.id === exId);
@@ -438,15 +475,6 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                 finalUpdates.isCompleted = true;
             }
 
-            // Auto-fill logic: if completing set and weight is empty, fill with placeholder
-            if (updates.isCompleted === true && currentSet.weightKg === "") {
-                const exInfo = activeExercises.find(e => e.id === exId);
-                const placeholderWeight = getWeightPlaceholder(exInfo?.name || "", currentSet.setNumber, exInfo?.weightTargetKg);
-                if (placeholderWeight) {
-                    finalUpdates.weightKg = placeholderWeight;
-                }
-            }
-
             const next = {
                 ...prev,
                 [exId]: prev[exId].map((set, i) => i === setIdx ? { ...set, ...finalUpdates } : set),
@@ -462,21 +490,12 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
         if (!file) return;
         try {
             updateSet(exId, setIdx, { isUploading: true });
-            const formData = new FormData();
-            formData.append("file", file);
-            const res = await fetch("/api/upload", { method: "POST", body: formData });
-            
-            if (res.ok) {
-                const { url } = await res.json();
-                updateSet(exId, setIdx, { videoUrl: url, isUploading: false });
-            } else {
-                updateSet(exId, setIdx, { isUploading: false });
-                alert("Upload failed.");
-            }
-        } catch(e) {
+            const url = await uploadMediaFile(file);
+            updateSet(exId, setIdx, { videoUrl: url, isUploading: false });
+        } catch (e) {
             console.error(e);
             updateSet(exId, setIdx, { isUploading: false });
-            alert("Error uploading video.");
+            alert(e instanceof Error ? e.message : "Error uploading video.");
         }
     };
 
@@ -490,7 +509,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                     ...sets,
                     {
                         setNumber: sets.length + 1,
-                        reps: lastSet?.reps || 10,
+                        reps: 0,
                         weightKg: lastSet?.weightKg || "",
                         rpe: lastSet?.rpe || "",
                         isCompleted: false,
@@ -534,8 +553,8 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                 const count = originalEx?.sets || 3;
                 next[newExId] = Array.from({ length: count }, (_, i) => ({
                     setNumber: i + 1,
-                    reps: parseInt(originalEx?.reps || "10") || 10,
-                    weightKg: originalEx?.weightTargetKg?.toString() || "",
+                    reps: 0,
+                    weightKg: "",
                     rpe: "",
                     isCompleted: false,
                     isWarmup: false,
@@ -568,7 +587,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                 ...prev,
                 [newEx.id]: Array.from({ length: 3 }, (_, i) => ({
                     setNumber: i + 1,
-                    reps: 10,
+                    reps: 0,
                     weightKg: "",
                     rpe: "",
                     isCompleted: false,
@@ -670,9 +689,14 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
     };
 
     const handleDiscard = async () => {
+        if (!sessionActive) {
+            router.push(returnTo);
+            return;
+        }
+
         localStorage.removeItem(localStorageKey);
         if (!activeLogId) {
-            router.back();
+            router.push(returnTo);
             return;
         }
 
@@ -704,21 +728,36 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                 <button 
                     onClick={handleDiscard} 
                     disabled={isDiscarding}
-                    className="btn-icon text-danger/60 hover:text-danger hover:bg-danger/10"
-                    title="Discard Workout"
+                    className={cn(
+                        "btn-icon",
+                        sessionActive
+                            ? "text-danger/60 hover:text-danger hover:bg-danger/10"
+                            : "text-fg-muted hover:text-fg hover:bg-surface-muted"
+                    )}
+                    title={sessionActive ? "Discard Workout" : "Back"}
                 >
-                    <Trash2 className="w-5 h-5" />
+                    {sessionActive ? <Trash2 className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
                 </button>
                 <div className="text-center">
                     <h2 className="text-sm font-bold text-fg truncate max-w-[180px]">{workout.name}</h2>
-                    <div className="flex items-center justify-center gap-1 text-[10px] text-brand-400 font-semibold uppercase tracking-widest">
-                        <Timer className="w-3 h-3" />
-                        {formatTime(elapsed)}
-                    </div>
+                    {sessionActive ? (
+                        <div className="flex items-center justify-center gap-1 text-[10px] text-brand-400 font-semibold uppercase tracking-widest">
+                            <Timer className="w-3 h-3" />
+                            {formatTime(elapsed)}
+                        </div>
+                    ) : (
+                        <p className="text-[10px] text-fg-subtle font-semibold uppercase tracking-widest">
+                            {isCheckingSession ? "Loading..." : "Ready to start"}
+                        </p>
+                    )}
                 </div>
-                <button onClick={handleInitiateFinish} disabled={saving} className="btn-primary btn-sm px-4 shadow-glow-brand">
-                    Finish
-                </button>
+                {sessionActive ? (
+                    <button onClick={handleInitiateFinish} disabled={saving} className="btn-primary btn-sm px-4 shadow-glow-brand">
+                        Finish
+                    </button>
+                ) : (
+                    <div className="w-[72px]" />
+                )}
             </div>
 
             <div className="flex-1 p-4 pt-20 pb-24 overflow-y-auto no-scrollbar md:pl-[var(--sidebar-width) + 1rem]">
@@ -729,45 +768,69 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                             <p className="text-sm font-bold text-fg mt-0.5">{scheduledDayLabel}</p>
                         </div>
                     )}
+
+                    {!sessionActive ? (
+                        <>
+                            <div className="card p-5 space-y-4">
+                                <div>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">Workout preview</p>
+                                    <p className="text-sm text-fg-muted mt-1">
+                                        Review today&apos;s exercises, then start when you&apos;re ready.
+                                    </p>
+                                </div>
+                                <div className="space-y-2">
+                                    {workout.exercises.map((ex) => (
+                                        <div
+                                            key={ex.id}
+                                            className="flex items-center justify-between py-2.5 px-3 rounded-xl bg-surface-muted border border-surface-border"
+                                        >
+                                            <div>
+                                                <p className="text-sm font-medium text-fg">{ex.name}</p>
+                                                {ex.muscleGroup && (
+                                                    <p className="text-xs text-fg-subtle">{ex.muscleGroup}</p>
+                                                )}
+                                            </div>
+                                            <p className="text-sm font-semibold text-fg">
+                                                {isCardio(ex.name, ex.muscleGroup)
+                                                    ? `${ex.sets > 1 ? `${ex.sets} × ` : ""}${ex.reps} min`
+                                                    : `${ex.sets} × ${ex.reps}`}
+                                            </p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            <button
+                                onClick={handleStartWorkout}
+                                disabled={isStarting || isCheckingSession}
+                                className="btn-primary w-full h-14 text-sm font-black uppercase tracking-widest shadow-glow-brand flex items-center justify-center gap-2"
+                            >
+                                <Flame className="w-4.5 h-4.5" />
+                                {isStarting ? "Starting..." : "Start Workout"}
+                            </button>
+                        </>
+                    ) : (
+                    <>
                     {activeExercises.map((ex) => {
                         const media = exerciseMedia[ex.name];
                         const hasPreview = !!(media?.videoUrl || media?.instructions);
 
                         return (
-                        <div key={ex.id} id={`exercise-${ex.id}`} className="card overflow-hidden p-0 space-y-0 animate-slide-up">
-                            {media?.videoUrl && (
-                                <button
-                                    type="button"
-                                    onClick={() => setPreviewExercise({ name: ex.name, media })}
-                                    className="relative w-full aspect-[2.4/1] max-h-36 bg-black group"
-                                    title="Watch form video"
-                                >
-                                    {getVideoThumbnail(media.videoUrl, media.thumbnailUrl) ? (
-                                        // eslint-disable-next-line @next/next/no-img-element
-                                        <img
-                                            src={getVideoThumbnail(media.videoUrl, media.thumbnailUrl)!}
-                                            alt={`${ex.name} demo`}
-                                            className="absolute inset-0 w-full h-full object-cover opacity-80 group-hover:opacity-60 transition-opacity"
-                                        />
-                                    ) : (
-                                        <div className="absolute inset-0 bg-gradient-to-br from-brand-950 to-surface-muted" />
-                                    )}
-                                    <div className="absolute inset-0 flex items-center justify-center bg-black/25 group-hover:bg-black/40 transition-colors">
-                                        <span className="w-11 h-11 rounded-full bg-brand-500 text-white shadow-glow-brand flex items-center justify-center border border-white/20 group-hover:scale-105 transition-transform">
-                                            <Play className="w-5 h-5 fill-current ml-0.5" />
-                                        </span>
-                                    </div>
-                                    <span className="absolute bottom-2 right-2 text-[9px] font-black uppercase tracking-widest text-white/90 bg-black/50 px-2 py-0.5 rounded-md">
-                                        Form video
-                                    </span>
-                                </button>
-                            )}
-                            <div className="p-4 space-y-4">
+                        <div key={ex.id} id={`exercise-${ex.id}`} className="card p-4 space-y-4 animate-slide-up">
                             <div className="flex flex-col gap-2 w-full">
                                 <div className="flex items-start justify-between gap-2">
                                     <div className="flex items-center gap-2 flex-wrap">
                                         <h3 className="font-bold text-fg text-base leading-tight">{ex.name}</h3>
-                                        {hasPreview && !media?.videoUrl && (
+                                        {media?.videoUrl && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setPreviewExercise({ name: ex.name, media })}
+                                                className="w-6 h-6 rounded-full bg-brand-500/10 text-brand-400 border border-brand-500/20 flex items-center justify-center hover:bg-brand-500 hover:text-white transition-colors shrink-0"
+                                                title="Watch form video"
+                                            >
+                                                <Play className="w-3 h-3 fill-current ml-0.5" />
+                                            </button>
+                                        )}
+                                        {!media?.videoUrl && media?.instructions && (
                                             <button
                                                 type="button"
                                                 onClick={() => setPreviewExercise({ name: ex.name, media })}
@@ -814,9 +877,16 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                                     <div className="col-span-4 text-center">Actions</div>
                                 </div>
 
-                                {logs[ex.id]?.map((set, sIdx) => (
+                                {logs[ex.id]?.map((set, sIdx) => {
+                                    const weightNum = parseFloat(set.weightKg);
+                                    const estimatedOneRM =
+                                        !isCardio(ex.name, ex.muscleGroup) && weightNum > 0 && set.reps > 0
+                                            ? calculateOneRM(weightNum, set.reps, set.rpe || undefined)
+                                            : 0;
+
+                                    return (
+                                    <div key={sIdx} className="space-y-0.5">
                                     <div
-                                        key={sIdx}
                                         className={cn(
                                             "grid grid-cols-12 gap-2 p-2 rounded-xl border transition-all duration-200",
                                             set.isCompleted
@@ -855,7 +925,8 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                                             <input
                                                 type="number"
                                                 className="input-sm w-full bg-surface-elevated border-none focus:ring-1 focus:ring-brand-500 text-center text-sm font-semibold rounded-lg h-10 px-0"
-                                                value={set.reps}
+                                                value={set.reps > 0 ? set.reps : ""}
+                                                placeholder={getRepsPlaceholder(ex.name, set.setNumber, ex.reps) || "0"}
                                                 onChange={(e) => updateSet(ex.id, sIdx, { reps: parseInt(e.target.value) || 0 })}
                                             />
                                         </div>
@@ -865,7 +936,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                                                 type="number"
                                                 className="input-sm w-full bg-surface-elevated border-none focus:ring-1 focus:ring-brand-500 text-center text-sm font-semibold rounded-lg h-10 px-0"
                                                 value={set.rpe}
-                                                placeholder="RPE"
+                                                placeholder={getRpePlaceholder(ex.name, set.setNumber) || "RPE"}
                                                 onChange={(e) => updateSet(ex.id, sIdx, { rpe: e.target.value })}
                                             />
                                         </div>
@@ -905,7 +976,13 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                                             </button>
                                         </div>
                                     </div>
-                                ))}
+                                    {estimatedOneRM > 0 && (
+                                        <p className="text-[10px] font-bold text-warning/80 text-right pr-2 pb-0.5">
+                                            Est. 1RM: {estimatedOneRM} kg
+                                        </p>
+                                    )}
+                                    </div>
+                                )})}
                             </div>
 
                             <button
@@ -915,7 +992,6 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                                 <Plus className="w-3.5 h-3.5" />
                                 Add Set
                             </button>
-                            </div>
                         </div>
                     )})}
 
@@ -943,6 +1019,8 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                             Finish Workout
                         </button>
                     </div>
+                    </>
+                    )}
                 </div>
             </div>
 
@@ -1061,6 +1139,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                 </div>
             )}
 
+            {sessionActive && (
             <div className="fixed bottom-0 inset-x-0 p-4 bg-surface p-safe-area md:hidden border-t border-surface-border glass">
                 <button
                     onClick={handleInitiateFinish}
@@ -1069,6 +1148,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                     Finish Workout
                 </button>
             </div>
+            )}
 
             {showFinishModal && (
                 <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 animate-fade-in p-4">

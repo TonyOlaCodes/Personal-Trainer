@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { RecentSessionsListModal, PREVIEW_LIMIT, type RecentSessionItem } from "./RecentSessionsListModal";
 import { WorkoutSessionModal } from "./WorkoutSessionModal";
 
@@ -14,7 +15,21 @@ interface Props {
     initialSessionId?: string | null;
     canAddCoachNote?: boolean;
     canDelete?: boolean;
+    canEditFeeling?: boolean;
     onDeleted?: () => void;
+    /** When true, loads the user's complete workout history when the explorer opens. */
+    fetchHistoryOnOpen?: boolean;
+    /** Load history for another user (coach viewing a client). */
+    historyUserId?: string;
+}
+
+function mapHistoryResponse(items: Array<{ id: string; workoutName: string; loggedAt: string; setCount?: number }>): RecentSessionItem[] {
+    return items.map((item) => ({
+        id: item.id,
+        workoutName: item.workoutName,
+        date: item.loggedAt,
+        setCount: item.setCount,
+    }));
 }
 
 export function RecentSessionsExplorer({
@@ -27,12 +42,55 @@ export function RecentSessionsExplorer({
     initialSessionId = null,
     canAddCoachNote = false,
     canDelete = false,
+    canEditFeeling = false,
     onDeleted,
+    fetchHistoryOnOpen = false,
+    historyUserId,
 }: Props) {
     const [view, setView] = useState<"list" | "detail">("list");
     const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+    const [allSessions, setAllSessions] = useState<RecentSessionItem[]>(sessions);
+    const [loadingHistory, setLoadingHistory] = useState(false);
+    const [historyError, setHistoryError] = useState("");
 
-    const sessionIds = useMemo(() => sessions.map((session) => session.id), [sessions]);
+    useEffect(() => {
+        setAllSessions(sessions);
+    }, [sessions]);
+
+    useEffect(() => {
+        if (!open || !fetchHistoryOnOpen) return;
+
+        let cancelled = false;
+        async function loadHistory() {
+            setLoadingHistory(true);
+            setHistoryError("");
+            try {
+                const params = new URLSearchParams({ history: "true" });
+                if (historyUserId) params.set("userId", historyUserId);
+                const res = await fetch(`/api/logs?${params}`);
+                const data = await res.json();
+                if (cancelled) return;
+                if (!res.ok) {
+                    setHistoryError(data.error || "Could not load workout history");
+                    return;
+                }
+                if (Array.isArray(data)) {
+                    setAllSessions(mapHistoryResponse(data));
+                }
+            } catch {
+                if (!cancelled) setHistoryError("Could not load workout history");
+            } finally {
+                if (!cancelled) setLoadingHistory(false);
+            }
+        }
+
+        loadHistory();
+        return () => {
+            cancelled = true;
+        };
+    }, [open, fetchHistoryOnOpen, historyUserId]);
+
+    const sessionIds = useMemo(() => allSessions.map((session) => session.id), [allSessions]);
 
     useEffect(() => {
         if (!open) {
@@ -41,15 +99,17 @@ export function RecentSessionsExplorer({
             return;
         }
 
-        if (initialSessionId && sessions.some((session) => session.id === initialSessionId)) {
-            setActiveSessionId(initialSessionId);
-            setView("detail");
+        if (initialSessionId) {
+            if (allSessions.some((session) => session.id === initialSessionId)) {
+                setActiveSessionId(initialSessionId);
+                setView("detail");
+            }
             return;
         }
 
         setView("list");
         setActiveSessionId(null);
-    }, [open, initialSessionId, sessions]);
+    }, [open, initialSessionId, allSessions]);
 
     const handleClose = () => {
         setView("list");
@@ -72,6 +132,7 @@ export function RecentSessionsExplorer({
                 onClose={handleClose}
                 canAddCoachNote={canAddCoachNote}
                 canDelete={canDelete}
+                canEditFeeling={canEditFeeling || canDelete}
                 onDeleted={onDeleted}
             />
         );
@@ -82,9 +143,11 @@ export function RecentSessionsExplorer({
             open
             onClose={handleClose}
             title={title}
-            subtitle={subtitle}
-            sessions={sessions}
+            subtitle={subtitle ?? (loadingHistory ? "Loading your full workout history..." : undefined)}
+            sessions={allSessions}
             emptyMessage={emptyMessage}
+            loading={loadingHistory}
+            error={historyError}
             onSelect={(sessionId) => {
                 setActiveSessionId(sessionId);
                 setView("detail");

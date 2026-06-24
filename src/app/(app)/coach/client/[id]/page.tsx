@@ -101,7 +101,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                 const sWeight = set.weightKg || 0;
                 const sReps = set.reps || 0;
                 const sVol = sWeight * sReps;
-                const currentOneRM = calculateOneRM(sWeight, sReps);
+                const currentOneRM = calculateOneRM(sWeight, sReps, set.rpe);
                 
                 exerciseLastDone[exName] = Math.max(exerciseLastDone[exName] || 0, logTime);
                 

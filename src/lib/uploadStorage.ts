@@ -2,7 +2,7 @@ import { put } from "@vercel/blob";
 import { mkdir, writeFile } from "fs/promises";
 import path from "path";
 
-const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
+const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 
 const MIME_TO_EXT: Record<string, string> = {
     "image/jpeg": "jpg",
@@ -87,7 +87,7 @@ export async function storeUploadedFile(file: File): Promise<{ url: string; type
     }
 
     if (file.size > MAX_UPLOAD_BYTES) {
-        throw new Error("File is too large. Please use a photo under 4 MB.");
+        throw new Error("File is too large. Please use a file under 8 MB.");
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());

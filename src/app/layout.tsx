@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { dark } from "@clerk/themes";
+import { siteConfig, siteUrl } from "@/lib/site";
 import "./globals.css";
 
 const inter = Inter({
@@ -11,16 +12,37 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl()),
   title: {
-    template: "%s | FitCoach Pro",
-    default: "FitCoach Pro — Fitness Coaching Platform",
+    template: `%s | ${siteConfig.name}`,
+    default: `${siteConfig.name} — ${siteConfig.tagline}`,
   },
-  description:
-    "Workout plans, progress tracking, check-ins, and direct coach communication in one place.",
-  keywords: ["fitness", "coaching", "workout", "gym", "personal trainer"],
+  description: siteConfig.shortDescription,
+  keywords: [...siteConfig.keywords],
+  applicationName: siteConfig.name,
+  authors: [{ name: siteConfig.name }],
+  creator: siteConfig.name,
+  publisher: siteConfig.name,
+  category: "fitness",
   openGraph: {
-    siteName: "FitCoach Pro",
     type: "website",
+    locale: siteConfig.locale,
+    url: siteUrl(),
+    siteName: siteConfig.name,
+    title: `${siteConfig.name} — ${siteConfig.tagline}`,
+    description: siteConfig.description,
+  },
+  twitter: {
+    card: "summary",
+    title: `${siteConfig.name} — ${siteConfig.tagline}`,
+    description: siteConfig.shortDescription,
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+  alternates: {
+    canonical: siteUrl(),
   },
 };
 

@@ -93,6 +93,8 @@ model User {
   notifyOnPlanUpdate      Boolean @default(true)
   notifyOnCheckInReview   Boolean @default(true)
   notifyOnWorkoutFeedback Boolean @default(true)
+  notifyOnMissedCheckIn   Boolean @default(true)
+  notifyOnMissedWorkout   Boolean @default(true)
 
   // Onboarding Step 1
   goal              Goal?

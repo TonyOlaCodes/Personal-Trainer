@@ -11,9 +11,10 @@ import {
     Dumbbell, Activity, Search, ChevronRight,
     Scale, Zap, BarChart2,
     Flame, ArrowUpRight, ArrowDownRight, X, Utensils, Footprints, Moon,
-    Pin
+    Pin, Minus
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { workoutFeelingEmoji } from "@/lib/workoutFeeling";
 import { PremiumLockScreen } from "@/components/shared/PremiumLockScreen";
 import { ReturnLink } from "@/components/shared/ReturnLink";
 import Link from "next/link";
@@ -62,6 +63,68 @@ function getBodyweightPeriodChange(history: BodyweightHistoryPoint[], days: numb
     return { change, startWeight, endWeight, periodLabel };
 }
 
+type VolumeTrend = "up" | "down" | "same";
+
+function getVolumeWeekComparison(current: number, previous: number) {
+    const deltaKg = Math.round(current - previous);
+    if (deltaKg === 0) {
+        return {
+            trend: "same" as VolumeTrend,
+            deltaKg: 0,
+            pct: 0,
+            hasPriorWeek: previous > 0 || current > 0,
+        };
+    }
+
+    const pct = previous > 0 ? Math.round((deltaKg / previous) * 100) : null;
+    return {
+        trend: (deltaKg > 0 ? "up" : "down") as VolumeTrend,
+        deltaKg,
+        pct,
+        hasPriorWeek: previous > 0,
+    };
+}
+
+function VolumeComparisonBadge({
+    current,
+    previous,
+    className,
+}: {
+    current: number;
+    previous: number;
+    className?: string;
+}) {
+    const comparison = getVolumeWeekComparison(current, previous);
+    const sign = comparison.deltaKg > 0 ? "+" : "";
+
+    return (
+        <div
+            className={cn(
+                "inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-[10px] font-bold",
+                comparison.trend === "up" && "bg-success/10 text-success",
+                comparison.trend === "down" && "bg-danger/10 text-danger",
+                comparison.trend === "same" && "bg-surface-muted text-fg-muted",
+                className
+            )}
+        >
+            {comparison.trend === "up" && <ArrowUpRight className="w-3.5 h-3.5 shrink-0" />}
+            {comparison.trend === "down" && <ArrowDownRight className="w-3.5 h-3.5 shrink-0" />}
+            {comparison.trend === "same" && <Minus className="w-3.5 h-3.5 shrink-0" />}
+            <span>
+                {comparison.trend === "same" ? (
+                    "Same as last week"
+                ) : comparison.hasPriorWeek && comparison.pct !== null ? (
+                    <>
+                        {sign}{comparison.pct}% ({sign}{comparison.deltaKg.toLocaleString()} kg) vs last week
+                    </>
+                ) : (
+                    <>{sign}{comparison.deltaKg.toLocaleString()} kg vs last week</>
+                )}
+            </span>
+        </div>
+    );
+}
+
 function isWeightChangeTowardGoal(
     changeKg: number,
     goal: string | null | undefined,
@@ -106,6 +169,7 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
     const [bwDays, setBwDays] = useState<7 | 30 | 365>(30);
     const [showExerciseModal, setShowExerciseModal] = useState(false);
     const [volTimeframe, setVolTimeframe] = useState<"daily" | "weekly" | "monthly" | "yearly">("weekly");
+    const [selectedWeekIndex, setSelectedWeekIndex] = useState<number | null>(null);
     const [isHydrated, setIsHydrated] = useState(false);
     const [pinnedExercises, setPinnedExercises] = useState<string[]>([]);
 
@@ -143,10 +207,18 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                         setSelectedExercise(exercises[0]);
                     }
                 }
+                if (d?.volumes?.weekly?.length) {
+                    setSelectedWeekIndex(d.volumes.weekly.length - 1);
+                }
                 setLoading(false);
             })
             .catch(() => setLoading(false));
     }, [isPremium]);
+
+    const weeklyVolumes = useMemo(() => data?.volumes?.weekly ?? [], [data]);
+    const activeWeekIndex = selectedWeekIndex ?? Math.max(0, weeklyVolumes.length - 1);
+    const selectedWeekVolume = weeklyVolumes[activeWeekIndex] ?? null;
+    const previousWeekVolume = activeWeekIndex > 0 ? (weeklyVolumes[activeWeekIndex - 1]?.volume ?? 0) : 0;
 
     const togglePinExercise = (ex: string, e: React.MouseEvent) => {
         e.stopPropagation();
@@ -265,7 +337,6 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
     const consistencyPct = (data?.consistency?.target ?? 0) > 0
         ? Math.min(Math.round(((data?.consistency?.thisWeek ?? 0) / (data?.consistency?.target ?? 4)) * 100), 100) : 0;
 
-    const volumeChangeDir = (data.weeklySummary?.volumeChange || 0) >= 0;
     const formatHabitValue = (value: number | null | undefined, unit: string) => {
         if (value === null || value === undefined) return "--";
         const formatted = unit === "hrs" ? value.toFixed(1) : Math.round(value).toLocaleString();
@@ -344,21 +415,18 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
 
                     {/* Volume This Week */}
                     <div className="card p-5">
-                        <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1">Volume</p>
+                        <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1">Training Volume · This Week</p>
                         <div className="flex items-baseline gap-1">
                             <span className="text-xl font-black text-fg">
-                                {data.weeklySummary?.totalVolume ? data.weeklySummary.totalVolume.toLocaleString() : "0"}
+                                {(data.weeklySummary?.totalVolume ?? 0).toLocaleString()}
                             </span>
                             <span className="text-[10px] font-bold text-fg-muted">kg</span>
                         </div>
-                        <div className="flex items-center gap-1.5 mt-1.5">
-                            {volumeChangeDir ?
-                                <ArrowUpRight className="w-3 h-3 text-success" /> :
-                                <ArrowDownRight className="w-3 h-3 text-danger" />
-                            }
-                            <span className={cn("text-[10px] font-bold", volumeChangeDir ? "text-success" : "text-danger")}>
-                                {data.weeklySummary?.volumeChange > 0 ? "+" : ""}{data.weeklySummary?.volumeChange || 0}% vs last week
-                            </span>
+                        <div className="mt-2">
+                            <VolumeComparisonBadge
+                                current={data.weeklySummary?.totalVolume ?? 0}
+                                previous={data.weeklySummary?.lastWeekVolume ?? 0}
+                            />
                         </div>
                     </div>
 
@@ -388,7 +456,7 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                                 </ReturnLink>
                              )}
                             {data.lastWorkout.feeling && (
-                                <div className="text-lg">{["😵", "😓", "😐", "💪", "🔥"][data.lastWorkout.feeling - 1]}</div>
+                                <div className="text-lg">{workoutFeelingEmoji(data.lastWorkout.feeling)}</div>
                             )}
                         </div>
                     </div>
@@ -850,6 +918,25 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                         ))}
                     </div>
                 </div>
+
+                {volTimeframe === "weekly" && selectedWeekVolume && (
+                    <div className="mb-6 p-4 rounded-2xl bg-surface-muted/30 border border-surface-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">
+                                Week of {selectedWeekVolume.label}
+                            </p>
+                            <p className="text-2xl font-black text-fg mt-1">
+                                {selectedWeekVolume.volume.toLocaleString()}
+                                <span className="text-sm font-bold text-fg-muted ml-1">kg</span>
+                            </p>
+                        </div>
+                        <VolumeComparisonBadge
+                            current={selectedWeekVolume.volume}
+                            previous={previousWeekVolume}
+                        />
+                    </div>
+                )}
+
                 <div className="h-[280px] w-full">
                     <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={data?.volumes?.[volTimeframe] || []} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
@@ -862,14 +949,26 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                                 cursor={{ fill: '#8B5CF610' }}
                                 labelStyle={{ color: "#6B7280", fontSize: 10, fontWeight: 800 }}
                             />
-                            <Bar dataKey="volume" radius={[6, 6, 0, 0]} barSize={volTimeframe === 'daily' ? 12 : 28}>
+                            <Bar
+                                dataKey="volume"
+                                radius={[6, 6, 0, 0]}
+                                barSize={volTimeframe === 'daily' ? 12 : 28}
+                                onClick={(_, index) => {
+                                    if (volTimeframe === "weekly" && typeof index === "number") {
+                                        setSelectedWeekIndex(index);
+                                    }
+                                }}
+                                className={volTimeframe === "weekly" ? "cursor-pointer" : undefined}
+                            >
                                 {(data?.volumes?.[volTimeframe] || []).map((_: unknown, index: number) => {
-                                    const isLast = index === (data?.volumes?.[volTimeframe] || []).length - 1;
+                                    const isHighlighted = volTimeframe === "weekly"
+                                        ? index === activeWeekIndex
+                                        : index === (data?.volumes?.[volTimeframe] || []).length - 1;
                                     return (
                                         <Cell
                                             key={`cell-${index}`}
-                                            fill={isLast ? "#8B5CF6" : "#1E293B"}
-                                            stroke={isLast ? "#8B5CF6" : "#374151"}
+                                            fill={isHighlighted ? "#8B5CF6" : "#1E293B"}
+                                            stroke={isHighlighted ? "#8B5CF6" : "#374151"}
                                             strokeWidth={1}
                                         />
                                     );
@@ -879,7 +978,9 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                     </ResponsiveContainer>
                 </div>
                 <p className="text-[9px] text-fg-subtle font-bold uppercase tracking-widest mt-3 text-center">
-                    Total kg moved per {volTimeframe.replace('ly', '').replace('i', 'y')} - latest period highlighted
+                    {volTimeframe === "weekly"
+                        ? "Tap a week to compare volume with the previous week"
+                        : `Total kg moved per ${volTimeframe.replace('ly', '').replace('i', 'y')} — latest period highlighted`}
                 </p>
             </section>
 

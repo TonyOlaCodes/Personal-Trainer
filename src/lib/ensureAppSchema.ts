@@ -5,7 +5,7 @@ import { ensureDailyMetricsTable, ensureDailyMetricTargetColumns } from "@/lib/d
 import { ensureUserAccountStatusColumns } from "@/lib/userDeactivation";
 import { ensureExerciseDictionary } from "@/lib/exerciseDictionary";
 import { ensureUnitSystemColumn } from "@/lib/units";
-import { ensureNotificationPreferenceColumns } from "@/lib/notifications";
+import { ensureNotificationPreferenceColumns, ensureNotificationsTable } from "@/lib/notifications";
 
 let appSchemaReady = false;
 let appSchemaPromise: Promise<void> | null = null;
@@ -25,6 +25,7 @@ export async function ensureAppSchema() {
             ensureExerciseDictionary(),
             ensureUnitSystemColumn(prisma),
             ensureNotificationPreferenceColumns(),
+            ensureNotificationsTable(),
         ]);
         appSchemaReady = true;
     })();

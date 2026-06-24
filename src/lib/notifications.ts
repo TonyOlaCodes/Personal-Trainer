@@ -13,7 +13,12 @@ export interface NotificationItem {
     route: string;
 }
 
-export type CoachNotificationPref = "notifyOnWorkout" | "notifyOnCheckIn" | "notifyOnMetricUpdate";
+export type CoachNotificationPref =
+    | "notifyOnWorkout"
+    | "notifyOnCheckIn"
+    | "notifyOnMetricUpdate"
+    | "notifyOnMissedCheckIn"
+    | "notifyOnMissedWorkout";
 export type ClientNotificationPref =
     | "notifyOnCoachMessage"
     | "notifyOnPlanUpdate"
@@ -34,6 +39,8 @@ export async function ensureNotificationPreferenceColumns() {
         `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notifyOnPlanUpdate" BOOLEAN NOT NULL DEFAULT true`,
         `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notifyOnCheckInReview" BOOLEAN NOT NULL DEFAULT true`,
         `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notifyOnWorkoutFeedback" BOOLEAN NOT NULL DEFAULT true`,
+        `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notifyOnMissedCheckIn" BOOLEAN NOT NULL DEFAULT true`,
+        `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notifyOnMissedWorkout" BOOLEAN NOT NULL DEFAULT true`,
     ];
 
     for (const statement of columns) {
@@ -83,6 +90,8 @@ export async function userWantsNotification(
             notifyOnWorkout: true,
             notifyOnCheckIn: true,
             notifyOnMetricUpdate: true,
+            notifyOnMissedCheckIn: true,
+            notifyOnMissedWorkout: true,
             notifyOnCoachMessage: true,
             notifyOnPlanUpdate: true,
             notifyOnCheckInReview: true,
@@ -91,7 +100,28 @@ export async function userWantsNotification(
     });
 
     if (!user) return false;
-    return user[pref] ?? true;
+    return (user as Record<string, boolean | undefined>)[pref] ?? true;
+}
+
+export async function hasNotificationSince(input: {
+    userId: string;
+    type: string;
+    entityId: string;
+    since: Date;
+}): Promise<boolean> {
+    await ensureNotificationsTable();
+
+    const rows = await prisma.$queryRaw<Array<{ exists: number }>>`
+        SELECT 1 as exists
+        FROM "notifications"
+        WHERE "userId" = ${input.userId}
+          AND "type" = ${input.type}
+          AND "entityId" = ${input.entityId}
+          AND "createdAt" >= ${input.since}
+        LIMIT 1
+    `;
+
+    return rows.length > 0;
 }
 
 export async function createNotification(input: {
@@ -159,6 +189,44 @@ export async function notifyCoachOfClientBodyweight(input: {
         message: `${input.clientName} logged ${input.weightKg.toFixed(1)} kg`,
         entityType: "BODYWEIGHT",
         entityId: null,
+        route: `/coach/client/${input.clientId}`,
+    });
+}
+
+export async function notifyCoachOfMissedCheckIn(input: {
+    coachId: string;
+    clientId: string;
+    clientName: string;
+    weekNumber: number;
+}) {
+    if (!(await userWantsNotification(input.coachId, "notifyOnMissedCheckIn"))) return;
+
+    await createNotification({
+        userId: input.coachId,
+        type: "CLIENT_MISSED_CHECKIN",
+        message: `${input.clientName} has not completed their check-in`,
+        entityType: "USER",
+        entityId: `${input.clientId}:${input.weekNumber}`,
+        route: `/coach/client/${input.clientId}`,
+    });
+}
+
+export async function notifyCoachOfMissedWorkout(input: {
+    coachId: string;
+    clientId: string;
+    clientName: string;
+    workoutName: string;
+    dateKey: string;
+    workoutId: string;
+}) {
+    if (!(await userWantsNotification(input.coachId, "notifyOnMissedWorkout"))) return;
+
+    await createNotification({
+        userId: input.coachId,
+        type: "CLIENT_MISSED_WORKOUT",
+        message: `${input.clientName} missed ${input.workoutName}`,
+        entityType: "USER",
+        entityId: `${input.clientId}:${input.dateKey}:${input.workoutId}`,
         route: `/coach/client/${input.clientId}`,
     });
 }

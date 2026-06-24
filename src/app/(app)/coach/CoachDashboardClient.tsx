@@ -9,6 +9,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { cn, formatDate, getInitials } from "@/lib/utils";
+import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { formatCoachPlanLabel } from "@/lib/coachPlans";
 
 const CHECK_IN_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -172,7 +173,7 @@ export function CoachDashboardClient({ clients, recentCheckIns, availablePlans }
                     <div className="flex items-center gap-4 pb-6 border-b border-surface-border">
                         <div className="w-14 h-14 rounded-2xl bg-gradient-brand flex items-center justify-center text-lg font-black text-white overflow-hidden shadow-glow-sm">
                             {currentSetupClient.avatarUrl ? (
-                                <img src={currentSetupClient.avatarUrl} alt="avatar" className="w-full h-full object-cover rounded-2xl" />
+                                <img src={resolveUploadUrl(currentSetupClient.avatarUrl)} alt="avatar" className="w-full h-full object-cover rounded-2xl" />
                             ) : (
                                 getInitials(currentSetupClient.name)
                             )}
@@ -395,7 +396,7 @@ export function CoachDashboardClient({ clients, recentCheckIns, availablePlans }
                                             "w-12 h-12 rounded-2xl flex items-center justify-center text-sm font-bold text-white shadow-glow-sm overflow-hidden",
                                             c.isDeleted ? "bg-surface-muted text-fg-subtle" : "bg-gradient-brand"
                                         )}>
-                                            {c.avatarUrl ? <img src={c.avatarUrl} alt="avatar" className="w-full h-full object-cover rounded-2xl" /> : getInitials(c.name)}
+                                            {c.avatarUrl ? <img src={resolveUploadUrl(c.avatarUrl)} alt="avatar" className="w-full h-full object-cover rounded-2xl" /> : getInitials(c.name)}
                                         </div>
                                         <div className="min-w-0">
                                             <div className="flex items-center gap-2">

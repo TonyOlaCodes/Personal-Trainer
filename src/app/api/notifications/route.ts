@@ -3,6 +3,22 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getNotifications, markAllNotificationsRead, markNotificationRead } from "@/lib/notifications";
+import { getQuickReplyTemplate, supportsQuickReply } from "@/lib/notificationTypes";
+
+function enrichNotification<T extends { type: string; entityType: string; entityId: string | null }>(notification: T) {
+    const clientId = notification.entityType === "USER" && notification.entityId
+        ? notification.entityId.split(":")[0]
+        : null;
+
+    return {
+        ...notification,
+        clientId,
+        supportsQuickReply: supportsQuickReply(notification.type),
+        quickReplyTemplate: supportsQuickReply(notification.type)
+            ? getQuickReplyTemplate(notification.type)
+            : null,
+    };
+}
 
 const patchSchema = z.object({
     id: z.string().optional(),
@@ -21,7 +37,10 @@ export async function GET(req: Request) {
     const notifications = await getNotifications(user.id, Number.isFinite(limit) ? limit : 20);
 
     return NextResponse.json({
-        notifications,
+        notifications: notifications.map((n) => enrichNotification({
+            ...n,
+            createdAt: n.createdAt.toISOString(),
+        })),
         unreadCount: notifications.filter((n) => !n.read).length,
     });
 }
