@@ -51,7 +51,7 @@ export function MobileTabBar({ userRole = "FREE", realRole = "FREE", isClientMod
 
     return (
         <nav className="md:hidden fixed bottom-0 inset-x-0 z-50 glass glass-border border-t border-surface-border safe-area-pb">
-            <div className="flex items-center justify-around px-2 py-2 overflow-x-auto no-scrollbar gap-1">
+            <div className="flex items-center justify-around px-2 py-2 overflow-hidden gap-1 w-full max-w-full">
                 {filteredItems.map((item) => {
                     const active = pathname.startsWith(item.href);
                     return (

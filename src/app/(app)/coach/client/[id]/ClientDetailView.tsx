@@ -143,7 +143,18 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
     const [chatMessages, setChatMessages] = useState<any[]>([]);
     const [chatInput, setChatInput] = useState("");
     const [sendingChat, setSendingChat] = useState(false);
-    const chatBottomRef = useRef<HTMLDivElement>(null);
+    const chatScrollRef = useRef<HTMLDivElement>(null);
+    const isNearBottomRef = useRef(true);
+    const shouldForceScrollRef = useRef(false);
+
+    const scrollChatToBottom = () => {
+        const container = chatScrollRef.current;
+        if (!container) return;
+        container.scrollTop = container.scrollHeight;
+    };
+
+    const isScrollNearBottom = (container: HTMLDivElement) =>
+        container.scrollHeight - container.scrollTop - container.clientHeight < 80;
     const [showAllSessions, setShowAllSessions] = useState(false);
     const [sessionsInitialId, setSessionsInitialId] = useState<string | null>(null);
 
@@ -305,8 +316,29 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
 
     useEffect(() => {
         if (showQuickChat) {
-            chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+            shouldForceScrollRef.current = true;
+            isNearBottomRef.current = true;
         }
+    }, [showQuickChat]);
+
+    useEffect(() => {
+        const container = chatScrollRef.current;
+        if (!container || !showQuickChat) return;
+        const onScroll = () => {
+            isNearBottomRef.current = isScrollNearBottom(container);
+        };
+        container.addEventListener("scroll", onScroll, { passive: true });
+        return () => container.removeEventListener("scroll", onScroll);
+    }, [showQuickChat]);
+
+    useEffect(() => {
+        if (!showQuickChat) return;
+        if (!shouldForceScrollRef.current && !isNearBottomRef.current) return;
+        requestAnimationFrame(() => {
+            scrollChatToBottom();
+            shouldForceScrollRef.current = false;
+            isNearBottomRef.current = true;
+        });
     }, [chatMessages, showQuickChat]);
 
     const sendChatMessage = async () => {
@@ -324,6 +356,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
             createdAt: new Date().toISOString(),
             sender: { id: currentUserId, role: "COACH" },
         };
+        shouldForceScrollRef.current = true;
         setChatMessages(prev => [...prev, optimisticMsg]);
 
         try {
@@ -1543,7 +1576,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                         </div>
                         
                         {/* Messages Log */}
-                        <div className="flex-1 overflow-y-auto p-4 space-y-3 no-scrollbar bg-surface/10">
+                        <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-4 space-y-3 no-scrollbar bg-surface/10">
                             {chatMessages.length === 0 ? (
                                 <div className="h-full flex flex-col items-center justify-center text-center p-6 opacity-60">
                                     <MessageSquare className="w-10 h-10 text-brand-400/50 mb-3" />
@@ -1573,7 +1606,6 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                     );
                                 })
                             )}
-                            <div ref={chatBottomRef} />
                         </div>
                         
                         {/* Input Footer */}

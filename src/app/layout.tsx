@@ -38,7 +38,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
-      <body className={`${inter.variable} antialiased`}>
+      <body className={`${inter.variable} antialiased w-full max-w-full max-md:overflow-x-hidden`}>
         <ClerkProvider
           appearance={{
             baseTheme: dark,

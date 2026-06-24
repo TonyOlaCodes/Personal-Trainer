@@ -91,11 +91,11 @@ export function TopBar({ title, subtitle, streak, hideSearch = true }: TopBarPro
     };
 
     return (
-        <header className="h-16 flex items-center justify-between px-6 border-b border-surface-border bg-surface-card/80 glass sticky top-0 z-30">
-            <div className="flex items-center gap-4">
-                <div>
-                    {title && <h1 className="text-base font-semibold text-fg">{title}</h1>}
-                    {subtitle && <p className="text-xs text-fg-muted">{subtitle}</p>}
+        <header className="h-16 flex items-center justify-between gap-2 px-4 sm:px-6 border-b border-surface-border bg-surface-card/80 glass sticky top-0 z-30 w-full max-w-full min-w-0">
+            <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
+                <div className="min-w-0">
+                    {title && <h1 className="text-base font-semibold text-fg truncate">{title}</h1>}
+                    {subtitle && <p className="text-xs text-fg-muted truncate">{subtitle}</p>}
                 </div>
                 {streak !== undefined && streak > 0 && (
                     <div 
@@ -108,7 +108,7 @@ export function TopBar({ title, subtitle, streak, hideSearch = true }: TopBarPro
                 )}
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
                 <div className="hidden sm:block">
                     <span className={roleBadgeClass[role] ?? "badge-muted"}>
                         {roleLabels[role] ?? role}

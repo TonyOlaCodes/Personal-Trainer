@@ -58,13 +58,13 @@ export default async function AppLayout({
 
     return (
         <RoleProvider role={effectiveRole}>
-            <div className="min-h-screen bg-surface">
+            <div className="min-h-screen bg-surface w-full max-w-full">
                 {/* Prevent layout shifts by injecting sidebar width before browser renders */}
                 <style dangerouslySetInnerHTML={{ __html: `:root { --sidebar-width: ${isSidebarCollapsed ? '72px' : '260px'}; }` }} />
                 <Sidebar userRole={effectiveRole} realRole={realRole} isClientMode={isClientMode} initialCollapsed={isSidebarCollapsed} />
 
-                <div className="md:pl-[var(--sidebar-width)]">
-                    <main className="min-h-screen pb-20 md:pb-0">
+                <div className="md:pl-[var(--sidebar-width)] w-full max-w-full min-w-0">
+                    <main className="min-h-screen pb-20 md:pb-0 w-full max-w-full min-w-0">
                         {children}
                     </main>
                 </div>

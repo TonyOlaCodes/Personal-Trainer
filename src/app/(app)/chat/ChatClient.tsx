@@ -115,6 +115,17 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
     const inputRef = useRef<HTMLInputElement>(null);
     const isFetchingRef = useRef(false);
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const isNearBottomRef = useRef(true);
+    const shouldForceScrollRef = useRef(false);
+
+    const scrollMessagesToBottom = useCallback(() => {
+        const container = messagesScrollRef.current;
+        if (!container) return;
+        container.scrollTop = container.scrollHeight;
+    }, []);
+
+    const isScrollNearBottom = (container: HTMLDivElement) =>
+        container.scrollHeight - container.scrollTop - container.clientHeight < 80;
 
     const persistChatSelection = useCallback((nextTab: "direct" | "general", conversation?: Conversation | null) => {
         localStorage.setItem(LAST_CHAT_TAB_KEY, nextTab);
@@ -277,12 +288,30 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
     }, [fetchMessages]);
 
     useEffect(() => {
+        shouldForceScrollRef.current = true;
+        isNearBottomRef.current = true;
+    }, [tab, selectedConv?.userId, mobileShowChat]);
+
+    useEffect(() => {
         const container = messagesScrollRef.current;
         if (!container) return;
+        const onScroll = () => {
+            isNearBottomRef.current = isScrollNearBottom(container);
+        };
+        container.addEventListener("scroll", onScroll, { passive: true });
+        return () => container.removeEventListener("scroll", onScroll);
+    }, [tab, selectedConv?.userId, mobileShowChat, isHydrated]);
+
+    useEffect(() => {
+        const container = messagesScrollRef.current;
+        if (!container) return;
+        if (!shouldForceScrollRef.current && !isNearBottomRef.current) return;
         requestAnimationFrame(() => {
-            container.scrollTop = container.scrollHeight;
+            scrollMessagesToBottom();
+            shouldForceScrollRef.current = false;
+            isNearBottomRef.current = true;
         });
-    }, [messages, tab, selectedConv?.userId, mobileShowChat]);
+    }, [messages, scrollMessagesToBottom]);
 
     // Edit window tracker
     useEffect(() => {
@@ -390,6 +419,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
             } : undefined
         };
         
+        shouldForceScrollRef.current = true;
         setMessages(prev => [...prev, newMsg]);
 
         if (tab === "direct" && selectedConv) {
@@ -617,7 +647,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
 
     return (
         <div
-            className="flex overflow-hidden bg-surface animate-fade-in fixed inset-x-0 top-0 bottom-20 z-40 md:static md:z-auto md:h-[calc(100dvh-4rem)] md:bottom-auto"
+            className="flex overflow-hidden bg-surface animate-fade-in fixed inset-x-0 top-0 bottom-20 z-40 w-full max-w-full md:static md:z-auto md:h-[calc(100dvh-4rem)] md:bottom-auto"
             onClick={() => { setMenuOpenId(null); setReactionPickerId(null); }}
         >
             
