@@ -1,7 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { format, startOfWeek, endOfWeek, subWeeks, isWithinInterval, startOfMonth, startOfYear } from "date-fns";
+import { format, startOfWeek, endOfWeek, subWeeks, isWithinInterval, startOfMonth, startOfYear, addDays, endOfDay } from "date-fns";
 import { ensureDailyMetricsTable, getDailyMetricTargets } from "@/lib/dailyMetrics";
 import { calculateOneRM } from "@/lib/utils";
 import { ensureBodyweightTable } from "@/lib/bodyweight";
@@ -58,6 +58,15 @@ export async function GET() {
     const thisWeekRange = { start: startOfWeek(now, { weekStartsOn: 1 }), end: endOfWeek(now, { weekStartsOn: 1 }) };
     const lastWeekRange = { start: startOfWeek(subWeeks(now, 1), { weekStartsOn: 1 }), end: endOfWeek(subWeeks(now, 1), { weekStartsOn: 1 }) };
 
+    // Week-to-date: compare Mon→today this week with the same Mon→day last week
+    const dayIndexInWeek = (now.getDay() + 6) % 7; // Mon=0 … Sun=6
+    const thisWeekWtdRange = { start: thisWeekRange.start, end: endOfDay(now) };
+    const lastWeekWtdRange = {
+        start: lastWeekRange.start,
+        end: endOfDay(addDays(lastWeekRange.start, dayIndexInWeek)),
+    };
+    const volumeComparisonPeriod = `${format(thisWeekRange.start, "EEE")}–${format(now, "EEE")}`;
+
     let workoutsThisWeek = 0;
     let workoutsLastWeek = 0;
     let totalVolumeThisWeek = 0;
@@ -106,8 +115,8 @@ export async function GET() {
             monthlyVolumeMap[monthKey] = (monthlyVolumeMap[monthKey] || 0) + sVol;
             yearlyVolumeMap[yearKey] = (yearlyVolumeMap[yearKey] || 0) + sVol;
 
-            if (isThisWeek) totalVolumeThisWeek += sVol;
-            if (isLastWeek) totalVolumeLastWeek += sVol;
+            if (isWithinInterval(log.loggedAt, thisWeekWtdRange)) totalVolumeThisWeek += sVol;
+            if (isWithinInterval(log.loggedAt, lastWeekWtdRange)) totalVolumeLastWeek += sVol;
 
             // Big 3 & PR logic (remaining unchanged for brevity but included in output)
             const normalizedEx = exName.toLowerCase();
@@ -161,16 +170,24 @@ export async function GET() {
             const currentOneRM = calculateOneRM(sWeight, sReps, set.rpe);
 
             if (existingSession) {
-                if (sWeight > existingSession.weight) { 
-                    existingSession.weight = sWeight; 
-                    existingSession.reps = sReps; 
+                if (sWeight > existingSession.weight) {
+                    existingSession.weight = sWeight;
+                    existingSession.reps = sReps;
+                    existingSession.bestSetRpe = typeof set.rpe === "number" ? set.rpe : null;
                 }
                 if (currentOneRM > (existingSession.oneRM || 0)) {
                     existingSession.oneRM = currentOneRM;
                 }
                 existingSession.volume += sVol;
             } else {
-                exerciseHistory[exName].push({ date: dateStr, weight: sWeight, reps: sReps, volume: sVol, oneRM: currentOneRM });
+                exerciseHistory[exName].push({
+                    date: dateStr,
+                    weight: sWeight,
+                    reps: sReps,
+                    volume: sVol,
+                    oneRM: currentOneRM,
+                    bestSetRpe: typeof set.rpe === "number" ? set.rpe : null,
+                });
             }
         });
 
@@ -340,6 +357,8 @@ export async function GET() {
         target: user.trainingDaysPerWeek || 4,
         totalVolume: Math.round(totalVolumeThisWeek),
         lastWeekVolume: Math.round(totalVolumeLastWeek),
+        volumeComparisonPeriod,
+        volumeComparisonDays: dayIndexInWeek + 1,
         volumeChange,
         volumeChangeKg,
         weightChange: Math.round(weightChangeWeek * 10) / 10,

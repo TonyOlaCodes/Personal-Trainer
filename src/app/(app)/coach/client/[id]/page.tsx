@@ -108,16 +108,24 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                 if (!exerciseHistory[exName]) exerciseHistory[exName] = [];
                 const existingSession = exerciseHistory[exName].find((h: any) => h.date === dateStr);
                 if (existingSession) {
-                    if (sWeight > existingSession.weight) { 
-                        existingSession.weight = sWeight; 
-                        existingSession.reps = sReps; 
+                    if (sWeight > existingSession.weight) {
+                        existingSession.weight = sWeight;
+                        existingSession.reps = sReps;
+                        existingSession.bestSetRpe = typeof set.rpe === "number" ? set.rpe : null;
                     }
                     if (currentOneRM > (existingSession.oneRM || 0)) {
                         existingSession.oneRM = currentOneRM;
                     }
                     existingSession.volume += sVol;
                 } else {
-                    exerciseHistory[exName].push({ date: dateStr, weight: sWeight, reps: sReps, volume: sVol, oneRM: currentOneRM });
+                    exerciseHistory[exName].push({
+                        date: dateStr,
+                        weight: sWeight,
+                        reps: sReps,
+                        volume: sVol,
+                        oneRM: currentOneRM,
+                        bestSetRpe: typeof set.rpe === "number" ? set.rpe : null,
+                    });
                 }
             });
         });

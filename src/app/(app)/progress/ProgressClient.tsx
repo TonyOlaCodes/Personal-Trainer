@@ -17,7 +17,9 @@ import { cn } from "@/lib/utils";
 import { workoutFeelingEmoji } from "@/lib/workoutFeeling";
 import { PremiumLockScreen } from "@/components/shared/PremiumLockScreen";
 import { ReturnLink } from "@/components/shared/ReturnLink";
+import { ExerciseHistoryTooltipContent } from "@/components/shared/ExerciseHistoryTooltip";
 import Link from "next/link";
+import { format, startOfWeek } from "date-fns";
 
 interface Props {
     userRole: string;
@@ -89,10 +91,12 @@ function VolumeComparisonBadge({
     current,
     previous,
     className,
+    vsLabel = "previous week",
 }: {
     current: number;
     previous: number;
     className?: string;
+    vsLabel?: string;
 }) {
     const comparison = getVolumeWeekComparison(current, previous);
     const sign = comparison.deltaKg > 0 ? "+" : "";
@@ -112,13 +116,13 @@ function VolumeComparisonBadge({
             {comparison.trend === "same" && <Minus className="w-3.5 h-3.5 shrink-0" />}
             <span>
                 {comparison.trend === "same" ? (
-                    "Same as last week"
+                    `Same as ${vsLabel}`
                 ) : comparison.hasPriorWeek && comparison.pct !== null ? (
                     <>
-                        {sign}{comparison.pct}% ({sign}{comparison.deltaKg.toLocaleString()} kg) vs last week
+                        {sign}{comparison.pct}% ({sign}{comparison.deltaKg.toLocaleString()} kg) vs {vsLabel}
                     </>
                 ) : (
-                    <>{sign}{comparison.deltaKg.toLocaleString()} kg vs last week</>
+                    <>{sign}{comparison.deltaKg.toLocaleString()} kg vs {vsLabel}</>
                 )}
             </span>
         </div>
@@ -219,6 +223,18 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
     const activeWeekIndex = selectedWeekIndex ?? Math.max(0, weeklyVolumes.length - 1);
     const selectedWeekVolume = weeklyVolumes[activeWeekIndex] ?? null;
     const previousWeekVolume = activeWeekIndex > 0 ? (weeklyVolumes[activeWeekIndex - 1]?.volume ?? 0) : 0;
+
+    const currentWeekStartKey = format(startOfWeek(new Date(), { weekStartsOn: 1 }), "yyyy-MM-dd");
+    const isCurrentCalendarWeek = selectedWeekVolume?.weekStart === currentWeekStartKey;
+    const volumeComparisonPeriod = data?.weeklySummary?.volumeComparisonPeriod as string | undefined;
+    const weekToDateVsLabel = volumeComparisonPeriod ? `${volumeComparisonPeriod} last week` : "same days last week";
+    const selectedWeekComparisonCurrent = isCurrentCalendarWeek
+        ? (data?.weeklySummary?.totalVolume ?? selectedWeekVolume?.volume ?? 0)
+        : (selectedWeekVolume?.volume ?? 0);
+    const selectedWeekComparisonPrevious = isCurrentCalendarWeek
+        ? (data?.weeklySummary?.lastWeekVolume ?? 0)
+        : previousWeekVolume;
+    const selectedWeekComparisonLabel = isCurrentCalendarWeek ? weekToDateVsLabel : "previous week";
 
     const togglePinExercise = (ex: string, e: React.MouseEvent) => {
         e.stopPropagation();
@@ -426,6 +442,7 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                             <VolumeComparisonBadge
                                 current={data.weeklySummary?.totalVolume ?? 0}
                                 previous={data.weeklySummary?.lastWeekVolume ?? 0}
+                                vsLabel={weekToDateVsLabel}
                             />
                         </div>
                     </div>
@@ -782,25 +799,11 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                                         <Tooltip
                                             content={({ active, payload, label }) => {
                                                 if (active && payload && payload.length) {
-                                                    const d = payload[0].payload;
                                                     return (
-                                                        <div className="bg-surface-elevated/95 backdrop-blur-md border border-brand-500/20 p-4 rounded-2xl shadow-2xl min-w-[160px]">
-                                                            <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle mb-2.5">{label}</p>
-                                                            <div className="space-y-1.5">
-                                                                <div className="flex items-center justify-between gap-6">
-                                                                    <span className="text-xs font-bold text-fg-muted">Best Set</span>
-                                                                    <span className="text-xs font-black text-brand-400">{d.weight}kg × {d.reps}</span>
-                                                                </div>
-                                                                <div className="flex items-center justify-between gap-6 pt-1.5 border-t border-surface-border/50">
-                                                                    <span className="text-xs text-fg-muted">Est. 1RM</span>
-                                                                    <span className="text-xs font-bold text-yellow-400">{d.oneRM || "—"}kg</span>
-                                                                </div>
-                                                                <div className="flex items-center justify-between gap-6 pt-1.5 border-t border-surface-border/50">
-                                                                    <span className="text-xs text-fg-muted">Volume</span>
-                                                                    <span className="text-xs font-bold text-success">{Math.round(d.volume)}kg</span>
-                                                                </div>
-                                                            </div>
-                                                        </div>
+                                                        <ExerciseHistoryTooltipContent
+                                                            label={label}
+                                                            data={payload[0].payload}
+                                                        />
                                                     );
                                                 }
                                                 return null;
@@ -931,8 +934,9 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                             </p>
                         </div>
                         <VolumeComparisonBadge
-                            current={selectedWeekVolume.volume}
-                            previous={previousWeekVolume}
+                            current={selectedWeekComparisonCurrent}
+                            previous={selectedWeekComparisonPrevious}
+                            vsLabel={selectedWeekComparisonLabel}
                         />
                     </div>
                 )}
@@ -1029,25 +1033,11 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                                         <Tooltip
                                             content={({ active, payload, label }) => {
                                                 if (active && payload && payload.length) {
-                                                    const d = payload[0].payload;
                                                     return (
-                                                        <div className="bg-surface-elevated/95 backdrop-blur-md border border-brand-500/20 p-4 rounded-2xl shadow-2xl min-w-[160px]">
-                                                            <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle mb-2.5">{label}</p>
-                                                            <div className="space-y-1.5">
-                                                                <div className="flex items-center justify-between gap-6">
-                                                                    <span className="text-xs font-bold text-fg-muted">Best Set</span>
-                                                                    <span className="text-xs font-black text-brand-400">{d.weight}kg × {d.reps}</span>
-                                                                </div>
-                                                                <div className="flex items-center justify-between gap-6 pt-1.5 border-t border-surface-border/50">
-                                                                    <span className="text-xs text-fg-muted">Est. 1RM</span>
-                                                                    <span className="text-xs font-bold text-yellow-400">{d.oneRM || "—"}kg</span>
-                                                                </div>
-                                                                <div className="flex items-center justify-between gap-6 pt-1.5 border-t border-surface-border/50">
-                                                                    <span className="text-xs text-fg-muted">Volume</span>
-                                                                    <span className="text-xs font-bold text-success">{Math.round(d.volume)}kg</span>
-                                                                </div>
-                                                            </div>
-                                                        </div>
+                                                        <ExerciseHistoryTooltipContent
+                                                            label={label}
+                                                            data={payload[0].payload}
+                                                        />
                                                     );
                                                 }
                                                 return null;

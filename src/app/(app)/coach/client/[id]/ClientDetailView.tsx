@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import Link from "next/link";
 import { ReturnLink } from "@/components/shared/ReturnLink";
+import { ExerciseHistoryTooltipContent } from "@/components/shared/ExerciseHistoryTooltip";
 import { RecentSessionsExplorer, PREVIEW_LIMIT } from "@/components/shared/RecentSessionsExplorer";
 import { cn, formatDate, getInitials } from "@/lib/utils";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
@@ -91,7 +92,7 @@ interface Props {
     bodyweightHistory: { date: string; weightKg: number }[];
     workoutNotes: ClientWorkoutNote[];
     workoutHistory: WorkoutHistoryEntry[];
-    exerciseHistory: Record<string, Array<{ date: string, weight: number, reps: number, volume: number, oneRM: number }>>;
+    exerciseHistory: Record<string, Array<{ date: string, weight: number, reps: number, volume: number, oneRM: number, bestSetRpe?: number | null }>>;
     exerciseLastDone: Record<string, number>;
     readOnly?: boolean;
 }
@@ -1388,29 +1389,15 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                             <Tooltip
                                                 content={({ active, payload, label }) => {
                                                     if (active && payload && payload.length) {
-                                                        const d = payload[0].payload;
                                                         return (
-                                                            <div className="bg-surface-elevated/95 backdrop-blur-md border border-indigo-500/20 p-4 rounded-2xl shadow-2xl min-w-[160px]">
-                                                                <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle mb-2.5">{label}</p>
-                                                                <div className="space-y-1.5">
-                                                                    <div className="flex items-center justify-between gap-6">
-                                                                        <span className="text-xs font-bold text-fg-muted">Best Set</span>
-                                                                        <span className="text-xs font-black text-brand-400">{d.weight}kg × {d.reps}</span>
-                                                                    </div>
-                                                                    <div className="flex items-center justify-between gap-6 pt-1.5 border-t border-surface-border/50">
-                                                                        <span className="text-xs text-fg-muted">Est. 1RM</span>
-                                                                        <span className="text-xs font-bold text-yellow-400">{d.oneRM || "—"}kg</span>
-                                                                    </div>
-                                                                    <div className="flex items-center justify-between gap-6 pt-1.5 border-t border-surface-border/50">
-                                                                        <span className="text-xs text-fg-muted">Volume</span>
-                                                                        <span className="text-xs font-bold text-success">{Math.round(d.volume)}kg</span>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
+                                                            <ExerciseHistoryTooltipContent
+                                                                label={label}
+                                                                data={payload[0].payload}
+                                                            />
                                                         );
                                                     }
                                                     return null;
-                                                 }}
+                                                }}
                                              />
                                              <Area
                                                  type="monotone" dataKey="weight" stroke="#818cf8" strokeWidth={3}
