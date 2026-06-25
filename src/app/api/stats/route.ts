@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { format, startOfWeek, endOfWeek, subWeeks, isWithinInterval, startOfMonth, startOfYear, addDays, endOfDay } from "date-fns";
 import { ensureDailyMetricsTable, getDailyMetricTargets } from "@/lib/dailyMetrics";
 import { calculateOneRM } from "@/lib/utils";
+import { createExerciseSessionEntry, mergeSetIntoExerciseSession } from "@/lib/exerciseHistory";
 import { ensureBodyweightTable } from "@/lib/bodyweight";
 
 export async function GET() {
@@ -167,25 +168,11 @@ export async function GET() {
 
             if (!exerciseHistory[exName]) exerciseHistory[exName] = [];
             const existingSession = exerciseHistory[exName].find((h: any) => h.date === dateStr);
-            const currentOneRM = calculateOneRM(sWeight, sReps);
 
             if (existingSession) {
-                if (sWeight > existingSession.weight) {
-                    existingSession.weight = sWeight;
-                    existingSession.reps = sReps;
-                }
-                if (currentOneRM > (existingSession.oneRM || 0)) {
-                    existingSession.oneRM = currentOneRM;
-                }
-                existingSession.volume += sVol;
+                mergeSetIntoExerciseSession(existingSession, sWeight, sReps, sVol);
             } else {
-                exerciseHistory[exName].push({
-                    date: dateStr,
-                    weight: sWeight,
-                    reps: sReps,
-                    volume: sVol,
-                    oneRM: currentOneRM,
-                });
+                exerciseHistory[exName].push(createExerciseSessionEntry(dateStr, sWeight, sReps, sVol));
             }
         });
 

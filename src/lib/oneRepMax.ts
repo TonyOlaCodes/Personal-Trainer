@@ -1,6 +1,6 @@
 /**
- * Estimated one-rep max from weight and reps only.
- * Brzycki for reps ≤ 10, Epley for reps > 10.
+ * Estimated one-rep max from weight and reps only (Brzycki ≤10 reps, Epley >10).
+ * Monotonic in weight for a fixed rep count.
  */
 export function calculateOneRM(weight: number, reps: number): number {
     if (weight <= 0 || reps <= 0) return 0;

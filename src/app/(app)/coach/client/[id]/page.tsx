@@ -5,7 +5,7 @@ import { TopBar } from "@/components/layout/TopBar";
 import { ClientDetailView } from "./ClientDetailView";
 import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
 import { getDailyMetricTargets } from "@/lib/dailyMetrics";
-import { calculateOneRM } from "@/lib/utils";
+import { createExerciseSessionEntry, mergeSetIntoExerciseSession } from "@/lib/exerciseHistory";
 
 import { SafeFallback, rethrowNextInternalErrors } from "@/components/shared/SafeFallback";
 import { formatErrorDetails } from "@/lib/ensureAppSchema";
@@ -101,29 +101,15 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                 const sWeight = set.weightKg || 0;
                 const sReps = set.reps || 0;
                 const sVol = sWeight * sReps;
-                const currentOneRM = calculateOneRM(sWeight, sReps);
                 
                 exerciseLastDone[exName] = Math.max(exerciseLastDone[exName] || 0, logTime);
                 
                 if (!exerciseHistory[exName]) exerciseHistory[exName] = [];
                 const existingSession = exerciseHistory[exName].find((h: any) => h.date === dateStr);
                 if (existingSession) {
-                    if (sWeight > existingSession.weight) {
-                        existingSession.weight = sWeight;
-                        existingSession.reps = sReps;
-                    }
-                    if (currentOneRM > (existingSession.oneRM || 0)) {
-                        existingSession.oneRM = currentOneRM;
-                    }
-                    existingSession.volume += sVol;
+                    mergeSetIntoExerciseSession(existingSession, sWeight, sReps, sVol);
                 } else {
-                    exerciseHistory[exName].push({
-                        date: dateStr,
-                        weight: sWeight,
-                        reps: sReps,
-                        volume: sVol,
-                        oneRM: currentOneRM,
-                    });
+                    exerciseHistory[exName].push(createExerciseSessionEntry(dateStr, sWeight, sReps, sVol));
                 }
             });
         });
