@@ -7,7 +7,7 @@ import { Walkthrough } from "@/components/shared/Walkthrough";
 import { RecentSessionsExplorer, PREVIEW_LIMIT } from "@/components/shared/RecentSessionsExplorer";
 import { ReturnLink } from "@/components/shared/ReturnLink";
 import { Dumbbell, ChevronRight, Clock, Flame, Activity, Calendar, Ticket, Check, Edit3, Trash2, Scale, Utensils, Footprints, Moon, AlertCircle } from "lucide-react";
-import { formatDate, formatRelative, cn, toDateKey, parseLogDate } from "@/lib/utils";
+import { formatDate, formatRelative, cn, toDateKey, parseLogDate, toLoggedAtIso } from "@/lib/utils";
 import { appendReturnTo } from "@/lib/navigation";
 import { useCurrentPath } from "@/hooks/useNavigation";
 import { useCurrentDate } from "@/hooks/useCurrentDate";
@@ -120,6 +120,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
     const [localActiveSession, setLocalActiveSession] = useState(activeSession);
     const [sessionsExplorerOpen, setSessionsExplorerOpen] = useState(false);
     const [sessionsExplorerInitialId, setSessionsExplorerInitialId] = useState<string | null>(null);
+    const [startingWorkout, setStartingWorkout] = useState(false);
 
     useEffect(() => {
         setLocalActiveSession(activeSession);
@@ -383,6 +384,64 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
         return "Good evening";
     };
 
+    const goToWorkoutLog = (workoutId: string, date?: string) => {
+        const dateQuery = date ? `?date=${encodeURIComponent(date)}` : "";
+        router.push(appendReturnTo(`/plans/log/${workoutId}${dateQuery}`, currentPath));
+    };
+
+    const handleStartTodayWorkout = async () => {
+        if (!todayWorkout || startingWorkout) return;
+
+        if (localActiveSession?.workoutId === todayWorkout.id) {
+            goToWorkoutLog(
+                todayWorkout.id,
+                localActiveSession.loggedAt
+                    ? toDateKey(parseLogDate(localActiveSession.loggedAt))
+                    : todayDate
+            );
+            return;
+        }
+
+        setStartingWorkout(true);
+        try {
+            const flattenedSets = todayWorkout.exercises.flatMap((ex, exOrder) =>
+                Array.from({ length: ex.sets }, (_, i) => ({
+                    exerciseId: ex.id,
+                    exerciseName: ex.name,
+                    exerciseOrder: exOrder,
+                    setNumber: i + 1,
+                    reps: 0,
+                    isWarmup: false,
+                    isCompleted: false,
+                }))
+            );
+
+            const res = await fetch("/api/logs", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    workoutId: todayWorkout.id,
+                    status: "IN_PROGRESS",
+                    loggedAt: toLoggedAtIso(todayDate),
+                    sets: flattenedSets,
+                }),
+            });
+
+            if (!res.ok) {
+                alert("Could not start workout. Try again.");
+                return;
+            }
+
+            goToWorkoutLog(todayWorkout.id, todayDate);
+            router.refresh();
+        } catch (e) {
+            console.error(e);
+            alert("Could not start workout.");
+        } finally {
+            setStartingWorkout(false);
+        }
+    };
+
     const redeemCode = async () => {
         setCodeStatus("loading");
         const res = await fetch("/api/codes/redeem", {
@@ -443,8 +502,8 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
         },
         {
             targetId: "today-workout",
-            title: "Start Training",
-            description: "Ready to work? Start your scheduled session right here from the dashboard.",
+            title: "Start Workout",
+            description: "Tap Start Workout to begin today's scheduled session immediately.",
             position: "bottom" as const
         }
     ];
@@ -805,7 +864,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                                 href={`/plans/log/${nextTrainingDay.id}?date=${encodeURIComponent(nextTrainingDay.date)}`}
                                 className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-brand-300 hover:text-brand-200 transition-colors"
                             >
-                                Next training day - {nextTrainingDay.name}, {nextTrainingDay.dayLabel} {formatDate(nextTrainingDay.date, { day: "numeric", month: "long" })}
+                                Next training day — preview {nextTrainingDay.name} ({nextTrainingDay.dayLabel} {formatDate(nextTrainingDay.date, { day: "numeric", month: "long" })})
                                 <ChevronRight className="w-3 h-3" />
                             </ReturnLink>
                         )}
@@ -884,16 +943,22 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
 
                         {/* Centered Start / Resume CTA */}
                         <div className="mt-6 pt-4 border-t border-surface-border/50 flex justify-center">
-                            <ReturnLink
-                                href={`/plans/log/${todayWorkout.id}`}
+                            <button
+                                type="button"
+                                onClick={handleStartTodayWorkout}
+                                disabled={startingWorkout}
                                 className={cn(
-                                    "btn-primary w-full max-w-md py-4 text-sm font-black uppercase tracking-widest flex items-center justify-center gap-2 rounded-2xl transition-all hover:scale-[1.02] active:scale-[0.98] shadow-glow-brand",
+                                    "btn-primary w-full max-w-md py-4 text-sm font-black uppercase tracking-widest flex items-center justify-center gap-2 rounded-2xl transition-all hover:scale-[1.02] active:scale-[0.98] shadow-glow-brand disabled:opacity-60",
                                     localActiveSession?.workoutId === todayWorkout.id ? "shadow-glow-success bg-success border-success hover:bg-success-600" : ""
                                 )}
                             >
                                 <Flame className={cn("w-4.5 h-4.5", localActiveSession?.workoutId === todayWorkout.id && "animate-pulse")} />
-                                {localActiveSession?.workoutId === todayWorkout.id ? "Resume Workout Session" : "Open Workout"}
-                            </ReturnLink>
+                                {startingWorkout
+                                    ? "Starting..."
+                                    : localActiveSession?.workoutId === todayWorkout.id
+                                        ? "Resume Workout Session"
+                                        : "Start Workout"}
+                            </button>
                         </div>
                     </div>
                 ) : (

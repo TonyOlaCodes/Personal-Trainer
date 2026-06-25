@@ -81,10 +81,10 @@ export function WorkoutSessionModal({
                 if (res.ok) {
                     setSession(data);
                 } else {
-                    setError(data.error || "Item no longer available");
+                    setError(typeof data.error === "string" ? data.error : "Could not load session");
                 }
             } catch {
-                if (!cancelled) setError("Item no longer available");
+                if (!cancelled) setError("Could not load session");
             } finally {
                 if (!cancelled) setLoading(false);
             }
@@ -235,7 +235,7 @@ export function WorkoutSessionModal({
                     ) : error ? (
                         <div className="p-10 text-center border border-dashed border-surface-border rounded-2xl">
                             <p className="text-sm font-bold text-fg">{error}</p>
-                            <p className="text-xs text-fg-muted mt-1">Item no longer available</p>
+                            <p className="text-xs text-fg-muted mt-1">{error || "Session not found"}</p>
                         </div>
                     ) : session ? (
                         <>
