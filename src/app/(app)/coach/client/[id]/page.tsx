@@ -5,7 +5,8 @@ import { TopBar } from "@/components/layout/TopBar";
 import { ClientDetailView } from "./ClientDetailView";
 import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
 import { getDailyMetricTargets } from "@/lib/dailyMetrics";
-import { createExerciseSessionEntry, mergeSetIntoExerciseSession } from "@/lib/exerciseHistory";
+import { format } from "date-fns";
+import { createExerciseSessionEntry, mergeSetIntoExerciseSession, normalizeExerciseHistory } from "@/lib/exerciseHistory";
 
 import { SafeFallback, rethrowNextInternalErrors } from "@/components/shared/SafeFallback";
 import { formatErrorDetails } from "@/lib/ensureAppSchema";
@@ -92,11 +93,13 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         const exerciseLastDone: Record<string, number> = {};
 
         (completedLogs ?? []).forEach(log => {
-            const dateStr = log.loggedAt ? log.loggedAt.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
+            const sessionDate = log.loggedAt
+                ? format(log.loggedAt, "MMM dd · h:mm a")
+                : "";
             const logTime = log.loggedAt ? log.loggedAt.getTime() : 0;
             
             (log.sets ?? []).forEach((set: any) => {
-                if (!set.exercise || !set.isCompleted) return;
+                if (!set.exercise || !set.isCompleted || set.isWarmup) return;
                 const exName = set.exercise.name;
                 const sWeight = set.weightKg || 0;
                 const sReps = set.reps || 0;
@@ -105,14 +108,16 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                 exerciseLastDone[exName] = Math.max(exerciseLastDone[exName] || 0, logTime);
                 
                 if (!exerciseHistory[exName]) exerciseHistory[exName] = [];
-                const existingSession = exerciseHistory[exName].find((h: any) => h.date === dateStr);
+                const existingSession = exerciseHistory[exName].find((h: any) => h.sessionId === log.id);
                 if (existingSession) {
                     mergeSetIntoExerciseSession(existingSession, sWeight, sReps, sVol);
                 } else {
-                    exerciseHistory[exName].push(createExerciseSessionEntry(dateStr, sWeight, sReps, sVol));
+                    exerciseHistory[exName].push(createExerciseSessionEntry(log.id, sessionDate, sWeight, sReps, sVol));
                 }
             });
         });
+
+        const normalizedExerciseHistory = normalizeExerciseHistory(exerciseHistory);
 
         // Dynamic Adherence and Trend Calculation
         const thirtyDaysAgo = new Date();
@@ -195,7 +200,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                             duration: l.duration || 0,
                             volume: (l.sets ?? []).reduce((sum: number, s: any) => sum + (s.reps || 0) * (s.weightKg || 0), 0),
                         }))}
-                        exerciseHistory={exerciseHistory}
+                        exerciseHistory={normalizedExerciseHistory}
                         exerciseLastDone={exerciseLastDone}
                     />
                 </div>

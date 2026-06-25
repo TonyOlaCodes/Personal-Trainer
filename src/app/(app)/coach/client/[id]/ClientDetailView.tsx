@@ -15,6 +15,7 @@ import { ReturnLink } from "@/components/shared/ReturnLink";
 import { ExerciseHistoryTooltipContent } from "@/components/shared/ExerciseHistoryTooltip";
 import { RecentSessionsExplorer, PREVIEW_LIMIT } from "@/components/shared/RecentSessionsExplorer";
 import { cn, formatDate, getInitials } from "@/lib/utils";
+import { deriveOneRMFromBestSet } from "@/lib/exerciseHistory";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { formatCoachPlanLabel } from "@/lib/coachPlans";
 
@@ -475,14 +476,20 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
         );
     }, [exerciseListOrdered, exerciseSearchQuery]);
 
-    const selectedExerciseStats = useMemo(() => {
-        if (!selectedExercise) return null;
-        const history = exerciseHistory[selectedExercise] || [];
-        if (history.length === 0) return null;
-        const currentMax = Math.max(...history.map((h: any) => h.weight || 0));
-        const estimatedMax = Math.max(...history.map((h: any) => h.oneRM || 0));
-        return { currentMax, estimatedMax };
+    const selectedExerciseHistory = useMemo(() => {
+        const raw = exerciseHistory[selectedExercise] || [];
+        return raw.map((session) => ({
+            ...session,
+            oneRM: deriveOneRMFromBestSet(session.weight, session.reps),
+        }));
     }, [exerciseHistory, selectedExercise]);
+
+    const selectedExerciseStats = useMemo(() => {
+        if (!selectedExercise || selectedExerciseHistory.length === 0) return null;
+        const currentMax = Math.max(...selectedExerciseHistory.map((h) => h.weight || 0));
+        const estimatedMax = Math.max(...selectedExerciseHistory.map((h) => h.oneRM || 0));
+        return { currentMax, estimatedMax };
+    }, [selectedExercise, selectedExerciseHistory]);
 
     return (
         <div className="space-y-8 animate-fade-in">
@@ -1376,7 +1383,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                             {selectedExercise ? (
                                 <div className="h-[300px] w-full">
                                     <ResponsiveContainer width="100%" height="100%">
-                                        <AreaChart data={exerciseHistory[selectedExercise] || []} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                        <AreaChart data={selectedExerciseHistory} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                             <defs>
                                                 <linearGradient id="exGrad" x1="0" x2="0" y1="0" y2="1">
                                                     <stop offset="5%" stopColor="#818cf8" stopOpacity={0.2} />

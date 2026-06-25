@@ -880,8 +880,8 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                                 {logs[ex.id]?.map((set, sIdx) => {
                                     const weightNum = parseFloat(set.weightKg);
                                     const estimatedOneRM =
-                                        !isCardio(ex.name, ex.muscleGroup) && weightNum > 0 && set.reps > 0
-                                            ? calculateOneRM(weightNum, set.reps)
+                                        !isCardio(ex.name, ex.muscleGroup) && weightNum > 0 && Number(set.reps) > 0
+                                            ? calculateOneRM(weightNum, Number(set.reps))
                                             : 0;
 
                                     return (

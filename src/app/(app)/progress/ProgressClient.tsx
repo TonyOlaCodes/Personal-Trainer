@@ -18,7 +18,7 @@ import { workoutFeelingEmoji } from "@/lib/workoutFeeling";
 import { PremiumLockScreen } from "@/components/shared/PremiumLockScreen";
 import { ReturnLink } from "@/components/shared/ReturnLink";
 import { ExerciseHistoryTooltipContent } from "@/components/shared/ExerciseHistoryTooltip";
-import Link from "next/link";
+import { deriveOneRMFromBestSet } from "@/lib/exerciseHistory";
 import { format, startOfWeek } from "date-fns";
 
 interface Props {
@@ -274,14 +274,20 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
         });
     }, [data, exerciseSearchQuery, pinnedExercises]);
 
-    const selectedExerciseStats = useMemo(() => {
-        if (!data || !selectedExercise) return null;
-        const history: any[] = (data?.exerciseHistory ?? {})[selectedExercise] || [];
-        if (history.length === 0) return null;
-        const currentMax = Math.max(...history.map((h: any) => h.weight || 0));
-        const estimatedMax = Math.max(...history.map((h: any) => h.oneRM || 0));
-        return { currentMax, estimatedMax };
+    const selectedExerciseHistory = useMemo(() => {
+        const raw: any[] = (data?.exerciseHistory ?? {})[selectedExercise] || [];
+        return raw.map((session) => ({
+            ...session,
+            oneRM: deriveOneRMFromBestSet(session.weight, session.reps),
+        }));
     }, [data, selectedExercise]);
+
+    const selectedExerciseStats = useMemo(() => {
+        if (!selectedExercise || selectedExerciseHistory.length === 0) return null;
+        const currentMax = Math.max(...selectedExerciseHistory.map((h) => h.weight || 0));
+        const estimatedMax = Math.max(...selectedExerciseHistory.map((h) => h.oneRM || 0));
+        return { currentMax, estimatedMax };
+    }, [selectedExercise, selectedExerciseHistory]);
 
     const bodyweightHistory = useMemo(
         () => (data?.bodyweight?.history ?? []) as BodyweightHistoryPoint[],
@@ -786,7 +792,7 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                         <div className="p-5 sm:p-6">
                             <div className="h-[300px] w-full">
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <AreaChart data={(data?.exerciseHistory ?? {})[selectedExercise] || []} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                    <AreaChart data={selectedExerciseHistory} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                         <defs>
                                             <linearGradient id="exGrad" x1="0" y1="0" x2="0" y2="1">
                                                 <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.2} />
@@ -996,7 +1002,7 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                             <div className="flex-1 min-w-0">
                                 <h3 className="text-lg font-black text-fg tracking-tight">{selectedExercise}</h3>
                                 <p className="text-[10px] text-fg-muted font-bold uppercase tracking-widest mt-1">
-                                    {((data?.exerciseHistory ?? {})[selectedExercise] || []).length} sessions logged
+                                    {selectedExerciseHistory.length} sessions logged
                                 </p>
                             </div>
                             {selectedExerciseStats && (
@@ -1020,7 +1026,7 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                             {/* Graph */}
                             <div className="h-[240px] w-full">
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <AreaChart data={(data?.exerciseHistory ?? {})[selectedExercise] || []} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                    <AreaChart data={selectedExerciseHistory} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                         <defs>
                                             <linearGradient id="modalGrad" x1="0" y1="0" x2="0" y2="1">
                                                 <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.2} />
@@ -1053,7 +1059,7 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                             <div>
                                 <h4 className="text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-3">Session Log</h4>
                                 <div className="space-y-2">
-                                    {((data?.exerciseHistory ?? {})[selectedExercise] || []).slice().reverse().map((session: any, i: number) => (
+                                    {selectedExerciseHistory.slice().reverse().map((session: any, i: number) => (
                                         <div key={i} className="flex items-center justify-between p-3 bg-surface-elevated/50 rounded-xl">
                                             <div className="flex items-center gap-3">
                                                 <span className="text-[10px] font-bold text-fg-subtle w-16 whitespace-nowrap">{session.date}</span>

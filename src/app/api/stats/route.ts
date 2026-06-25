@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { format, startOfWeek, endOfWeek, subWeeks, isWithinInterval, startOfMonth, startOfYear, addDays, endOfDay } from "date-fns";
 import { ensureDailyMetricsTable, getDailyMetricTargets } from "@/lib/dailyMetrics";
 import { calculateOneRM } from "@/lib/utils";
-import { createExerciseSessionEntry, mergeSetIntoExerciseSession } from "@/lib/exerciseHistory";
+import { createExerciseSessionEntry, mergeSetIntoExerciseSession, normalizeExerciseHistory } from "@/lib/exerciseHistory";
 import { ensureBodyweightTable } from "@/lib/bodyweight";
 
 export async function GET() {
@@ -29,7 +29,8 @@ export async function GET() {
             sets: {
                 include: {
                     exercise: { select: { name: true, muscleGroup: true } }
-                }
+                },
+                orderBy: { setNumber: "asc" }
             }
         },
         orderBy: { loggedAt: "asc" }
@@ -77,6 +78,7 @@ export async function GET() {
 
     logs.forEach(log => {
         const dateStr = format(log.loggedAt, "MMM dd");
+        const sessionDate = format(log.loggedAt, "MMM dd · h:mm a");
         const dayKey = format(log.loggedAt, "yyyy-MM-dd");
         const weekStartKey = format(startOfWeek(log.loggedAt, { weekStartsOn: 1 }), "yyyy-MM-dd");
         const weekKey = format(startOfWeek(log.loggedAt, { weekStartsOn: 1 }), "MMM dd");
@@ -100,6 +102,7 @@ export async function GET() {
             const sWeight = set.weightKg || 0;
             const sReps = set.reps || 0;
             const sVol = sWeight * sReps;
+            const isWorkingSet = !set.isWarmup;
             sessionSets++;
             sessionVolume += sVol;
 
@@ -126,7 +129,7 @@ export async function GET() {
             else if (normalizedEx.includes("squat")) big3Key = "Squat";
             else if (normalizedEx.includes("deadlift")) big3Key = "Deadlift";
 
-            if (big3Key && sWeight > 0) {
+            if (big3Key && sWeight > 0 && isWorkingSet) {
                 if (sWeight > (big3[big3Key].weight || 0)) {
                     const prevWeight = big3[big3Key].weight || 0;
                     big3[big3Key] = {
@@ -145,12 +148,7 @@ export async function GET() {
                 const curVal = sbdByDate[dateStr][fieldKey as "squat"|"bench"|"deadlift"] ?? 0;
                 if (sWeight > curVal) {
                     sbdByDate[dateStr][fieldKey as "squat"|"bench"|"deadlift"] = sWeight;
-                }
-                
-                const cur1RMVal = sbdByDate[dateStr][fieldKey1RM as "squat1RM"|"bench1RM"|"deadlift1RM"] ?? 0;
-                const set1RM = calculateOneRM(sWeight, sReps);
-                if (set1RM > cur1RMVal) {
-                    sbdByDate[dateStr][fieldKey1RM as "squat1RM"|"bench1RM"|"deadlift1RM"] = set1RM;
+                    sbdByDate[dateStr][fieldKey1RM as "squat1RM"|"bench1RM"|"deadlift1RM"] = calculateOneRM(sWeight, sReps);
                 }
             }
 
@@ -167,12 +165,13 @@ export async function GET() {
             }
 
             if (!exerciseHistory[exName]) exerciseHistory[exName] = [];
-            const existingSession = exerciseHistory[exName].find((h: any) => h.date === dateStr);
-
-            if (existingSession) {
-                mergeSetIntoExerciseSession(existingSession, sWeight, sReps, sVol);
-            } else {
-                exerciseHistory[exName].push(createExerciseSessionEntry(dateStr, sWeight, sReps, sVol));
+            if (isWorkingSet) {
+                const existingSession = exerciseHistory[exName].find((h: any) => h.sessionId === log.id);
+                if (existingSession) {
+                    mergeSetIntoExerciseSession(existingSession, sWeight, sReps, sVol);
+                } else {
+                    exerciseHistory[exName].push(createExerciseSessionEntry(log.id, sessionDate, sWeight, sReps, sVol));
+                }
             }
         });
 
@@ -401,7 +400,7 @@ export async function GET() {
             big3,
             sbdTimeline: sbdTimelineProgressive,
             muscleVolume,
-            exerciseHistory,
+            exerciseHistory: normalizeExerciseHistory(exerciseHistory),
             prList,
             topExercises,
             lastWorkout: lastWorkoutSummary,
