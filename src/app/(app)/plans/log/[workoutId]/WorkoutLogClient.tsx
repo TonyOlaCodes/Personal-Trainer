@@ -6,7 +6,7 @@ import {
     Timer, Flame, Check, HelpCircle,
     Trash2, Plus, InfoIcon, Award, Video, Play, Zap, X, ChevronLeft
 } from "lucide-react";
-import { cn, generateId, formatDate, isSameCalendarDay, parseLogDate, toDateKey, toLoggedAtIso } from "@/lib/utils";
+import { cn, generateId, formatDate, isSameCalendarDay, parseLogDate, toDateKey, toLoggedAtIso, calculateOneRM } from "@/lib/utils";
 import { uploadMediaFile } from "@/lib/compressImage";
 import { appendReturnTo, getReturnToFromSearchParams } from "@/lib/navigation";
 import { isCardio, ExerciseAutocomplete } from "@/components/shared/ExerciseAutocomplete";
@@ -768,50 +768,19 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                         </div>
                     )}
 
-                    {!sessionActive ? (
-                        <>
-                            <div className="card p-5 space-y-4">
-                                <div>
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">Workout preview</p>
-                                    <p className="text-sm text-fg-muted mt-1">
-                                        Review today&apos;s exercises, then start when you&apos;re ready.
-                                    </p>
-                                </div>
-                                <div className="space-y-2">
-                                    {workout.exercises.map((ex) => (
-                                        <div
-                                            key={ex.id}
-                                            className="flex items-center justify-between py-2.5 px-3 rounded-xl bg-surface-muted border border-surface-border"
-                                        >
-                                            <div>
-                                                <p className="text-sm font-medium text-fg">{ex.name}</p>
-                                                {ex.muscleGroup && (
-                                                    <p className="text-xs text-fg-subtle">{ex.muscleGroup}</p>
-                                                )}
-                                            </div>
-                                            <p className="text-sm font-semibold text-fg">
-                                                {isCardio(ex.name, ex.muscleGroup)
-                                                    ? `${ex.sets > 1 ? `${ex.sets} × ` : ""}${ex.reps} min`
-                                                    : `${ex.sets} × ${ex.reps}`}
-                                            </p>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                            <button
-                                onClick={handleStartWorkout}
-                                disabled={isStarting || isCheckingSession}
-                                className="btn-primary w-full h-14 text-sm font-black uppercase tracking-widest shadow-glow-brand flex items-center justify-center gap-2"
-                            >
-                                <Flame className="w-4.5 h-4.5" />
-                                {isStarting ? "Starting..." : "Start Workout"}
-                            </button>
-                        </>
-                    ) : (
-                    <>
+                    {!sessionActive && (
+                        <div className="card p-4 border-brand-500/20 bg-brand-950/10">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">Workout preview</p>
+                            <p className="text-sm text-fg-muted mt-1">
+                                Review sets below, then start when you&apos;re ready.
+                            </p>
+                        </div>
+                    )}
+
                     {activeExercises.map((ex) => {
                         const media = exerciseMedia[ex.name];
                         const hasPreview = !!(media?.videoUrl || media?.instructions);
+                        const cardio = isCardio(ex.name, ex.muscleGroup);
 
                         return (
                         <div key={ex.id} id={`exercise-${ex.id}`} className="card p-4 space-y-4 animate-slide-up">
@@ -846,69 +815,94 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                                         </span>
                                     )}
                                 </div>
-                                
+
                                 {ex.notes && <p className="text-xs text-fg-muted -mt-1">{ex.notes}</p>}
 
-                                <div className="flex items-center gap-2 pt-1">
-                                    <button 
-                                        type="button"
-                                        onClick={() => setIsSubstituting(ex.id)}
-                                        className="text-[10px] font-black uppercase text-brand-400/60 hover:text-brand-400 bg-brand-400/5 hover:bg-brand-400/10 px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5"
-                                    >
-                                        <Flame className="w-3 h-3" /> Swap
-                                    </button>
-                                    <button 
-                                        type="button"
-                                        onClick={() => removeExercise(ex.id)}
-                                        className="text-[10px] font-black uppercase text-danger/40 hover:text-danger bg-danger/5 hover:bg-danger/10 px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5"
-                                    >
-                                        <Trash2 className="w-3 h-3" /> Delete
-                                    </button>
-                                </div>
+                                {sessionActive && (
+                                    <div className="flex items-center gap-2 pt-1">
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsSubstituting(ex.id)}
+                                            className="text-[10px] font-black uppercase text-brand-400/60 hover:text-brand-400 bg-brand-400/5 hover:bg-brand-400/10 px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5"
+                                        >
+                                            <Flame className="w-3 h-3" /> Swap
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => removeExercise(ex.id)}
+                                            className="text-[10px] font-black uppercase text-danger/40 hover:text-danger bg-danger/5 hover:bg-danger/10 px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5"
+                                        >
+                                            <Trash2 className="w-3 h-3" /> Delete
+                                        </button>
+                                    </div>
+                                )}
                             </div>
 
                             <div className="space-y-2">
                                 <div className="grid grid-cols-12 gap-2 text-[11px] font-black text-fg-subtle uppercase px-1 mb-1 tracking-wider">
-                                    <div className="col-span-1 text-center">{isCardio(ex.name, ex.muscleGroup) ? "Rd" : "Set"}</div>
-                                    <div className="col-span-3 text-center">{isCardio(ex.name, ex.muscleGroup) ? "Lvl/Spd" : "Weight"}</div>
-                                    <div className="col-span-2 text-center">{isCardio(ex.name, ex.muscleGroup) ? "Mins" : "Reps"}</div>
+                                    <div className="col-span-1 text-center">{cardio ? "Rd" : "Set"}</div>
+                                    <div className="col-span-3 text-center">{cardio ? "Lvl/Spd" : "Weight"}</div>
+                                    <div className="col-span-2 text-center">{cardio ? "Mins" : "Reps"}</div>
                                     <div className="col-span-2 text-center">RPE</div>
-                                    <div className="col-span-4 text-center">Actions</div>
+                                    {!cardio && <div className={cn("text-center", sessionActive ? "col-span-2" : "col-span-4")}>Est 1RM</div>}
+                                    {!sessionActive && cardio && <div className="col-span-4" />}
+                                    {sessionActive && <div className={cn("text-center", cardio ? "col-span-4" : "col-span-2")}>Actions</div>}
                                 </div>
 
                                 {logs[ex.id]?.map((set, sIdx) => {
+                                    const weightPlaceholder = getWeightPlaceholder(ex.name, set.setNumber, ex.weightTargetKg);
+                                    const repsPlaceholder = getRepsPlaceholder(ex.name, set.setNumber, ex.reps);
+                                    const rpePlaceholder = getRpePlaceholder(ex.name, set.setNumber);
+                                    const displayWeight = set.weightKg || (sessionActive ? "" : weightPlaceholder);
+                                    const displayReps = set.reps > 0 ? set.reps : (sessionActive ? "" : repsPlaceholder);
+                                    const weightNum = parseFloat(String(displayWeight)) || 0;
+                                    const repsNum = typeof displayReps === "number" ? displayReps : parseInt(String(displayReps), 10) || 0;
+                                    const est1RM = !cardio && !set.isWarmup && weightNum > 0 && repsNum > 0 ? calculateOneRM(weightNum, repsNum) : null;
+
                                     return (
                                     <div key={sIdx} className="space-y-0.5">
                                     <div
                                         className={cn(
                                             "grid grid-cols-12 gap-2 p-2 rounded-xl border transition-all duration-200",
-                                            set.isCompleted
+                                            sessionActive && set.isCompleted
                                                 ? "bg-success-950/20 border-success-800/40"
-                                                : "bg-surface-muted/50 border-surface-border hover:border-brand-700/30"
+                                                : "bg-surface-muted/50 border-surface-border",
+                                            sessionActive && !set.isCompleted && "hover:border-brand-700/30"
                                         )}
                                     >
                                         <div className="col-span-1 flex items-center justify-center">
-                                            <button
-                                                onClick={() => updateSet(ex.id, sIdx, { isWarmup: !set.isWarmup })}
-                                                className={cn(
-                                                    "w-7 h-10 rounded-md text-[10px] font-bold flex items-center justify-center transition-colors shadow-sm",
-                                                    set.isWarmup ? "bg-warning-500/20 text-warning-400" : "bg-surface-elevated text-fg-subtle hover:text-fg"
-                                                )}
-                                            >
-                                                {set.isWarmup ? "W" : set.setNumber}
-                                            </button>
+                                            {sessionActive ? (
+                                                <button
+                                                    onClick={() => updateSet(ex.id, sIdx, { isWarmup: !set.isWarmup })}
+                                                    className={cn(
+                                                        "w-7 h-10 rounded-md text-[10px] font-bold flex items-center justify-center transition-colors shadow-sm",
+                                                        set.isWarmup ? "bg-warning-500/20 text-warning-400" : "bg-surface-elevated text-fg-subtle hover:text-fg"
+                                                    )}
+                                                >
+                                                    {set.isWarmup ? "W" : set.setNumber}
+                                                </button>
+                                            ) : (
+                                                <span className="w-7 h-10 rounded-md text-[10px] font-bold flex items-center justify-center bg-surface-elevated text-fg-subtle">
+                                                    {set.setNumber}
+                                                </span>
+                                            )}
                                         </div>
 
                                         <div className="col-span-3">
                                             <div className="relative">
                                                 <input
                                                     type="number"
-                                                    className="input-sm w-full bg-surface-elevated border-none focus:ring-1 focus:ring-brand-500 text-center text-sm font-semibold rounded-lg h-10 px-1"
-                                                    value={set.weightKg}
-                                                    placeholder={getWeightPlaceholder(ex.name, set.setNumber, ex.weightTargetKg) || "0"}
+                                                    readOnly={!sessionActive}
+                                                    disabled={!sessionActive}
+                                                    className={cn(
+                                                        "input-sm w-full bg-surface-elevated border-none text-center text-sm font-semibold rounded-lg h-10 px-1",
+                                                        sessionActive && "focus:ring-1 focus:ring-brand-500"
+                                                    )}
+                                                    value={displayWeight}
+                                                    placeholder={weightPlaceholder || "0"}
                                                     onChange={(e) => updateSet(ex.id, sIdx, { weightKg: e.target.value })}
                                                 />
-                                                {!isCardio(ex.name, ex.muscleGroup) && (set.weightKg || getWeightPlaceholder(ex.name, set.setNumber, ex.weightTargetKg)) && (
+                                                {!cardio && (displayWeight || weightPlaceholder) && (
                                                     <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[9px] text-fg-subtle pointer-events-none">kg</span>
                                                 )}
                                             </div>
@@ -917,9 +911,14 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                                         <div className="col-span-2">
                                             <input
                                                 type="number"
-                                                className="input-sm w-full bg-surface-elevated border-none focus:ring-1 focus:ring-brand-500 text-center text-sm font-semibold rounded-lg h-10 px-0"
-                                                value={set.reps > 0 ? set.reps : ""}
-                                                placeholder={getRepsPlaceholder(ex.name, set.setNumber, ex.reps) || "0"}
+                                                readOnly={!sessionActive}
+                                                disabled={!sessionActive}
+                                                className={cn(
+                                                    "input-sm w-full bg-surface-elevated border-none text-center text-sm font-semibold rounded-lg h-10 px-0",
+                                                    sessionActive && "focus:ring-1 focus:ring-brand-500"
+                                                )}
+                                                value={displayReps}
+                                                placeholder={repsPlaceholder || "0"}
                                                 onChange={(e) => updateSet(ex.id, sIdx, { reps: parseInt(e.target.value) || 0 })}
                                             />
                                         </div>
@@ -927,19 +926,36 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                                         <div className="col-span-2">
                                             <input
                                                 type="number"
-                                                className="input-sm w-full bg-surface-elevated border-none focus:ring-1 focus:ring-brand-500 text-center text-sm font-semibold rounded-lg h-10 px-0"
-                                                value={set.rpe}
-                                                placeholder={getRpePlaceholder(ex.name, set.setNumber) || "RPE"}
+                                                readOnly={!sessionActive}
+                                                disabled={!sessionActive}
+                                                className={cn(
+                                                    "input-sm w-full bg-surface-elevated border-none text-center text-sm font-semibold rounded-lg h-10 px-0",
+                                                    sessionActive && "focus:ring-1 focus:ring-brand-500"
+                                                )}
+                                                value={sessionActive ? set.rpe : (set.rpe || rpePlaceholder)}
+                                                placeholder={rpePlaceholder || "RPE"}
                                                 onChange={(e) => updateSet(ex.id, sIdx, { rpe: e.target.value })}
                                             />
                                         </div>
 
-                                        <div className="col-span-4 flex items-center justify-end gap-1">
+                                        {!cardio && (
+                                            <div className={cn("flex items-center justify-center", sessionActive ? "col-span-2" : "col-span-4")}>
+                                                <span className={cn(
+                                                    "text-xs font-bold tabular-nums",
+                                                    est1RM ? "text-warning-400" : "text-fg-subtle"
+                                                )}>
+                                                    {est1RM ? `${est1RM}kg` : "—"}
+                                                </span>
+                                            </div>
+                                        )}
+
+                                        {sessionActive && (
+                                        <div className={cn("flex items-center justify-end gap-1", cardio ? "col-span-4" : "col-span-2")}>
                                             <label className="cursor-pointer">
-                                                <input 
-                                                    type="file" 
-                                                    accept="video/*" 
-                                                    className="hidden" 
+                                                <input
+                                                    type="file"
+                                                    accept="video/*"
+                                                    className="hidden"
                                                     onChange={(e) => handleUploadVideo(ex.id, sIdx, e.target.files?.[0])}
                                                 />
                                                 <div className={cn(
@@ -968,21 +984,37 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                                                 <Trash2 className="w-4 h-4" />
                                             </button>
                                         </div>
+                                        )}
                                     </div>
                                     </div>
                                 )})}
-                            </div>
+                                        </div>
 
-                            <button
-                                onClick={() => addSet(ex.id)}
-                                className="w-full flex items-center justify-center gap-2 py-2.5 bg-surface-muted/50 border border-dashed border-surface-border rounded-xl text-xs font-semibold text-fg-muted hover:text-brand-400 hover:border-brand-600 transition-all"
-                            >
-                                <Plus className="w-3.5 h-3.5" />
-                                Add Set
-                            </button>
+                                        {!sessionActive && cardio && <div className="col-span-4" />}
+
+                                        {sessionActive && (
+                                <button
+                                    onClick={() => addSet(ex.id)}
+                                    className="w-full flex items-center justify-center gap-2 py-2.5 bg-surface-muted/50 border border-dashed border-surface-border rounded-xl text-xs font-semibold text-fg-muted hover:text-brand-400 hover:border-brand-600 transition-all"
+                                >
+                                    <Plus className="w-3.5 h-3.5" />
+                                    Add Set
+                                </button>
+                            )}
                         </div>
                     )})}
 
+                    {!sessionActive ? (
+                        <button
+                            onClick={handleStartWorkout}
+                            disabled={isStarting || isCheckingSession}
+                            className="btn-primary w-full h-14 text-sm font-black uppercase tracking-widest shadow-glow-brand flex items-center justify-center gap-2"
+                        >
+                            <Flame className="w-4.5 h-4.5" />
+                            {isStarting ? "Starting..." : "Start Workout"}
+                        </button>
+                    ) : (
+                    <>
                     <button
                         onClick={() => setIsAddingExercise(true)}
                         className="w-full h-16 rounded-3xl border-2 border-dashed border-surface-border text-fg-subtle hover:text-brand-400 hover:border-brand-500/40 hover:bg-brand-500/5 transition-all flex items-center justify-center gap-3 group"

@@ -18,6 +18,7 @@ import { workoutFeelingEmoji } from "@/lib/workoutFeeling";
 import { PremiumLockScreen } from "@/components/shared/PremiumLockScreen";
 import { ReturnLink } from "@/components/shared/ReturnLink";
 import { ExerciseHistoryTooltipContent } from "@/components/shared/ExerciseHistoryTooltip";
+import { deriveOneRMFromBestSet } from "@/lib/exerciseHistory";
 import { format, startOfWeek } from "date-fns";
 
 interface Props {
@@ -273,15 +274,19 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
         });
     }, [data, exerciseSearchQuery, pinnedExercises]);
 
-    const selectedExerciseHistory = useMemo(
-        () => (data?.exerciseHistory ?? {})[selectedExercise] || [],
-        [data, selectedExercise]
-    );
+    const selectedExerciseHistory = useMemo(() => {
+        const raw: any[] = (data?.exerciseHistory ?? {})[selectedExercise] || [];
+        return raw.map((session) => ({
+            ...session,
+            oneRM: deriveOneRMFromBestSet(session.weight, session.reps),
+        }));
+    }, [data, selectedExercise]);
 
     const selectedExerciseStats = useMemo(() => {
         if (!selectedExercise || selectedExerciseHistory.length === 0) return null;
         return {
-            currentMax: Math.max(...selectedExerciseHistory.map((h: { weight?: number }) => h.weight || 0)),
+            currentMax: Math.max(...selectedExerciseHistory.map((h) => h.weight || 0)),
+            estimatedMax: Math.max(...selectedExerciseHistory.map((h) => h.oneRM || 0)),
         };
     }, [selectedExercise, selectedExerciseHistory]);
 
@@ -773,9 +778,15 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                                 <p className="text-[10px] text-fg-muted font-medium mt-0.5">Performance curve over time</p>
                             </div>
                             {selectedExerciseStats && (
-                                <div className="text-center px-3 py-1.5 rounded-xl bg-brand-500/10 border border-brand-500/20 shrink-0">
-                                    <p className="text-[9px] font-black text-brand-400/70 uppercase tracking-widest">Current Max</p>
-                                    <p className="text-sm font-black text-brand-400">{selectedExerciseStats.currentMax}<span className="text-[9px] ml-0.5 font-bold">kg</span></p>
+                                <div className="flex items-center gap-3 shrink-0">
+                                    <div className="text-center px-3 py-1.5 rounded-xl bg-warning/10 border border-warning/20">
+                                        <p className="text-[9px] font-black text-warning/70 uppercase tracking-widest">Est. Max</p>
+                                        <p className="text-sm font-black text-warning">{selectedExerciseStats.estimatedMax}<span className="text-[9px] ml-0.5 font-bold">kg</span></p>
+                                    </div>
+                                    <div className="text-center px-3 py-1.5 rounded-xl bg-brand-500/10 border border-brand-500/20">
+                                        <p className="text-[9px] font-black text-brand-400/70 uppercase tracking-widest">Current Max</p>
+                                        <p className="text-sm font-black text-brand-400">{selectedExerciseStats.currentMax}<span className="text-[9px] ml-0.5 font-bold">kg</span></p>
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -811,6 +822,15 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                                             dot={{ r: 4, fill: "#8B5CF6", stroke: "#0F172A", strokeWidth: 2 }}
                                             activeDot={{ r: 6, fill: "#A78BFA", strokeWidth: 0 }}
                                             animationDuration={800}
+                                        />
+                                        <Line
+                                            type="monotone"
+                                            dataKey="oneRM"
+                                            stroke="#FACC15"
+                                            strokeWidth={2}
+                                            strokeDasharray="5 5"
+                                            dot={false}
+                                            activeDot={false}
                                         />
                                     </AreaChart>
                                 </ResponsiveContainer>
@@ -987,9 +1007,15 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                                 </p>
                             </div>
                             {selectedExerciseStats && (
-                                <div className="text-center px-2.5 py-1.5 rounded-xl bg-brand-500/10 border border-brand-500/20 mr-3">
-                                    <p className="text-[8px] font-black text-brand-400/70 uppercase tracking-widest">Current Max</p>
-                                    <p className="text-sm font-black text-brand-400 leading-tight">{selectedExerciseStats.currentMax}<span className="text-[8px] ml-0.5 font-bold">kg</span></p>
+                                <div className="flex items-center gap-2 mr-3">
+                                    <div className="text-center px-2.5 py-1.5 rounded-xl bg-warning/10 border border-warning/20">
+                                        <p className="text-[8px] font-black text-warning/70 uppercase tracking-widest">Est. Max</p>
+                                        <p className="text-sm font-black text-warning leading-tight">{selectedExerciseStats.estimatedMax}<span className="text-[8px] ml-0.5 font-bold">kg</span></p>
+                                    </div>
+                                    <div className="text-center px-2.5 py-1.5 rounded-xl bg-brand-500/10 border border-brand-500/20">
+                                        <p className="text-[8px] font-black text-brand-400/70 uppercase tracking-widest">Current Max</p>
+                                        <p className="text-sm font-black text-brand-400 leading-tight">{selectedExerciseStats.currentMax}<span className="text-[8px] ml-0.5 font-bold">kg</span></p>
+                                    </div>
                                 </div>
                             )}
                             <button onClick={() => setShowExerciseModal(false)} className="w-8 h-8 rounded-lg bg-surface-muted hover:bg-surface-elevated flex items-center justify-center transition-colors shrink-0">
@@ -1025,6 +1051,7 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                                             }}
                                         />
                                         <Area type="monotone" dataKey="weight" stroke="#8B5CF6" strokeWidth={3} fill="url(#modalGrad)" dot={{ r: 4, fill: "#8B5CF6", stroke: "#0F172A", strokeWidth: 2 }} activeDot={{ r: 6, fill: "#A78BFA", strokeWidth: 0 }} />
+                                        <Line type="monotone" dataKey="oneRM" stroke="#FACC15" strokeWidth={2} strokeDasharray="4 4" dot={false} activeDot={false} />
                                     </AreaChart>
                                 </ResponsiveContainer>
                             </div>
@@ -1042,7 +1069,7 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                                                 </div>
                                             </div>
                                             <div className="text-right">
-                                                <span className="text-[10px] font-bold text-fg-muted">Vol: {Math.round(session.volume)}kg</span>
+                                                <span className="text-[10px] font-bold text-yellow-500/80">Est. 1RM: {session.oneRM}kg</span>
                                             </div>
                                         </div>
                                     ))}

@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Activity, ChevronLeft, ChevronRight, Dumbbell, Loader2, MessageSquare, Trash2, X } from "lucide-react";
-import { cn, formatDate } from "@/lib/utils";
+import { cn, formatDate, calculateOneRM } from "@/lib/utils";
+import { isCardio } from "@/components/shared/ExerciseAutocomplete";
 import { WorkoutFeelingEditor } from "@/components/shared/WorkoutFeelingEditor";
 import { workoutFeelingEmoji } from "@/lib/workoutFeeling";
 
@@ -293,21 +294,32 @@ export function WorkoutSessionModal({
                                             </div>
                                             <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">{group.sets.length} sets</span>
                                         </div>
-                                        <div className="grid grid-cols-4 gap-2 text-[10px] font-black uppercase tracking-widest text-fg-subtle px-2 pb-2">
+                                        <div className="grid grid-cols-5 gap-2 text-[10px] font-black uppercase tracking-widest text-fg-subtle px-2 pb-2">
                                             <span>Set</span>
                                             <span>Reps</span>
                                             <span>Kg</span>
                                             <span>RPE</span>
+                                            <span>Est 1RM</span>
                                         </div>
                                         <div className="space-y-1">
-                                            {group.sets.map((set) => (
-                                                <div key={set.id} className={cn("grid grid-cols-4 gap-2 rounded-lg bg-surface-muted px-2 py-2 text-sm", !set.isCompleted && "opacity-50")}>
+                                            {group.sets.map((set) => {
+                                                const cardio = isCardio(set.exercise.name, set.exercise.muscleGroup);
+                                                const weight = set.weightKg ?? 0;
+                                                const reps = set.reps ?? 0;
+                                                const est1RM = !cardio && !set.isWarmup && weight > 0 && reps > 0
+                                                    ? calculateOneRM(weight, reps)
+                                                    : null;
+                                                return (
+                                                <div key={set.id} className={cn("grid grid-cols-5 gap-2 rounded-lg bg-surface-muted px-2 py-2 text-sm", !set.isCompleted && "opacity-50")}>
                                                     <span>{set.setNumber}{set.isWarmup ? " W" : ""}</span>
                                                     <span>{set.reps ?? "-"}</span>
                                                     <span>{set.weightKg ?? "-"}</span>
                                                     <span>{set.rpe ?? "-"}</span>
+                                                    <span className={est1RM ? "font-bold text-warning-400" : "text-fg-subtle"}>
+                                                        {est1RM ? `${est1RM}kg` : "—"}
+                                                    </span>
                                                 </div>
-                                            ))}
+                                            )})}
                                         </div>
                                     </div>
                                 ))}

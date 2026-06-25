@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { format, startOfWeek, endOfWeek, subWeeks, isWithinInterval, startOfMonth, startOfYear, addDays, endOfDay } from "date-fns";
 import { ensureDailyMetricsTable, getDailyMetricTargets } from "@/lib/dailyMetrics";
 import { createExerciseSessionEntry, mergeSetIntoExerciseSession, normalizeExerciseHistory } from "@/lib/exerciseHistory";
+import { calculateOneRM } from "@/lib/oneRepMax";
 import { ensureBodyweightTable } from "@/lib/bodyweight";
 
 export async function GET() {
@@ -53,7 +54,7 @@ export async function GET() {
         "Deadlift": { weight: 0, reps: 0, date: "", change: 0 }
     };
 
-    const sbdByDate: Record<string, { date: string; dateKey: string; squat: number | null; bench: number | null; deadlift: number | null }> = {};
+    const sbdByDate: Record<string, { date: string; dateKey: string; squat: number | null; bench: number | null; deadlift: number | null; squat1RM: number | null; bench1RM: number | null; deadlift1RM: number | null }> = {};
 
     const now = new Date();
     const thisWeekRange = { start: startOfWeek(now, { weekStartsOn: 1 }), end: endOfWeek(now, { weekStartsOn: 1 }) };
@@ -136,15 +137,18 @@ export async function GET() {
                         change: prevWeight > 0 ? sWeight - prevWeight : 0
                     };
                 }
-                if (!sbdByDate[dateStr]) sbdByDate[dateStr] = { 
-                    date: dateStr, dateKey: dayKey, 
+                if (!sbdByDate[dateStr]) sbdByDate[dateStr] = {
+                    date: dateStr, dateKey: dayKey,
                     squat: null, bench: null, deadlift: null,
+                    squat1RM: null, bench1RM: null, deadlift1RM: null,
                 };
                 const fieldKey = big3Key === "Squat" ? "squat" : big3Key === "Bench Press" ? "bench" : "deadlift";
-                
+                const fieldKey1RM = big3Key === "Squat" ? "squat1RM" : big3Key === "Bench Press" ? "bench1RM" : "deadlift1RM";
+
                 const curVal = sbdByDate[dateStr][fieldKey as "squat"|"bench"|"deadlift"] ?? 0;
                 if (sWeight > curVal) {
                     sbdByDate[dateStr][fieldKey as "squat"|"bench"|"deadlift"] = sWeight;
+                    sbdByDate[dateStr][fieldKey1RM as "squat1RM"|"bench1RM"|"deadlift1RM"] = calculateOneRM(sWeight, sReps);
                 }
             }
 
@@ -349,17 +353,25 @@ export async function GET() {
     const sbdTimeline = Object.values(sbdByDate).sort((a, b) => a.dateKey!.localeCompare(b.dateKey!));
     
     let peakS = 0, peakB = 0, peakD = 0;
+    let peakS1RM = 0, peakB1RM = 0, peakD1RM = 0;
 
     const sbdTimelineProgressive = sbdTimeline.map(row => {
         if (row.squat !== null && row.squat > peakS) peakS = row.squat;
         if (row.bench !== null && row.bench > peakB) peakB = row.bench;
         if (row.deadlift !== null && row.deadlift > peakD) peakD = row.deadlift;
 
+        if (row.squat1RM !== null && row.squat1RM > peakS1RM) peakS1RM = row.squat1RM;
+        if (row.bench1RM !== null && row.bench1RM > peakB1RM) peakB1RM = row.bench1RM;
+        if (row.deadlift1RM !== null && row.deadlift1RM > peakD1RM) peakD1RM = row.deadlift1RM;
+
         return {
             date: row.date,
             squat: peakS || null,
             bench: peakB || null,
             deadlift: peakD || null,
+            squat1RM: peakS1RM || null,
+            bench1RM: peakB1RM || null,
+            deadlift1RM: peakD1RM || null,
         };
     });
 

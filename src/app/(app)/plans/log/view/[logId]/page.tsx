@@ -2,7 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { redirect, notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
-import { formatDate, cn } from "@/lib/utils";
+import { formatDate, cn, calculateOneRM } from "@/lib/utils";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { Suspense } from "react";
 import { Dumbbell, Clock, Zap, Video, FileText } from "lucide-react";
@@ -141,25 +141,34 @@ export default async function LogViewPage({ params }: { params: Promise<{ logId:
                             </div>
                             
                             <div className="space-y-3">
-                                <div className="grid grid-cols-5 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-fg-subtle border-b border-surface-border mb-3">
+                                <div className="grid grid-cols-6 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-fg-subtle border-b border-surface-border mb-3">
                                     <span className="col-span-1">SET</span>
                                     <span className="col-span-1 text-center">REPS</span>
                                     <span className="col-span-1 text-center">LOAD</span>
                                     <span className="col-span-1 text-center">RPE</span>
+                                    <span className="col-span-1 text-center">Est 1RM</span>
                                     <span className="col-span-1 text-right">MEDIA</span>
                                 </div>
-                                {ex.sets.map((set: any) => (
+                                {ex.sets.map((set: any) => {
+                                    const isCardioExercise = ex.muscleGroup?.toLowerCase() === "cardio";
+                                    const est1RM = !isCardioExercise && !set.isWarmup && set.weightKg && set.reps
+                                        ? calculateOneRM(set.weightKg, set.reps)
+                                        : null;
+                                    return (
                                     <div key={set.id} className="space-y-3">
                                         <div className={cn(
-                                            "grid grid-cols-5 px-3 py-3 text-sm items-center rounded-2xl group transition-all",
+                                            "grid grid-cols-6 px-3 py-3 text-sm items-center rounded-2xl group transition-all",
                                             set.isPR ? "bg-brand-500/5 border border-brand-500/20 shadow-glow-brand-sm" : "bg-surface-muted border border-transparent hover:border-surface-border"
                                         )}>
-                                            <span className="col-span-1 font-black text-fg-subtle tracking-tighter">#{set.setNumber}</span>
+                                            <span className="col-span-1 font-black text-fg-subtle tracking-tighter">#{set.setNumber}{set.isWarmup ? " W" : ""}</span>
                                             <span className="col-span-1 font-black text-center text-fg">{set.reps || "-"}</span>
                                             <span className="col-span-1 font-black text-center text-brand-400 italic">
                                                 {set.weightKg ? `${set.weightKg}` : "-"} <span className="text-[9px] not-italic text-fg-subtle">KG</span>
                                             </span>
                                             <span className="col-span-1 font-black text-center text-warning italic">{set.rpe || "-"}</span>
+                                            <span className={cn("col-span-1 font-black text-center", est1RM ? "text-warning-400" : "text-fg-subtle")}>
+                                                {est1RM ? `${est1RM}kg` : "—"}
+                                            </span>
                                             <div className="col-span-1 flex justify-end">
                                                 {set.videoUrl && <Video className={cn("w-4 h-4", set.videoUrl ? "text-success animate-pulse" : "text-fg-subtle/20")} />}
                                             </div>
@@ -177,7 +186,7 @@ export default async function LogViewPage({ params }: { params: Promise<{ logId:
                                             </div>
                                         )}
                                     </div>
-                                ))}
+                                )})}
                             </div>
                         </div>
                     ))}
