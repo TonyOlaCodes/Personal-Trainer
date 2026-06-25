@@ -15,7 +15,6 @@ import { ReturnLink } from "@/components/shared/ReturnLink";
 import { ExerciseHistoryTooltipContent } from "@/components/shared/ExerciseHistoryTooltip";
 import { RecentSessionsExplorer, PREVIEW_LIMIT } from "@/components/shared/RecentSessionsExplorer";
 import { cn, formatDate, getInitials } from "@/lib/utils";
-import { deriveOneRMFromBestSet } from "@/lib/exerciseHistory";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { formatCoachPlanLabel } from "@/lib/coachPlans";
 
@@ -93,7 +92,7 @@ interface Props {
     bodyweightHistory: { date: string; weightKg: number }[];
     workoutNotes: ClientWorkoutNote[];
     workoutHistory: WorkoutHistoryEntry[];
-    exerciseHistory: Record<string, Array<{ date: string, weight: number, reps: number, volume: number, oneRM: number }>>;
+    exerciseHistory: Record<string, Array<{ date: string, weight: number, reps: number, volume: number }>>;
     exerciseLastDone: Record<string, number>;
     readOnly?: boolean;
 }
@@ -476,19 +475,16 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
         );
     }, [exerciseListOrdered, exerciseSearchQuery]);
 
-    const selectedExerciseHistory = useMemo(() => {
-        const raw = exerciseHistory[selectedExercise] || [];
-        return raw.map((session) => ({
-            ...session,
-            oneRM: deriveOneRMFromBestSet(session.weight, session.reps),
-        }));
-    }, [exerciseHistory, selectedExercise]);
+    const selectedExerciseHistory = useMemo(
+        () => exerciseHistory[selectedExercise] || [],
+        [exerciseHistory, selectedExercise]
+    );
 
     const selectedExerciseStats = useMemo(() => {
         if (!selectedExercise || selectedExerciseHistory.length === 0) return null;
-        const currentMax = Math.max(...selectedExerciseHistory.map((h) => h.weight || 0));
-        const estimatedMax = Math.max(...selectedExerciseHistory.map((h) => h.oneRM || 0));
-        return { currentMax, estimatedMax };
+        return {
+            currentMax: Math.max(...selectedExerciseHistory.map((h) => h.weight || 0)),
+        };
     }, [selectedExercise, selectedExerciseHistory]);
 
     return (
@@ -1367,15 +1363,9 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                 <p className="text-[10px] text-fg-muted font-bold uppercase tracking-wide mt-0.5">Performance curve over time</p>
                             </div>
                             {selectedExerciseStats && (
-                                <div className="flex items-center gap-3 shrink-0">
-                                    <div className="text-center px-3 py-1.5 rounded-xl bg-warning/10 border border-warning/20">
-                                        <p className="text-[9px] font-black text-warning/70 uppercase tracking-widest">Est. Max</p>
-                                        <p className="text-sm font-black text-warning">{selectedExerciseStats.estimatedMax}<span className="text-[9px] ml-0.5 font-bold">kg</span></p>
-                                    </div>
-                                    <div className="text-center px-3 py-1.5 rounded-xl bg-brand-500/10 border border-brand-500/20">
-                                        <p className="text-[9px] font-black text-brand-400/70 uppercase tracking-widest">Current Max</p>
-                                        <p className="text-sm font-black text-brand-400">{selectedExerciseStats.currentMax}<span className="text-[9px] ml-0.5 font-bold">kg</span></p>
-                                    </div>
+                                <div className="text-center px-3 py-1.5 rounded-xl bg-brand-500/10 border border-brand-500/20 shrink-0">
+                                    <p className="text-[9px] font-black text-brand-400/70 uppercase tracking-widest">Current Max</p>
+                                    <p className="text-sm font-black text-brand-400">{selectedExerciseStats.currentMax}<span className="text-[9px] ml-0.5 font-bold">kg</span></p>
                                 </div>
                             )}
                         </div>
@@ -1412,15 +1402,6 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                                  dot={{ r: 4, fill: "#818cf8", stroke: "#0F172A", strokeWidth: 2 }}
                                                  activeDot={{ r: 6, fill: "#a5b4fc", strokeWidth: 0 }}
                                                  animationDuration={800}
-                                             />
-                                             <Line 
-                                                 type="monotone" 
-                                                 dataKey="oneRM" 
-                                                 stroke="#FACC15" 
-                                                 strokeWidth={2} 
-                                                 strokeDasharray="5 5" 
-                                                 dot={false}
-                                                 activeDot={false}
                                              />
                                          </AreaChart>
                                      </ResponsiveContainer>

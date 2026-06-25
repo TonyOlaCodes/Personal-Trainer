@@ -1,12 +1,9 @@
-import { calculateOneRM } from "./oneRepMax";
-
 export type ExerciseSessionEntry = {
     sessionId: string;
     date: string;
     weight: number;
     reps: number;
     volume: number;
-    oneRM: number;
 };
 
 export function coerceSetNumber(value: unknown): number {
@@ -15,20 +12,10 @@ export function coerceSetNumber(value: unknown): number {
     return n;
 }
 
-/** 1RM always matches the displayed best set (weight × reps). */
-export function deriveOneRMFromBestSet(weight: number, reps: number): number {
-    return calculateOneRM(coerceSetNumber(weight), Math.round(coerceSetNumber(reps)));
-}
-
 export function finalizeExerciseSessionEntry(session: ExerciseSessionEntry): ExerciseSessionEntry {
     const weight = coerceSetNumber(session.weight);
     const reps = Math.round(coerceSetNumber(session.reps));
-    return {
-        ...session,
-        weight,
-        reps,
-        oneRM: deriveOneRMFromBestSet(weight, reps),
-    };
+    return { ...session, weight, reps };
 }
 
 export function normalizeExerciseHistory(
@@ -42,7 +29,7 @@ export function normalizeExerciseHistory(
     );
 }
 
-/** Best set = heaviest non-warmup weight in the workout; 1RM is always from that set. */
+/** Best set = heaviest non-warmup weight in the workout. */
 export function mergeSetIntoExerciseSession(
     session: ExerciseSessionEntry,
     sWeight: number,
@@ -63,7 +50,6 @@ export function mergeSetIntoExerciseSession(
         session.reps = reps;
     }
 
-    session.oneRM = deriveOneRMFromBestSet(session.weight, session.reps);
     session.volume += sVol;
 }
 
@@ -82,6 +68,5 @@ export function createExerciseSessionEntry(
         weight,
         reps,
         volume: sVol,
-        oneRM: deriveOneRMFromBestSet(weight, reps),
     });
 }

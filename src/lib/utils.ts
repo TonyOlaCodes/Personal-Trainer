@@ -157,5 +157,3 @@ export const roleBadgeClass: Record<string, string> = {
     COACH: "badge-success",
     SUPER_ADMIN: "badge-warning",
 };
-
-export { calculateOneRM } from "@/lib/oneRepMax";

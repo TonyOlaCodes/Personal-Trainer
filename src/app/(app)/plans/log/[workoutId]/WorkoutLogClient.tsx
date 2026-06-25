@@ -8,7 +8,6 @@ import {
 } from "lucide-react";
 import { cn, generateId, formatDate, isSameCalendarDay, parseLogDate, toDateKey, toLoggedAtIso } from "@/lib/utils";
 import { uploadMediaFile } from "@/lib/compressImage";
-import { calculateOneRM } from "@/lib/oneRepMax";
 import { appendReturnTo, getReturnToFromSearchParams } from "@/lib/navigation";
 import { isCardio, ExerciseAutocomplete } from "@/components/shared/ExerciseAutocomplete";
 
@@ -878,12 +877,6 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                                 </div>
 
                                 {logs[ex.id]?.map((set, sIdx) => {
-                                    const weightNum = parseFloat(set.weightKg);
-                                    const estimatedOneRM =
-                                        !isCardio(ex.name, ex.muscleGroup) && weightNum > 0 && Number(set.reps) > 0
-                                            ? calculateOneRM(weightNum, Number(set.reps))
-                                            : 0;
-
                                     return (
                                     <div key={sIdx} className="space-y-0.5">
                                     <div
@@ -976,11 +969,6 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                                             </button>
                                         </div>
                                     </div>
-                                    {estimatedOneRM > 0 && (
-                                        <p className="text-[10px] font-bold text-warning/80 text-right pr-2 pb-0.5">
-                                            Est. 1RM: {estimatedOneRM} kg
-                                        </p>
-                                    )}
                                     </div>
                                 )})}
                             </div>
