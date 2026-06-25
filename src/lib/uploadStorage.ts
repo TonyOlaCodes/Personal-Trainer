@@ -49,19 +49,26 @@ const BLOB_NOT_CONFIGURED_MESSAGE =
     "Photo uploads need Vercel Blob storage. In the Vercel dashboard: Storage → Create Blob → connect it to this project, then redeploy.";
 
 async function storeInBlob(buffer: Buffer, filename: string, contentType: string) {
-    const token = blobToken();
-    if (!token) {
-        throw new Error(BLOB_NOT_CONFIGURED_MESSAGE);
+    // On Vercel, omit `token` so the SDK uses OIDC (VERCEL_OIDC_TOKEN + BLOB_STORE_ID).
+    // Passing an empty/invalid static token overrides OIDC and causes "Access denied".
+    const staticToken = isVercelRuntime() ? undefined : blobToken();
+
+    try {
+        const blob = await put(`uploads/${filename}`, buffer, {
+            access: "public",
+            contentType,
+            addRandomSuffix: false,
+            ...(staticToken ? { token: staticToken } : {}),
+        });
+
+        return { url: blob.url, type: contentType };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (/access denied|no token found|valid token/i.test(message)) {
+            throw new Error(BLOB_NOT_CONFIGURED_MESSAGE);
+        }
+        throw error;
     }
-
-    const blob = await put(`uploads/${filename}`, buffer, {
-        access: "public",
-        contentType,
-        addRandomSuffix: false,
-        token,
-    });
-
-    return { url: blob.url, type: contentType };
 }
 
 async function storeLocally(buffer: Buffer, filename: string, contentType: string) {

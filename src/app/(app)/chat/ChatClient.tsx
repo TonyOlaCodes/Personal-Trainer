@@ -61,6 +61,8 @@ interface Props {
 }
 
 const REACTION_EMOJIS = ["👍", "🔥", "💪", "❤️", "😂", "🎯"];
+const CHAT_MEDIA_THUMB =
+    "w-[104px] h-[104px] sm:w-[120px] sm:h-[120px] object-cover rounded-xl shrink-0";
 const LAST_CHAT_TAB_KEY = "lastChatTab";
 const LAST_CHAT_CONVERSATION_KEY = "lastChatConversationId";
 
@@ -949,26 +951,48 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                                                         <span className="text-[9px] opacity-50 ml-2 italic">(edited)</span>
                                                     )}
                                                 </div>
-                                            ) : msg.type === "VIDEO" ? (
-                                                <div 
-                                                    className="relative max-w-xs cursor-pointer rounded-2xl overflow-hidden shadow-sm"
-                                                    onClick={() => msg.mediaUrl && setViewerMedia({ src: resolveUploadUrl(msg.mediaUrl), type: "VIDEO" })}
-                                                >
-                                                    <video src={resolveUploadUrl(msg.mediaUrl)} className="w-full pointer-events-none" />
-                                                    <div className="absolute inset-0 bg-black/20 flex items-center justify-center transition-colors hover:bg-black/10">
-                                                        <div className="w-12 h-12 bg-white/30 backdrop-blur-md rounded-full flex items-center justify-center text-white">
-                                                            <div className="w-0 h-0 border-t-8 border-t-transparent border-l-[12px] border-l-white border-b-8 border-b-transparent ml-1" />
+                                            ) : msg.type === "VIDEO" || msg.type === "IMAGE" ? (
+                                                <div className={cn(
+                                                    "flex flex-col gap-1.5",
+                                                    isMine ? "items-end" : "items-start"
+                                                )}>
+                                                    {msg.type === "VIDEO" ? (
+                                                        <div
+                                                            className={cn(
+                                                                "relative cursor-pointer overflow-hidden shadow-sm hover:opacity-95 transition-opacity",
+                                                                CHAT_MEDIA_THUMB
+                                                            )}
+                                                            onClick={() => msg.mediaUrl && setViewerMedia({ src: resolveUploadUrl(msg.mediaUrl), type: "VIDEO" })}
+                                                        >
+                                                            <video src={resolveUploadUrl(msg.mediaUrl)} className="w-full h-full object-cover pointer-events-none" />
+                                                            <div className="absolute inset-0 bg-black/25 flex items-center justify-center transition-colors hover:bg-black/15">
+                                                                <div className="w-9 h-9 bg-white/30 backdrop-blur-md rounded-full flex items-center justify-center text-white">
+                                                                    <div className="w-0 h-0 border-t-[6px] border-t-transparent border-l-[10px] border-l-white border-b-[6px] border-b-transparent ml-0.5" />
+                                                                </div>
+                                                            </div>
                                                         </div>
-                                                    </div>
+                                                    ) : (
+                                                        <img
+                                                            src={resolveUploadUrl(msg.mediaUrl)}
+                                                            alt="media"
+                                                            className={cn(
+                                                                CHAT_MEDIA_THUMB,
+                                                                "cursor-pointer hover:opacity-90 transition-opacity shadow-sm"
+                                                            )}
+                                                            onClick={() => msg.mediaUrl && setViewerMedia({ src: resolveUploadUrl(msg.mediaUrl), type: "IMAGE" })}
+                                                        />
+                                                    )}
+                                                    {msg.content?.trim() && (
+                                                        <div className={cn(
+                                                            isMine ? "bubble-sent break-words" : "bubble-received break-words",
+                                                            (!isMine && msg.mentions?.includes(currentUserId)) && "border-l-4 border-l-warning bg-warning/5 border-y-warning/20 border-r-warning/20 shadow-[0_0_12px_rgba(245,158,11,0.15)] text-fg",
+                                                            msg.isPinned && "ring-1 ring-brand-400/30"
+                                                        )}>
+                                                            {renderContent(msg.content)}
+                                                        </div>
+                                                    )}
                                                 </div>
-                                            ) : (
-                                                <img 
-                                                    src={resolveUploadUrl(msg.mediaUrl)} 
-                                                    alt="media" 
-                                                    className="max-w-xs rounded-2xl cursor-pointer hover:opacity-90 transition-opacity shadow-sm" 
-                                                    onClick={() => msg.mediaUrl && setViewerMedia({ src: resolveUploadUrl(msg.mediaUrl), type: "IMAGE" })}
-                                                />
-                                            )}
+                                            ) : null}
 
                                             {/* Reactions */}
                                             {reactions.length > 0 && (
@@ -1032,13 +1056,30 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                         {/* Staged media */}
                         {stagedMedia && (
                             <div className="mb-3 relative inline-block animate-slide-up">
-                                <div className="relative rounded-2xl overflow-hidden border border-brand-500/30 max-w-[200px]">
-                                    {stagedMedia.type === "IMAGE" ? (
-                                        <img src={resolveUploadUrl(stagedMedia.url)} alt="Staged" className="w-full h-auto object-cover max-h-32" />
-                                    ) : (
-                                        <video src={resolveUploadUrl(stagedMedia.url)} className="w-full h-auto max-h-32" muted />
+                                <button
+                                    type="button"
+                                    className={cn(
+                                        "relative overflow-hidden border border-brand-500/30 hover:opacity-95 transition-opacity",
+                                        CHAT_MEDIA_THUMB
                                     )}
-                                </div>
+                                    onClick={() => setViewerMedia({
+                                        src: resolveUploadUrl(stagedMedia.url),
+                                        type: stagedMedia.type,
+                                    })}
+                                >
+                                    {stagedMedia.type === "IMAGE" ? (
+                                        <img src={resolveUploadUrl(stagedMedia.url)} alt="Staged" className="w-full h-full object-cover" />
+                                    ) : (
+                                        <>
+                                            <video src={resolveUploadUrl(stagedMedia.url)} className="w-full h-full object-cover pointer-events-none" muted />
+                                            <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
+                                                <div className="w-8 h-8 bg-white/30 backdrop-blur-md rounded-full flex items-center justify-center text-white">
+                                                    <div className="w-0 h-0 border-t-[5px] border-t-transparent border-l-[8px] border-l-white border-b-[5px] border-b-transparent ml-0.5" />
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+                                </button>
                                 <button onClick={() => setStagedMedia(null)} className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-danger rounded-full flex items-center justify-center text-white shadow-lg hover:bg-danger-600 transition-colors">
                                     <X className="w-3 h-3" strokeWidth={3} />
                                 </button>
