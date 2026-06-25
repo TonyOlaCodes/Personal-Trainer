@@ -772,6 +772,90 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                             const prevMsg = idx > 0 ? messages[idx - 1] : null;
                             const showDate = !prevMsg || new Date(msg.createdAt).toDateString() !== new Date(prevMsg.createdAt).toDateString();
 
+                            const messageActions = !isEditing ? (
+                                <div className="flex-shrink-0 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 max-sm:opacity-100 transition-opacity self-center mb-5">
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); setReplyTo(msg); inputRef.current?.focus(); }}
+                                                className="btn-icon w-7 h-7 rounded-lg"
+                                                title="Reply"
+                                            >
+                                                <Reply className="w-3.5 h-3.5" />
+                                            </button>
+
+                                            <div className="relative">
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); setReactionPickerId(reactionPickerId === msg.id ? null : msg.id); }}
+                                                    className="btn-icon w-7 h-7 rounded-lg"
+                                                    title="React"
+                                                >
+                                                    <SmilePlus className="w-3.5 h-3.5" />
+                                                </button>
+                                                {reactionPickerId === msg.id && (
+                                                    <div
+                                                        className="absolute bottom-9 left-1/2 -translate-x-1/2 z-50 grid grid-cols-3 sm:flex gap-1.5 bg-surface-elevated border border-surface-border rounded-2xl p-2 shadow-modal animate-scale-in w-max max-w-[150px] sm:max-w-none"
+                                                        onClick={e => e.stopPropagation()}
+                                                    >
+                                                        {REACTION_EMOJIS.map(emoji => (
+                                                            <button
+                                                                key={emoji}
+                                                                onClick={() => toggleReaction(msg.id, emoji)}
+                                                                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-muted transition-colors text-base"
+                                                            >
+                                                                {emoji}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {(isMine || canPin || isAdmin) && (
+                                                <div className="relative">
+                                                    <button
+                                                        onClick={e => { e.stopPropagation(); setMenuOpenId(menuOpenId === msg.id ? null : msg.id); }}
+                                                        className="btn-icon w-7 h-7 rounded-lg"
+                                                    >
+                                                        <MoreVertical className="w-3.5 h-3.5" />
+                                                    </button>
+                                                    {menuOpenId === msg.id && (
+                                                        <div
+                                                            className="absolute bottom-9 left-1/2 -translate-x-1/2 z-50 bg-surface-elevated border border-surface-border rounded-xl shadow-modal overflow-hidden min-w-[140px] w-max"
+                                                            onClick={e => e.stopPropagation()}
+                                                        >
+                                                            {canPin && (
+                                                                <button
+                                                                    onClick={() => togglePin(msg.id)}
+                                                                    className="w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-fg hover:bg-surface-muted transition-colors"
+                                                                >
+                                                                    <Pin className="w-3.5 h-3.5 text-brand-400" />
+                                                                    {msg.isPinned ? "Unpin" : "Pin"}
+                                                                </button>
+                                                            )}
+                                                            {isMine && canEdit && (
+                                                                <button
+                                                                    onClick={() => { setEditingId(msg.id); setEditText(msg.content ?? ""); setMenuOpenId(null); }}
+                                                                    className="w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-fg hover:bg-surface-muted transition-colors"
+                                                                >
+                                                                    <Pencil className="w-3.5 h-3.5 text-brand-400" /> Edit
+                                                                </button>
+                                                            )}
+                                                            {(isMine || isAdmin) && (
+                                                                <button
+                                                                    onClick={() => deleteMessage(msg.id)}
+                                                                    className={cn(
+                                                                        "w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-danger hover:bg-danger/5 transition-colors",
+                                                                        (canPin || (isMine && canEdit)) && "border-t border-surface-border"
+                                                                    )}
+                                                                >
+                                                                    <Trash2 className="w-3.5 h-3.5" /> Delete
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                            ) : null;
+
                             return (
                                 <div key={msg.id}>
                                     {showDate && (
@@ -784,7 +868,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                                         </div>
                                     )}
 
-                                    <div className={cn("flex items-end gap-2 group", isMine && "flex-row-reverse")}>
+                                    <div className={cn("flex items-end gap-2 group w-full", isMine && "justify-end")}>
                                         {/* Avatar */}
                                         {!isMine && (
                                             <div className="w-7 h-7 rounded-full bg-gradient-brand flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0 overflow-hidden mb-5">
@@ -794,7 +878,9 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                                             </div>
                                         )}
 
-                                        <div className={cn("max-w-[70%] relative", isMine && "items-end flex flex-col")}>
+                                        {isMine && messageActions}
+
+                                        <div className={cn("max-w-[70%] min-w-0 relative", isMine && "items-end flex flex-col")}>
                                             {/* Sender name */}
                                             {!isMine && (
                                                 <p className="text-[10px] text-fg-muted mb-1 ml-1 flex items-center gap-1.5">
@@ -835,7 +921,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                                                 </div>
                                             ) : msg.type === "TEXT" ? (
                                                 <div className={cn(
-                                                     isMine ? "bubble-sent" : "bubble-received",
+                                                     isMine ? "bubble-sent break-words" : "bubble-received break-words",
                                                      (!isMine && msg.mentions?.includes(currentUserId)) && "border-l-4 border-l-warning bg-warning/5 border-y-warning/20 border-r-warning/20 shadow-[0_0_12px_rgba(245,158,11,0.15)] text-fg",
                                                      msg.isPinned && "ring-1 ring-brand-400/30"
                                                  )}>
@@ -895,93 +981,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                                             </div>
                                         </div>
 
-                                        {/* Action Buttons */}
-                                        {!isEditing && (
-                                            <div className={cn("flex-shrink-0 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity", isMine && "order-first")}>
-                                                {/* Reply */}
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); setReplyTo(msg); inputRef.current?.focus(); }}
-                                                    className="btn-icon w-7 h-7 rounded-lg"
-                                                    title="Reply"
-                                                >
-                                                    <Reply className="w-3.5 h-3.5" />
-                                                </button>
-
-                                                {/* React */}
-                                                <div className="relative">
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); setReactionPickerId(reactionPickerId === msg.id ? null : msg.id); }}
-                                                        className="btn-icon w-7 h-7 rounded-lg"
-                                                        title="React"
-                                                    >
-                                                        <SmilePlus className="w-3.5 h-3.5" />
-                                                    </button>
-                                                    {reactionPickerId === msg.id && (
-                                                        <div
-                                                            className="absolute bottom-9 left-1/2 -translate-x-1/2 z-50 grid grid-cols-3 sm:flex gap-1.5 bg-surface-elevated border border-surface-border rounded-2xl p-2 shadow-modal animate-scale-in w-max max-w-[150px] sm:max-w-none"
-                                                            onClick={e => e.stopPropagation()}
-                                                        >
-                                                            {REACTION_EMOJIS.map(emoji => (
-                                                                <button
-                                                                    key={emoji}
-                                                                    onClick={() => toggleReaction(msg.id, emoji)}
-                                                                    className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-muted transition-colors text-base"
-                                                                >
-                                                                    {emoji}
-                                                                </button>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                </div>
-
-                                                {/* More Menu */}
-                                                {(isMine || canPin || isAdmin) && (
-                                                    <div className="relative">
-                                                        <button
-                                                            onClick={e => { e.stopPropagation(); setMenuOpenId(menuOpenId === msg.id ? null : msg.id); }}
-                                                            className="btn-icon w-7 h-7 rounded-lg"
-                                                        >
-                                                            <MoreVertical className="w-3.5 h-3.5" />
-                                                        </button>
-                                                        {menuOpenId === msg.id && (
-                                                            <div
-                                                                className="absolute bottom-9 left-1/2 -translate-x-1/2 z-50 bg-surface-elevated border border-surface-border rounded-xl shadow-modal overflow-hidden min-w-[140px] w-max"
-                                                                onClick={e => e.stopPropagation()}
-                                                            >
-                                                                {canPin && (
-                                                                    <button
-                                                                        onClick={() => togglePin(msg.id)}
-                                                                        className="w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-fg hover:bg-surface-muted transition-colors"
-                                                                    >
-                                                                        <Pin className="w-3.5 h-3.5 text-brand-400" />
-                                                                        {msg.isPinned ? "Unpin" : "Pin"}
-                                                                    </button>
-                                                                )}
-                                                                {isMine && canEdit && (
-                                                                    <button
-                                                                        onClick={() => { setEditingId(msg.id); setEditText(msg.content ?? ""); setMenuOpenId(null); }}
-                                                                        className="w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-fg hover:bg-surface-muted transition-colors"
-                                                                    >
-                                                                        <Pencil className="w-3.5 h-3.5 text-brand-400" /> Edit
-                                                                    </button>
-                                                                )}
-                                                                {(isMine || isAdmin) && (
-                                                                    <button
-                                                                        onClick={() => deleteMessage(msg.id)}
-                                                                        className={cn(
-                                                                            "w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-danger hover:bg-danger/5 transition-colors",
-                                                                            (canPin || (isMine && canEdit)) && "border-t border-surface-border"
-                                                                        )}
-                                                                    >
-                                                                        <Trash2 className="w-3.5 h-3.5" /> Delete
-                                                                    </button>
-                                                                )}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
+                                        {!isMine && messageActions}
                                     </div>
                                 </div>
                             );
