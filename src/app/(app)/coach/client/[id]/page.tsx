@@ -101,7 +101,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                 const sWeight = set.weightKg || 0;
                 const sReps = set.reps || 0;
                 const sVol = sWeight * sReps;
-                const currentOneRM = calculateOneRM(sWeight, sReps, set.rpe);
+                const currentOneRM = calculateOneRM(sWeight, sReps);
                 
                 exerciseLastDone[exName] = Math.max(exerciseLastDone[exName] || 0, logTime);
                 
@@ -111,7 +111,6 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                     if (sWeight > existingSession.weight) {
                         existingSession.weight = sWeight;
                         existingSession.reps = sReps;
-                        existingSession.bestSetRpe = typeof set.rpe === "number" ? set.rpe : null;
                     }
                     if (currentOneRM > (existingSession.oneRM || 0)) {
                         existingSession.oneRM = currentOneRM;
@@ -124,7 +123,6 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                         reps: sReps,
                         volume: sVol,
                         oneRM: currentOneRM,
-                        bestSetRpe: typeof set.rpe === "number" ? set.rpe : null,
                     });
                 }
             });

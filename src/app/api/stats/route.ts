@@ -147,7 +147,7 @@ export async function GET() {
                 }
                 
                 const cur1RMVal = sbdByDate[dateStr][fieldKey1RM as "squat1RM"|"bench1RM"|"deadlift1RM"] ?? 0;
-                const set1RM = calculateOneRM(sWeight, sReps, set.rpe);
+                const set1RM = calculateOneRM(sWeight, sReps);
                 if (set1RM > cur1RMVal) {
                     sbdByDate[dateStr][fieldKey1RM as "squat1RM"|"bench1RM"|"deadlift1RM"] = set1RM;
                 }
@@ -167,13 +167,12 @@ export async function GET() {
 
             if (!exerciseHistory[exName]) exerciseHistory[exName] = [];
             const existingSession = exerciseHistory[exName].find((h: any) => h.date === dateStr);
-            const currentOneRM = calculateOneRM(sWeight, sReps, set.rpe);
+            const currentOneRM = calculateOneRM(sWeight, sReps);
 
             if (existingSession) {
                 if (sWeight > existingSession.weight) {
                     existingSession.weight = sWeight;
                     existingSession.reps = sReps;
-                    existingSession.bestSetRpe = typeof set.rpe === "number" ? set.rpe : null;
                 }
                 if (currentOneRM > (existingSession.oneRM || 0)) {
                     existingSession.oneRM = currentOneRM;
@@ -186,7 +185,6 @@ export async function GET() {
                     reps: sReps,
                     volume: sVol,
                     oneRM: currentOneRM,
-                    bestSetRpe: typeof set.rpe === "number" ? set.rpe : null,
                 });
             }
         });

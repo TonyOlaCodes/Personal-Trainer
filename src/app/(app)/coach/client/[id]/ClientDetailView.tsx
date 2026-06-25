@@ -92,7 +92,7 @@ interface Props {
     bodyweightHistory: { date: string; weightKg: number }[];
     workoutNotes: ClientWorkoutNote[];
     workoutHistory: WorkoutHistoryEntry[];
-    exerciseHistory: Record<string, Array<{ date: string, weight: number, reps: number, volume: number, oneRM: number, bestSetRpe?: number | null }>>;
+    exerciseHistory: Record<string, Array<{ date: string, weight: number, reps: number, volume: number, oneRM: number }>>;
     exerciseLastDone: Record<string, number>;
     readOnly?: boolean;
 }
