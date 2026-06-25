@@ -105,6 +105,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
     const [editText, setEditText] = useState("");
     const [editExpired, setEditExpired] = useState<Record<string, boolean>>({});
     const [reactionPickerId, setReactionPickerId] = useState<string | null>(null);
+    const [activeMessageId, setActiveMessageId] = useState<string | null>(null);
     const [showMentionDropdown, setShowMentionDropdown] = useState(false);
     const [mentionQuery, setMentionQuery] = useState("");
     const [showPinned, setShowPinned] = useState(false);
@@ -139,6 +140,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
         setSelectedConv(conversation);
         setTab("direct");
         setMobileShowChat(true);
+        setActiveMessageId(null);
         persistChatSelection("direct", conversation);
     }, [persistChatSelection]);
 
@@ -187,6 +189,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
         setTab(newTab);
         setReplyTo(null);
         setShowPinned(false);
+        setActiveMessageId(null);
         persistChatSelection(newTab, newTab === "direct" ? selectedConv : null);
 
         if (newTab === "general") {
@@ -659,7 +662,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
     return (
         <div
             className="flex overflow-hidden bg-surface animate-fade-in fixed inset-x-0 top-0 bottom-20 z-40 w-full max-w-full md:static md:z-auto md:h-[calc(100dvh-4rem)] md:bottom-auto"
-            onClick={() => { setMenuOpenId(null); setReactionPickerId(null); }}
+            onClick={() => { setMenuOpenId(null); setReactionPickerId(null); setActiveMessageId(null); }}
         >
             
             {viewerMedia && (
@@ -772,8 +775,16 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                             const prevMsg = idx > 0 ? messages[idx - 1] : null;
                             const showDate = !prevMsg || new Date(msg.createdAt).toDateString() !== new Date(prevMsg.createdAt).toDateString();
 
+                            const showMessageActions = activeMessageId === msg.id || menuOpenId === msg.id || reactionPickerId === msg.id;
+
                             const messageActions = !isEditing ? (
-                                <div className="flex-shrink-0 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 max-sm:opacity-100 transition-opacity self-center mb-5">
+                                <div
+                                    data-chat-action
+                                    className={cn(
+                                        "flex-shrink-0 flex items-center gap-0.5 transition-opacity self-center mb-5",
+                                        showMessageActions ? "opacity-100" : "opacity-0 sm:group-hover:opacity-100"
+                                    )}
+                                >
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); setReplyTo(msg); inputRef.current?.focus(); }}
                                                 className="btn-icon w-7 h-7 rounded-lg"
@@ -868,7 +879,15 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                                         </div>
                                     )}
 
-                                    <div className={cn("flex items-end gap-2 group w-full", isMine && "justify-end")}>
+                                    <div
+                                        className={cn("flex items-end gap-2 group w-full", isMine && "justify-end")}
+                                        onClick={(e) => {
+                                            if (window.matchMedia("(min-width: 640px)").matches) return;
+                                            const target = e.target as HTMLElement;
+                                            if (target.closest("[data-chat-action], button, a, input, video, img")) return;
+                                            setActiveMessageId((prev) => (prev === msg.id ? null : msg.id));
+                                        }}
+                                    >
                                         {/* Avatar */}
                                         {!isMine && (
                                             <div className="w-7 h-7 rounded-full bg-gradient-brand flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0 overflow-hidden mb-5">
