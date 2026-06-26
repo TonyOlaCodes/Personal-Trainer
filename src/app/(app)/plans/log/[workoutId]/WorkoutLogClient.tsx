@@ -763,7 +763,14 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                         Finish
                     </button>
                 ) : (
-                    <div className="w-[72px]" />
+                    <button
+                        onClick={handleStartWorkout}
+                        disabled={isStarting || isCheckingSession}
+                        className="btn-primary btn-sm px-3 sm:px-4 shadow-glow-brand shrink-0 text-[10px] sm:text-xs font-black uppercase tracking-wider flex items-center gap-1.5"
+                    >
+                        <Flame className="w-3.5 h-3.5" />
+                        {isStarting ? "..." : "Start"}
+                    </button>
                 )}
             </div>
 
@@ -1012,16 +1019,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                         </div>
                     )})}
 
-                    {!sessionActive ? (
-                        <button
-                            onClick={handleStartWorkout}
-                            disabled={isStarting || isCheckingSession}
-                            className="btn-primary w-full h-14 text-sm font-black uppercase tracking-widest shadow-glow-brand flex items-center justify-center gap-2"
-                        >
-                            <Flame className="w-4.5 h-4.5" />
-                            {isStarting ? "Starting..." : "Start Workout"}
-                        </button>
-                    ) : (
+                    {!sessionActive ? null : (
                     <>
                     <button
                         onClick={() => setIsAddingExercise(true)}
@@ -1167,8 +1165,8 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                 </div>
             )}
 
-            {sessionActive && (
-            <div className="fixed bottom-0 inset-x-0 p-4 bg-surface p-safe-area md:hidden border-t border-surface-border glass">
+            {sessionActive && !showFinishModal && (
+            <div className="fixed bottom-0 inset-x-0 p-4 bg-surface p-safe-area md:hidden border-t border-surface-border glass z-30">
                 <button
                     onClick={handleInitiateFinish}
                     className="btn-primary w-full h-12 text-base shadow-glow-brand"
@@ -1178,18 +1176,34 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
             </div>
             )}
 
-            {showFinishModal && (
-                <div className="fixed inset-0 z-50 flex overflow-hidden overscroll-none items-end sm:items-center justify-center bg-black/80 animate-fade-in p-4">
-                    <div className="bg-surface-card w-full max-w-sm rounded-[2rem] p-6 space-y-6 animate-slide-up border border-surface-border">
-                        <div className="text-center space-y-2">
-                            <div className="w-16 h-16 bg-brand-500/10 rounded-full flex items-center justify-center mx-auto mb-2 shadow-glow-brand-sm">
-                                <Award className="w-8 h-8 text-brand-400" />
-                            </div>
-                            <h3 className="text-2xl font-black text-fg tracking-tighter uppercase">Workout Complete!</h3>
-                            <p className="text-xs text-fg-subtle font-medium">Review your session details below.</p>
-                        </div>
+            {!sessionActive && (
+            <div className="fixed bottom-0 inset-x-0 p-4 bg-surface p-safe-area border-t border-surface-border glass md:pl-[var(--sidebar-width)]">
+                <button
+                    onClick={handleStartWorkout}
+                    disabled={isStarting || isCheckingSession}
+                    className="btn-primary w-full max-w-2xl mx-auto h-14 text-sm font-black uppercase tracking-widest shadow-glow-brand flex items-center justify-center gap-2"
+                >
+                    <Flame className="w-4.5 h-4.5" />
+                    {isStarting ? "Starting..." : "Start Workout"}
+                </button>
+            </div>
+            )}
 
-                        <div className="space-y-4">
+            {showFinishModal && (
+                <div className="fixed inset-0 z-[70] flex overflow-hidden overscroll-none items-end sm:items-center justify-center bg-black/80 animate-fade-in sm:p-4">
+                    <div
+                        className="bg-surface-card w-full sm:max-w-sm max-h-[min(92dvh,100%)] sm:max-h-[90vh] rounded-t-[2rem] sm:rounded-[2rem] border border-surface-border shadow-glow-brand-lg flex flex-col animate-slide-up"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-5 sm:p-6 space-y-5">
+                            <div className="text-center space-y-2">
+                                <div className="w-14 h-14 sm:w-16 sm:h-16 bg-brand-500/10 rounded-full flex items-center justify-center mx-auto shadow-glow-brand-sm">
+                                    <Award className="w-7 h-7 sm:w-8 sm:h-8 text-brand-400" />
+                                </div>
+                                <h3 className="text-xl sm:text-2xl font-black text-fg tracking-tighter uppercase">Workout Complete!</h3>
+                                <p className="text-xs text-fg-subtle font-medium">Review your session details below.</p>
+                            </div>
+
                             <WorkoutFeelingPicker
                                 value={finishFeeling}
                                 onChange={setFinishFeeling}
@@ -1222,7 +1236,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                             </div>
                         </div>
 
-                        <div className="flex gap-3 pt-2">
+                        <div className="flex gap-3 p-4 sm:p-6 pt-3 border-t border-surface-border shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-6">
                             <button onClick={() => setShowFinishModal(false)} className="btn-secondary h-12 flex-1" disabled={saving}>
                                 Back
                             </button>

@@ -18,14 +18,22 @@ export default async function ChatPage() {
     // For clients → their coach
     // For coaches → their clients
     // For admin → all coaches + clients
-    let conversations: { userId: string; name: string; role: string; avatarUrl: string | null; isDeleted?: boolean; lastMessageAt?: string | null }[] = [];
+    let conversations: {
+        userId: string;
+        name: string;
+        role: string;
+        avatarUrl: string | null;
+        isDeleted?: boolean;
+        lastMessageAt?: string | null;
+        lastActiveAt?: string | null;
+    }[] = [];
 
     if (user.role === "PREMIUM") {
         // Show coach if assigned
         if (user.coachId) {
             const coach = await prisma.user.findUnique({
                 where: { id: user.coachId },
-                select: { id: true, name: true, role: true, avatarUrl: true, isDeleted: true, deletedName: true },
+                select: { id: true, name: true, role: true, avatarUrl: true, isDeleted: true, deletedName: true, lastActiveAt: true },
             });
             if (coach) {
                 conversations = [withResolvedAvatar({
@@ -34,13 +42,14 @@ export default async function ChatPage() {
                     role: coach.role,
                     avatarUrl: coach.isDeleted ? null : coach.avatarUrl,
                     isDeleted: coach.isDeleted,
+                    lastActiveAt: coach.lastActiveAt?.toISOString() ?? null,
                 })];
             }
         }
     } else if (user.role === "SUPER_ADMIN") {
         const users = await prisma.user.findMany({
             where: { id: { not: user.id } },
-            select: { id: true, name: true, role: true, avatarUrl: true, isDeleted: true, deletedName: true },
+            select: { id: true, name: true, role: true, avatarUrl: true, isDeleted: true, deletedName: true, lastActiveAt: true },
             orderBy: [{ isDeleted: "asc" }, { name: "asc" }],
         });
         conversations = users.map((c) => withResolvedAvatar({
@@ -49,11 +58,12 @@ export default async function ChatPage() {
             role: c.role,
             avatarUrl: c.isDeleted ? null : c.avatarUrl,
             isDeleted: c.isDeleted,
+            lastActiveAt: c.lastActiveAt?.toISOString() ?? null,
         }));
     } else if (user.role === "COACH") {
         const clients = await prisma.user.findMany({
             where: { coachId: user.id },
-            select: { id: true, name: true, role: true, avatarUrl: true, isDeleted: true, deletedName: true },
+            select: { id: true, name: true, role: true, avatarUrl: true, isDeleted: true, deletedName: true, lastActiveAt: true },
         });
         conversations = clients.map((c) => withResolvedAvatar({
             userId: c.id,
@@ -61,6 +71,7 @@ export default async function ChatPage() {
             role: c.role,
             avatarUrl: c.isDeleted ? null : c.avatarUrl,
             isDeleted: c.isDeleted,
+            lastActiveAt: c.lastActiveAt?.toISOString() ?? null,
         }));
     }
 

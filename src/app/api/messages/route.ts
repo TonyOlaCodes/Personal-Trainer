@@ -12,6 +12,8 @@ import {
 } from "@/lib/apiAuth";
 import { isInactiveAccount } from "@/lib/userDeactivation";
 import { getDirectMessageActivity } from "@/lib/chatActivity";
+import { isCoachRole } from "@/lib/roles";
+import { getLastActiveMap, touchUserLastActive } from "@/lib/userPresence";
 import { withResolvedUpload, withResolvedAvatar, normalizeStoredUploadUrl } from "@/lib/uploadUrls";
 
 // GET messages
@@ -20,10 +22,7 @@ export async function GET(req: Request) {
     if (authResult.error) return authResult.error;
     const user = authResult.user;
 
-    await prisma.user.update({
-        where: { id: user.id },
-        data: { updatedAt: new Date() },
-    });
+    await touchUserLastActive(user.id);
 
     const url = new URL(req.url);
     const isGeneral = url.searchParams.get("general") === "true";
@@ -39,16 +38,26 @@ export async function GET(req: Request) {
         let peerIds: string[] = [];
         if (user.role === "PREMIUM" && user.coachId) {
             peerIds = [user.coachId];
-        } else if (["COACH", "SUPER_ADMIN"].includes(user.role)) {
+        } else if (user.role === "COACH") {
             const clients = await prisma.user.findMany({
                 where: { coachId: user.id },
                 select: { id: true },
             });
             peerIds = clients.map((client) => client.id);
+        } else if (user.role === "SUPER_ADMIN") {
+            const users = await prisma.user.findMany({
+                where: { id: { not: user.id } },
+                select: { id: true },
+            });
+            peerIds = users.map((peer) => peer.id);
         }
 
         const activity = await getDirectMessageActivity(user.id, peerIds);
-        return NextResponse.json({ activity });
+        const presence = isCoachRole(user.role)
+            ? await getLastActiveMap(peerIds)
+            : undefined;
+
+        return NextResponse.json({ activity, ...(presence ? { presence } : {}) });
     }
 
     let where: Prisma.MessageWhereInput | null = null;
@@ -142,6 +151,8 @@ export async function POST(req: Request) {
     const authResult = await requireAuthUser(req);
     if (authResult.error) return authResult.error;
     const user = authResult.user;
+
+    await touchUserLastActive(user.id);
 
     const body = await req.json();
     const parsed = msgSchema.safeParse(body);

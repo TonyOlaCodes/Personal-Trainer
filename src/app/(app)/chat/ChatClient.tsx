@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { getInitials, formatRelative, cn, roleLabels } from "@/lib/utils";
+import { formatLastOnline } from "@/lib/userPresence";
 import { sortConversationsByActivity } from "@/lib/chatActivity";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { uploadMediaFile } from "@/lib/compressImage";
@@ -51,6 +52,7 @@ interface Conversation {
     avatarUrl?: string | null;
     isDeleted?: boolean;
     lastMessageAt?: string | null;
+    lastActiveAt?: string | null;
 }
 
 interface Props {
@@ -88,6 +90,7 @@ function resolveDirectConversation(
 
 /* ─── Component ──────────────────────────────────────── */
 export function ChatClient({ currentUserId, currentUserRole, conversations, canUseDirectChat = true }: Props) {
+    const canViewLastOnline = currentUserRole === "COACH" || currentUserRole === "SUPER_ADMIN";
     const [tab, setTab] = useState<"direct" | "general">("general");
     const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
     const [isHydrated, setIsHydrated] = useState(false);
@@ -113,6 +116,14 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
     const [showPinned, setShowPinned] = useState(false);
     const [mobileShowChat, setMobileShowChat] = useState(true);
     const [conversationActivity, setConversationActivity] = useState<Record<string, string>>({});
+    const [conversationPresence, setConversationPresence] = useState<Record<string, string | null>>({});
+
+    const resolveLastActive = useCallback((userId: string) => {
+        if (conversationPresence[userId] !== undefined) {
+            return conversationPresence[userId];
+        }
+        return conversations.find((conversation) => conversation.userId === userId)?.lastActiveAt ?? null;
+    }, [conversationPresence, conversations]);
 
     const messagesScrollRef = useRef<HTMLDivElement>(null);
     const fileRef = useRef<HTMLInputElement>(null);
@@ -149,12 +160,17 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
     // Restore last opened chat (global or direct)
     useEffect(() => {
         const initialActivity: Record<string, string> = {};
+        const initialPresence: Record<string, string | null> = {};
         conversations.forEach((conversation) => {
             if (conversation.lastMessageAt) {
                 initialActivity[conversation.userId] = conversation.lastMessageAt;
             }
+            if (conversation.lastActiveAt !== undefined) {
+                initialPresence[conversation.userId] = conversation.lastActiveAt ?? null;
+            }
         });
         setConversationActivity(initialActivity);
+        setConversationPresence(initialPresence);
 
         const savedTab = localStorage.getItem(LAST_CHAT_TAB_KEY);
         const savedConversationId = localStorage.getItem(LAST_CHAT_CONVERSATION_KEY);
@@ -222,6 +238,9 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                 if (data.activity) {
                     setConversationActivity((prev) => ({ ...prev, ...data.activity }));
                 }
+                if (canViewLastOnline && data.presence) {
+                    setConversationPresence((prev) => ({ ...prev, ...data.presence }));
+                }
             } catch {
                 // ignore polling errors
             }
@@ -233,7 +252,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
         }, 3000);
 
         return () => clearInterval(interval);
-    }, [isHydrated, canUseDirectChat]);
+    }, [isHydrated, canUseDirectChat, canViewLastOnline]);
 
     /* ─── Fetch Messages ────────────────────────────── */
     const fetchMessages = useCallback(async () => {
@@ -636,9 +655,15 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                                             <Star className="w-3 h-3 text-brand-400 fill-brand-400 shrink-0" />
                                         )}
                                     </div>
-                                    <p className="text-[10px] uppercase font-bold tracking-widest text-fg-subtle">
-                                        {conv.isDeleted ? "Inactive" : (roleLabels[conv.role] ?? conv.role)}
-                                    </p>
+                                    {canViewLastOnline ? (
+                                        <p className="text-[10px] text-fg-subtle truncate">
+                                            {formatLastOnline(resolveLastActive(conv.userId))}
+                                        </p>
+                                    ) : (
+                                        <p className="text-[10px] uppercase font-bold tracking-widest text-fg-subtle">
+                                            {conv.isDeleted ? "Inactive" : (roleLabels[conv.role] ?? conv.role)}
+                                        </p>
+                                    )}
                                 </div>
                             </button>
                         ))
@@ -715,7 +740,13 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                                 </div>
                                 <div>
                                     <p className="font-bold text-sm">{selectedConv.name}</p>
-                                    <p className="text-[10px] text-fg-muted font-medium">{roleLabels[selectedConv.role] ?? selectedConv.role}</p>
+                                    {canViewLastOnline ? (
+                                        <p className="text-[10px] text-fg-subtle font-medium truncate">
+                                            {formatLastOnline(resolveLastActive(selectedConv.userId))}
+                                        </p>
+                                    ) : (
+                                        <p className="text-[10px] text-fg-muted font-medium">{roleLabels[selectedConv.role] ?? selectedConv.role}</p>
+                                    )}
                                 </div>
                             </>
                         ) : (

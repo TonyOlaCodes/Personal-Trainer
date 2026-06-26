@@ -9,6 +9,7 @@ import { getUserDeactivationStatusByClerkId } from "@/lib/userDeactivation";
 import { ensureAppSchema, formatErrorDetails } from "@/lib/ensureAppSchema";
 import { SafeFallback } from "@/components/shared/SafeFallback";
 import { deactivateCoachActivePlans, isCoachRole } from "@/lib/roles";
+import { touchUserLastActive } from "@/lib/userPresence";
 
 export default async function AppLayout({
     children,
@@ -54,6 +55,8 @@ export default async function AppLayout({
     if (isCoachRole(userRole)) {
         await deactivateCoachActivePlans(user.id);
     }
+
+    await touchUserLastActive(user.id);
 
     return (
         <RoleProvider role={userRole}>
