@@ -133,23 +133,44 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
     const now = useCurrentDate();
     const todayDate = toDateKey(now);
     const prevTodayDateRef = useRef(todayDate);
+    const viewingTodayRef = useRef(true);
     const [code, setCode] = useState("");
     const [codeStatus, setCodeStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
     const [codeMsg, setCodeMsg] = useState("");
     const [showTour, setShowTour] = useState(false);
-    const [weightDate, setWeightDate] = useState(bodyweight.selectedDate);
-    const [weight, setWeight] = useState(bodyweight.selectedWeightKg ? bodyweight.selectedWeightKg.toFixed(2) : "");
+    const [weightDate, setWeightDate] = useState(todayDate);
+    const [weight, setWeight] = useState(
+        bodyweight.selectedDate === todayDate && bodyweight.selectedWeightKg
+            ? bodyweight.selectedWeightKg.toFixed(2)
+            : ""
+    );
     const [latestWeight, setLatestWeight] = useState(bodyweight.latestWeightKg);
-    const [selectedPreviousWeight, setSelectedPreviousWeight] = useState(bodyweight.selectedPreviousWeightKg);
-    const [weightLogged, setWeightLogged] = useState(Boolean(bodyweight.selectedWeightKg));
+    const [selectedPreviousWeight, setSelectedPreviousWeight] = useState(
+        bodyweight.selectedDate === todayDate ? bodyweight.selectedPreviousWeightKg : null
+    );
+    const [weightLogged, setWeightLogged] = useState(
+        bodyweight.selectedDate === todayDate && Boolean(bodyweight.selectedWeightKg)
+    );
     const [weightMsg, setWeightMsg] = useState("");
     const [savingWeight, setSavingWeight] = useState(false);
-    const [calories, setCalories] = useState(dailyMetrics.calories ? String(dailyMetrics.calories) : "");
-    const [steps, setSteps] = useState(dailyMetrics.steps ? String(dailyMetrics.steps) : "");
-    const [sleepHours, setSleepHours] = useState(dailyMetrics.sleepHours ? dailyMetrics.sleepHours.toString() : "");
-    const [caloriesLogged, setCaloriesLogged] = useState(Boolean(dailyMetrics.calories));
-    const [stepsLogged, setStepsLogged] = useState(Boolean(dailyMetrics.steps));
-    const [sleepLogged, setSleepLogged] = useState(Boolean(dailyMetrics.sleepHours));
+    const [calories, setCalories] = useState(
+        dailyMetrics.selectedDate === todayDate && dailyMetrics.calories ? String(dailyMetrics.calories) : ""
+    );
+    const [steps, setSteps] = useState(
+        dailyMetrics.selectedDate === todayDate && dailyMetrics.steps ? String(dailyMetrics.steps) : ""
+    );
+    const [sleepHours, setSleepHours] = useState(
+        dailyMetrics.selectedDate === todayDate && dailyMetrics.sleepHours ? dailyMetrics.sleepHours.toString() : ""
+    );
+    const [caloriesLogged, setCaloriesLogged] = useState(
+        dailyMetrics.selectedDate === todayDate && Boolean(dailyMetrics.calories)
+    );
+    const [stepsLogged, setStepsLogged] = useState(
+        dailyMetrics.selectedDate === todayDate && Boolean(dailyMetrics.steps)
+    );
+    const [sleepLogged, setSleepLogged] = useState(
+        dailyMetrics.selectedDate === todayDate && Boolean(dailyMetrics.sleepHours)
+    );
     const [latestCalories, setLatestCalories] = useState(dailyMetrics.latestCalories);
     const [latestSteps, setLatestSteps] = useState(dailyMetrics.latestSteps);
     const [latestSleepHours, setLatestSleepHours] = useState(dailyMetrics.latestSleepHours);
@@ -170,10 +191,27 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
     useEffect(() => {
         const prevToday = prevTodayDateRef.current;
         if (prevToday === todayDate) return;
+
         prevTodayDateRef.current = todayDate;
-        setWeightDate((current) => (current === prevToday ? todayDate : current));
+
+        if (viewingTodayRef.current || weightDate === prevToday) {
+            viewingTodayRef.current = true;
+            setWeightDate(todayDate);
+            setWeight("");
+            setWeightLogged(false);
+            setSelectedPreviousWeight(null);
+            setWeightMsg("");
+            setCalories("");
+            setSteps("");
+            setSleepHours("");
+            setCaloriesLogged(false);
+            setStepsLogged(false);
+            setSleepLogged(false);
+            setMetricsMsg("");
+        }
+
         router.refresh();
-    }, [todayDate, router]);
+    }, [todayDate, weightDate, router]);
 
     useEffect(() => {
         const urlParams = new URLSearchParams(window.location.search);
@@ -619,7 +657,10 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                 <div className="flex items-center gap-2">
                     <button
                         type="button"
-                        onClick={() => setWeightDate(todayDate)}
+                        onClick={() => {
+                            viewingTodayRef.current = true;
+                            setWeightDate(todayDate);
+                        }}
                         className={cn(
                             "h-9 px-3.5 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all",
                             isWeightDateToday
@@ -634,7 +675,11 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                         <input
                             type="date"
                             value={weightDate}
-                            onChange={(e) => setWeightDate(e.target.value)}
+                            onChange={(e) => {
+                                const next = e.target.value;
+                                viewingTodayRef.current = next === todayDate;
+                                setWeightDate(next);
+                            }}
                             className="bg-transparent text-fg focus:outline-none cursor-pointer"
                         />
                     </label>

@@ -1,37 +1,49 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getMsUntilNextMidnight } from "@/lib/utils";
+import { getMsUntilNextMidnight, toDateKey } from "@/lib/utils";
 
-/** Keeps a live Date in sync, rolling forward at local midnight. */
+/** Keeps a live Date in sync with the app calendar day (Ireland), rolling forward at midnight. */
 export function useCurrentDate() {
     const [now, setNow] = useState(() => new Date());
 
     useEffect(() => {
         let timeoutId: ReturnType<typeof setTimeout>;
+        let intervalId: ReturnType<typeof setInterval>;
 
-        const sync = () => setNow(new Date());
+        const syncIfDayChanged = () => {
+            setNow((prev) => {
+                const next = new Date();
+                return toDateKey(prev) === toDateKey(next) ? prev : next;
+            });
+        };
 
-        const schedule = () => {
+        const scheduleMidnight = () => {
             clearTimeout(timeoutId);
             timeoutId = setTimeout(() => {
-                sync();
-                schedule();
+                syncIfDayChanged();
+                scheduleMidnight();
             }, getMsUntilNextMidnight());
         };
 
         const onVisibility = () => {
             if (document.visibilityState === "visible") {
-                sync();
-                schedule();
+                syncIfDayChanged();
+                scheduleMidnight();
             }
         };
 
-        schedule();
+        syncIfDayChanged();
+        scheduleMidnight();
+        intervalId = setInterval(() => {
+            if (document.visibilityState === "visible") syncIfDayChanged();
+        }, 60_000);
+
         document.addEventListener("visibilitychange", onVisibility);
 
         return () => {
             clearTimeout(timeoutId);
+            clearInterval(intervalId);
             document.removeEventListener("visibilitychange", onVisibility);
         };
     }, []);

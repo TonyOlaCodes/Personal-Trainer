@@ -2,7 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
-import { getDayName, getWeekNumber, isSameCalendarDay, toDateKey } from "@/lib/utils";
+import { getDayName, getWeekNumber, isSameCalendarDay, parseLogDate, toDateKey } from "@/lib/utils";
 import { startOfWeek, endOfWeek } from "date-fns";
 import { getBodyweightWeeklyAverage } from "@/lib/bodyweight";
 import { getWorkoutsTargetFromUserPlan } from "@/lib/planTrainingTarget";
@@ -88,15 +88,10 @@ export default async function DashboardPage() {
             orderBy: { updatedAt: "desc" }
         });
 
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = String(now.getMonth() + 1).padStart(2, "0");
-        const day = String(now.getDate()).padStart(2, "0");
-        const todayDate = `${year}-${month}-${day}`;
+        const todayDate = toDateKey(new Date());
+        const today = parseLogDate(todayDate);
 
-        now.setHours(0, 0, 0, 0);
-
-        const currentIsoWeek = getWeekNumber(now);
+        const currentIsoWeek = getWeekNumber(today);
 
         const currentCheckin = await prisma.checkIn.findFirst({
             where: { userId: user.id, weekNumber: currentIsoWeek },
@@ -109,7 +104,7 @@ export default async function DashboardPage() {
         
         let currentWeekIndex = 0;
         let todayWorkout: any = null;
-        const jsDow = now.getDay();
+        const jsDow = today.getDay();
         const todayDow0Mon = jsDow === 0 ? 6 : jsDow - 1; // 0=Mon ... 6=Sun
 
         const findWorkoutForDate = (date: Date) => {
@@ -146,7 +141,7 @@ export default async function DashboardPage() {
             const startedAt = new Date(activeUserPlan.startedAt);
             startedAt.setHours(0, 0, 0, 0);
 
-            const diffDays = Math.floor((now.getTime() - startedAt.getTime()) / 86400000);
+            const diffDays = Math.floor((today.getTime() - startedAt.getTime()) / 86400000);
             if (diffDays >= 0) {
                 currentWeekIndex = Math.floor(diffDays / 7);
                 if (currentWeekIndex >= weeks.length) currentWeekIndex = currentWeekIndex % weeks.length;
@@ -171,7 +166,7 @@ export default async function DashboardPage() {
         const isTodayWorkoutCompleted = todayWorkout && user.workoutLogs.some(
             (l: any) => l.status === "COMPLETED" && 
                  l.workoutId === todayWorkout.id && 
-                 isSameCalendarDay(l.loggedAt, now)
+                 isSameCalendarDay(l.loggedAt, todayDate)
         );
 
         let totalDuration = 0;
@@ -197,8 +192,7 @@ export default async function DashboardPage() {
         )].map(d => new Date(d).getTime()).sort((a, b) => b - a);
 
         let streak = 0;
-        const checkDay = new Date();
-        checkDay.setHours(0, 0, 0, 0);
+        const checkDay = parseLogDate(todayDate);
         for (const dayTime of allLogDates) {
             if (dayTime === checkDay.getTime()) {
                 streak++;
@@ -210,8 +204,8 @@ export default async function DashboardPage() {
 
         let nextTrainingDay: { id: string; name: string; date: string; dayLabel: string } | null = null;
         for (let offset = 1; offset <= 42; offset++) {
-            const candidateDate = new Date(now);
-            candidateDate.setDate(now.getDate() + offset);
+            const candidateDate = parseLogDate(todayDate);
+            candidateDate.setDate(candidateDate.getDate() + offset);
             const candidateWorkout = findWorkoutForDate(candidateDate);
             if (candidateWorkout) {
                 nextTrainingDay = {
@@ -262,8 +256,8 @@ export default async function DashboardPage() {
                         userId: user.id,
                         status: "COMPLETED",
                         loggedAt: {
-                            gte: startOfWeek(now, { weekStartsOn: 1 }),
-                            lte: endOfWeek(now, { weekStartsOn: 1 }),
+                            gte: startOfWeek(today, { weekStartsOn: 1 }),
+                            lte: endOfWeek(today, { weekStartsOn: 1 }),
                         },
                     },
                 }),
