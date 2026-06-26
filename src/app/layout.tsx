@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import Script from "next/script";
 import { ClerkProvider } from "@clerk/nextjs";
 import { dark } from "@clerk/themes";
 import { siteConfig, siteUrl } from "@/lib/site";
@@ -59,8 +60,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark" suppressHydrationWarning>
+    <html lang="en" className="dark" data-theme="midnight" suppressHydrationWarning>
       <body className={`${inter.variable} antialiased w-full max-w-full max-md:overflow-x-hidden`}>
+        <Script id="pt-theme-init" strategy="beforeInteractive">
+          {`(function(){try{var t=localStorage.getItem("pt-theme");var v=["midnight","neon","solar","arctic","jungle","velvet"];var m={emerald:"jungle",ocean:"arctic",rose:"velvet"};if(m[t])t=m[t];if(v.indexOf(t)===-1)t="midnight";document.documentElement.setAttribute("data-theme",t);}catch(e){}})();`}
+        </Script>
         <ClerkProvider
           appearance={{
             baseTheme: dark,

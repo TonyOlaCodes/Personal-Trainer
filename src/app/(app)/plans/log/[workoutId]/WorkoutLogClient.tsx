@@ -854,14 +854,31 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                             </div>
 
                             <div className="space-y-2">
-                                <div className="grid grid-cols-12 gap-2 text-[11px] font-black text-fg-subtle uppercase px-1 mb-1 tracking-wider">
+                                <div className={cn(
+                                    "grid gap-1.5 md:gap-2 text-[10px] md:text-[11px] font-black text-fg-subtle uppercase px-1 mb-1 tracking-wide md:tracking-wider",
+                                    sessionActive ? "grid-cols-10 md:grid-cols-12" : "grid-cols-12"
+                                )}>
                                     <div className="col-span-1 text-center">{cardio ? "Rd" : "Set"}</div>
-                                    <div className="col-span-3 text-center">{cardio ? "Lvl/Spd" : "Weight"}</div>
+                                    <div className={cn("text-center", sessionActive ? "col-span-4 md:col-span-3" : "col-span-3")}>{cardio ? "Lvl/Spd" : "Weight"}</div>
                                     <div className="col-span-2 text-center">{cardio ? "Mins" : "Reps"}</div>
-                                    <div className="col-span-2 text-center">RPE</div>
-                                    {!cardio && <div className={cn("text-center", sessionActive ? "col-span-2" : "col-span-4")}>Est 1RM</div>}
+                                    <div className={cn("text-center", sessionActive ? "col-span-3 md:col-span-2" : "col-span-2")}>RPE</div>
+                                    {!cardio && (
+                                        <div
+                                            className={cn(
+                                                "text-center",
+                                                sessionActive ? "hidden md:block md:col-span-2" : "col-span-4"
+                                            )}
+                                            title="Estimated 1RM"
+                                        >
+                                            Est 1RM
+                                        </div>
+                                    )}
                                     {!sessionActive && cardio && <div className="col-span-4" />}
-                                    {sessionActive && <div className={cn("text-center", cardio ? "col-span-4" : "col-span-2")}>Actions</div>}
+                                    {sessionActive && (
+                                        <div className={cn("text-center hidden md:block", cardio ? "md:col-span-4" : "md:col-span-2")}>
+                                            Actions
+                                        </div>
+                                    )}
                                 </div>
 
                                 {logs[ex.id]?.map((set, sIdx) => {
@@ -874,98 +891,8 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                                     const repsNum = typeof displayReps === "number" ? displayReps : parseInt(String(displayReps), 10) || 0;
                                     const est1RM = !cardio && !set.isWarmup && weightNum > 0 && repsNum > 0 ? calculateOneRM(weightNum, repsNum) : null;
 
-                                    return (
-                                    <div key={sIdx} className="space-y-0.5">
-                                    <div
-                                        className={cn(
-                                            "grid grid-cols-12 gap-2 p-2 rounded-xl border transition-all duration-200",
-                                            sessionActive && set.isCompleted
-                                                ? "bg-success-950/20 border-success-800/40"
-                                                : "bg-surface-muted/50 border-surface-border",
-                                            sessionActive && !set.isCompleted && "hover:border-brand-700/30"
-                                        )}
-                                    >
-                                        <div className="col-span-1 flex items-center justify-center">
-                                            {sessionActive ? (
-                                                <button
-                                                    onClick={() => updateSet(ex.id, sIdx, { isWarmup: !set.isWarmup })}
-                                                    className={cn(
-                                                        "w-7 h-10 rounded-md text-[10px] font-bold flex items-center justify-center transition-colors shadow-sm",
-                                                        set.isWarmup ? "bg-warning-500/20 text-warning-400" : "bg-surface-elevated text-fg-subtle hover:text-fg"
-                                                    )}
-                                                >
-                                                    {set.isWarmup ? "W" : set.setNumber}
-                                                </button>
-                                            ) : (
-                                                <span className="w-7 h-10 rounded-md text-[10px] font-bold flex items-center justify-center bg-surface-elevated text-fg-subtle">
-                                                    {set.setNumber}
-                                                </span>
-                                            )}
-                                        </div>
-
-                                        <div className="col-span-3">
-                                            <div className="relative">
-                                                <input
-                                                    type="number"
-                                                    readOnly={!sessionActive}
-                                                    disabled={!sessionActive}
-                                                    className={cn(
-                                                        "input-sm w-full bg-surface-elevated border-none text-center text-sm font-semibold rounded-lg h-10 px-1",
-                                                        sessionActive && "focus:ring-1 focus:ring-brand-500"
-                                                    )}
-                                                    value={displayWeight}
-                                                    placeholder={weightPlaceholder || "0"}
-                                                    onChange={(e) => updateSet(ex.id, sIdx, { weightKg: e.target.value })}
-                                                />
-                                                {!cardio && (displayWeight || weightPlaceholder) && (
-                                                    <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[9px] text-fg-subtle pointer-events-none">kg</span>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        <div className="col-span-2">
-                                            <input
-                                                type="number"
-                                                readOnly={!sessionActive}
-                                                disabled={!sessionActive}
-                                                className={cn(
-                                                    "input-sm w-full bg-surface-elevated border-none text-center text-sm font-semibold rounded-lg h-10 px-0",
-                                                    sessionActive && "focus:ring-1 focus:ring-brand-500"
-                                                )}
-                                                value={displayReps}
-                                                placeholder={repsPlaceholder || "0"}
-                                                onChange={(e) => updateSet(ex.id, sIdx, { reps: parseInt(e.target.value) || 0 })}
-                                            />
-                                        </div>
-
-                                        <div className="col-span-2">
-                                            <input
-                                                type="number"
-                                                readOnly={!sessionActive}
-                                                disabled={!sessionActive}
-                                                className={cn(
-                                                    "input-sm w-full bg-surface-elevated border-none text-center text-sm font-semibold rounded-lg h-10 px-0",
-                                                    sessionActive && "focus:ring-1 focus:ring-brand-500"
-                                                )}
-                                                value={sessionActive ? set.rpe : (set.rpe || rpePlaceholder)}
-                                                placeholder={rpePlaceholder || "RPE"}
-                                                onChange={(e) => updateSet(ex.id, sIdx, { rpe: e.target.value })}
-                                            />
-                                        </div>
-
-                                        {!cardio && (
-                                            <div className={cn("flex items-center justify-center", sessionActive ? "col-span-2" : "col-span-4")}>
-                                                <span className={cn(
-                                                    "text-xs font-bold tabular-nums",
-                                                    est1RM ? "text-warning-400" : "text-fg-subtle"
-                                                )}>
-                                                    {est1RM ? `${est1RM}kg` : "—"}
-                                                </span>
-                                            </div>
-                                        )}
-
-                                        {sessionActive && (
-                                        <div className={cn("flex items-center justify-end gap-1", cardio ? "col-span-4" : "col-span-2")}>
+                                    const setActions = sessionActive ? (
+                                        <div className="flex items-center justify-end gap-1 shrink-0">
                                             <label className="cursor-pointer">
                                                 <input
                                                     type="file"
@@ -999,6 +926,132 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                                                 <Trash2 className="w-4 h-4" />
                                             </button>
                                         </div>
+                                    ) : null;
+
+                                    return (
+                                    <div key={sIdx} className="space-y-0.5">
+                                    <div
+                                        className={cn(
+                                            "p-2 rounded-xl border transition-all duration-200",
+                                            sessionActive && "space-y-2 md:space-y-0",
+                                            sessionActive && set.isCompleted
+                                                ? "bg-success-950/20 border-success-800/40"
+                                                : "bg-surface-muted/50 border-surface-border",
+                                            sessionActive && !set.isCompleted && "hover:border-brand-700/30"
+                                        )}
+                                    >
+                                        <div className={cn(
+                                            "grid gap-1.5 md:gap-2",
+                                            sessionActive ? "grid-cols-10 md:grid-cols-12" : "grid-cols-12"
+                                        )}>
+                                        <div className="col-span-1 flex items-center justify-center">
+                                            {sessionActive ? (
+                                                <button
+                                                    onClick={() => updateSet(ex.id, sIdx, { isWarmup: !set.isWarmup })}
+                                                    className={cn(
+                                                        "w-7 h-10 rounded-md text-[10px] font-bold flex items-center justify-center transition-colors shadow-sm",
+                                                        set.isWarmup ? "bg-warning-500/20 text-warning-400" : "bg-surface-elevated text-fg-subtle hover:text-fg"
+                                                    )}
+                                                >
+                                                    {set.isWarmup ? "W" : set.setNumber}
+                                                </button>
+                                            ) : (
+                                                <span className="w-7 h-10 rounded-md text-[10px] font-bold flex items-center justify-center bg-surface-elevated text-fg-subtle">
+                                                    {set.setNumber}
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        <div className={cn(sessionActive ? "col-span-4 md:col-span-3" : "col-span-3")}>
+                                            <div className="relative">
+                                                <input
+                                                    type="number"
+                                                    readOnly={!sessionActive}
+                                                    disabled={!sessionActive}
+                                                    className={cn(
+                                                        "input-sm w-full bg-surface-elevated border-none text-center text-sm font-semibold rounded-lg h-10",
+                                                        !cardio && (displayWeight || weightPlaceholder) ? "pr-5 pl-1" : "px-1",
+                                                        sessionActive && "focus:ring-1 focus:ring-brand-500"
+                                                    )}
+                                                    value={displayWeight}
+                                                    placeholder={weightPlaceholder || "0"}
+                                                    onChange={(e) => updateSet(ex.id, sIdx, { weightKg: e.target.value })}
+                                                />
+                                                {!cardio && (displayWeight || weightPlaceholder) && (
+                                                    <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] text-fg-subtle pointer-events-none">kg</span>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div className="col-span-2">
+                                            <input
+                                                type="number"
+                                                readOnly={!sessionActive}
+                                                disabled={!sessionActive}
+                                                className={cn(
+                                                    "input-sm w-full bg-surface-elevated border-none text-center text-sm font-semibold rounded-lg h-10 px-0",
+                                                    sessionActive && "focus:ring-1 focus:ring-brand-500"
+                                                )}
+                                                value={displayReps}
+                                                placeholder={repsPlaceholder || "0"}
+                                                onChange={(e) => updateSet(ex.id, sIdx, { reps: parseInt(e.target.value) || 0 })}
+                                            />
+                                        </div>
+
+                                        <div className={cn(sessionActive ? "col-span-3 md:col-span-2" : "col-span-2")}>
+                                            <input
+                                                type="number"
+                                                readOnly={!sessionActive}
+                                                disabled={!sessionActive}
+                                                className={cn(
+                                                    "input-sm w-full bg-surface-elevated border-none text-center text-sm font-semibold rounded-lg h-10 px-0",
+                                                    sessionActive && "focus:ring-1 focus:ring-brand-500"
+                                                )}
+                                                value={sessionActive ? set.rpe : (set.rpe || rpePlaceholder)}
+                                                placeholder={rpePlaceholder || "RPE"}
+                                                onChange={(e) => updateSet(ex.id, sIdx, { rpe: e.target.value })}
+                                            />
+                                        </div>
+
+                                        {!cardio && (
+                                            <div className={cn(
+                                                "flex items-center justify-center min-w-0",
+                                                sessionActive ? "hidden md:flex md:col-span-2" : "col-span-4"
+                                            )}>
+                                                <span className={cn(
+                                                    "text-xs font-bold tabular-nums whitespace-nowrap",
+                                                    est1RM ? "text-warning-400" : "text-fg-subtle"
+                                                )}>
+                                                    {est1RM ? `${est1RM}kg` : "—"}
+                                                </span>
+                                            </div>
+                                        )}
+
+                                        {sessionActive && (
+                                        <div className={cn("hidden md:flex items-center justify-end gap-1", cardio ? "md:col-span-4" : "md:col-span-2")}>
+                                            {setActions}
+                                        </div>
+                                        )}
+                                        </div>
+
+                                        {sessionActive && (
+                                            <div className={cn(
+                                                "flex items-center justify-between gap-3 md:hidden",
+                                                !cardio && "pt-1.5 border-t border-surface-border/40"
+                                            )}>
+                                                {!cardio && (
+                                                    <div className="flex items-baseline gap-2 min-w-0">
+                                                        <span className="text-[10px] font-black uppercase tracking-wider text-fg-subtle shrink-0">Est 1RM</span>
+                                                        <span className={cn(
+                                                            "text-sm font-bold tabular-nums whitespace-nowrap",
+                                                            est1RM ? "text-warning-400" : "text-fg-subtle"
+                                                        )}>
+                                                            {est1RM ? `${est1RM}kg` : "—"}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                {setActions}
+                                            </div>
                                         )}
                                     </div>
                                     </div>
