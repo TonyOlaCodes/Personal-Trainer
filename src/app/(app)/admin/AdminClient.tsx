@@ -86,7 +86,7 @@ interface Props {
 
 type Tab = "users" | "coaches" | "plans" | "codes";
 type CodeFilter = "ALL" | "ACTIVE" | "USED" | "EXPIRED";
-type UserSortField = "createdAt" | "role" | "name" | "email" | "status" | "coach";
+type UserSortField = "createdAt" | "role" | "name" | "status";
 type SortDir = "asc" | "desc";
 
 const ROLE_SORT_ORDER: Record<string, number> = {
@@ -100,9 +100,7 @@ const USER_SORT_OPTIONS: { id: UserSortField; label: string; defaultDir: SortDir
     { id: "createdAt", label: "Created", defaultDir: "desc" },
     { id: "role", label: "Role", defaultDir: "asc" },
     { id: "name", label: "Name", defaultDir: "asc" },
-    { id: "email", label: "Email", defaultDir: "asc" },
     { id: "status", label: "Status", defaultDir: "asc" },
-    { id: "coach", label: "Coach", defaultDir: "asc" },
 ];
 
 function accountSortRank(account: { isDeleted: boolean; isDeactivated: boolean }) {
@@ -114,7 +112,7 @@ function accountSortRank(account: { isDeleted: boolean; isDeactivated: boolean }
 function sortAdminUsers(users: AdminUser[], field: UserSortField, dir: SortDir) {
     const mult = dir === "asc" ? 1 : -1;
 
-    return [...users].sort((a, b) => {
+    const compareField = (a: AdminUser, b: AdminUser): number => {
         let cmp = 0;
 
         switch (field) {
@@ -127,19 +125,18 @@ function sortAdminUsers(users: AdminUser[], field: UserSortField, dir: SortDir) 
             case "name":
                 cmp = (a.name ?? a.email).localeCompare(b.name ?? b.email, undefined, { sensitivity: "base" });
                 break;
-            case "email":
-                cmp = a.email.localeCompare(b.email, undefined, { sensitivity: "base" });
-                break;
             case "status":
                 cmp = accountSortRank(a) - accountSortRank(b);
-                break;
-            case "coach":
-                cmp = (a.coachName ?? "").localeCompare(b.coachName ?? "", undefined, { sensitivity: "base" });
                 break;
         }
 
         if (cmp !== 0) return cmp * mult;
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    };
+
+    return [...users].sort((a, b) => {
+        if (a.isDeleted !== b.isDeleted) return a.isDeleted ? 1 : -1;
+        return compareField(a, b);
     });
 }
 

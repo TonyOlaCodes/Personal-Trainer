@@ -676,12 +676,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                                             <Star className="w-3 h-3 text-brand-400 fill-brand-400 shrink-0" />
                                         )}
                                     </div>
-                                    {presence ? (
-                                        <div className="flex items-center gap-1.5 min-w-0">
-                                            <span className={cn("w-2 h-2 rounded-full shrink-0", presence.dotClassName)} />
-                                            <p className="text-[10px] text-fg-subtle truncate">{presence.label}</p>
-                                        </div>
-                                    ) : (
+                                    {!canViewLastOnline && (
                                         <p className="text-[10px] uppercase font-bold tracking-widest text-fg-subtle">
                                             {conv.isDeleted ? "Inactive" : (roleLabels[conv.role] ?? conv.role)}
                                         </p>
@@ -774,12 +769,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                                 </div>
                                 <div>
                                     <p className="font-bold text-sm">{selectedConv.name}</p>
-                                    {selectedPresence ? (
-                                        <div className="flex items-center gap-1.5 min-w-0">
-                                            <span className={cn("w-2 h-2 rounded-full shrink-0", selectedPresence.dotClassName)} />
-                                            <p className="text-[10px] text-fg-subtle font-medium truncate">{selectedPresence.label}</p>
-                                        </div>
-                                    ) : (
+                                    {!canViewLastOnline && (
                                         <p className="text-[10px] text-fg-muted font-medium">{roleLabels[selectedConv.role] ?? selectedConv.role}</p>
                                     )}
                                 </div>
