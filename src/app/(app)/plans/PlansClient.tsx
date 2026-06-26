@@ -9,6 +9,8 @@ import {
 } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import { PLAN_TEMPLATES } from "@/lib/templates";
+import { isCoachRole } from "@/lib/roles";
+import { ActiveSessionBanner, type ActiveSessionInfo } from "@/components/shared/ActiveSessionBanner";
 
 interface Plan {
     id: string;
@@ -27,6 +29,7 @@ interface Plan {
 interface Props {
     plans: Plan[];
     userRole: string;
+    activeSession?: ActiveSessionInfo | null;
 }
 
 const TEMPLATE_ICONS: Record<string, string> = {
@@ -45,7 +48,8 @@ const PREBUILT_TEMPLATES = Object.values(PLAN_TEMPLATES).map((template) => ({
     icon: TEMPLATE_ICONS[template.id] ?? "GYM",
 }));
 
-export function PlansClient({ plans }: Props) {
+export function PlansClient({ plans, userRole, activeSession = null }: Props) {
+    const isCoach = isCoachRole(userRole);
     const searchParams = useSearchParams();
     const highlightedPlanId = searchParams.get("highlight");
     const [tab, setTab] = useState<"mine" | "templates" | "code">("mine");
@@ -54,6 +58,7 @@ export function PlansClient({ plans }: Props) {
     const [codeMsg, setCodeMsg] = useState("");
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [copiedId, setCopiedId] = useState<string | null>(null);
+    const [localActiveSession, setLocalActiveSession] = useState(activeSession);
 
     const activePlan = plans.find((p) => p.isActive);
 
@@ -119,6 +124,13 @@ export function PlansClient({ plans }: Props) {
                 </Link>
             </div>
 
+            {localActiveSession && !isCoach && (
+                <ActiveSessionBanner
+                    session={localActiveSession}
+                    onDiscarded={() => setLocalActiveSession(null)}
+                />
+            )}
+
             {/* Active plan banner */}
             {activePlan && (
                 <div className="card p-5 border-brand-600/40 bg-brand-950/30 flex items-center justify-between gap-4">
@@ -180,7 +192,11 @@ export function PlansClient({ plans }: Props) {
                             <p className="font-semibold mb-1">No plans yet</p>
                             <p className="text-sm text-fg-muted mb-4">Create a custom plan or pick a template below.</p>
                             <div className="flex justify-center gap-3">
-                                <Link href="/dashboard" className="btn-secondary btn-sm">Go to Dashboard</Link>
+                                {isCoach ? (
+                                    <Link href="/coach" className="btn-secondary btn-sm">Coach Panel</Link>
+                                ) : (
+                                    <Link href="/dashboard" className="btn-secondary btn-sm">Go to Dashboard</Link>
+                                )}
                                 <Link href="/plans/create" className="btn-primary btn-sm">Create Plan</Link>
                             </div>
                         </div>
@@ -215,23 +231,25 @@ export function PlansClient({ plans }: Props) {
                                         </div>
                                     </Link>
                                     <div className="flex items-center gap-2 shrink-0 self-center">
-                                        {plan.isActive ? (
-                                            <button
-                                                onClick={() => setActive(null)}
-                                                className="btn-ghost btn-sm text-fg-muted hover:text-danger"
-                                                title="Deactivate plan"
-                                            >
-                                                <PauseCircle className="w-3.5 h-3.5" />
-                                                Deactivate
-                                            </button>
-                                        ) : (
-                                            <button
-                                                onClick={() => setActive(plan.id)}
-                                                className="btn-ghost btn-sm text-brand-400 hover:text-brand-300"
-                                            >
-                                                <Play className="w-3.5 h-3.5" />
-                                                Activate
-                                            </button>
+                                        {!isCoach && (
+                                            plan.isActive ? (
+                                                <button
+                                                    onClick={() => setActive(null)}
+                                                    className="btn-ghost btn-sm text-fg-muted hover:text-danger"
+                                                    title="Deactivate plan"
+                                                >
+                                                    <PauseCircle className="w-3.5 h-3.5" />
+                                                    Deactivate
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    onClick={() => setActive(plan.id)}
+                                                    className="btn-ghost btn-sm text-brand-400 hover:text-brand-300"
+                                                >
+                                                    <Play className="w-3.5 h-3.5" />
+                                                    Activate
+                                                </button>
+                                            )
                                         )}
                                         <button
                                             onClick={() => deletePlan(plan.id, plan.isOwned)}

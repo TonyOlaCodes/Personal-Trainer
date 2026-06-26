@@ -1,16 +1,19 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { Suspense, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Walkthrough } from "@/components/shared/Walkthrough";
 import { RecentSessionsExplorer, PREVIEW_LIMIT } from "@/components/shared/RecentSessionsExplorer";
 import { ReturnLink } from "@/components/shared/ReturnLink";
-import { Dumbbell, ChevronRight, Clock, Flame, Activity, Calendar, Ticket, Check, Edit3, Trash2, Scale, Utensils, Footprints, Moon, AlertCircle } from "lucide-react";
+import { ActiveSessionBanner } from "@/components/shared/ActiveSessionBanner";
+import { CheckInsClient } from "@/app/(app)/checkins/CheckInsClient";
+import { Dumbbell, ChevronRight, Clock, Flame, Activity, Calendar, Ticket, Check, Edit3, Trash2, Scale, Utensils, Footprints, Moon, AlertCircle, X } from "lucide-react";
 import { formatDate, formatRelative, cn, toDateKey, parseLogDate, toLoggedAtIso } from "@/lib/utils";
 import { appendReturnTo } from "@/lib/navigation";
 import { useCurrentPath } from "@/hooks/useNavigation";
 import { useCurrentDate } from "@/hooks/useCurrentDate";
+import { useScrollLock } from "@/hooks/useScrollLock";
 import { isCardio } from "@/components/shared/ExerciseAutocomplete";
 
 interface Exercise {
@@ -64,6 +67,42 @@ interface Props {
         dueDayLabel: string | null;
         frequencyWeeks: number | null;
     };
+    checkInPanel?: {
+        checkIns: Array<{
+            id: string;
+            userId?: string;
+            createdAt: string;
+            weekNumber: number;
+            bodyweightKg?: number | null;
+            feedback: string | null;
+            notes?: string | null;
+            status: "PENDING" | "REVIEWED";
+            coachResponse?: string | null;
+            respondedAt?: string | null;
+            sleepRating?: number | null;
+            dietRating?: number | null;
+            energyRating?: number | null;
+            stressRating?: number | null;
+            intensityRating?: number | null;
+            frontImageUrl?: string | null;
+            sideImageUrl?: string | null;
+            videoUrl?: string | null;
+            coachVideoUrl?: string | null;
+        }>;
+        workoutsThisWeek: number;
+        workoutsTarget: number;
+        bodyweightWeeklyAverage: {
+            averageWeightKg: number | null;
+            entries: number;
+            previousAverageWeightKg: number | null;
+            previousEntries: number;
+        };
+        checkInSchedule: {
+            day: number | null;
+            frequencyWeeks: number | null;
+            startDate: string | null;
+        };
+    } | null;
     bodyweight: {
         selectedDate: string;
         selectedWeightKg: number | null;
@@ -88,7 +127,7 @@ interface Props {
     };
 }
 
-export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDay, todayCompleted, activeSession, recentLogs, avgDurationMin, currentCheckin, checkInDueState, bodyweight, dailyMetrics }: Props) {
+export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDay, todayCompleted, activeSession, recentLogs, avgDurationMin, currentCheckin, checkInDueState, checkInPanel, bodyweight, dailyMetrics }: Props) {
     const router = useRouter();
     const currentPath = useCurrentPath();
     const now = useCurrentDate();
@@ -98,7 +137,6 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
     const [codeStatus, setCodeStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
     const [codeMsg, setCodeMsg] = useState("");
     const [showTour, setShowTour] = useState(false);
-    const [discarding, setDiscarding] = useState(false);
     const [weightDate, setWeightDate] = useState(bodyweight.selectedDate);
     const [weight, setWeight] = useState(bodyweight.selectedWeightKg ? bodyweight.selectedWeightKg.toFixed(2) : "");
     const [latestWeight, setLatestWeight] = useState(bodyweight.latestWeightKg);
@@ -120,7 +158,10 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
     const [localActiveSession, setLocalActiveSession] = useState(activeSession);
     const [sessionsExplorerOpen, setSessionsExplorerOpen] = useState(false);
     const [sessionsExplorerInitialId, setSessionsExplorerInitialId] = useState<string | null>(null);
+    const [showCheckInPanel, setShowCheckInPanel] = useState(false);
     const [startingWorkout, setStartingWorkout] = useState(false);
+
+    useScrollLock(showCheckInPanel);
 
     useEffect(() => {
         setLocalActiveSession(activeSession);
@@ -182,24 +223,6 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
             }
         } catch (e) {
             console.error(e);
-        }
-    };
-
-    const discardSession = async (logId: string) => {
-        if (!confirm("Are you sure you want to discard this session? All progress will be lost.")) return;
-        setDiscarding(true);
-        try {
-            const res = await fetch(`/api/logs/${logId}`, {
-                method: "DELETE"
-            });
-            if (res.ok) {
-                setLocalActiveSession(null);
-                router.refresh();
-            }
-        } catch (e) {
-            console.error(e);
-        } finally {
-            setDiscarding(false);
         }
     };
 
@@ -489,10 +512,10 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
             position: "right" as const
         },
         {
-            targetId: "nav-check-ins",
+            targetId: "dashboard-check-in",
             title: "Weekly Check-ins",
             description: "Submit your weekly check-ins and progress photos to your coach for feedback.",
-            position: "right" as const
+            position: "bottom" as const
         },
         {
             targetId: "nav-chat",
@@ -766,40 +789,20 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
             
             {/* Active Session Prompt */}
             {localActiveSession && (
-                <div className="card-hover p-4 bg-gradient-to-r from-brand-600/20 to-brand-950 border-brand-500/40 border shadow-glow-brand animate-pulse-slow">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-brand-400 flex items-center justify-center">
-                                <Flame className="w-5 h-5 text-white" />
-                            </div>
-                            <div>
-                                <h4 className="font-bold text-fg">Active Session in Progress</h4>
-                                <p className="text-sm text-brand-300">{localActiveSession.workoutName}</p>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                            <button 
-                                onClick={() => discardSession(localActiveSession.id)}
-                                disabled={discarding}
-                                className="btn-ghost text-brand-300 hover:text-white hover:bg-brand-500/20 px-4 flex items-center gap-2"
-                            >
-                                <Trash2 className="w-4 h-4" />
-                                <span className="hidden sm:inline">Discard</span>
-                            </button>
-                            <ReturnLink 
-                                href={`/plans/log/${localActiveSession.workoutId}${localActiveSession.loggedAt ? `?date=${encodeURIComponent(toDateKey(parseLogDate(localActiveSession.loggedAt)))}` : ""}`} 
-                                className="btn-primary shadow-glow-brand px-6"
-                            >
-                                {discarding ? "..." : "Resume"}
-                            </ReturnLink>
-                        </div>
-                    </div>
-                </div>
+                <ActiveSessionBanner
+                    session={localActiveSession}
+                    onDiscarded={() => setLocalActiveSession(null)}
+                />
             )}
 
             {/* Check-in Widget */}
             {user.role !== "FREE" && (checkInDueState.isConfigured || !!currentCheckin) && (
-                <Link href="/checkins" className="block group">
+                <button
+                    type="button"
+                    id="dashboard-check-in"
+                    onClick={() => checkInPanel && setShowCheckInPanel(true)}
+                    className="block group w-full text-left"
+                >
                     <div className={cn(
                         "card p-4 flex items-center justify-between transition-all hover:shadow-glow-sm",
                         currentCheckin 
@@ -850,7 +853,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                         </div>
                         <ChevronRight className="w-4 h-4 text-fg-subtle group-hover:text-fg transition-colors" />
                     </div>
-                </Link>
+                </button>
             )}
 
 
@@ -1071,6 +1074,48 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
             )}
 
 
+            {showCheckInPanel && checkInPanel && (
+                <div className="fixed inset-0 z-[60] flex overflow-hidden overscroll-none flex-col md:items-center md:justify-center md:p-6 bg-surface md:bg-black/60 md:backdrop-blur-sm animate-fade-in">
+                    <div className="relative flex flex-col w-full h-full md:h-auto md:max-h-[90vh] md:max-w-2xl md:rounded-2xl md:border md:border-surface-border md:shadow-modal bg-surface overflow-hidden">
+                        <div className="flex items-center justify-between px-4 sm:px-5 py-3 sm:py-4 border-b border-surface-border bg-surface-card/95 backdrop-blur-md shrink-0">
+                            <div>
+                                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-brand-400">Weekly</p>
+                                <h2 className="text-lg font-black text-fg tracking-tight">Check-in</h2>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowCheckInPanel(false);
+                                    router.refresh();
+                                }}
+                                className="btn-icon w-9 h-9"
+                                aria-label="Close check-in"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain pb-24 md:pb-6 p-4 sm:p-6">
+                            <Suspense fallback={<div className="min-h-[320px] animate-pulse rounded-2xl bg-surface-muted" />}>
+                                <CheckInsClient
+                                    checkIns={checkInPanel.checkIns.map((c) => ({
+                                        ...c,
+                                        feedback: c.feedback ?? "",
+                                    }))}
+                                    isCoach={false}
+                                    userRole={user.role}
+                                    targetWeightKg={user.targetWeightKg}
+                                    workoutsThisWeek={checkInPanel.workoutsThisWeek}
+                                    workoutsTarget={checkInPanel.workoutsTarget}
+                                    bodyweightWeeklyAverage={checkInPanel.bodyweightWeeklyAverage}
+                                    checkInDueState={checkInDueState}
+                                    checkInSchedule={checkInPanel.checkInSchedule}
+                                    hiddenGoals={user.hiddenGoals ?? []}
+                                />
+                            </Suspense>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

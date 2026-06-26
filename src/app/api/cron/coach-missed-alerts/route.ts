@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { processCoachMissedAlerts } from "@/lib/coachMissedAlerts";
+import { processScheduledCoachAlerts } from "@/lib/coachMissedAlerts";
 import { ensureAppSchema } from "@/lib/ensureAppSchema";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +13,7 @@ function authorizeCron(req: Request) {
     return authHeader === `Bearer ${secret}`;
 }
 
-/** Daily end-of-day scan for missed client check-ins and workouts. */
+/** Every 15 minutes: flush queued coach alerts and run missed scans at each coach's chosen local times. */
 export async function GET(req: Request) {
     if (!authorizeCron(req)) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -21,7 +21,7 @@ export async function GET(req: Request) {
 
     try {
         await ensureAppSchema();
-        const result = await processCoachMissedAlerts(new Date());
+        const result = await processScheduledCoachAlerts(new Date());
         return NextResponse.json({ ok: true, ...result });
     } catch (error) {
         console.error("[cron/coach-missed-alerts]", error);

@@ -10,6 +10,8 @@ import { cn, generateId, formatDate, isSameCalendarDay, parseLogDate, toDateKey,
 import { uploadMediaFile } from "@/lib/compressImage";
 import { appendReturnTo, getReturnToFromSearchParams } from "@/lib/navigation";
 import { isCardio, ExerciseAutocomplete } from "@/components/shared/ExerciseAutocomplete";
+import { WorkoutFeelingPicker } from "@/components/shared/WorkoutFeelingPicker";
+import { useScrollLock } from "@/hooks/useScrollLock";
 
 interface Exercise {
     id: string;
@@ -226,6 +228,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
     const [showFinishModal, setShowFinishModal] = useState(false);
     const [manualDurationMinutes, setManualDurationMinutes] = useState("");
     const [workoutNotes, setWorkoutNotes] = useState("");
+    const [finishFeeling, setFinishFeeling] = useState<number | null>(null);
 
     // Active exercises state (allows adding/substituting)
     const [activeExercises, setActiveExercises] = useState<Exercise[]>(initialSession.exercises);
@@ -240,6 +243,9 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
     const sessionActive = Boolean(activeLogId);
     const [previewExercise, setPreviewExercise] = useState<{ name: string; media: ExercisePreviewMedia } | null>(null);
     const [modalTouchStart, setModalTouchStart] = useState<number | null>(null);
+
+    const modalOpen = Boolean(previewExercise) || isSubstituting !== null || isAddingExercise || showFinishModal;
+    useScrollLock(modalOpen);
 
     const findLastCompletedSet = (exerciseName: string, setNumber: number) =>
         lastWorkoutLogSets.find(
@@ -623,6 +629,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
             return;
         }
         setManualDurationMinutes(Math.floor(elapsed / 60).toString());
+        setFinishFeeling(null);
         setShowFinishModal(true);
     };
 
@@ -654,6 +661,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                     workoutId: workout.id,
                     duration: finalDuration,
                     notes: workoutNotes.trim() || undefined,
+                    feeling: finishFeeling ?? undefined,
                     status: "COMPLETED",
                     loggedAt: toLoggedAtIso(logDate),
                     sets: flattenedSets,
@@ -1046,7 +1054,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
 
             {previewExercise && (
                 <div
-                    className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/80 animate-fade-in sm:p-4 backdrop-blur-sm"
+                    className="fixed inset-0 z-[70] flex overflow-hidden overscroll-none items-end sm:items-center justify-center bg-black/80 animate-fade-in sm:p-4 backdrop-blur-sm"
                     onClick={() => setPreviewExercise(null)}
                 >
                     <div
@@ -1074,7 +1082,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                             </button>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                        <div className="flex-1 overflow-y-auto overscroll-contain p-5 space-y-4">
                             {previewExercise.media.videoUrl && (
                                 <div className="w-full overflow-hidden rounded-2xl border border-surface-border bg-black aspect-video">
                                     {isDirectVideo(previewExercise.media.videoUrl) ? (
@@ -1111,7 +1119,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
 
             {/* Substitution / Add Modal */}
             {(isSubstituting || isAddingExercise) && (
-                <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/80 animate-fade-in p-4 backdrop-blur-sm">
+                <div className="fixed inset-0 z-[60] flex overflow-hidden overscroll-none items-end sm:items-center justify-center bg-black/80 animate-fade-in p-4 backdrop-blur-sm">
                     <div className="bg-surface-card w-full max-w-sm rounded-[2.5rem] p-8 space-y-6 animate-slide-up border border-surface-border shadow-glow-brand-lg">
                         <div className="text-center space-y-2">
                              <div className="w-16 h-16 bg-gradient-brand rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-glow-brand animate-pulse-brand">
@@ -1171,7 +1179,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
             )}
 
             {showFinishModal && (
-                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 animate-fade-in p-4">
+                <div className="fixed inset-0 z-50 flex overflow-hidden overscroll-none items-end sm:items-center justify-center bg-black/80 animate-fade-in p-4">
                     <div className="bg-surface-card w-full max-w-sm rounded-[2rem] p-6 space-y-6 animate-slide-up border border-surface-border">
                         <div className="text-center space-y-2">
                             <div className="w-16 h-16 bg-brand-500/10 rounded-full flex items-center justify-center mx-auto mb-2 shadow-glow-brand-sm">
@@ -1182,6 +1190,12 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                         </div>
 
                         <div className="space-y-4">
+                            <WorkoutFeelingPicker
+                                value={finishFeeling}
+                                onChange={setFinishFeeling}
+                                disabled={saving}
+                            />
+
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black uppercase tracking-widest text-fg-subtle px-1">Duration (Minutes)</label>
                                 <div className="relative">

@@ -3,6 +3,7 @@
 import { useState, useLayoutEffect } from "react";
 import { X, ChevronRight, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useScrollLock } from "@/hooks/useScrollLock";
 
 interface Step {
     targetId: string;
@@ -21,6 +22,8 @@ export function Walkthrough({ steps, onComplete }: WalkthroughProps) {
     const [currentIdx, setCurrentIdx] = useState(-1);
     const [coords, setCoords] = useState({ top: 0, left: 0, width: 0, height: 0 });
     const currentStep = currentIdx === -1 ? null : steps[currentIdx];
+
+    useScrollLock(true);
 
     const updateCoords = () => {
         if (currentIdx === -1) return;
@@ -49,7 +52,7 @@ export function Walkthrough({ steps, onComplete }: WalkthroughProps) {
 
     if (currentIdx === -1) {
         return (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
+            <div className="fixed inset-0 z-[100] flex overflow-hidden overscroll-none items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
                 <div className="bg-surface-card max-w-sm rounded-[2.5rem] p-8 text-center space-y-6 border border-brand-500/30 shadow-glow-brand ring-1 ring-white/10 animate-slide-up">
                     <div className="w-20 h-20 bg-gradient-brand rounded-3xl flex items-center justify-center mx-auto shadow-glow-brand rotate-3">
                         <Zap className="w-10 h-10 text-white animate-pulse" />

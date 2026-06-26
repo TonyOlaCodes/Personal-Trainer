@@ -1,11 +1,10 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { CalendarClient } from "./CalendarClient";
-import { activeWorkoutWhere } from "@/lib/planWorkouts";
-import { toDateKey } from "@/lib/utils";
+import { loadClientCalendarData } from "@/lib/clientCalendarData";
+import { isCoachRole } from "@/lib/roles";
 
 export const metadata = { title: "Calendar" };
 
@@ -15,106 +14,26 @@ export default async function CalendarPage() {
 
     const user = await prisma.user.findUnique({
         where: { clerkId: userId },
-        include: {
-            plans: {
-                where: { isActive: true },
-                include: {
-                    plan: {
-                        include: {
-                            weeks: {
-                                include: { 
-                                    workouts: { 
-                                        where: activeWorkoutWhere(),
-                                        include: { exercises: { where: { isCustom: false }, orderBy: { order: "asc" } } }, 
-                                        orderBy: { dayNumber: "asc" } 
-                                    } 
-                                },
-                                orderBy: { weekNumber: "asc" },
-                            },
-                        },
-                    },
-                },
-                take: 1,
-            },
-            workoutLogs: {
-                where: { status: "COMPLETED" },
-                include: { 
-                    workout: { 
-                        select: { name: true, id: true } 
-                    },
-                    sets: { 
-                        include: { 
-                            exercise: { select: { name: true } } 
-                        } 
-                    }
-                },
-                orderBy: { loggedAt: "desc" },
-                take: 365,
-            },
-        },
+        select: { id: true, role: true },
     });
 
     if (!user) redirect("/sign-in");
 
-    const cookieStore = await cookies();
-    const isClientMode = cookieStore.get("viewMode")?.value === "CLIENT";
-    if ((user.role === "COACH" || user.role === "SUPER_ADMIN") && !isClientMode) {
-        redirect("/coach");
+    if (isCoachRole(user.role)) {
+        redirect("/coach/calendar");
     }
 
-    const userPlan = user.plans[0] ?? null;
-    const activePlan = userPlan?.plan ?? null;
-    const logs = user.workoutLogs;
-
-    const inProgressLogs = await prisma.workoutLog.findMany({
-        where: { userId: user.id, status: "IN_PROGRESS" },
-        include: { workout: { select: { name: true, id: true } } },
-        orderBy: { updatedAt: "desc" },
-    });
+    const calendar = await loadClientCalendarData(user.id);
 
     return (
         <>
             <TopBar title="Calendar" subtitle="Your training schedule" />
             <div className="p-4 sm:p-6 lg:p-10 max-w-7xl mx-auto pb-20">
                 <CalendarClient
-                    activePlan={activePlan ? {
-                        name: activePlan.name,
-                        weeks: activePlan.weeks.map((w) => ({
-                            weekNumber: w.weekNumber,
-                            workouts: w.workouts.map((wd) => ({
-                                dayNumber: wd.dayNumber,
-                                dayOfWeek: (wd as any).dayOfWeek,
-                                name: wd.name,
-                                id: wd.id,
-                                exercises: wd.exercises.map(ex => ({
-                                    name: ex.name,
-                                    sets: ex.sets,
-                                    reps: ex.reps
-                                }))
-                            })),
-                        })),
-                    } : null}
-                    planStartedAt={userPlan?.startedAt ? userPlan.startedAt.toISOString() : null}
-                    loggedDates={logs.filter((l) => l.status === "COMPLETED").map((l) => ({
-                        id: l.id,
-                        date: toDateKey(l.loggedAt),
-                        workoutName: l.workout.name,
-                        workoutId: (l as any).workoutId || l.workout?.id,
-                        duration: (l as any).duration || null,
-                        sets: l.sets.map(s => ({
-                            exerciseName: s.exercise.name,
-                            setNumber: s.setNumber,
-                            reps: s.reps,
-                            weightKg: s.weightKg,
-                            rpe: (s as any).rpe
-                        }))
-                    }))}
-                    inProgressSessions={inProgressLogs.map((l) => ({
-                        id: l.id,
-                        date: toDateKey(l.loggedAt),
-                        workoutId: l.workoutId,
-                        workoutName: l.workout.name,
-                    }))}
+                    activePlan={calendar.activePlan}
+                    planStartedAt={calendar.planStartedAt}
+                    loggedDates={calendar.loggedDates}
+                    inProgressSessions={calendar.inProgressSessions}
                 />
             </div>
         </>

@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { format, startOfWeek, endOfWeek, subWeeks, isWithinInterval, startOfMonth, startOfYear, addDays, endOfDay } from "date-fns";
 import { ensureDailyMetricsTable, getDailyMetricTargets } from "@/lib/dailyMetrics";
 import { createExerciseSessionEntry, mergeSetIntoExerciseSession, normalizeExerciseHistory } from "@/lib/exerciseHistory";
-import { calculateOneRM } from "@/lib/oneRepMax";
+import { calculateOneRM, isBetterSet } from "@/lib/oneRepMax";
 import { ensureBodyweightTable } from "@/lib/bodyweight";
 
 export async function GET() {
@@ -54,7 +54,19 @@ export async function GET() {
         "Deadlift": { weight: 0, reps: 0, date: "", change: 0 }
     };
 
-    const sbdByDate: Record<string, { date: string; dateKey: string; squat: number | null; bench: number | null; deadlift: number | null; squat1RM: number | null; bench1RM: number | null; deadlift1RM: number | null }> = {};
+    const sbdByDate: Record<string, {
+        date: string;
+        dateKey: string;
+        squat: number | null;
+        bench: number | null;
+        deadlift: number | null;
+        squat1RM: number | null;
+        bench1RM: number | null;
+        deadlift1RM: number | null;
+        squatReps?: number;
+        benchReps?: number;
+        deadliftReps?: number;
+    }> = {};
 
     const now = new Date();
     const thisWeekRange = { start: startOfWeek(now, { weekStartsOn: 1 }), end: endOfWeek(now, { weekStartsOn: 1 }) };
@@ -130,8 +142,9 @@ export async function GET() {
             else if (normalizedEx.includes("deadlift")) big3Key = "Deadlift";
 
             if (big3Key && sWeight > 0 && isWorkingSet) {
-                if (sWeight > (big3[big3Key].weight || 0)) {
-                    const prevWeight = big3[big3Key].weight || 0;
+                const prev = big3[big3Key];
+                if (isBetterSet(sWeight, sReps, prev.weight, prev.reps)) {
+                    const prevWeight = prev.weight || 0;
                     big3[big3Key] = {
                         weight: sWeight, reps: sReps, date: dateStr,
                         change: prevWeight > 0 ? sWeight - prevWeight : 0
@@ -144,22 +157,25 @@ export async function GET() {
                 };
                 const fieldKey = big3Key === "Squat" ? "squat" : big3Key === "Bench Press" ? "bench" : "deadlift";
                 const fieldKey1RM = big3Key === "Squat" ? "squat1RM" : big3Key === "Bench Press" ? "bench1RM" : "deadlift1RM";
+                const repsKey = big3Key === "Squat" ? "squatReps" : big3Key === "Bench Press" ? "benchReps" : "deadliftReps";
 
-                const curVal = sbdByDate[dateStr][fieldKey as "squat"|"bench"|"deadlift"] ?? 0;
-                if (sWeight > curVal) {
+                const curWeight = sbdByDate[dateStr][fieldKey as "squat"|"bench"|"deadlift"] ?? 0;
+                const curReps = sbdByDate[dateStr][repsKey as "squatReps"|"benchReps"|"deadliftReps"] ?? 0;
+                if (isBetterSet(sWeight, sReps, curWeight, curReps)) {
                     sbdByDate[dateStr][fieldKey as "squat"|"bench"|"deadlift"] = sWeight;
+                    sbdByDate[dateStr][repsKey as "squatReps"|"benchReps"|"deadliftReps"] = sReps;
                     sbdByDate[dateStr][fieldKey1RM as "squat1RM"|"bench1RM"|"deadlift1RM"] = calculateOneRM(sWeight, sReps);
                 }
             }
 
             if (sWeight > 0) {
-                // PR is now based on absolute MAX weight, not estimated 1RM
-                if (!exercisePRs[exName] || sWeight > exercisePRs[exName].weight) {
+                const prevPr = exercisePRs[exName];
+                if (!prevPr || isBetterSet(sWeight, sReps, prevPr.weight, prevPr.reps)) {
                     exercisePRs[exName] = { 
                         weight: sWeight, 
                         reps: sReps, 
                         date: dateStr, 
-                        prevWeight: exercisePRs[exName]?.weight || 0 
+                        prevWeight: prevPr?.weight || 0 
                     };
                 }
             }

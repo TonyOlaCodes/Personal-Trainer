@@ -3,7 +3,10 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { getDayName, getWeekNumber, isSameCalendarDay, toDateKey } from "@/lib/utils";
-import { cookies } from "next/headers";
+import { startOfWeek, endOfWeek } from "date-fns";
+import { getBodyweightWeeklyAverage } from "@/lib/bodyweight";
+import { getWorkoutsTargetFromUserPlan } from "@/lib/planTrainingTarget";
+import { withResolvedCheckInMedia } from "@/lib/uploadUrls";
 import { DashboardClient } from "./DashboardClient";
 import { getBodyweightSummary } from "@/lib/bodyweight";
 import { getCheckInDueState, getUserCheckInSchedule } from "@/lib/checkInSchedule";
@@ -11,6 +14,8 @@ import { getDailyMetricsSummary } from "@/lib/dailyMetrics";
 import { ensureAppSchema, formatErrorDetails } from "@/lib/ensureAppSchema";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
 import { SafeFallback, rethrowNextInternalErrors } from "@/components/shared/SafeFallback";
+import { cleanupStaleInProgressSessions } from "@/lib/workoutSessionCleanup";
+import { isCoachRole } from "@/lib/roles";
 
 export const metadata = { title: "Dashboard" };
 
@@ -65,12 +70,11 @@ export default async function DashboardPage() {
 
         if (!user.onboardingDone) redirect("/onboarding");
 
-        const cookieStore = await cookies();
-        const viewMode = cookieStore.get("viewMode")?.value || "COACH";
-
-        if ((user.role === "COACH" || user.role === "SUPER_ADMIN") && viewMode === "COACH") {
+        if (isCoachRole(user.role)) {
             redirect("/coach");
         }
+
+        await cleanupStaleInProgressSessions(user.id);
 
         // Fetch active session separately to be safe or use the user object
         const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -227,6 +231,51 @@ export default async function DashboardPage() {
         const checkInSchedule = await getUserCheckInSchedule(user.id);
         const checkInDueState = getCheckInDueState(checkInSchedule, new Date());
 
+        const checkInPanel = user.role !== "FREE"
+            ? {
+                checkIns: (await prisma.checkIn.findMany({
+                    where: { userId: user.id },
+                    orderBy: { createdAt: "desc" },
+                })).map((c) => withResolvedCheckInMedia({
+                    id: c.id,
+                    userId: c.userId,
+                    createdAt: c.createdAt.toISOString(),
+                    weekNumber: c.weekNumber,
+                    bodyweightKg: c.bodyweightKg,
+                    feedback: c.feedback,
+                    notes: c.notes,
+                    status: c.status,
+                    coachResponse: c.coachResponse,
+                    respondedAt: c.respondedAt?.toISOString() ?? null,
+                    sleepRating: c.sleepRating,
+                    dietRating: c.dietRating,
+                    stressRating: c.stressRating,
+                    energyRating: c.energyRating,
+                    intensityRating: c.intensityRating,
+                    frontImageUrl: c.frontImageUrl,
+                    sideImageUrl: c.sideImageUrl,
+                    videoUrl: c.videoUrl,
+                    coachVideoUrl: c.coachVideoUrl,
+                })),
+                workoutsThisWeek: await prisma.workoutLog.count({
+                    where: {
+                        userId: user.id,
+                        status: "COMPLETED",
+                        loggedAt: {
+                            gte: startOfWeek(now, { weekStartsOn: 1 }),
+                            lte: endOfWeek(now, { weekStartsOn: 1 }),
+                        },
+                    },
+                }),
+                workoutsTarget: getWorkoutsTargetFromUserPlan(
+                    user.trainingDaysPerWeek,
+                    activeUserPlan ? { startedAt: activeUserPlan.startedAt, plan: activePlan } : null
+                ),
+                bodyweightWeeklyAverage: await getBodyweightWeeklyAverage(user.id, todayDate),
+                checkInSchedule,
+            }
+            : null;
+
         return (
             <>
                 <TopBar showToday streak={streak} hideSearch={true} />
@@ -257,6 +306,7 @@ export default async function DashboardPage() {
                                 status: currentCheckin.status as string,
                             } : null}
                             checkInDueState={checkInDueState}
+                            checkInPanel={checkInPanel}
                             bodyweight={{
                                 selectedDate: todayDate,
                                 selectedWeightKg: bodyweight?.selected?.weightKg ?? null,

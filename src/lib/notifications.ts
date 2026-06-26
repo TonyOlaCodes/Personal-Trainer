@@ -1,5 +1,15 @@
 import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
+import {
+    COACH_NOTIFY_PREF_TO_TIME_FIELD,
+    DEFAULT_MISSED_NOTIFY_TIME,
+    type CoachNotificationPref,
+    deliveryModeForPref,
+    isValidTimezone,
+    nextDeliveryUtc,
+    normalizeNotifyTime,
+    type CoachNotificationSchedule,
+} from "@/lib/coachNotificationSchedule";
 
 export interface NotificationItem {
     id: string;
@@ -13,12 +23,6 @@ export interface NotificationItem {
     route: string;
 }
 
-export type CoachNotificationPref =
-    | "notifyOnWorkout"
-    | "notifyOnCheckIn"
-    | "notifyOnMetricUpdate"
-    | "notifyOnMissedCheckIn"
-    | "notifyOnMissedWorkout";
 export type ClientNotificationPref =
     | "notifyOnCoachMessage"
     | "notifyOnPlanUpdate"
@@ -27,6 +31,7 @@ export type ClientNotificationPref =
 
 let notificationsReady = false;
 let notificationColumnsReady = false;
+let pendingCoachNotificationsReady = false;
 
 export async function ensureNotificationPreferenceColumns() {
     if (notificationColumnsReady) return;
@@ -41,6 +46,12 @@ export async function ensureNotificationPreferenceColumns() {
         `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notifyOnWorkoutFeedback" BOOLEAN NOT NULL DEFAULT true`,
         `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notifyOnMissedCheckIn" BOOLEAN NOT NULL DEFAULT true`,
         `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notifyOnMissedWorkout" BOOLEAN NOT NULL DEFAULT true`,
+        `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notificationTimezone" TEXT NOT NULL DEFAULT 'UTC'`,
+        `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notifyOnWorkoutTime" TEXT`,
+        `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notifyOnCheckInTime" TEXT`,
+        `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notifyOnMetricUpdateTime" TEXT`,
+        `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notifyOnMissedCheckInTime" TEXT DEFAULT '${DEFAULT_MISSED_NOTIFY_TIME}'`,
+        `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notifyOnMissedWorkoutTime" TEXT DEFAULT '${DEFAULT_MISSED_NOTIFY_TIME}'`,
     ];
 
     for (const statement of columns) {
@@ -48,6 +59,33 @@ export async function ensureNotificationPreferenceColumns() {
     }
 
     notificationColumnsReady = true;
+}
+
+export async function ensurePendingCoachNotificationsTable() {
+    if (pendingCoachNotificationsReady) return;
+
+    await prisma.$executeRaw`
+        CREATE TABLE IF NOT EXISTS "pending_coach_notifications" (
+            "id" TEXT PRIMARY KEY,
+            "coachId" TEXT NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+            "prefKey" TEXT NOT NULL,
+            "type" TEXT NOT NULL,
+            "message" TEXT NOT NULL,
+            "entityType" TEXT NOT NULL,
+            "entityId" TEXT,
+            "route" TEXT NOT NULL,
+            "deliverAfter" TIMESTAMP(3) NOT NULL,
+            "sentAt" TIMESTAMP(3),
+            "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+    `;
+    await prisma.$executeRaw`
+        CREATE INDEX IF NOT EXISTS "pending_coach_notifications_coach_deliver_idx"
+        ON "pending_coach_notifications"("coachId", "deliverAfter")
+        WHERE "sentAt" IS NULL
+    `;
+
+    pendingCoachNotificationsReady = true;
 }
 
 export async function ensureNotificationsTable() {
@@ -76,6 +114,35 @@ export async function ensureNotificationsTable() {
     `;
 
     notificationsReady = true;
+}
+
+export async function getCoachNotificationSchedule(coachId: string): Promise<CoachNotificationSchedule> {
+    await ensureNotificationPreferenceColumns();
+
+    const user = await prisma.user.findUnique({
+        where: { id: coachId },
+        select: {
+            notificationTimezone: true,
+            notifyOnWorkoutTime: true,
+            notifyOnCheckInTime: true,
+            notifyOnMetricUpdateTime: true,
+            notifyOnMissedCheckInTime: true,
+            notifyOnMissedWorkoutTime: true,
+        },
+    });
+
+    const tz = user?.notificationTimezone && isValidTimezone(user.notificationTimezone)
+        ? user.notificationTimezone
+        : "UTC";
+
+    return {
+        timezone: tz,
+        notifyOnWorkoutTime: normalizeNotifyTime(user?.notifyOnWorkoutTime),
+        notifyOnCheckInTime: normalizeNotifyTime(user?.notifyOnCheckInTime),
+        notifyOnMetricUpdateTime: normalizeNotifyTime(user?.notifyOnMetricUpdateTime),
+        notifyOnMissedCheckInTime: normalizeNotifyTime(user?.notifyOnMissedCheckInTime) ?? DEFAULT_MISSED_NOTIFY_TIME,
+        notifyOnMissedWorkoutTime: normalizeNotifyTime(user?.notifyOnMissedWorkoutTime) ?? DEFAULT_MISSED_NOTIFY_TIME,
+    };
 }
 
 export async function userWantsNotification(
@@ -140,16 +207,108 @@ export async function createNotification(input: {
     `;
 }
 
+async function enqueuePendingCoachNotification(input: {
+    coachId: string;
+    prefKey: CoachNotificationPref;
+    type: string;
+    message: string;
+    entityType: string;
+    entityId?: string | null;
+    route: string;
+    deliverAfter: Date;
+}) {
+    await ensurePendingCoachNotificationsTable();
+
+    await prisma.$executeRaw`
+        INSERT INTO "pending_coach_notifications"
+            ("id", "coachId", "prefKey", "type", "message", "entityType", "entityId", "route", "deliverAfter")
+        VALUES
+            (${randomUUID()}, ${input.coachId}, ${input.prefKey}, ${input.type}, ${input.message},
+             ${input.entityType}, ${input.entityId ?? null}, ${input.route}, ${input.deliverAfter})
+    `;
+}
+
+export async function deliverCoachNotification(
+    coachId: string,
+    pref: CoachNotificationPref,
+    payload: {
+        type: string;
+        message: string;
+        entityType: string;
+        entityId?: string | null;
+        route: string;
+    }
+) {
+    if (!(await userWantsNotification(coachId, pref))) return;
+
+    const schedule = await getCoachNotificationSchedule(coachId);
+    if (deliveryModeForPref(schedule, pref) === "immediate") {
+        await createNotification({ userId: coachId, ...payload });
+        return;
+    }
+
+    const timeField = COACH_NOTIFY_PREF_TO_TIME_FIELD[pref] as keyof CoachNotificationSchedule;
+    const notifyTime = schedule[timeField];
+    if (typeof notifyTime !== "string") return;
+
+    const deliverAfter = nextDeliveryUtc(schedule.timezone, notifyTime);
+    await enqueuePendingCoachNotification({
+        coachId,
+        prefKey: pref,
+        deliverAfter,
+        ...payload,
+    });
+}
+
+export async function flushPendingCoachNotifications(referenceDate = new Date()) {
+    await ensurePendingCoachNotificationsTable();
+    await ensureNotificationsTable();
+
+    const pending = await prisma.$queryRaw<Array<{
+        id: string;
+        coachId: string;
+        type: string;
+        message: string;
+        entityType: string;
+        entityId: string | null;
+        route: string;
+    }>>`
+        SELECT "id", "coachId", "type", "message", "entityType", "entityId", "route"
+        FROM "pending_coach_notifications"
+        WHERE "sentAt" IS NULL
+          AND "deliverAfter" <= ${referenceDate}
+        ORDER BY "deliverAfter" ASC
+        LIMIT 200
+    `;
+
+    let sent = 0;
+    for (const row of pending) {
+        await createNotification({
+            userId: row.coachId,
+            type: row.type,
+            message: row.message,
+            entityType: row.entityType,
+            entityId: row.entityId,
+            route: row.route,
+        });
+        await prisma.$executeRaw`
+            UPDATE "pending_coach_notifications"
+            SET "sentAt" = ${referenceDate}
+            WHERE "id" = ${row.id}
+        `;
+        sent++;
+    }
+
+    return sent;
+}
+
 export async function notifyCoachOfClientWorkout(input: {
     coachId: string;
     clientName: string;
     workoutName: string;
     workoutLogId: string;
 }) {
-    if (!(await userWantsNotification(input.coachId, "notifyOnWorkout"))) return;
-
-    await createNotification({
-        userId: input.coachId,
+    await deliverCoachNotification(input.coachId, "notifyOnWorkout", {
         type: "CLIENT_WORKOUT",
         message: `${input.clientName} completed ${input.workoutName}`,
         entityType: "WORKOUT_LOG",
@@ -163,10 +322,7 @@ export async function notifyCoachOfClientCheckIn(input: {
     clientName: string;
     checkInId: string;
 }) {
-    if (!(await userWantsNotification(input.coachId, "notifyOnCheckIn"))) return;
-
-    await createNotification({
-        userId: input.coachId,
+    await deliverCoachNotification(input.coachId, "notifyOnCheckIn", {
         type: "CLIENT_CHECKIN",
         message: `${input.clientName} submitted a check-in`,
         entityType: "CHECK_IN",
@@ -181,10 +337,7 @@ export async function notifyCoachOfClientBodyweight(input: {
     clientName: string;
     weightKg: number;
 }) {
-    if (!(await userWantsNotification(input.coachId, "notifyOnMetricUpdate"))) return;
-
-    await createNotification({
-        userId: input.coachId,
+    await deliverCoachNotification(input.coachId, "notifyOnMetricUpdate", {
         type: "CLIENT_BODYWEIGHT",
         message: `${input.clientName} logged ${input.weightKg.toFixed(1)} kg`,
         entityType: "BODYWEIGHT",
@@ -199,10 +352,7 @@ export async function notifyCoachOfMissedCheckIn(input: {
     clientName: string;
     weekNumber: number;
 }) {
-    if (!(await userWantsNotification(input.coachId, "notifyOnMissedCheckIn"))) return;
-
-    await createNotification({
-        userId: input.coachId,
+    await deliverCoachNotification(input.coachId, "notifyOnMissedCheckIn", {
         type: "CLIENT_MISSED_CHECKIN",
         message: `${input.clientName} has not completed their check-in`,
         entityType: "USER",
@@ -219,10 +369,7 @@ export async function notifyCoachOfMissedWorkout(input: {
     dateKey: string;
     workoutId: string;
 }) {
-    if (!(await userWantsNotification(input.coachId, "notifyOnMissedWorkout"))) return;
-
-    await createNotification({
-        userId: input.coachId,
+    await deliverCoachNotification(input.coachId, "notifyOnMissedWorkout", {
         type: "CLIENT_MISSED_WORKOUT",
         message: `${input.clientName} missed ${input.workoutName}`,
         entityType: "USER",
@@ -262,3 +409,6 @@ export async function markAllNotificationsRead(userId: string) {
         WHERE "userId" = ${userId}
     `;
 }
+
+// Re-export coach pref type for callers
+export type { CoachNotificationPref } from "@/lib/coachNotificationSchedule";

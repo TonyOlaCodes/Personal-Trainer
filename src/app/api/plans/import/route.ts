@@ -1,6 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { isCoachRole } from "@/lib/roles";
 
 export async function POST(req: Request) {
     const { userId } = await auth();
@@ -64,11 +65,13 @@ export async function POST(req: Request) {
         }
     });
 
-    await prisma.userPlan.create({
-        data: { userId: user.id, planId: clonedPlan.id }
-    });
+    if (!isCoachRole(user.role)) {
+        await prisma.userPlan.create({
+            data: { userId: user.id, planId: clonedPlan.id },
+        });
+    }
 
-    return NextResponse.json({ 
+    return NextResponse.json({
         author: originalPlan.creator?.name || "Anonymous Athlete",
         id: clonedPlan.id
     }, { status: 200 });

@@ -11,7 +11,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { cn, getInitials } from "@/lib/utils";
 import { resolveUploadUrl, uploadMediaFile } from "@/lib/compressImage";
-import { RoleSwitcher } from "@/components/shared/RoleSwitcher";
+import { isCoachRole, isClientRole } from "@/lib/roles";
+import { DEFAULT_MISSED_NOTIFY_TIME } from "@/lib/coachNotificationSchedule";
 
 interface Props {
     user: {
@@ -39,9 +40,13 @@ interface Props {
         notifyOnWorkoutFeedback?: boolean;
         notifyOnMissedCheckIn?: boolean;
         notifyOnMissedWorkout?: boolean;
+        notificationTimezone?: string | null;
+        notifyOnWorkoutTime?: string | null;
+        notifyOnCheckInTime?: string | null;
+        notifyOnMetricUpdateTime?: string | null;
+        notifyOnMissedCheckInTime?: string | null;
+        notifyOnMissedWorkoutTime?: string | null;
     };
-    realRole: "FREE" | "PREMIUM" | "COACH" | "SUPER_ADMIN";
-    isClientMode: boolean;
 }
 
 const GOAL_LABELS: Record<string, string> = {
@@ -60,7 +65,7 @@ const LOC_LABELS: Record<string, string> = {
     HOME: "Home / Home Gym",
 };
 
-export function SettingsClient({ user, realRole, isClientMode }: Props) {
+export function SettingsClient({ user }: Props) {
     const { signOut } = useClerk();
     const router = useRouter();
     const [activeTab, setActiveTab] = useState("profile");
@@ -86,8 +91,15 @@ export function SettingsClient({ user, realRole, isClientMode }: Props) {
     const [goalSaving, setGoalSaving] = useState(false);
     const [goalSaved, setGoalSaved] = useState(false);
 
-    const showCoachNotifications = (realRole === "COACH" || realRole === "SUPER_ADMIN") && !isClientMode;
-    const showClientNotifications = isClientMode || realRole === "FREE" || realRole === "PREMIUM";
+    const showCoachNotifications = isCoachRole(user.role);
+    const showClientNotifications = isClientRole(user.role);
+
+    const sections = [
+        { id: "profile", label: "Profile", icon: User },
+        ...(isClientRole(user.role) ? [{ id: "goals", label: "My Goals", icon: Target }] : []),
+        { id: "appearance", label: "Appearance", icon: Palette },
+        { id: "notifications", label: "Notifications", icon: Bell },
+    ];
 
     const [notifyOnWorkout, setNotifyOnWorkout] = useState(user.notifyOnWorkout ?? true);
     const [notifyOnCheckIn, setNotifyOnCheckIn] = useState(user.notifyOnCheckIn ?? true);
@@ -98,19 +110,25 @@ export function SettingsClient({ user, realRole, isClientMode }: Props) {
     const [notifyOnWorkoutFeedback, setNotifyOnWorkoutFeedback] = useState(user.notifyOnWorkoutFeedback ?? true);
     const [notifyOnMissedCheckIn, setNotifyOnMissedCheckIn] = useState(user.notifyOnMissedCheckIn ?? true);
     const [notifyOnMissedWorkout, setNotifyOnMissedWorkout] = useState(user.notifyOnMissedWorkout ?? true);
+    const [notificationTimezone, setNotificationTimezone] = useState(
+        user.notificationTimezone
+        ?? (typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : "UTC")
+    );
+    const [notifyOnWorkoutTime, setNotifyOnWorkoutTime] = useState(user.notifyOnWorkoutTime ?? "");
+    const [notifyOnCheckInTime, setNotifyOnCheckInTime] = useState(user.notifyOnCheckInTime ?? "");
+    const [notifyOnMetricUpdateTime, setNotifyOnMetricUpdateTime] = useState(user.notifyOnMetricUpdateTime ?? "");
+    const [notifyOnMissedCheckInTime, setNotifyOnMissedCheckInTime] = useState(
+        user.notifyOnMissedCheckInTime ?? DEFAULT_MISSED_NOTIFY_TIME
+    );
+    const [notifyOnMissedWorkoutTime, setNotifyOnMissedWorkoutTime] = useState(
+        user.notifyOnMissedWorkoutTime ?? DEFAULT_MISSED_NOTIFY_TIME
+    );
     const [notifSaving, setNotifSaving] = useState(false);
     const [notifSaved, setNotifSaved] = useState(false);
 
     // Access code state
     const [secretCode, setSecretCode] = useState("");
     const [redeeming, setRedeeming] = useState(false);
-
-    const sections = [
-        { id: "profile", label: "Profile", icon: User },
-        { id: "goals", label: "My Goals", icon: Target },
-        { id: "appearance", label: "Appearance", icon: Palette },
-        { id: "notifications", label: "Notifications", icon: Bell },
-    ];
 
     const [theme, setTheme] = useState(typeof window !== "undefined" ? localStorage.getItem("pt-theme") || "midnight" : "midnight");
 
@@ -194,13 +212,19 @@ export function SettingsClient({ user, realRole, isClientMode }: Props) {
     const handleNotificationSave = async () => {
         setNotifSaving(true);
         try {
-            const payload: Record<string, boolean> = {};
+            const payload: Record<string, boolean | string | null> = {};
             if (showCoachNotifications) {
                 payload.notifyOnWorkout = notifyOnWorkout;
                 payload.notifyOnCheckIn = notifyOnCheckIn;
                 payload.notifyOnMetricUpdate = notifyOnMetricUpdate;
                 payload.notifyOnMissedCheckIn = notifyOnMissedCheckIn;
                 payload.notifyOnMissedWorkout = notifyOnMissedWorkout;
+                payload.notificationTimezone = notificationTimezone;
+                payload.notifyOnWorkoutTime = notifyOnWorkout && notifyOnWorkoutTime ? notifyOnWorkoutTime : null;
+                payload.notifyOnCheckInTime = notifyOnCheckIn && notifyOnCheckInTime ? notifyOnCheckInTime : null;
+                payload.notifyOnMetricUpdateTime = notifyOnMetricUpdate && notifyOnMetricUpdateTime ? notifyOnMetricUpdateTime : null;
+                payload.notifyOnMissedCheckInTime = notifyOnMissedCheckIn ? notifyOnMissedCheckInTime : null;
+                payload.notifyOnMissedWorkoutTime = notifyOnMissedWorkout ? notifyOnMissedWorkoutTime : null;
             }
             if (showClientNotifications) {
                 payload.notifyOnCoachMessage = notifyOnCoachMessage;
@@ -276,8 +300,6 @@ export function SettingsClient({ user, realRole, isClientMode }: Props) {
                         {activeTab === s.id && <ChevronRight className="w-4 h-4 text-brand-400" />}
                     </button>
                 ))}
-
-                <RoleSwitcher realRole={realRole} isClientMode={isClientMode} />
 
                 <div className="pt-4 mt-4 border-t border-surface-border">
                     <button
@@ -598,35 +620,67 @@ export function SettingsClient({ user, realRole, isClientMode }: Props) {
                         {showCoachNotifications && (
                             <div className="space-y-3">
                                 <p className="text-xs font-black uppercase tracking-widest text-fg-subtle">Coach alerts</p>
-                                <NotificationToggle
+                                <div className="p-4 rounded-2xl border border-surface-border bg-surface-muted/20 space-y-2">
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-fg-subtle px-1">
+                                        Your timezone
+                                    </label>
+                                    <input
+                                        type="text"
+                                        className="input h-11 text-sm font-medium"
+                                        value={notificationTimezone}
+                                        onChange={(e) => setNotificationTimezone(e.target.value)}
+                                        placeholder="e.g. Europe/London"
+                                    />
+                                    <p className="text-[11px] text-fg-muted px-1">
+                                        Daily missed-workout and missed check-in summaries use this timezone.
+                                    </p>
+                                </div>
+                                <CoachNotificationToggle
                                     label="Client completes a workout"
                                     description="When a client finishes a logged session."
                                     checked={notifyOnWorkout}
                                     onChange={setNotifyOnWorkout}
+                                    time={notifyOnWorkoutTime}
+                                    onTimeChange={setNotifyOnWorkoutTime}
+                                    timeHint="Leave blank for instant alerts. Set a time to batch until then each day."
                                 />
-                                <NotificationToggle
+                                <CoachNotificationToggle
                                     label="Client submits a check-in"
                                     description="When a client sends a weekly check-in."
                                     checked={notifyOnCheckIn}
                                     onChange={setNotifyOnCheckIn}
+                                    time={notifyOnCheckInTime}
+                                    onTimeChange={setNotifyOnCheckInTime}
+                                    timeHint="Leave blank for instant alerts."
                                 />
-                                <NotificationToggle
+                                <CoachNotificationToggle
                                     label="Client logs bodyweight"
                                     description="When a client records their weight on the dashboard."
                                     checked={notifyOnMetricUpdate}
                                     onChange={setNotifyOnMetricUpdate}
+                                    time={notifyOnMetricUpdateTime}
+                                    onTimeChange={setNotifyOnMetricUpdateTime}
+                                    timeHint="Leave blank for instant alerts."
                                 />
-                                <NotificationToggle
+                                <CoachNotificationToggle
                                     label="Client misses a scheduled check-in"
-                                    description="End-of-day alert when a client has not submitted their due check-in."
+                                    description="Daily summary when a client has not submitted their due check-in."
                                     checked={notifyOnMissedCheckIn}
                                     onChange={setNotifyOnMissedCheckIn}
+                                    time={notifyOnMissedCheckInTime}
+                                    onTimeChange={setNotifyOnMissedCheckInTime}
+                                    requireTime
+                                    timeHint="Checked once per day at this time."
                                 />
-                                <NotificationToggle
+                                <CoachNotificationToggle
                                     label="Client misses a scheduled workout"
-                                    description="End-of-day alert when a client did not complete today's planned session."
+                                    description="Daily summary when a client did not complete today's planned session."
                                     checked={notifyOnMissedWorkout}
                                     onChange={setNotifyOnMissedWorkout}
+                                    time={notifyOnMissedWorkoutTime}
+                                    onTimeChange={setNotifyOnMissedWorkoutTime}
+                                    requireTime
+                                    timeHint="Checked once per day at this time."
                                 />
                             </div>
                         )}
@@ -741,6 +795,54 @@ export function SettingsClient({ user, realRole, isClientMode }: Props) {
                     </div>
                 </div>
             </div>
+        </div>
+    );
+}
+
+function CoachNotificationToggle({
+    label,
+    description,
+    checked,
+    onChange,
+    time,
+    onTimeChange,
+    requireTime = false,
+    timeHint,
+}: {
+    label: string;
+    description: string;
+    checked: boolean;
+    onChange: (value: boolean) => void;
+    time: string;
+    onTimeChange: (value: string) => void;
+    requireTime?: boolean;
+    timeHint?: string;
+}) {
+    return (
+        <div className="p-4 rounded-2xl border border-surface-border bg-surface-muted/30 space-y-3">
+            <NotificationToggle
+                label={label}
+                description={description}
+                checked={checked}
+                onChange={onChange}
+            />
+            {checked && (
+                <div className="pl-1 space-y-1.5 border-t border-surface-border/60 pt-3">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">
+                        {requireTime ? "Daily alert time" : "Delivery time (optional)"}
+                    </label>
+                    <input
+                        type="time"
+                        className="input h-10 w-full max-w-[160px] text-sm font-bold"
+                        value={time}
+                        required={requireTime}
+                        onChange={(e) => onTimeChange(e.target.value)}
+                    />
+                    {timeHint && (
+                        <p className="text-[11px] text-fg-muted">{timeHint}</p>
+                    )}
+                </div>
+            )}
         </div>
     );
 }

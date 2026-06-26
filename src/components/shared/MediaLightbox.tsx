@@ -1,6 +1,7 @@
 import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
+import { useScrollLock } from "@/hooks/useScrollLock";
 
 import { resolveUploadUrl } from "@/lib/uploadUrls";
 
@@ -14,16 +15,16 @@ export function MediaLightbox({ src, type, onClose }: MediaLightboxProps) {
     const [isVisible, setIsVisible] = useState(false);
     const mediaSrc = resolveUploadUrl(src);
 
+    useScrollLock(true);
+
     useEffect(() => {
         setIsVisible(true);
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === "Escape") handleClose();
         };
         document.addEventListener("keydown", handleKeyDown);
-        document.body.style.overflow = "hidden"; // Prevent background scrolling
         return () => {
             document.removeEventListener("keydown", handleKeyDown);
-            document.body.style.overflow = "auto";
         };
     }, []);
 
@@ -35,7 +36,7 @@ export function MediaLightbox({ src, type, onClose }: MediaLightboxProps) {
     return (
         <div 
             className={cn(
-                "fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-sm transition-opacity duration-200",
+                "fixed inset-0 z-[100] flex overflow-hidden overscroll-none items-center justify-center bg-black/90 backdrop-blur-sm transition-opacity duration-200",
                 isVisible ? "opacity-100" : "opacity-0"
             )}
             onClick={handleClose}

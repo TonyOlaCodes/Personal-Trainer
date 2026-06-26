@@ -45,7 +45,6 @@ const EXERCISE_DICTIONARY = [
     { name: "Deficit Push-Up", muscleGroup: "Chest" },
     { name: "Ring Push-Up", muscleGroup: "Chest" },
     { name: "Chest Dips", muscleGroup: "Chest" },
-    { name: "Dips", muscleGroup: "Chest" },
     { name: "Weighted Dips", muscleGroup: "Chest" },
 
     // ─── BACK ───────────────────────────────────────────────────────────────
@@ -63,7 +62,6 @@ const EXERCISE_DICTIONARY = [
     { name: "Deficit Deadlift", muscleGroup: "Back" },
     { name: "Rack Pull", muscleGroup: "Back" },
     { name: "Barbell Row", muscleGroup: "Back" },
-    { name: "Barbell Rows", muscleGroup: "Back" },
     { name: "Pendlay Row", muscleGroup: "Back" },
     { name: "Yates Row", muscleGroup: "Back" },
     { name: "Dumbbell Row", muscleGroup: "Back" },
@@ -73,7 +71,6 @@ const EXERCISE_DICTIONARY = [
     { name: "T-Bar Row", muscleGroup: "Back" },
     { name: "Meadows Row", muscleGroup: "Back" },
     { name: "Lat Pulldown", muscleGroup: "Back" },
-    { name: "Lat Pulldowns", muscleGroup: "Back" },
     { name: "Wide-Grip Lat Pulldown", muscleGroup: "Back" },
     { name: "Close-Grip Lat Pulldown", muscleGroup: "Back" },
     { name: "Neutral-Grip Lat Pulldown", muscleGroup: "Back" },
@@ -84,22 +81,18 @@ const EXERCISE_DICTIONARY = [
     { name: "Machine Pullover", muscleGroup: "Back" },
     { name: "Straight-Arm Pulldown", muscleGroup: "Back" },
     { name: "Seated Cable Row", muscleGroup: "Back" },
-    { name: "Seated Cable Rows", muscleGroup: "Back" },
     { name: "Wide-Grip Cable Row", muscleGroup: "Back" },
     { name: "Close-Grip Cable Row", muscleGroup: "Back" },
     { name: "Machine Row", muscleGroup: "Back" },
     { name: "Pull-Up", muscleGroup: "Back" },
-    { name: "Pull-Ups", muscleGroup: "Back" },
     { name: "Wide-Grip Pull-Up", muscleGroup: "Back" },
     { name: "Close-Grip Pull-Up", muscleGroup: "Back" },
     { name: "Weighted Pull-Up", muscleGroup: "Back" },
     { name: "Chin-Up", muscleGroup: "Back" },
-    { name: "Chin-Ups", muscleGroup: "Back" },
     { name: "Neutral-Grip Pull-Up", muscleGroup: "Back" },
     { name: "Inverted Row", muscleGroup: "Back" },
     { name: "Ring Row", muscleGroup: "Back" },
     { name: "Face Pull", muscleGroup: "Shoulders" },
-    { name: "Face Pulls", muscleGroup: "Shoulders" },
     { name: "Rear Delt Cable Fly", muscleGroup: "Shoulders" },
     { name: "Good Morning", muscleGroup: "Hamstrings" },
     { name: "Hyperextension", muscleGroup: "Back" },
@@ -121,9 +114,7 @@ const EXERCISE_DICTIONARY = [
     { name: "Smith Machine Shoulder Press", muscleGroup: "Shoulders" },
     { name: "Landmine Shoulder Press", muscleGroup: "Shoulders" },
     { name: "Lateral Raise", muscleGroup: "Shoulders" },
-    { name: "Lateral Raises", muscleGroup: "Shoulders" },
     { name: "Dumbbell Lateral Raise", muscleGroup: "Shoulders" },
-    { name: "Dumbbell Lateral Raises", muscleGroup: "Shoulders" },
     { name: "Cable Lateral Raise", muscleGroup: "Shoulders" },
     { name: "Machine Lateral Raise", muscleGroup: "Shoulders" },
     { name: "Leaning Cable Lateral Raise", muscleGroup: "Shoulders" },
@@ -146,19 +137,14 @@ const EXERCISE_DICTIONARY = [
 
     // ─── BICEPS ─────────────────────────────────────────────────────────────
     { name: "Barbell Curl", muscleGroup: "Biceps" },
-    { name: "Barbell Curls", muscleGroup: "Biceps" },
     { name: "Barbell Bicep Curl", muscleGroup: "Biceps" },
-    { name: "Barbell Bicep Curls", muscleGroup: "Biceps" },
     { name: "EZ Bar Curl", muscleGroup: "Biceps" },
     { name: "Dumbbell Curl", muscleGroup: "Biceps" },
-    { name: "Dumbbell Curls", muscleGroup: "Biceps" },
     { name: "Alternating Dumbbell Curl", muscleGroup: "Biceps" },
     { name: "Incline Dumbbell Curl", muscleGroup: "Biceps" },
     { name: "Hammer Curl", muscleGroup: "Biceps" },
-    { name: "Hammer Curls", muscleGroup: "Biceps" },
     { name: "Cross-Body Hammer Curl", muscleGroup: "Biceps" },
     { name: "Preacher Curl", muscleGroup: "Biceps" },
-    { name: "Preacher Curls", muscleGroup: "Biceps" },
     { name: "Machine Preacher Curl", muscleGroup: "Biceps" },
     { name: "Cable Curl", muscleGroup: "Biceps" },
     { name: "Cable Bicep Curl", muscleGroup: "Biceps" },
@@ -170,12 +156,10 @@ const EXERCISE_DICTIONARY = [
 
     // ─── TRICEPS ────────────────────────────────────────────────────────────
     { name: "Tricep Pushdown", muscleGroup: "Triceps" },
-    { name: "Tricep Pushdowns", muscleGroup: "Triceps" },
     { name: "Tricep Rope Pushdown", muscleGroup: "Triceps" },
     { name: "V-Bar Tricep Pushdown", muscleGroup: "Triceps" },
     { name: "Reverse-Grip Tricep Pushdown", muscleGroup: "Triceps" },
     { name: "Skull Crusher", muscleGroup: "Triceps" },
-    { name: "Skull Crushers", muscleGroup: "Triceps" },
     { name: "EZ Bar Skull Crusher", muscleGroup: "Triceps" },
     { name: "Overhead Tricep Extension", muscleGroup: "Triceps" },
     { name: "Dumbbell Overhead Tricep Extension", muscleGroup: "Triceps" },
@@ -186,7 +170,6 @@ const EXERCISE_DICTIONARY = [
     { name: "Tricep Dips", muscleGroup: "Triceps" },
     { name: "Bench Dips", muscleGroup: "Triceps" },
     { name: "Tricep Kickback", muscleGroup: "Triceps" },
-    { name: "Tricep Kickbacks", muscleGroup: "Triceps" },
     { name: "Cable Kickback", muscleGroup: "Triceps" },
     { name: "JM Press", muscleGroup: "Triceps" },
     { name: "Tate Press", muscleGroup: "Triceps" },
@@ -208,10 +191,8 @@ const EXERCISE_DICTIONARY = [
 
     // ─── QUADS / LEGS ───────────────────────────────────────────────────────
     { name: "Squat", muscleGroup: "Quads" },
-    { name: "Squats", muscleGroup: "Quads" },
     { name: "Back Squat", muscleGroup: "Quads" },
     { name: "Barbell Squat", muscleGroup: "Quads" },
-    { name: "Barbell Squats", muscleGroup: "Quads" },
     { name: "Front Squat", muscleGroup: "Quads" },
     { name: "High-Bar Squat", muscleGroup: "Quads" },
     { name: "Low-Bar Squat", muscleGroup: "Quads" },
@@ -226,22 +207,16 @@ const EXERCISE_DICTIONARY = [
     { name: "Box Squat", muscleGroup: "Quads" },
     { name: "Pause Squat", muscleGroup: "Quads" },
     { name: "Bulgarian Split Squat", muscleGroup: "Quads" },
-    { name: "Bulgarian Split Squats", muscleGroup: "Quads" },
     { name: "Split Squat", muscleGroup: "Quads" },
     { name: "Lunge", muscleGroup: "Quads" },
-    { name: "Lunges", muscleGroup: "Quads" },
     { name: "Walking Lunge", muscleGroup: "Quads" },
-    { name: "Walking Lunges", muscleGroup: "Quads" },
     { name: "Reverse Lunge", muscleGroup: "Quads" },
-    { name: "Reverse Lunges", muscleGroup: "Quads" },
     { name: "Forward Lunge", muscleGroup: "Quads" },
     { name: "Lateral Lunge", muscleGroup: "Quads" },
     { name: "Curtsy Lunge", muscleGroup: "Quads" },
     { name: "Step-Up", muscleGroup: "Quads" },
     { name: "Step Up", muscleGroup: "Quads" },
-    { name: "Step Ups", muscleGroup: "Quads" },
     { name: "Leg Extension", muscleGroup: "Quads" },
-    { name: "Leg Extensions", muscleGroup: "Quads" },
     { name: "Sissy Squat", muscleGroup: "Quads" },
     { name: "Pistol Squat", muscleGroup: "Quads" },
     { name: "Wall Sit", muscleGroup: "Quads" },
@@ -250,7 +225,6 @@ const EXERCISE_DICTIONARY = [
 
     // ─── HAMSTRINGS ─────────────────────────────────────────────────────────
     { name: "Leg Curl", muscleGroup: "Hamstrings" },
-    { name: "Leg Curls", muscleGroup: "Hamstrings" },
     { name: "Seated Leg Curl", muscleGroup: "Hamstrings" },
     { name: "Lying Leg Curl", muscleGroup: "Hamstrings" },
     { name: "Standing Leg Curl", muscleGroup: "Hamstrings" },
@@ -262,7 +236,6 @@ const EXERCISE_DICTIONARY = [
 
     // ─── GLUTES ─────────────────────────────────────────────────────────────
     { name: "Hip Thrust", muscleGroup: "Glutes" },
-    { name: "Hip Thrusts", muscleGroup: "Glutes" },
     { name: "Barbell Hip Thrust", muscleGroup: "Glutes" },
     { name: "Single-Leg Hip Thrust", muscleGroup: "Glutes" },
     { name: "Glute Bridge", muscleGroup: "Glutes" },
@@ -276,10 +249,8 @@ const EXERCISE_DICTIONARY = [
 
     // ─── CALVES ─────────────────────────────────────────────────────────────
     { name: "Calf Raise", muscleGroup: "Calves" },
-    { name: "Calf Raises", muscleGroup: "Calves" },
     { name: "Standing Calf Raise", muscleGroup: "Calves" },
     { name: "Seated Calf Raise", muscleGroup: "Calves" },
-    { name: "Seated Calf Raises", muscleGroup: "Calves" },
     { name: "Donkey Calf Raise", muscleGroup: "Calves" },
     { name: "Leg Press Calf Raise", muscleGroup: "Calves" },
     { name: "Single-Leg Calf Raise", muscleGroup: "Calves" },
@@ -287,37 +258,27 @@ const EXERCISE_DICTIONARY = [
 
     // ─── CORE ───────────────────────────────────────────────────────────────
     { name: "Plank", muscleGroup: "Core" },
-    { name: "Planks", muscleGroup: "Core" },
     { name: "Side Plank", muscleGroup: "Core" },
     { name: "RKC Plank", muscleGroup: "Core" },
     { name: "Crunch", muscleGroup: "Core" },
-    { name: "Crunches", muscleGroup: "Core" },
     { name: "Cable Crunch", muscleGroup: "Core" },
-    { name: "Cable Crunches", muscleGroup: "Core" },
     { name: "Decline Crunch", muscleGroup: "Core" },
     { name: "Decline Sit-Up", muscleGroup: "Core" },
     { name: "Sit-Up", muscleGroup: "Core" },
     { name: "Sit Up", muscleGroup: "Core" },
-    { name: "Sit-Ups", muscleGroup: "Core" },
-    { name: "Sit Ups", muscleGroup: "Core" },
     { name: "Hanging Leg Raise", muscleGroup: "Core" },
-    { name: "Hanging Leg Raises", muscleGroup: "Core" },
     { name: "Hanging Knee Raise", muscleGroup: "Core" },
-    { name: "Hanging Knee Raises", muscleGroup: "Core" },
     { name: "Captain's Chair Leg Raise", muscleGroup: "Core" },
     { name: "Toes to Bar", muscleGroup: "Core" },
     { name: "Knees to Elbows", muscleGroup: "Core" },
     { name: "Russian Twist", muscleGroup: "Core" },
-    { name: "Russian Twists", muscleGroup: "Core" },
     { name: "Weighted Russian Twist", muscleGroup: "Core" },
     { name: "Bicycle Crunch", muscleGroup: "Core" },
-    { name: "Bicycle Crunches", muscleGroup: "Core" },
     { name: "Ab Wheel Rollout", muscleGroup: "Core" },
     { name: "Dead Bug", muscleGroup: "Core" },
     { name: "Hollow Body Hold", muscleGroup: "Core" },
     { name: "V-Up", muscleGroup: "Core" },
     { name: "Mountain Climber", muscleGroup: "Core" },
-    { name: "Mountain Climbers", muscleGroup: "Core" },
     { name: "Pallof Press", muscleGroup: "Core" },
     { name: "Woodchopper", muscleGroup: "Core" },
     { name: "Cable Woodchopper", muscleGroup: "Core" },
@@ -351,9 +312,7 @@ const EXERCISE_DICTIONARY = [
     { name: "Running", muscleGroup: "Cardio" },
     { name: "Run", muscleGroup: "Cardio" },
     { name: "Sprint", muscleGroup: "Cardio" },
-    { name: "Sprints", muscleGroup: "Cardio" },
     { name: "Hill Sprint", muscleGroup: "Cardio" },
-    { name: "Hill Sprints", muscleGroup: "Cardio" },
     { name: "Interval Run", muscleGroup: "Cardio" },
     { name: "Tempo Run", muscleGroup: "Cardio" },
     { name: "Long Run", muscleGroup: "Cardio" },
@@ -374,9 +333,7 @@ const EXERCISE_DICTIONARY = [
     { name: "Prowler Pull", muscleGroup: "Cardio" },
     { name: "Sled Drag", muscleGroup: "Cardio" },
     { name: "Burpee", muscleGroup: "Cardio" },
-    { name: "Burpees", muscleGroup: "Cardio" },
     { name: "Jumping Jack", muscleGroup: "Cardio" },
-    { name: "Jumping Jacks", muscleGroup: "Cardio" },
     { name: "Box Step-Over", muscleGroup: "Cardio" },
     { name: "Shuttle Run", muscleGroup: "Cardio" },
     { name: "Agility Ladder", muscleGroup: "Cardio" },
@@ -433,11 +390,9 @@ const EXERCISE_DICTIONARY = [
     { name: "Thruster", muscleGroup: "CrossFit" },
     { name: "Barbell Thruster", muscleGroup: "CrossFit" },
     { name: "Wall Ball", muscleGroup: "CrossFit" },
-    { name: "Wall Balls", muscleGroup: "CrossFit" },
     { name: "Medicine Ball Slam", muscleGroup: "CrossFit" },
     { name: "Medicine Ball Clean", muscleGroup: "CrossFit" },
     { name: "Box Jump", muscleGroup: "CrossFit" },
-    { name: "Box Jumps", muscleGroup: "CrossFit" },
     { name: "Box Jump Over", muscleGroup: "CrossFit" },
     { name: "Broad Jump", muscleGroup: "CrossFit" },
     { name: "Depth Jump", muscleGroup: "CrossFit" },
@@ -471,18 +426,22 @@ const EXERCISE_DICTIONARY = [
     { name: "Dumbbell Complex", muscleGroup: "Full Body" },
     { name: "Clean and Press", muscleGroup: "Full Body" },
     { name: "Renegade Row", muscleGroup: "Full Body" },
-    { name: "Renegade Rows", muscleGroup: "Full Body" },
     { name: "Bear Complex", muscleGroup: "Full Body" },
     { name: "Ground to Overhead", muscleGroup: "Full Body" },
     { name: "Shoulder to Overhead", muscleGroup: "Full Body" },
 ];
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { PLURAL_NAMES_TO_REMOVE } = require("./exercisePluralMerges");
 
 // Deduplicate by name (case-sensitive, matches DB unique constraint)
 const seen = new Set();
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const EXERCISE_MEDIA = require("./exerciseMediaData.js");
 
-const EXERCISES = EXERCISE_DICTIONARY.filter((ex) => {
+const EXERCISES = EXERCISE_DICTIONARY
+    .filter((ex) => !PLURAL_NAMES_TO_REMOVE.has(ex.name))
+    .filter((ex) => {
     if (seen.has(ex.name)) return false;
     seen.add(ex.name);
     return true;

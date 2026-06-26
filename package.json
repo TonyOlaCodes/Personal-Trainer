@@ -9,6 +9,7 @@
     "lint": "eslint",
     "postinstall": "prisma generate",
     "seed:exercises": "node scripts/seed_exercises.js",
+    "merge:plural-exercises": "node scripts/merge-plural-exercises.js",
     "generate:exercise-media": "node scripts/generate-exercise-media.mjs",
     "audit:safety": "node scripts/audit-data-safety.js"
   },

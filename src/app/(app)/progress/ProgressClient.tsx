@@ -14,6 +14,7 @@ import {
     Pin, Minus
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useScrollLock } from "@/hooks/useScrollLock";
 import { workoutFeelingEmoji } from "@/lib/workoutFeeling";
 import { PremiumLockScreen } from "@/components/shared/PremiumLockScreen";
 import { ReturnLink } from "@/components/shared/ReturnLink";
@@ -176,6 +177,8 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
     const [selectedWeekIndex, setSelectedWeekIndex] = useState<number | null>(null);
     const [isHydrated, setIsHydrated] = useState(false);
     const [pinnedExercises, setPinnedExercises] = useState<string[]>([]);
+
+    useScrollLock(showExerciseModal && Boolean(selectedExercise));
 
     useEffect(() => {
         setIsHydrated(true);
@@ -997,8 +1000,8 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
 
             {/* ── EXERCISE DETAIL MODAL ── */}
             {showExerciseModal && selectedExercise && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setShowExerciseModal(false)}>
-                    <div className="bg-surface-card border border-surface-border rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                <div className="fixed inset-0 z-50 flex overflow-hidden overscroll-none items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setShowExerciseModal(false)}>
+                    <div className="bg-surface-card border border-surface-border rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto overscroll-contain" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center justify-between p-6 border-b border-surface-border sticky top-0 bg-surface-card/95 backdrop-blur-md z-10">
                             <div className="flex-1 min-w-0">
                                 <h3 className="text-lg font-black text-fg tracking-tight">{selectedExercise}</h3>

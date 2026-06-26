@@ -8,6 +8,7 @@ import { RoleProvider } from "@/lib/RoleContext";
 import { getUserDeactivationStatusByClerkId } from "@/lib/userDeactivation";
 import { ensureAppSchema, formatErrorDetails } from "@/lib/ensureAppSchema";
 import { SafeFallback } from "@/components/shared/SafeFallback";
+import { deactivateCoachActivePlans, isCoachRole } from "@/lib/roles";
 
 export default async function AppLayout({
     children,
@@ -45,23 +46,21 @@ export default async function AppLayout({
     }
 
     const cookieStore = await cookies();
-    const isClientMode = cookieStore.get("viewMode")?.value === "CLIENT";
 
     const isSidebarCollapsed = cookieStore.get("sidebarCollapsed")?.value === "true";
 
-    const realRole = (user?.role as "FREE" | "PREMIUM" | "COACH" | "SUPER_ADMIN") ?? "FREE";
-    let effectiveRole = realRole;
+    const userRole = (user?.role as "FREE" | "PREMIUM" | "COACH" | "SUPER_ADMIN") ?? "FREE";
 
-    if (["COACH", "SUPER_ADMIN"].includes(realRole) && isClientMode) {
-        effectiveRole = "PREMIUM";
+    if (isCoachRole(userRole)) {
+        await deactivateCoachActivePlans(user.id);
     }
 
     return (
-        <RoleProvider role={effectiveRole}>
+        <RoleProvider role={userRole}>
             <div className="min-h-screen bg-surface w-full max-w-full">
                 {/* Prevent layout shifts by injecting sidebar width before browser renders */}
                 <style dangerouslySetInnerHTML={{ __html: `:root { --sidebar-width: ${isSidebarCollapsed ? '72px' : '260px'}; }` }} />
-                <Sidebar userRole={effectiveRole} realRole={realRole} isClientMode={isClientMode} initialCollapsed={isSidebarCollapsed} />
+                <Sidebar userRole={userRole} initialCollapsed={isSidebarCollapsed} />
 
                 <div className="md:pl-[var(--sidebar-width)] w-full max-w-full min-w-0">
                     <main className="min-h-screen pb-20 md:pb-0 w-full max-w-full min-w-0">
@@ -69,7 +68,7 @@ export default async function AppLayout({
                     </main>
                 </div>
 
-                <MobileTabBar userRole={effectiveRole} realRole={realRole} isClientMode={isClientMode} />
+                <MobileTabBar userRole={userRole} />
             </div>
         </RoleProvider>
     );

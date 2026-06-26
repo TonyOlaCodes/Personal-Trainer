@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { useScrollLock } from "@/hooks/useScrollLock";
 import { RecentSessionsListModal, PREVIEW_LIMIT, type RecentSessionItem } from "./RecentSessionsListModal";
 import { WorkoutSessionModal } from "./WorkoutSessionModal";
 
@@ -47,6 +48,8 @@ export function RecentSessionsExplorer({
     fetchHistoryOnOpen = false,
     historyUserId,
 }: Props) {
+    useScrollLock(open);
+
     const [view, setView] = useState<"list" | "detail">("list");
     const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
     const [allSessions, setAllSessions] = useState<RecentSessionItem[]>(sessions);

@@ -6,7 +6,8 @@ import {
     Info, Clock,
     Layout, History,
     PlayCircle,
-    Zap, Hash, Flame
+    Zap, Hash, Flame,
+    User, PencilLine,
 } from "lucide-react";
 import Link from "next/link";
 import { ReturnLink } from "@/components/shared/ReturnLink";
@@ -17,7 +18,7 @@ import { useCurrentDate } from "@/hooks/useCurrentDate";
 interface PlanExercise { name: string; sets: number; reps: string; }
 interface PlanWorkout { dayNumber: number; dayOfWeek?: number | null; name: string; id: string; exercises: PlanExercise[]; }
 interface PlanWeek { weekNumber: number; workouts: PlanWorkout[]; }
-interface ActivePlan { name: string; weeks: PlanWeek[]; }
+interface ActivePlan { id?: string; name: string; weeks: PlanWeek[]; }
 
 interface LogSet {
     exerciseName: string;
@@ -47,6 +48,11 @@ interface Props {
     planStartedAt: string | null;
     loggedDates: LoggedDate[];
     inProgressSessions: InProgressSession[];
+    coachView?: {
+        clientId: string;
+        clientName: string;
+        planId: string | null;
+    };
 }
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -55,7 +61,9 @@ const MONTHS = [
     "July", "August", "September", "October", "November", "December",
 ];
 
-export function CalendarClient({ activePlan, planStartedAt, loggedDates, inProgressSessions }: Props) {
+export function CalendarClient({ activePlan, planStartedAt, loggedDates, inProgressSessions, coachView }: Props) {
+    const isCoachView = Boolean(coachView);
+    const planId = coachView?.planId ?? activePlan?.id ?? null;
     const now = useCurrentDate();
     const today = useMemo(() => {
         const d = new Date(now);
@@ -167,8 +175,12 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates, inProgr
         for (const log of prevLogs) {
             const exSets = log.sets.filter(s => s.exerciseName.toLowerCase() === exerciseName.toLowerCase());
             if (exSets.length > 0) {
-                const maxWeight = Math.max(...exSets.map(s => s.weightKg || 0));
-                const bestSet = exSets.find(s => s.weightKg === maxWeight) || exSets[0];
+                const working = exSets.filter((s) => (s.weightKg || 0) > 0 && (s.reps || 0) > 0);
+                if (working.length === 0) continue;
+                const maxWeight = Math.max(...working.map((s) => s.weightKg || 0));
+                const atMaxWeight = working.filter((s) => s.weightKg === maxWeight);
+                const bestSet = atMaxWeight.reduce((best, s) =>
+                    (s.reps || 0) > (best.reps || 0) ? s : best, atMaxWeight[0]);
                 return {
                     weight: maxWeight,
                     reps: bestSet.reps,
@@ -423,6 +435,15 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates, inProgr
                                         <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                                         Review Session
                                     </ReturnLink>
+                                    {isCoachView && coachView && (
+                                        <Link
+                                            href={`/coach/client/${coachView.clientId}`}
+                                            className="btn-secondary w-full h-11 text-[10px] font-black uppercase tracking-[.2em] flex items-center justify-center gap-2"
+                                        >
+                                            <User className="w-4 h-4" />
+                                            View Client
+                                        </Link>
+                                    )}
                                 </div>
                             </div>
                                 ))}
@@ -493,7 +514,26 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates, inProgr
                                     </div>
                                 </div>
 
-                                {selectedDate < today ? (
+                                {isCoachView && coachView ? (
+                                    <div className="space-y-2">
+                                        <Link
+                                            href={`/coach/client/${coachView.clientId}`}
+                                            className="btn-primary w-full h-12 text-xs font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2 shadow-glow-brand"
+                                        >
+                                            <User className="w-4 h-4" />
+                                            View Client
+                                        </Link>
+                                        {planId && (
+                                            <Link
+                                                href={`/plans/create?id=${planId}&clientId=${coachView.clientId}`}
+                                                className="btn-secondary w-full h-12 text-xs font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2"
+                                            >
+                                                <PencilLine className="w-4 h-4" />
+                                                {selectedDate >= today ? "Edit Workout" : "Edit Plan"}
+                                            </Link>
+                                        )}
+                                    </div>
+                                ) : selectedDate < today ? (
                                     <ReturnLink
                                         href={workoutLogHref}
                                         className={cn(
@@ -536,7 +576,21 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates, inProgr
                                     <p className="text-xs font-black text-fg uppercase tracking-widest mb-1 opacity-80">Rest Optimization</p>
                                     <p className="text-[10px] text-fg-subtle font-bold leading-relaxed">No training assigned for this date. Focus on recovery and nutrition.</p>
                                 </div>
-                                <Link href="/plans" className="text-[10px] font-black text-brand-400 uppercase tracking-widest hover:underline pt-4">View Full Plan</Link>
+                                <Link
+                                    href={isCoachView && coachView ? `/coach/client/${coachView.clientId}` : "/plans"}
+                                    className="text-[10px] font-black text-brand-400 uppercase tracking-widest hover:underline pt-4"
+                                >
+                                    {isCoachView && coachView ? "View Client Profile" : "View Full Plan"}
+                                </Link>
+                                {isCoachView && coachView && planId && (
+                                    <Link
+                                        href={`/plans/create?id=${planId}&clientId=${coachView.clientId}`}
+                                        className="text-[10px] font-black text-fg-muted uppercase tracking-widest hover:text-brand-400 transition-colors flex items-center justify-center gap-1.5"
+                                    >
+                                        <PencilLine className="w-3 h-3" />
+                                        Edit Plan
+                                    </Link>
+                                )}
                             </div>
                         )}
                     </div>

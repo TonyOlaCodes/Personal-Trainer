@@ -24,27 +24,25 @@ interface MobileNavItem {
 const mobileNavItems: MobileNavItem[] = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, hideRoles: ["COACH", "SUPER_ADMIN"] },
     { href: "/coach", label: "Coach", icon: Users, roles: ["COACH", "SUPER_ADMIN"] },
+    { href: "/coach/calendar", label: "Calendar", icon: Calendar, roles: ["COACH", "SUPER_ADMIN"] },
     { href: "/plans", label: "Plans", icon: Dumbbell },
     { href: "/calendar", label: "Calendar", icon: Calendar, hideRoles: ["COACH", "SUPER_ADMIN"] },
-    { href: "/checkins", label: "Check-ins", icon: ClipboardList },
+    { href: "/checkins", label: "Check-ins", icon: ClipboardList, hideRoles: ["FREE", "PREMIUM"] },
     { href: "/progress", label: "Progress", icon: BarChart3, hideRoles: ["COACH", "SUPER_ADMIN"] },
     { href: "/chat", label: "Chat", icon: MessageSquare },
 ];
 
 interface MobileTabBarProps {
     userRole?: string;
-    realRole?: string;
-    isClientMode?: boolean;
 }
 
-export function MobileTabBar({ userRole = "FREE", realRole = "FREE", isClientMode = false }: MobileTabBarProps) {
+export function MobileTabBar({ userRole = "FREE" }: MobileTabBarProps) {
     const pathname = usePathname();
 
-    const filteredRole = isClientMode ? "PREMIUM" : userRole;
     const filteredItems = mobileNavItems.filter((item) => {
-        if (item.hideRoles && item.hideRoles.includes(filteredRole)) return false;
+        if (item.hideRoles && item.hideRoles.includes(userRole)) return false;
         if (!item.roles) return true;
-        return item.roles.includes(filteredRole);
+        return item.roles.includes(userRole);
     });
 
     return (

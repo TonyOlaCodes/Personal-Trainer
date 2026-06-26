@@ -18,6 +18,7 @@ import { RecentSessionsExplorer, PREVIEW_LIMIT } from "@/components/shared/Recen
 import { cn, formatDate, getInitials } from "@/lib/utils";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { formatCoachPlanLabel } from "@/lib/coachPlans";
+import { useScrollLock } from "@/hooks/useScrollLock";
 
 const CHECK_IN_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const CHECK_IN_FREQUENCIES = [
@@ -149,6 +150,8 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
     const chatScrollRef = useRef<HTMLDivElement>(null);
     const isNearBottomRef = useRef(true);
     const shouldForceScrollRef = useRef(false);
+
+    useScrollLock(showQuickChat);
 
     const scrollChatToBottom = () => {
         const container = chatScrollRef.current;
@@ -1574,7 +1577,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                         </div>
                         
                         {/* Messages Log */}
-                        <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-4 space-y-3 no-scrollbar bg-surface/10">
+                        <div ref={chatScrollRef} className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-3 no-scrollbar bg-surface/10">
                             {chatMessages.length === 0 ? (
                                 <div className="h-full flex flex-col items-center justify-center text-center p-6 opacity-60">
                                     <MessageSquare className="w-10 h-10 text-brand-400/50 mb-3" />

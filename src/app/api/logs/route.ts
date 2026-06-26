@@ -35,7 +35,7 @@ export async function POST(req: Request) {
     if (authResult.error) return authResult.error;
     const user = authResult.user;
 
-    if (!canLogWorkouts(user, req)) {
+    if (!canLogWorkouts(user)) {
         return NextResponse.json({ error: "Coaches cannot log workouts" }, { status: 403 });
     }
     const body = await req.json();
@@ -72,18 +72,15 @@ export async function POST(req: Request) {
     const targetDate = loggedAt ? parseLogDate(loggedAt) : new Date();
     const { start: startOfDay, end: endOfDay } = getLocalDayBounds(targetDate);
 
-    const existingInProgress =
-        status === "IN_PROGRESS"
-            ? await prisma.workoutLog.findFirst({
-                  where: {
-                      userId: user.id,
-                      workoutId,
-                      status: "IN_PROGRESS",
-                      loggedAt: { gte: startOfDay, lte: endOfDay },
-                  },
-                  orderBy: { updatedAt: "desc" },
-              })
-            : null;
+    const existingInProgress = await prisma.workoutLog.findFirst({
+        where: {
+            userId: user.id,
+            workoutId,
+            status: "IN_PROGRESS",
+            loggedAt: { gte: startOfDay, lte: endOfDay },
+        },
+        orderBy: { updatedAt: "desc" },
+    });
 
     // Drop stale in-progress drafts only when starting a fresh session
     if (status === "IN_PROGRESS" && !existingInProgress) {
@@ -184,6 +181,27 @@ export async function POST(req: Request) {
         videoUrl: s.videoUrl ? normalizeStoredUploadUrl(s.videoUrl) ?? s.videoUrl : undefined,
     }));
 
+    if (status === "COMPLETED" && existingInProgress) {
+        if (existingCompleted && existingCompleted.id !== existingInProgress.id) {
+            await prisma.workoutLog.delete({ where: { id: existingCompleted.id } });
+        }
+        await prisma.logSet.deleteMany({ where: { workoutLogId: existingInProgress.id } });
+        const workoutLog = await prisma.workoutLog.update({
+            where: { id: existingInProgress.id },
+            data: { ...logPayload, sets: { create: setsCreate } },
+            include: { sets: true, workout: { select: { name: true } } },
+        });
+        if (user.coachId) {
+            await notifyCoachOfClientWorkout({
+                coachId: user.coachId,
+                clientName: user.name ?? user.email,
+                workoutName: workoutLog.workout.name,
+                workoutLogId: workoutLog.id,
+            });
+        }
+        return NextResponse.json(workoutLog, { status: 200 });
+    }
+
     if (existingCompleted) {
         await prisma.logSet.deleteMany({ where: { workoutLogId: existingCompleted.id } });
         const workoutLog = await prisma.workoutLog.update({
@@ -213,6 +231,18 @@ export async function POST(req: Request) {
         },
         include: { sets: true, workout: { select: { name: true } } },
     });
+
+    if (status === "COMPLETED") {
+        await prisma.workoutLog.deleteMany({
+            where: {
+                userId: user.id,
+                workoutId,
+                status: "IN_PROGRESS",
+                loggedAt: { gte: startOfDay, lte: endOfDay },
+                id: { not: workoutLog.id },
+            },
+        });
+    }
 
     if (status === "COMPLETED" && user.coachId) {
         await notifyCoachOfClientWorkout({

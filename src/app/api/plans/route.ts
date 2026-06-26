@@ -4,6 +4,7 @@ import { prisma, ensureDbSchema } from "@/lib/prisma";
 import { z } from "zod";
 import { randomBytes } from "crypto";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
+import { isCoachRole } from "@/lib/roles";
 
 const planSchema = z.object({
     name: z.string().min(1),
@@ -120,18 +121,20 @@ export async function POST(req: Request) {
         },
     });
 
-    // Assign plan to user — auto-activate if this is their first/only plan or they have no active plan
-    const hasActivePlan = await prisma.userPlan.findFirst({
-        where: { userId: user.id, isActive: true }
-    });
+    // Assign plan to client accounts only — coaches build templates without an active assignment
+    if (!isCoachRole(user.role)) {
+        const hasActivePlan = await prisma.userPlan.findFirst({
+            where: { userId: user.id, isActive: true },
+        });
 
-    await prisma.userPlan.create({
-        data: {
-            userId: user.id,
-            planId: plan.id,
-            isActive: !hasActivePlan,  // auto-activate if no current active plan
-        },
-    });
+        await prisma.userPlan.create({
+            data: {
+                userId: user.id,
+                planId: plan.id,
+                isActive: !hasActivePlan,
+            },
+        });
+    }
 
     return NextResponse.json(plan, { status: 201 });
     } catch (error) {

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Activity, ChevronLeft, ChevronRight, Dumbbell, Loader2, MessageSquare, Trash2, X } from "lucide-react";
+import { ModalOverlay } from "@/components/shared/ModalOverlay";
 import { cn, formatDate, calculateOneRM } from "@/lib/utils";
 import { isCardio } from "@/components/shared/ExerciseAutocomplete";
 import { WorkoutFeelingEditor } from "@/components/shared/WorkoutFeelingEditor";
@@ -172,8 +173,11 @@ export function WorkoutSessionModal({
     };
 
     return (
-        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-6">
-            <div className="w-full sm:max-w-3xl max-h-[92vh] bg-surface-card border border-surface-border rounded-t-3xl sm:rounded-2xl shadow-modal overflow-hidden animate-slide-up">
+        <ModalOverlay className="bg-black/60 backdrop-blur-none sm:p-6 p-0">
+            <div
+                className="w-full sm:max-w-3xl max-h-[92vh] bg-surface-card border border-surface-border rounded-t-3xl sm:rounded-2xl shadow-modal overflow-hidden animate-slide-up"
+                onClick={(e) => e.stopPropagation()}
+            >
                 <div className="p-5 border-b border-surface-border flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 mb-2">
@@ -227,7 +231,7 @@ export function WorkoutSessionModal({
                     </button>
                 </div>
 
-                <div className="overflow-y-auto max-h-[calc(92vh-88px)] p-5 space-y-5 pb-24 sm:pb-5">
+                <div className="overflow-y-auto overscroll-contain max-h-[calc(92vh-88px)] p-5 space-y-5 pb-24 sm:pb-5">
                     {loading ? (
                         <div className="p-12 text-center">
                             <Loader2 className="w-6 h-6 mx-auto animate-spin text-brand-400" />
@@ -396,6 +400,6 @@ export function WorkoutSessionModal({
                     </div>
                 )}
             </div>
-        </div>
+        </ModalOverlay>
     );
 }

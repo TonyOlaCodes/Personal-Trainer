@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { normalizeCalories, normalizeSleepHours, normalizeSteps, updateDailyMetricTargets } from "@/lib/dailyMetrics";
 import { ensureNotificationPreferenceColumns } from "@/lib/notifications";
+import { normalizeNotifyTime } from "@/lib/coachNotificationSchedule";
 import { normalizeStoredUploadUrl, withResolvedAvatar } from "@/lib/uploadUrls";
 import { z } from "zod";
 
@@ -38,6 +39,12 @@ const profileSchema = z.object({
     notifyOnWorkoutFeedback: z.boolean().optional(),
     notifyOnMissedCheckIn: z.boolean().optional(),
     notifyOnMissedWorkout: z.boolean().optional(),
+    notificationTimezone: z.string().min(1).max(64).optional(),
+    notifyOnWorkoutTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$|^$/).nullable().optional(),
+    notifyOnCheckInTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$|^$/).nullable().optional(),
+    notifyOnMetricUpdateTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$|^$/).nullable().optional(),
+    notifyOnMissedCheckInTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
+    notifyOnMissedWorkoutTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
 });
 
 export async function PATCH(req: Request) {
@@ -79,6 +86,22 @@ export async function PATCH(req: Request) {
                     ...(parsed.notifyOnWorkoutFeedback !== undefined && { notifyOnWorkoutFeedback: parsed.notifyOnWorkoutFeedback }),
                     ...(parsed.notifyOnMissedCheckIn !== undefined && { notifyOnMissedCheckIn: parsed.notifyOnMissedCheckIn }),
                     ...(parsed.notifyOnMissedWorkout !== undefined && { notifyOnMissedWorkout: parsed.notifyOnMissedWorkout }),
+                    ...(parsed.notificationTimezone !== undefined && { notificationTimezone: parsed.notificationTimezone }),
+                    ...(parsed.notifyOnWorkoutTime !== undefined && {
+                        notifyOnWorkoutTime: parsed.notifyOnWorkoutTime ? normalizeNotifyTime(parsed.notifyOnWorkoutTime) : null,
+                    }),
+                    ...(parsed.notifyOnCheckInTime !== undefined && {
+                        notifyOnCheckInTime: parsed.notifyOnCheckInTime ? normalizeNotifyTime(parsed.notifyOnCheckInTime) : null,
+                    }),
+                    ...(parsed.notifyOnMetricUpdateTime !== undefined && {
+                        notifyOnMetricUpdateTime: parsed.notifyOnMetricUpdateTime ? normalizeNotifyTime(parsed.notifyOnMetricUpdateTime) : null,
+                    }),
+                    ...(parsed.notifyOnMissedCheckInTime !== undefined && {
+                        notifyOnMissedCheckInTime: normalizeNotifyTime(parsed.notifyOnMissedCheckInTime) ?? "18:00",
+                    }),
+                    ...(parsed.notifyOnMissedWorkoutTime !== undefined && {
+                        notifyOnMissedWorkoutTime: normalizeNotifyTime(parsed.notifyOnMissedWorkoutTime) ?? "18:00",
+                    }),
                 },
             });
         } catch (dbErr) {

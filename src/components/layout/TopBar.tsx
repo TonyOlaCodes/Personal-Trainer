@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { useRole } from "@/lib/RoleContext";
 import { formatRelative, roleLabels, roleBadgeClass, formatDate, getDayName, cn } from "@/lib/utils";
 import { useCurrentDate } from "@/hooks/useCurrentDate";
+import { useScrollLock } from "@/hooks/useScrollLock";
 import { getQuickReplyTemplate, supportsQuickReply } from "@/lib/notificationTypes";
 
 
@@ -56,6 +57,8 @@ export function TopBar({ title, subtitle, showToday = false, streak, hideSearch 
     const notifRef = useRef<HTMLDivElement>(null);
     const isCoach = role === "COACH" || role === "SUPER_ADMIN";
     const onSettings = pathname.startsWith("/settings");
+
+    useScrollLock(showNotifications);
 
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
@@ -216,7 +219,7 @@ export function TopBar({ title, subtitle, showToday = false, streak, hideSearch 
                         </button>
 
                         {showNotifications && (
-                            <div className="absolute right-0 mt-2 w-[min(100vw-2rem,24rem)] bg-surface-elevated border border-surface-border rounded-2xl shadow-modal overflow-hidden animate-slide-up z-50">
+                            <div className="fixed left-1/2 top-16 z-50 w-[min(calc(100vw-2rem),24rem)] -translate-x-1/2 bg-surface-elevated border border-surface-border rounded-2xl shadow-modal overflow-hidden animate-slide-up md:absolute md:left-auto md:right-0 md:top-auto md:mt-2 md:translate-x-0 md:w-96">
                                 <div className="p-4 border-b border-surface-border bg-surface-card flex items-center justify-between">
                                     <h3 className="text-sm font-bold text-fg">Notifications</h3>
                                     {unreadCount > 0 && (
@@ -225,7 +228,7 @@ export function TopBar({ title, subtitle, showToday = false, streak, hideSearch 
                                         </span>
                                     )}
                                 </div>
-                                <div className="max-h-[min(70vh,28rem)] overflow-y-auto no-scrollbar">
+                                <div className="max-h-[min(70vh,28rem)] overflow-y-auto overscroll-contain no-scrollbar">
                                     {notifications.length === 0 ? (
                                         <div className="p-8 text-center">
                                             <p className="text-sm text-fg-muted">No notifications yet.</p>
@@ -245,8 +248,8 @@ export function TopBar({ title, subtitle, showToday = false, streak, hideSearch 
                                                     onClick={() => handleNotificationNavigate(n)}
                                                     className="w-full text-left hover:opacity-90 transition-opacity"
                                                 >
-                                                    <div className="flex items-start justify-between mb-1 gap-2">
-                                                        <p className={cn("text-sm", !n.read ? "font-bold text-fg" : "font-medium text-fg-muted")}>
+                                                    <div className="flex items-start justify-between mb-1 gap-2 min-w-0">
+                                                        <p className={cn("text-sm break-words min-w-0 flex-1", !n.read ? "font-bold text-fg" : "font-medium text-fg-muted")}>
                                                             {n.message}
                                                         </p>
                                                         {!n.read && <span className="w-2 h-2 rounded-full bg-brand-400 mt-1.5 shrink-0" />}

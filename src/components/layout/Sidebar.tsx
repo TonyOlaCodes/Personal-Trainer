@@ -37,6 +37,7 @@ const navItems: NavItem[] = [
     { href: "/admin/exercises", label: "Exercises", icon: Video, roles: ["SUPER_ADMIN"] },
     { href: "/coach", label: "Coach Panel", icon: Users, roles: ["COACH", "SUPER_ADMIN"] },
     { href: "/coach/invites", label: "Invites", icon: UserPlus, roles: ["COACH", "SUPER_ADMIN"] },
+    { href: "/coach/calendar", label: "Calendar", icon: Calendar, roles: ["COACH", "SUPER_ADMIN"] },
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, hideRoles: ["COACH", "SUPER_ADMIN"] },
     { href: "/plans", label: "Plans", icon: Dumbbell },
     { href: "/calendar", label: "Calendar", icon: Calendar, hideRoles: ["COACH", "SUPER_ADMIN"] },
@@ -47,12 +48,10 @@ const navItems: NavItem[] = [
 
 interface SidebarProps {
     userRole?: string;
-    realRole?: string;
-    isClientMode?: boolean;
     initialCollapsed?: boolean;
 }
 
-export function Sidebar({ userRole = "FREE", realRole = "FREE", isClientMode = false, initialCollapsed = false }: SidebarProps) {
+export function Sidebar({ userRole = "FREE", initialCollapsed = false }: SidebarProps) {
     const pathname = usePathname();
     const [collapsed, setCollapsed] = useState(initialCollapsed);
 
@@ -66,11 +65,10 @@ export function Sidebar({ userRole = "FREE", realRole = "FREE", isClientMode = f
         setCollapsed(!collapsed);
     };
 
-    const filteredRole = isClientMode ? "PREMIUM" : userRole;
     const filteredItems = navItems.filter((item) => {
-        if (item.hideRoles && item.hideRoles.includes(filteredRole)) return false;
+        if (item.hideRoles && item.hideRoles.includes(userRole)) return false;
         if (!item.roles) return true;
-        return item.roles.includes(filteredRole);
+        return item.roles.includes(userRole);
     });
 
     return (

@@ -1,4 +1,4 @@
-import { deriveOneRMFromBestSet } from "./oneRepMax";
+import { deriveOneRMFromBestSet, isBetterSet } from "./oneRepMax";
 
 export type ExerciseSessionEntry = {
     sessionId: string;
@@ -37,7 +37,7 @@ export function normalizeExerciseHistory(
     );
 }
 
-/** Best set = heaviest non-warmup weight in the workout; 1RM always from that set. */
+/** Best set = heaviest non-warmup weight; at equal weight, highest reps. 1RM from that set. */
 export function mergeSetIntoExerciseSession(
     session: ExerciseSessionEntry,
     sWeight: number,
@@ -51,10 +51,8 @@ export function mergeSetIntoExerciseSession(
         return;
     }
 
-    if (weight > session.weight) {
+    if (isBetterSet(weight, reps, session.weight, session.reps)) {
         session.weight = weight;
-        session.reps = reps;
-    } else if (weight === session.weight && reps < session.reps) {
         session.reps = reps;
     }
 

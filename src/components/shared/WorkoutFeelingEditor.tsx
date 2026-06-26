@@ -4,9 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Pencil, Smile } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { WorkoutFeelingPicker } from "@/components/shared/WorkoutFeelingPicker";
 import {
-    WORKOUT_FEELING_EMOJIS,
-    WORKOUT_FEELING_LABELS,
     workoutFeelingEmoji,
     workoutFeelingLabel,
 } from "@/lib/workoutFeeling";
@@ -67,36 +66,19 @@ export function WorkoutFeelingEditor({
     if (editing && canEdit) {
         return (
             <div className={cn("space-y-2", alignmentClass, className)}>
-                <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">How did it feel?</p>
-                <div className={cn("flex flex-wrap gap-1.5", flexJustify)}>
-                    {WORKOUT_FEELING_EMOJIS.map((emoji, index) => {
-                        const value = index + 1;
-                        const selected = feeling === value;
-                        return (
-                            <button
-                                key={value}
-                                type="button"
-                                disabled={saving}
-                                onClick={() => saveFeeling(value)}
-                                title={WORKOUT_FEELING_LABELS[index]}
-                                className={cn(
-                                    "w-9 h-9 rounded-xl border text-lg transition-all",
-                                    selected
-                                        ? "border-brand-500/40 bg-brand-500/15 shadow-glow-brand-sm scale-105"
-                                        : "border-surface-border bg-surface-muted hover:border-brand-500/30 hover:bg-brand-500/5",
-                                    saving && "opacity-60"
-                                )}
-                            >
-                                {emoji}
-                            </button>
-                        );
-                    })}
-                </div>
+                <WorkoutFeelingPicker
+                    value={feeling}
+                    onChange={saveFeeling}
+                    disabled={saving}
+                />
                 <button
                     type="button"
                     onClick={() => setEditing(false)}
                     disabled={saving}
-                    className="text-[10px] font-bold uppercase tracking-widest text-fg-subtle hover:text-fg"
+                    className={cn(
+                        "text-[10px] font-bold uppercase tracking-widest text-fg-subtle hover:text-fg",
+                        align === "right" ? "text-right w-full" : "text-left"
+                    )}
                 >
                     Cancel
                 </button>

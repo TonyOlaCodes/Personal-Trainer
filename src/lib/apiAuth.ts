@@ -3,9 +3,9 @@ import { NextResponse } from "next/server";
 import type { User } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getUserDeactivationStatusByClerkId, isInactiveAccount } from "@/lib/userDeactivation";
-import { isClientViewMode, parseTeamCoachId } from "@/lib/roles";
+import { isCoachRole, parseTeamCoachId } from "@/lib/roles";
 
-export { defaultHomeForRole, isClientViewMode, parseTeamCoachId } from "@/lib/roles";
+export { defaultHomeForRole, isCoachRole, isClientRole, parseTeamCoachId } from "@/lib/roles";
 
 export async function requireAuthUser(req?: Request): Promise<
     | { user: User; error: null }
@@ -28,10 +28,8 @@ export async function requireAuthUser(req?: Request): Promise<
     return { user, error: null };
 }
 
-export function canLogWorkouts(user: User, req: Request): boolean {
-    if (user.role === "FREE" || user.role === "PREMIUM") return true;
-    if ((user.role === "COACH" || user.role === "SUPER_ADMIN") && isClientViewMode(req)) return true;
-    return false;
+export function canLogWorkouts(user: User): boolean {
+    return user.role === "FREE" || user.role === "PREMIUM";
 }
 
 export async function workoutAssignedToUser(userId: string, workoutId: string): Promise<boolean> {

@@ -95,6 +95,12 @@ model User {
   notifyOnWorkoutFeedback Boolean @default(true)
   notifyOnMissedCheckIn   Boolean @default(true)
   notifyOnMissedWorkout   Boolean @default(true)
+  notificationTimezone    String  @default("UTC")
+  notifyOnWorkoutTime     String?
+  notifyOnCheckInTime     String?
+  notifyOnMetricUpdateTime String?
+  notifyOnMissedCheckInTime String? @default("18:00")
+  notifyOnMissedWorkoutTime String? @default("18:00")
 
   // Onboarding Step 1
   goal              Goal?

@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { redeemAccessCodeForUser } from "@/lib/accessCodes";
+import { isCoachRole } from "@/lib/roles";
 import { z } from "zod";
 
 // POST redeem an access code
@@ -11,6 +12,13 @@ export async function POST(req: Request) {
 
     const user = await prisma.user.findUnique({ where: { clerkId: userId } });
     if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+
+    if (isCoachRole(user.role)) {
+        return NextResponse.json(
+            { error: "Coach accounts cannot redeem client access codes." },
+            { status: 403 }
+        );
+    }
 
     const { code } = z.object({ code: z.string().min(1) }).parse(await req.json());
 

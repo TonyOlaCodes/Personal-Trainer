@@ -2,6 +2,7 @@
 
 import { Activity, ChevronRight, Loader2, X } from "lucide-react";
 import Link from "next/link";
+import { ModalOverlay } from "@/components/shared/ModalOverlay";
 import { formatDate, formatRelative } from "@/lib/utils";
 
 export interface RecentSessionItem {
@@ -43,10 +44,7 @@ export function RecentSessionsListModal({
     if (!open) return null;
 
     return (
-        <div
-            className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm animate-fade-in sm:p-4"
-            onClick={onClose}
-        >
+        <ModalOverlay onClose={onClose}>
             <div
                 className="bg-surface-card w-full sm:max-w-lg max-h-[85vh] rounded-t-[2rem] sm:rounded-3xl border border-surface-border shadow-glow-brand-lg overflow-hidden animate-slide-up flex flex-col"
                 onClick={(e) => e.stopPropagation()}
@@ -62,7 +60,7 @@ export function RecentSessionsListModal({
                     </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto divide-y divide-surface-border min-h-0">
+                <div className="flex-1 overflow-y-auto overscroll-contain divide-y divide-surface-border min-h-0">
                     {loading ? (
                         <div className="p-12 text-center">
                             <Loader2 className="w-6 h-6 mx-auto animate-spin text-brand-400" />
@@ -133,6 +131,6 @@ export function RecentSessionsListModal({
                     </p>
                 </div>
             </div>
-        </div>
+        </ModalOverlay>
     );
 }
