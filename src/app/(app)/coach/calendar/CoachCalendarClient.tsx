@@ -2,11 +2,16 @@
 
 import { useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, AlertCircle, CalendarCheck, UserCircle } from "lucide-react";
+import { ChevronDown, UserCircle, TrendingUp } from "lucide-react";
 import { CalendarClient } from "@/app/(app)/calendar/CalendarClient";
-import { cn, toDateKey } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { useCurrentDate } from "@/hooks/useCurrentDate";
 import type { ClientCalendarPayload } from "@/lib/clientCalendarData";
+import {
+    computeMonthlyCompliance,
+    computeWeeklyCompliance,
+    complianceTone,
+} from "@/lib/calendarCompliance";
 import Link from "next/link";
 
 interface ClientOption {
@@ -22,65 +27,65 @@ interface Props {
     calendar: ClientCalendarPayload | null;
 }
 
+function ComplianceCard({
+    label,
+    sublabel,
+    completed,
+    due,
+    percent,
+}: {
+    label: string;
+    sublabel: string;
+    completed: number;
+    due: number;
+    percent: number | null;
+}) {
+    const tone = complianceTone(percent);
+    const cardClass = {
+        success: "border-success/30 bg-success/5",
+        warning: "border-warning/30 bg-warning/5",
+        danger: "border-danger/30 bg-danger/5",
+        muted: "border-surface-border bg-surface-muted/20",
+    }[tone];
+    const valueClass = {
+        success: "text-success",
+        warning: "text-warning",
+        danger: "text-danger",
+        muted: "text-fg-subtle",
+    }[tone];
+
+    return (
+        <div className={cn("card p-4 border", cardClass)}>
+            <div className="flex items-center gap-2 mb-1">
+                <TrendingUp className={cn("w-4 h-4", valueClass)} />
+                <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">{label}</span>
+            </div>
+            <p className={cn("text-3xl font-black tabular-nums", valueClass)}>
+                {percent !== null ? `${percent}%` : "—"}
+            </p>
+            <p className="text-[10px] text-fg-muted font-bold mt-0.5">
+                {due > 0 ? `${completed}/${due} workouts` : "No sessions due yet"} · {sublabel}
+            </p>
+        </div>
+    );
+}
+
 export function CoachCalendarClient({ clients, selectedClientId, selectedClientName, calendar }: Props) {
     const router = useRouter();
     const now = useCurrentDate();
 
-    const weekStats = useMemo(() => {
-        if (!calendar?.activePlan || !calendar.planStartedAt) {
-            return { missed: 0, upcoming: 0, completed: 0 };
-        }
+    const complianceInput = useMemo(
+        () => ({
+            activePlan: calendar?.activePlan ?? null,
+            planStartedAt: calendar?.planStartedAt ?? null,
+            loggedDates: calendar?.loggedDates ?? [],
+        }),
+        [calendar]
+    );
 
-        const today = new Date(now);
-        today.setHours(0, 0, 0, 0);
-        const weekStart = new Date(today);
-        const dow = today.getDay();
-        weekStart.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1));
-        weekStart.setHours(0, 0, 0, 0);
+    const weekCompliance = useMemo(() => computeWeeklyCompliance(complianceInput, now), [complianceInput, now]);
 
-        const loggedSet = new Set(calendar.loggedDates.map((l) => l.date));
-        const inProgressSet = new Set(calendar.inProgressSessions.map((s) => s.date));
-
-        let missed = 0;
-        let upcoming = 0;
-        let completed = 0;
-
-        for (let i = 0; i < 7; i++) {
-            const d = new Date(weekStart);
-            d.setDate(weekStart.getDate() + i);
-            const key = toDateKey(d);
-
-            const start = new Date(calendar.planStartedAt);
-            start.setHours(0, 0, 0, 0);
-            const diffDays = Math.floor((d.getTime() - start.getTime()) / 86400000);
-            if (diffDays < 0) continue;
-
-            const weeks = calendar.activePlan.weeks;
-            if (!weeks.length) continue;
-
-            let weekIdx = Math.floor(diffDays / 7) % weeks.length;
-            const week = weeks[weekIdx];
-            if (!week) continue;
-
-            const jsDow = d.getDay();
-            const monBasedDow = jsDow === 0 ? 6 : jsDow - 1;
-            const fallbackDayNumber = monBasedDow + 1;
-            const usesOneIndexed = week.workouts.length >= 5
-                && week.workouts.every((w) => w.dayOfWeek !== null && w.dayOfWeek !== undefined && w.dayOfWeek === w.dayNumber);
-            const targetDow = usesOneIndexed ? (monBasedDow === 6 ? 0 : monBasedDow + 1) : monBasedDow;
-            const planned = week.workouts.find((w) => w.dayOfWeek === targetDow)
-                ?? week.workouts.find((w) => (w.dayOfWeek === null || w.dayOfWeek === undefined) && w.dayNumber === fallbackDayNumber);
-
-            if (!planned) continue;
-
-            if (loggedSet.has(key)) completed++;
-            else if (inProgressSet.has(key)) upcoming++;
-            else if (d < today) missed++;
-            else upcoming++;
-        }
-
-        return { missed, upcoming, completed };
-    }, [calendar, now]);
+    const monthCompliance = useMemo(() => computeMonthlyCompliance(complianceInput, now), [complianceInput, now]);
 
     const onClientChange = (clientId: string) => {
         router.push(`/coach/calendar?clientId=${encodeURIComponent(clientId)}`);
@@ -127,34 +132,21 @@ export function CoachCalendarClient({ clients, selectedClientId, selectedClientN
             </div>
 
             {calendar?.activePlan && (
-                <div className="grid grid-cols-3 gap-3">
-                    <div className={cn(
-                        "card p-4 border-danger/20",
-                        weekStats.missed > 0 && "bg-danger/5 shadow-glow-danger-sm"
-                    )}>
-                        <div className="flex items-center gap-2 mb-1">
-                            <AlertCircle className={cn("w-4 h-4", weekStats.missed > 0 ? "text-danger" : "text-fg-subtle")} />
-                            <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Missed</span>
-                        </div>
-                        <p className="text-2xl font-black text-fg">{weekStats.missed}</p>
-                        <p className="text-[10px] text-fg-muted font-bold">This week</p>
-                    </div>
-                    <div className="card p-4 border-brand-500/20 bg-brand-950/10">
-                        <div className="flex items-center gap-2 mb-1">
-                            <CalendarCheck className="w-4 h-4 text-brand-400" />
-                            <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Upcoming</span>
-                        </div>
-                        <p className="text-2xl font-black text-fg">{weekStats.upcoming}</p>
-                        <p className="text-[10px] text-fg-muted font-bold">This week</p>
-                    </div>
-                    <div className="card p-4 border-success/20 bg-success/5">
-                        <div className="flex items-center gap-2 mb-1">
-                            <CalendarCheck className="w-4 h-4 text-success" />
-                            <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Done</span>
-                        </div>
-                        <p className="text-2xl font-black text-fg">{weekStats.completed}</p>
-                        <p className="text-[10px] text-fg-muted font-bold">This week</p>
-                    </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <ComplianceCard
+                        label="This Week"
+                        sublabel="Since Monday"
+                        completed={weekCompliance.completed}
+                        due={weekCompliance.due}
+                        percent={weekCompliance.percent}
+                    />
+                    <ComplianceCard
+                        label="This Month"
+                        sublabel="Month to date"
+                        completed={monthCompliance.completed}
+                        due={monthCompliance.due}
+                        percent={monthCompliance.percent}
+                    />
                 </div>
             )}
 

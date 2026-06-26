@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { getInitials, formatRelative, cn, roleLabels } from "@/lib/utils";
-import { formatLastOnline } from "@/lib/userPresence";
+import { getPresenceIndicator } from "@/lib/userPresence";
 import { sortConversationsByActivity } from "@/lib/chatActivity";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { uploadMediaFile } from "@/lib/compressImage";
@@ -124,6 +124,11 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
         }
         return conversations.find((conversation) => conversation.userId === userId)?.lastActiveAt ?? null;
     }, [conversationPresence, conversations]);
+
+    const selectedPresence = useMemo(() => {
+        if (!canViewLastOnline || !selectedConv) return null;
+        return getPresenceIndicator(resolveLastActive(selectedConv.userId));
+    }, [canViewLastOnline, selectedConv, resolveLastActive, conversationPresence]);
 
     const messagesScrollRef = useRef<HTMLDivElement>(null);
     const fileRef = useRef<HTMLInputElement>(null);
@@ -629,7 +634,12 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                     ) : sortedConversations.length === 0 ? (
                         <p className="text-xs text-fg-muted text-center p-6">No conversations yet</p>
                     ) : (
-                        sortedConversations.map((conv) => (
+                        sortedConversations.map((conv) => {
+                            const presence = canViewLastOnline
+                                ? getPresenceIndicator(resolveLastActive(conv.userId))
+                                : null;
+
+                            return (
                             <button
                                 key={conv.userId}
                                 onClick={() => selectConversation(conv)}
@@ -640,10 +650,21 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                                     conv.isDeleted && "opacity-50 grayscale bg-surface-muted/5 border-dashed border-surface-border/50"
                                 )}
                             >
-                                <div className="w-10 h-10 rounded-full bg-gradient-brand flex items-center justify-center text-xs font-bold text-white flex-shrink-0 overflow-hidden">
-                                    {conv.avatarUrl
-                                        ? <img src={resolveUploadUrl(conv.avatarUrl)} alt={conv.name} className="w-full h-full object-cover" />
-                                        : getInitials(conv.name)}
+                                <div className="relative w-10 h-10 shrink-0">
+                                    <div className="w-10 h-10 rounded-full bg-gradient-brand flex items-center justify-center text-xs font-bold text-white overflow-hidden">
+                                        {conv.avatarUrl
+                                            ? <img src={resolveUploadUrl(conv.avatarUrl)} alt={conv.name} className="w-full h-full object-cover" />
+                                            : getInitials(conv.name)}
+                                    </div>
+                                    {canViewLastOnline && presence && (
+                                        <span
+                                            className={cn(
+                                                "absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-surface",
+                                                presence.dotClassName
+                                            )}
+                                            title={presence.label}
+                                        />
+                                    )}
                                 </div>
                                 <div className="min-w-0 flex-1">
                                     <div className="flex items-center justify-between gap-1">
@@ -655,10 +676,11 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                                             <Star className="w-3 h-3 text-brand-400 fill-brand-400 shrink-0" />
                                         )}
                                     </div>
-                                    {canViewLastOnline ? (
-                                        <p className="text-[10px] text-fg-subtle truncate">
-                                            {formatLastOnline(resolveLastActive(conv.userId))}
-                                        </p>
+                                    {presence ? (
+                                        <div className="flex items-center gap-1.5 min-w-0">
+                                            <span className={cn("w-2 h-2 rounded-full shrink-0", presence.dotClassName)} />
+                                            <p className="text-[10px] text-fg-subtle truncate">{presence.label}</p>
+                                        </div>
                                     ) : (
                                         <p className="text-[10px] uppercase font-bold tracking-widest text-fg-subtle">
                                             {conv.isDeleted ? "Inactive" : (roleLabels[conv.role] ?? conv.role)}
@@ -666,7 +688,8 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                                     )}
                                 </div>
                             </button>
-                        ))
+                            );
+                        })
                     )}
                 </div>
             )}
@@ -733,17 +756,29 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                             </>
                         ) : selectedConv ? (
                             <>
-                                <div className="w-8 h-8 rounded-full bg-gradient-brand flex items-center justify-center text-xs font-bold text-white overflow-hidden">
-                                    {selectedConv.avatarUrl
-                                        ? <img src={resolveUploadUrl(selectedConv.avatarUrl)} alt={selectedConv.name} className="w-full h-full object-cover" />
-                                        : getInitials(selectedConv.name)}
+                                <div className="relative w-8 h-8 shrink-0">
+                                    <div className="w-8 h-8 rounded-full bg-gradient-brand flex items-center justify-center text-xs font-bold text-white overflow-hidden">
+                                        {selectedConv.avatarUrl
+                                            ? <img src={resolveUploadUrl(selectedConv.avatarUrl)} alt={selectedConv.name} className="w-full h-full object-cover" />
+                                            : getInitials(selectedConv.name)}
+                                    </div>
+                                    {selectedPresence && (
+                                        <span
+                                            className={cn(
+                                                "absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-surface-card",
+                                                selectedPresence.dotClassName
+                                            )}
+                                            title={selectedPresence.label}
+                                        />
+                                    )}
                                 </div>
                                 <div>
                                     <p className="font-bold text-sm">{selectedConv.name}</p>
-                                    {canViewLastOnline ? (
-                                        <p className="text-[10px] text-fg-subtle font-medium truncate">
-                                            {formatLastOnline(resolveLastActive(selectedConv.userId))}
-                                        </p>
+                                    {selectedPresence ? (
+                                        <div className="flex items-center gap-1.5 min-w-0">
+                                            <span className={cn("w-2 h-2 rounded-full shrink-0", selectedPresence.dotClassName)} />
+                                            <p className="text-[10px] text-fg-subtle font-medium truncate">{selectedPresence.label}</p>
+                                        </div>
                                     ) : (
                                         <p className="text-[10px] text-fg-muted font-medium">{roleLabels[selectedConv.role] ?? selectedConv.role}</p>
                                     )}

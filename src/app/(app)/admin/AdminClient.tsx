@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Users, Dumbbell, Ticket, Shield, Copy, Check, ChevronRight, Plus, Trash2, UserX, RotateCcw } from "lucide-react";
+import { Users, Dumbbell, Ticket, Shield, Copy, Check, ChevronRight, Plus, Trash2, UserX, RotateCcw, ArrowUpDown } from "lucide-react";
 import { cn, formatDate, getInitials, roleLabels, roleBadgeClass } from "@/lib/utils";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { getAccessCodeStatus } from "@/lib/accessCodeStatus";
@@ -86,6 +86,24 @@ interface Props {
 
 type Tab = "users" | "coaches" | "plans" | "codes";
 type CodeFilter = "ALL" | "ACTIVE" | "USED" | "EXPIRED";
+type UserSortField = "createdAt" | "role" | "name" | "email" | "status" | "coach";
+type SortDir = "asc" | "desc";
+
+const ROLE_SORT_ORDER: Record<string, number> = {
+    SUPER_ADMIN: 0,
+    COACH: 1,
+    PREMIUM: 2,
+    FREE: 3,
+};
+
+const USER_SORT_OPTIONS: { id: UserSortField; label: string; defaultDir: SortDir }[] = [
+    { id: "createdAt", label: "Created", defaultDir: "desc" },
+    { id: "role", label: "Role", defaultDir: "asc" },
+    { id: "name", label: "Name", defaultDir: "asc" },
+    { id: "email", label: "Email", defaultDir: "asc" },
+    { id: "status", label: "Status", defaultDir: "asc" },
+    { id: "coach", label: "Coach", defaultDir: "asc" },
+];
 
 function accountSortRank(account: { isDeleted: boolean; isDeactivated: boolean }) {
     if (account.isDeleted) return 2;
@@ -93,11 +111,36 @@ function accountSortRank(account: { isDeleted: boolean; isDeactivated: boolean }
     return 0;
 }
 
-function sortAdminUsers(users: AdminUser[]) {
-    return [...users].sort((a, b) =>
-        accountSortRank(a) - accountSortRank(b) ||
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
+function sortAdminUsers(users: AdminUser[], field: UserSortField, dir: SortDir) {
+    const mult = dir === "asc" ? 1 : -1;
+
+    return [...users].sort((a, b) => {
+        let cmp = 0;
+
+        switch (field) {
+            case "createdAt":
+                cmp = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+                break;
+            case "role":
+                cmp = (ROLE_SORT_ORDER[a.role] ?? 99) - (ROLE_SORT_ORDER[b.role] ?? 99);
+                break;
+            case "name":
+                cmp = (a.name ?? a.email).localeCompare(b.name ?? b.email, undefined, { sensitivity: "base" });
+                break;
+            case "email":
+                cmp = a.email.localeCompare(b.email, undefined, { sensitivity: "base" });
+                break;
+            case "status":
+                cmp = accountSortRank(a) - accountSortRank(b);
+                break;
+            case "coach":
+                cmp = (a.coachName ?? "").localeCompare(b.coachName ?? "", undefined, { sensitivity: "base" });
+                break;
+        }
+
+        if (cmp !== 0) return cmp * mult;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
 }
 
 function normalizeCode(code: RawAdminCode): AdminCode {
@@ -141,7 +184,9 @@ function codeStatusInput(code: AdminCode) {
 
 export function AdminClient({ users: initialUsers, coaches, plans: initialPlans, codes: initialCodes, userRole }: Props) {
     const [tab, setTab] = useState<Tab>("users");
-    const [users, setUsers] = useState<AdminUser[]>(sortAdminUsers(initialUsers));
+    const [users, setUsers] = useState<AdminUser[]>(initialUsers);
+    const [userSortField, setUserSortField] = useState<UserSortField>("createdAt");
+    const [userSortDir, setUserSortDir] = useState<SortDir>("desc");
     const [plansList, setPlansList] = useState<AdminPlan[]>(initialPlans);
     const [codes, setCodes] = useState<AdminCode[]>(initialCodes.map(normalizeCode));
     const [codeFilter, setCodeFilter] = useState<CodeFilter>("ALL");
@@ -158,6 +203,21 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
     const [confirmEmail, setConfirmEmail] = useState("");
     const [selectedCoachId, setSelectedCoachId] = useState<string>("NONE");
     const [accountActionId, setAccountActionId] = useState<string | null>(null);
+
+    const sortedUsers = useMemo(
+        () => sortAdminUsers(users, userSortField, userSortDir),
+        [users, userSortField, userSortDir]
+    );
+
+    const setUserSort = (field: UserSortField) => {
+        if (field === userSortField) {
+            setUserSortDir((current) => (current === "asc" ? "desc" : "asc"));
+            return;
+        }
+        const option = USER_SORT_OPTIONS.find((item) => item.id === field);
+        setUserSortField(field);
+        setUserSortDir(option?.defaultDir ?? "asc");
+    };
 
     const generateCode = async () => {
         setGeneratingCode(true);
@@ -290,16 +350,16 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
 
         if (res.ok) {
             if (action === "delete") {
-                setUsers(prev => sortAdminUsers(prev.map(u => u.id === user.id ? {
+                setUsers(prev => prev.map(u => u.id === user.id ? {
                     ...u,
                     role: "FREE",
                     isDeactivated: true,
                     isDeleted: true,
                     coachId: null,
                     coachName: null,
-                } : u)));
+                } : u));
             } else {
-                setUsers(prev => sortAdminUsers(prev.map(u => u.id === user.id ? { ...u, isDeactivated: action === "deactivate" } : u)));
+                setUsers(prev => prev.map(u => u.id === user.id ? { ...u, isDeactivated: action === "deactivate" } : u));
             }
         } else {
             const data = await res.json().catch(() => null);
@@ -355,12 +415,40 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
             {/* Tab: Users */}
             {tab === "users" && (
                 <div className="card overflow-hidden">
-                    <div className="px-5 py-4 border-b border-surface-border flex items-center justify-between">
-                        <h3 className="heading-3">All Users</h3>
-                        <p className="text-xs text-fg-muted">{activeUsers.length} total</p>
+                    <div className="px-5 py-4 border-b border-surface-border space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                            <h3 className="heading-3">All Users</h3>
+                            <p className="text-xs text-fg-muted">{activeUsers.length} total</p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-fg-subtle">
+                                <ArrowUpDown className="w-3 h-3" />
+                                Sort
+                            </span>
+                            <div className="flex flex-wrap gap-1 bg-surface-muted p-1 rounded-lg border border-surface-border">
+                                {USER_SORT_OPTIONS.map((option) => (
+                                    <button
+                                        key={option.id}
+                                        type="button"
+                                        onClick={() => setUserSort(option.id)}
+                                        className={cn(
+                                            "px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest transition-all",
+                                            userSortField === option.id
+                                                ? "bg-surface-card text-brand-400 shadow-sm"
+                                                : "text-fg-subtle hover:text-fg"
+                                        )}
+                                    >
+                                        {option.label}
+                                        {userSortField === option.id && (
+                                            <span className="ml-1 opacity-80">{userSortDir === "asc" ? "↑" : "↓"}</span>
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
                     </div>
                     <div className="divide-y divide-surface-border">
-                        {users.map((u) => (
+                        {sortedUsers.map((u) => (
                             <div key={u.id} className={cn("flex items-start justify-between gap-4 px-5 py-3.5", (u.isDeactivated || u.isDeleted) && "opacity-60 bg-surface-muted/20")}>
                                 <div className="flex items-start gap-3 min-w-0">
                                     <ProfileAvatar name={u.name} email={u.email} avatarUrl={u.avatarUrl} />

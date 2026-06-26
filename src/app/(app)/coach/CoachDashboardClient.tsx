@@ -10,7 +10,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { cn, formatDate, getInitials } from "@/lib/utils";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
-import { formatCoachPlanLabel } from "@/lib/coachPlans";
+import { PendingReviewsModal, type PendingReviewItem } from "@/components/shared/PendingReviewsModal";
 
 const CHECK_IN_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -46,13 +46,15 @@ interface RecentCheckIn {
 interface Props {
     clients: Client[];
     recentCheckIns: RecentCheckIn[];
+    pendingReviews: PendingReviewItem[];
     availablePlans: { id: string; name: string; type: string }[];
 }
 
-export function CoachDashboardClient({ clients, recentCheckIns, availablePlans }: Props) {
+export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, availablePlans }: Props) {
     const router = useRouter();
     const [skippedClients, setSkippedClients] = useState<string[]>([]);
     const [savingSetup, setSavingSetup] = useState(false);
+    const [showPendingReviews, setShowPendingReviews] = useState(false);
 
     const sortedClients = useMemo(() => {
         return [...clients].sort((a, b) => {
@@ -61,7 +63,7 @@ export function CoachDashboardClient({ clients, recentCheckIns, availablePlans }
         });
     }, [clients]);
 
-    const pendingCheckIns = recentCheckIns.filter(ci => ci.status === "Pending").length;
+    const pendingCheckIns = pendingReviews.length;
     const activeClients = clients.filter(c => !c.isDeleted);
     const deletedClients = clients.filter(c => c.isDeleted);
 
@@ -338,6 +340,12 @@ export function CoachDashboardClient({ clients, recentCheckIns, availablePlans }
     // Default Coach Dashboard view if no setups are active
     return (
         <div className="space-y-8 animate-fade-in">
+            <PendingReviewsModal
+                open={showPendingReviews}
+                onClose={() => setShowPendingReviews(false)}
+                reviews={pendingReviews}
+            />
+
             {/* Stats row */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="stat-card">
@@ -350,11 +358,20 @@ export function CoachDashboardClient({ clients, recentCheckIns, availablePlans }
                     <p className="stat-value">{activeClients.length}</p>
                     <p className="stat-label">Active Clients</p>
                 </div>
-                <div className="stat-card">
+                <button
+                    type="button"
+                    onClick={() => setShowPendingReviews(true)}
+                    className={cn(
+                        "stat-card text-left transition-all",
+                        pendingCheckIns > 0
+                            ? "hover:border-brand-500/40 hover:bg-brand-500/5 cursor-pointer"
+                            : "cursor-pointer hover:bg-surface-muted/30"
+                    )}
+                >
                     <TrendingUp className="w-4 h-4 text-success mb-1" />
                     <p className="stat-value">{pendingCheckIns}</p>
                     <p className="stat-label">Pending Reviews</p>
-                </div>
+                </button>
                 <div className="stat-card">
                     <Activity className="w-4 h-4 text-warning mb-1" />
                     <p className="stat-value">{activeClients.reduce((acc, c) => acc + c.stats.logs, 0)}</p>

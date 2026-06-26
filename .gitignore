@@ -24,6 +24,21 @@
 .DS_Store
 scripts/.cache/
 *.pem
+/tmp/
+.cursor/
+.agents/
+.codex/
+
+# local debug dumps (never commit)
+/db-out.json
+/exercise_list.txt
+/git_status*.txt
+/lint_*.txt
+/*_lint.txt
+/out.txt
+/prisma_*.txt
+/pub_size.txt
+/test-prisma.js
 
 # debug
 npm-debug.log*

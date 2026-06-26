@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import {
     User, Bell, Palette,
     HelpCircle, LogOut, ChevronRight, Check,
-    Camera, Loader2, Save, Target
+    Camera, Loader2, Save, Target, RotateCcw
 } from "lucide-react";
 import { useClerk } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
@@ -40,7 +40,6 @@ interface Props {
         notifyOnWorkoutFeedback?: boolean;
         notifyOnMissedCheckIn?: boolean;
         notifyOnMissedWorkout?: boolean;
-        notificationTimezone?: string | null;
         notifyOnWorkoutTime?: string | null;
         notifyOnCheckInTime?: string | null;
         notifyOnMetricUpdateTime?: string | null;
@@ -110,10 +109,6 @@ export function SettingsClient({ user }: Props) {
     const [notifyOnWorkoutFeedback, setNotifyOnWorkoutFeedback] = useState(user.notifyOnWorkoutFeedback ?? true);
     const [notifyOnMissedCheckIn, setNotifyOnMissedCheckIn] = useState(user.notifyOnMissedCheckIn ?? true);
     const [notifyOnMissedWorkout, setNotifyOnMissedWorkout] = useState(user.notifyOnMissedWorkout ?? true);
-    const [notificationTimezone, setNotificationTimezone] = useState(
-        user.notificationTimezone
-        ?? (typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : "UTC")
-    );
     const [notifyOnWorkoutTime, setNotifyOnWorkoutTime] = useState(user.notifyOnWorkoutTime ?? "");
     const [notifyOnCheckInTime, setNotifyOnCheckInTime] = useState(user.notifyOnCheckInTime ?? "");
     const [notifyOnMetricUpdateTime, setNotifyOnMetricUpdateTime] = useState(user.notifyOnMetricUpdateTime ?? "");
@@ -219,7 +214,6 @@ export function SettingsClient({ user }: Props) {
                 payload.notifyOnMetricUpdate = notifyOnMetricUpdate;
                 payload.notifyOnMissedCheckIn = notifyOnMissedCheckIn;
                 payload.notifyOnMissedWorkout = notifyOnMissedWorkout;
-                payload.notificationTimezone = notificationTimezone;
                 payload.notifyOnWorkoutTime = notifyOnWorkout && notifyOnWorkoutTime ? notifyOnWorkoutTime : null;
                 payload.notifyOnCheckInTime = notifyOnCheckIn && notifyOnCheckInTime ? notifyOnCheckInTime : null;
                 payload.notifyOnMetricUpdateTime = notifyOnMetricUpdate && notifyOnMetricUpdateTime ? notifyOnMetricUpdateTime : null;
@@ -231,6 +225,7 @@ export function SettingsClient({ user }: Props) {
                 payload.notifyOnPlanUpdate = notifyOnPlanUpdate;
                 payload.notifyOnCheckInReview = notifyOnCheckInReview;
                 payload.notifyOnWorkoutFeedback = notifyOnWorkoutFeedback;
+                payload.notifyOnMissedCheckIn = notifyOnMissedCheckIn;
             }
 
             const res = await fetch("/api/user/profile", {
@@ -620,21 +615,6 @@ export function SettingsClient({ user }: Props) {
                         {showCoachNotifications && (
                             <div className="space-y-3">
                                 <p className="text-xs font-black uppercase tracking-widest text-fg-subtle">Coach alerts</p>
-                                <div className="p-4 rounded-2xl border border-surface-border bg-surface-muted/20 space-y-2">
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-fg-subtle px-1">
-                                        Your timezone
-                                    </label>
-                                    <input
-                                        type="text"
-                                        className="input h-11 text-sm font-medium"
-                                        value={notificationTimezone}
-                                        onChange={(e) => setNotificationTimezone(e.target.value)}
-                                        placeholder="e.g. Europe/London"
-                                    />
-                                    <p className="text-[11px] text-fg-muted px-1">
-                                        Daily missed-workout and missed check-in summaries use this timezone.
-                                    </p>
-                                </div>
                                 <CoachNotificationToggle
                                     label="Client completes a workout"
                                     description="When a client finishes a logged session."
@@ -711,6 +691,12 @@ export function SettingsClient({ user }: Props) {
                                     description="When your coach leaves notes on a session."
                                     checked={notifyOnWorkoutFeedback}
                                     onChange={setNotifyOnWorkoutFeedback}
+                                />
+                                <NotificationToggle
+                                    label="Missed check-in reminder"
+                                    description="Daily reminder when your weekly check-in is due or overdue."
+                                    checked={notifyOnMissedCheckIn}
+                                    onChange={setNotifyOnMissedCheckIn}
                                 />
                             </div>
                         )}
@@ -831,13 +817,26 @@ function CoachNotificationToggle({
                     <label className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">
                         {requireTime ? "Daily alert time" : "Delivery time (optional)"}
                     </label>
-                    <input
-                        type="time"
-                        className="input h-10 w-full max-w-[160px] text-sm font-bold"
-                        value={time}
-                        required={requireTime}
-                        onChange={(e) => onTimeChange(e.target.value)}
-                    />
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="time"
+                            className="input h-10 w-full max-w-[160px] text-sm font-bold"
+                            value={time}
+                            required={requireTime}
+                            onChange={(e) => onTimeChange(e.target.value)}
+                        />
+                        {time && (
+                            <button
+                                type="button"
+                                onClick={() => onTimeChange(requireTime ? DEFAULT_MISSED_NOTIFY_TIME : "")}
+                                className="btn-icon h-10 w-10 shrink-0 text-fg-subtle hover:text-fg"
+                                title={requireTime ? "Reset to default time" : "Clear time"}
+                                aria-label={requireTime ? "Reset to default time" : "Clear time"}
+                            >
+                                <RotateCcw className="w-4 h-4" />
+                            </button>
+                        )}
+                    </div>
                     {timeHint && (
                         <p className="text-[11px] text-fg-muted">{timeHint}</p>
                     )}

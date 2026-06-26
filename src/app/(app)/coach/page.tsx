@@ -53,12 +53,26 @@ export default async function CoachDashboardPage() {
 
     const clientIds = coach.clients.map((client) => client.id);
 
-    const [recentCheckIns, bodyweightRows, allCoachPlans, activeClientPlans, inviteClientPlans] = await Promise.all([
+    const [recentCheckIns, pendingReviews, bodyweightRows, allCoachPlans, activeClientPlans, inviteClientPlans] = await Promise.all([
         prisma.checkIn.findMany({
             where: { user: { coachId: coach.id } },
             include: { user: { select: { name: true } } },
             orderBy: { createdAt: "desc" },
             take: 5
+        }),
+        prisma.checkIn.findMany({
+            where: {
+                status: "PENDING",
+                user: {
+                    coachId: coach.id,
+                    isDeleted: false,
+                    isDeactivated: false,
+                },
+            },
+            include: {
+                user: { select: { id: true, name: true, avatarUrl: true } },
+            },
+            orderBy: { createdAt: "desc" },
         }),
         clientIds.length > 0 ? prisma.$queryRaw<Array<{ userId: string; date: string; weightKg: number }>>`
             SELECT "userId", "loggedDate"::text AS "date", "weightKg"
@@ -169,6 +183,14 @@ export default async function CoachDashboardPage() {
                         week: ci.weekNumber,
                         date: ci.createdAt.toISOString(),
                         status: ci.coachResponse ? "Responded" : "Pending",
+                    }))}
+                    pendingReviews={pendingReviews.map((ci) => ({
+                        id: ci.id,
+                        clientId: ci.user.id,
+                        clientName: ci.user.name || "Client",
+                        avatarUrl: ci.user.avatarUrl,
+                        week: ci.weekNumber,
+                        date: ci.createdAt.toISOString(),
                     }))}
                     availablePlans={availablePlans}
                 />

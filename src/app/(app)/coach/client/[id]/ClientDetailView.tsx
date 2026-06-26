@@ -19,6 +19,7 @@ import { cn, formatDate, getInitials } from "@/lib/utils";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { formatCoachPlanLabel } from "@/lib/coachPlans";
 import { useScrollLock } from "@/hooks/useScrollLock";
+import { getPresenceIndicator } from "@/lib/userPresence";
 
 const CHECK_IN_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const CHECK_IN_FREQUENCIES = [
@@ -281,23 +282,10 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
         }
     };
 
-    // Presence state selector
-    const presence = useMemo(() => {
-        if (!client.lastActiveAt) return { color: "bg-fg-muted/40", text: "Away" };
-        const lastActive = new Date(client.lastActiveAt);
-        const diffMs = Date.now() - lastActive.getTime();
-        const diffMins = diffMs / (1000 * 60);
-        const diffHours = diffMs / (1000 * 60 * 60);
-        
-        if (diffMins < 15) {
-            return { color: "bg-success shadow-glow-success animate-pulse", text: "Active Now" };
-        } else if (diffHours < 24) {
-            return { color: "bg-warning", text: "Active today" };
-        } else {
-            const days = Math.max(1, Math.floor(diffHours / 24));
-            return { color: "bg-fg-muted/30", text: days === 1 ? "Away 1d" : `Away ${days}d` };
-        }
-    }, [client.lastActiveAt]);
+    const presence = useMemo(
+        () => getPresenceIndicator(client.lastActiveAt),
+        [client.lastActiveAt]
+    );
 
     // Quick Chat Fetch & Polling
     useEffect(() => {
@@ -532,8 +520,8 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                         <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 justify-center sm:justify-start">
                             <h2 className="text-2xl font-bold text-fg tracking-tight">{client.name || "Strength Athlete"}</h2>
                             <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface-muted/50 border border-surface-border w-fit h-fit mx-auto sm:mx-0">
-                                <span className={cn("w-1.5 h-1.5 rounded-full", presence.color)} />
-                                <span className="text-[9px] text-fg-subtle font-black uppercase tracking-wider">{presence.text}</span>
+                                <span className={cn("w-1.5 h-1.5 rounded-full", presence.dotClassName)} />
+                                <span className="text-[9px] text-fg-subtle font-black uppercase tracking-wider">{presence.label}</span>
                             </div>
                         </div>
                         <p className="text-sm text-fg-muted mb-1 mt-1 sm:mt-0">{client.email}</p>
@@ -1563,8 +1551,8 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                 <div className="min-w-0">
                                     <p className="font-bold text-sm text-fg truncate">{client.name}</p>
                                     <div className="flex items-center gap-1.5 mt-0.5">
-                                        <span className={cn("w-1.5 h-1.5 rounded-full", presence.color)} />
-                                        <span className="text-[8px] text-fg-subtle font-black uppercase tracking-wider">{presence.text}</span>
+                                        <span className={cn("w-1.5 h-1.5 rounded-full", presence.dotClassName)} />
+                                        <span className="text-[8px] text-fg-subtle font-black uppercase tracking-wider">{presence.label}</span>
                                     </div>
                                 </div>
                             </div>

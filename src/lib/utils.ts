@@ -1,14 +1,17 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { APP_TIMEZONE } from "@/lib/appTimezone";
+import { getLocalTimeParts, localDayBoundsUtc } from "@/lib/coachNotificationSchedule";
 
 /** Merge Tailwind classes safely */
 export function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs));
 }
 
-/** Format a Date to a short readable string */
+/** Format a Date in the app timezone (Ireland). */
 export function formatDate(date: Date | string, opts?: Intl.DateTimeFormatOptions) {
     return new Intl.DateTimeFormat("en-GB", {
+        timeZone: APP_TIMEZONE,
         day: "numeric",
         month: "short",
         year: "numeric",
@@ -32,12 +35,9 @@ export function formatRelative(date: Date | string) {
     return formatDate(d);
 }
 
-/** Local calendar date as YYYY-MM-DD */
+/** Calendar date as YYYY-MM-DD in the app timezone (Ireland). */
 export function toDateKey(date: Date): string {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, "0");
-    const d = String(date.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
+    return getLocalTimeParts(date, APP_TIMEZONE).dateKey;
 }
 
 /** Parse YYYY-MM-DD (or ISO) to a stable local noon Date for workout logging */
@@ -64,13 +64,9 @@ export function isSameCalendarDay(a: string | Date, b: string | Date): boolean {
     return toDateKey(da) === toDateKey(db);
 }
 
-/** Local start/end of day for a calendar date */
+/** Start/end of a calendar day in the app timezone, as UTC instants. */
 export function getLocalDayBounds(date: Date) {
-    const start = new Date(date);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(date);
-    end.setHours(23, 59, 59, 999);
-    return { start, end };
+    return localDayBoundsUtc(toDateKey(date), APP_TIMEZONE);
 }
 
 /** ISO timestamp to store for a scheduled workout day */
@@ -94,25 +90,27 @@ export function kgToLbs(kg: number) {
     return (kg * 2.20462).toFixed(1);
 }
 
-/** Get current ISO week number */
+/** ISO week number for a date in the app timezone. */
 export function getWeekNumber(date = new Date()) {
-    const d = new Date(date);
-    d.setHours(0, 0, 0, 0);
-    d.setDate(d.getDate() + 4 - (d.getDay() || 7));
-    const yearStart = new Date(d.getFullYear(), 0, 1);
-    return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+    const { dateKey } = getLocalTimeParts(date, APP_TIMEZONE);
+    const [y, m, d] = dateKey.split("-").map(Number);
+    const temp = new Date(Date.UTC(y, m - 1, d));
+    const dayNum = temp.getUTCDay() || 7;
+    temp.setUTCDate(temp.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(temp.getUTCFullYear(), 0, 1));
+    return Math.ceil(((temp.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
 }
 
-/** Get current day of week name */
+/** Day of week name in the app timezone. */
 export function getDayName(date = new Date()) {
-    return new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(date);
+    return new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: APP_TIMEZONE }).format(date);
 }
 
-/** Milliseconds until the next local midnight */
+/** Milliseconds until the next midnight in the app timezone. */
 export function getMsUntilNextMidnight(from = new Date()) {
-    const next = new Date(from);
-    next.setHours(24, 0, 0, 0);
-    return next.getTime() - from.getTime();
+    const { dateKey } = getLocalTimeParts(from, APP_TIMEZONE);
+    const { end } = localDayBoundsUtc(dateKey, APP_TIMEZONE);
+    return end.getTime() - from.getTime();
 }
 
 /** Pluralise helper */

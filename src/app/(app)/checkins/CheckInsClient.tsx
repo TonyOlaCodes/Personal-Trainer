@@ -567,6 +567,9 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highl
 export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWeightKg, workoutsThisWeek, workoutsTarget, bodyweightWeeklyAverage, checkInDueState, checkInSchedule, hiddenGoals }: Props) {
     const searchParams = useSearchParams();
     const highlightedCheckInId = searchParams.get("highlight");
+    const statusParam = searchParams.get("status");
+    const initialStatusFilter =
+        statusParam === "PENDING" || statusParam === "REVIEWED" ? statusParam : "ALL";
     const isPremium = ["PREMIUM", "COACH", "SUPER_ADMIN"].includes(userRole);
     const [checkIns, setCheckIns] = useState(initial);
 
@@ -590,7 +593,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
     const [saving,   setSaving]   = useState(false);
     const [viewerMedia, setViewerMedia] = useState<string | null>(null);
     const [isLogging, setIsLogging] = useState(false);
-    const [statusFilter, setStatusFilter] = useState<"ALL" | "PENDING" | "REVIEWED">("ALL");
+    const [statusFilter, setStatusFilter] = useState<"ALL" | "PENDING" | "REVIEWED">(initialStatusFilter);
     const [coachSortBy, setCoachSortBy] = useState<"WEEK" | "CLIENT">("WEEK");
     const filteredCheckIns = checkIns.filter(c => {
         if (statusFilter === "PENDING") return c.status === "PENDING";

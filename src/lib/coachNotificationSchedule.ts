@@ -1,5 +1,6 @@
 /**
  * Coach notification delivery times (HH:mm, 24h) and timezone helpers.
+ * App calendar/notifications use {@link APP_TIMEZONE} from appTimezone.ts.
  */
 
 export type CoachNotificationPref =

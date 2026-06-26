@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { ReturnLink } from "@/components/shared/ReturnLink";
-import { cn, toDateKey } from "@/lib/utils";
+import { cn, toDateKey, parseLogDate } from "@/lib/utils";
 import { useCurrentDate } from "@/hooks/useCurrentDate";
 
 /* ─────────────────────────── Types ─────────────────────────── */
@@ -65,15 +65,13 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates, inProgr
     const isCoachView = Boolean(coachView);
     const planId = coachView?.planId ?? activePlan?.id ?? null;
     const now = useCurrentDate();
-    const today = useMemo(() => {
-        const d = new Date(now);
-        d.setHours(0, 0, 0, 0);
-        return d;
-    }, [now]);
-    const todayKey = toDateKey(today);
+    const todayKey = toDateKey(now);
     const prevTodayKeyRef = useRef(todayKey);
 
-    const [view, setView] = useState({ year: today.getFullYear(), month: today.getMonth() });
+    const [view, setView] = useState(() => {
+        const [y, m] = todayKey.split("-").map(Number);
+        return { year: y, month: m - 1 };
+    });
     const [selectedDateKey, setSelectedDateKey] = useState<string>(todayKey);
 
     useEffect(() => {
@@ -83,12 +81,13 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates, inProgr
         setSelectedDateKey((current) => (current === prevTodayKey ? todayKey : current));
         setView((current) => {
             const [prevYear, prevMonth] = prevTodayKey.split("-").map(Number);
+            const [ty, tm] = todayKey.split("-").map(Number);
             if (current.year === prevYear && current.month === prevMonth - 1) {
-                return { year: today.getFullYear(), month: today.getMonth() };
+                return { year: ty, month: tm - 1 };
             }
             return current;
         });
-    }, [todayKey, today]);
+    }, [todayKey]);
 
     /* ─── Data Mappers ─── */
     const logMap = useMemo(() => {
@@ -211,7 +210,10 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates, inProgr
                             <ChevronLeft className="w-4 h-4" />
                         </button>
                         <button 
-                            onClick={() => setView({ year: today.getFullYear(), month: today.getMonth() })} 
+                            onClick={() => {
+                                const [y, m] = todayKey.split("-").map(Number);
+                                setView({ year: y, month: m - 1 });
+                            }}
                             className="px-4 h-8 rounded-xl bg-surface hover:bg-brand-950/30 hover:text-brand-400 text-[10px] font-black uppercase tracking-widest transition-all border border-surface-border text-fg active:scale-95"
                         >
                             Today
@@ -235,16 +237,16 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates, inProgr
                     </div>
                     <div className="grid grid-cols-7 bg-surface-card/30 backdrop-blur-md">
                         {cells.map((day, idx) => {
-                            const dateObj = day ? new Date(view.year, view.month, day) : null;
-                            if (dateObj) dateObj.setHours(0,0,0,0);
-                            
-                            const dateKey = dateObj ? toDateKey(dateObj) : "";
+                            const dateKey = day
+                                ? `${view.year}-${String(view.month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`
+                                : "";
+                            const dateObj = day ? parseLogDate(dateKey) : null;
                             const dayLogs = day ? logMap[dateKey] : null;
                             const log = dayLogs?.[0] ?? null;
                             const dayInProgress = !dayLogs?.length ? inProgressByDate[dateKey]?.[0] ?? null : null;
                             const planned = dateObj ? getPlannedWorkoutForDate(dateObj) : null;
-                            const isPast = dateObj ? dateObj < today : false;
-                            const isTodayDay = dateObj ? dateObj.getTime() === today.getTime() : false;
+                            const isPast = dateKey !== "" && dateKey < todayKey;
+                            const isTodayDay = dateKey === todayKey;
                             const selected = dateKey === selectedDateKey;
 
                             // Status logic
@@ -362,7 +364,7 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates, inProgr
                                 "w-2.5 h-2.5 rounded-full",
                                 selectedLogs.length > 0 ? "bg-success" :
                                 resumeSession ? "bg-warning animate-pulse" :
-                                (selectedPlanned ? (selectedDate < today ? "bg-danger" : "bg-brand-400") : "bg-surface-border")
+                                (selectedPlanned ? (selectedDateKey < todayKey ? "bg-danger" : "bg-brand-400") : "bg-surface-border")
                             )} />
                         </div>
                     </div>
@@ -454,7 +456,7 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates, inProgr
                                     "p-4 rounded-2xl border",
                                     resumeSession
                                         ? "bg-warning-950/20 border-warning-500/20 shadow-glow-warning-sm"
-                                        : selectedDate < today
+                                        : selectedDateKey < todayKey
                                             ? "bg-danger-950/20 border-danger-500/20"
                                             : "bg-brand-950/20 border-brand-500/20 shadow-glow-brand-sm"
                                 )}>
@@ -464,13 +466,13 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates, inProgr
                                                 "text-[10px] font-black uppercase tracking-widest mb-1",
                                                 resumeSession
                                                     ? "text-warning"
-                                                    : selectedDate < today
+                                                    : selectedDateKey < todayKey
                                                         ? "text-danger"
                                                         : "text-brand-400"
                                             )}>
                                                 {resumeSession
                                                     ? "Session In Progress"
-                                                    : selectedDate < today
+                                                    : selectedDateKey < todayKey
                                                         ? "Missed Session"
                                                         : "Upcoming Session"}
                                             </p>
@@ -480,7 +482,7 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates, inProgr
                                             "w-5 h-5",
                                             resumeSession
                                                 ? "text-warning opacity-60"
-                                                : selectedDate < today
+                                                : selectedDateKey < todayKey
                                                     ? "text-danger opacity-40"
                                                     : "text-brand-400"
                                         )} />
@@ -529,11 +531,11 @@ export function CalendarClient({ activePlan, planStartedAt, loggedDates, inProgr
                                                 className="btn-secondary w-full h-12 text-xs font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2"
                                             >
                                                 <PencilLine className="w-4 h-4" />
-                                                {selectedDate >= today ? "Edit Workout" : "Edit Plan"}
+                                                {selectedDateKey >= todayKey ? "Edit Workout" : "Edit Plan"}
                                             </Link>
                                         )}
                                     </div>
-                                ) : selectedDate < today ? (
+                                ) : selectedDateKey < todayKey ? (
                                     <ReturnLink
                                         href={workoutLogHref}
                                         className={cn(

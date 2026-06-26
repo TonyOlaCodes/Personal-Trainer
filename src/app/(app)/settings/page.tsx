@@ -35,7 +35,6 @@ export default async function SettingsPage() {
                     notifyOnWorkoutFeedback: true,
                     notifyOnMissedCheckIn: true,
                     notifyOnMissedWorkout: true,
-                    notificationTimezone: true,
                     notifyOnWorkoutTime: true,
                     notifyOnCheckInTime: true,
                     notifyOnMetricUpdateTime: true,

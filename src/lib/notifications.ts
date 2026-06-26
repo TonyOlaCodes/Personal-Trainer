@@ -5,11 +5,11 @@ import {
     DEFAULT_MISSED_NOTIFY_TIME,
     type CoachNotificationPref,
     deliveryModeForPref,
-    isValidTimezone,
     nextDeliveryUtc,
     normalizeNotifyTime,
     type CoachNotificationSchedule,
 } from "@/lib/coachNotificationSchedule";
+import { APP_TIMEZONE } from "@/lib/appTimezone";
 
 export interface NotificationItem {
     id: string;
@@ -27,7 +27,8 @@ export type ClientNotificationPref =
     | "notifyOnCoachMessage"
     | "notifyOnPlanUpdate"
     | "notifyOnCheckInReview"
-    | "notifyOnWorkoutFeedback";
+    | "notifyOnWorkoutFeedback"
+    | "notifyOnMissedCheckIn";
 
 let notificationsReady = false;
 let notificationColumnsReady = false;
@@ -46,7 +47,7 @@ export async function ensureNotificationPreferenceColumns() {
         `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notifyOnWorkoutFeedback" BOOLEAN NOT NULL DEFAULT true`,
         `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notifyOnMissedCheckIn" BOOLEAN NOT NULL DEFAULT true`,
         `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notifyOnMissedWorkout" BOOLEAN NOT NULL DEFAULT true`,
-        `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notificationTimezone" TEXT NOT NULL DEFAULT 'UTC'`,
+        `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notificationTimezone" TEXT NOT NULL DEFAULT '${APP_TIMEZONE}'`,
         `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notifyOnWorkoutTime" TEXT`,
         `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notifyOnCheckInTime" TEXT`,
         `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notifyOnMetricUpdateTime" TEXT`,
@@ -122,7 +123,6 @@ export async function getCoachNotificationSchedule(coachId: string): Promise<Coa
     const user = await prisma.user.findUnique({
         where: { id: coachId },
         select: {
-            notificationTimezone: true,
             notifyOnWorkoutTime: true,
             notifyOnCheckInTime: true,
             notifyOnMetricUpdateTime: true,
@@ -131,12 +131,8 @@ export async function getCoachNotificationSchedule(coachId: string): Promise<Coa
         },
     });
 
-    const tz = user?.notificationTimezone && isValidTimezone(user.notificationTimezone)
-        ? user.notificationTimezone
-        : "UTC";
-
     return {
-        timezone: tz,
+        timezone: APP_TIMEZONE,
         notifyOnWorkoutTime: normalizeNotifyTime(user?.notifyOnWorkoutTime),
         notifyOnCheckInTime: normalizeNotifyTime(user?.notifyOnCheckInTime),
         notifyOnMetricUpdateTime: normalizeNotifyTime(user?.notifyOnMetricUpdateTime),
