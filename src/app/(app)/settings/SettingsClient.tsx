@@ -13,7 +13,6 @@ import { cn, getInitials } from "@/lib/utils";
 import { resolveUploadUrl, uploadMediaFile } from "@/lib/compressImage";
 import { isCoachRole, isClientRole } from "@/lib/roles";
 import { DEFAULT_MISSED_NOTIFY_TIME } from "@/lib/coachNotificationSchedule";
-import { normalizeTheme, THEME_PRESETS, type ThemeId } from "@/lib/themes";
 
 interface Props {
     user: {
@@ -126,10 +125,7 @@ export function SettingsClient({ user }: Props) {
     const [secretCode, setSecretCode] = useState("");
     const [redeeming, setRedeeming] = useState(false);
 
-    const [theme, setTheme] = useState<ThemeId>(() => {
-        if (typeof window === "undefined") return "midnight";
-        return normalizeTheme(localStorage.getItem("pt-theme"));
-    });
+    const [theme, setTheme] = useState(typeof window !== "undefined" ? localStorage.getItem("pt-theme") || "midnight" : "midnight");
 
     useEffect(() => {
         document.documentElement.setAttribute("data-theme", theme);
@@ -745,29 +741,32 @@ export function SettingsClient({ user }: Props) {
                     <div className="card p-8 space-y-8 animate-slide-up">
                         <div>
                             <h3 className="text-xl font-bold text-fg mb-1">Theme Presets</h3>
-                            <p className="text-sm text-fg-muted">Full palette swaps — backgrounds, accents, glows, and semantic colors all change together.</p>
+                            <p className="text-sm text-fg-muted">Choose a visual style that matches your energy levels.</p>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {THEME_PRESETS.map((t) => (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {[
+                                { id: "midnight", name: "Midnight Glow", desc: "Default indigo/purple aesthetic", bg: "bg-[#6366f1]" },
+                                { id: "emerald", name: "Electric Emerald", desc: "Vibrant greens for performance", bg: "bg-[#10b981]" },
+                                { id: "solar", name: "Solar Flare", desc: "Energetic orange and ambers", bg: "bg-[#f59e0b]" },
+                                { id: "ocean", name: "Ocean Breeze", desc: "Cool cyans and deep blues", bg: "bg-[#06b6d4]" },
+                                { id: "rose", name: "Crimson Peak", desc: "High intensity red tones", bg: "bg-[#f43f5e]" },
+                            ].map((t) => (
                                 <button
                                     key={t.id}
                                     onClick={() => setTheme(t.id)}
                                     className={cn(
-                                        "p-4 rounded-2xl border transition-all text-left flex flex-col gap-3 group hover:border-brand-500/50 overflow-hidden",
+                                        "p-4 rounded-2xl border transition-all text-left flex items-start gap-4 group hover:border-brand-500/50",
                                         theme === t.id ? "bg-brand-500/10 border-brand-500 shadow-glow-sm" : "bg-surface-muted/50 border-surface-border"
                                     )}
                                 >
-                                    <div
-                                        className="w-full h-16 rounded-xl shrink-0 shadow-sm transition-transform group-hover:scale-[1.02] border border-white/10"
-                                        style={{ background: t.preview }}
-                                    />
+                                    <div className={cn("w-10 h-10 rounded-xl shrink-0 shadow-sm transition-transform group-hover:scale-105", t.bg)} />
                                     <div className="flex-1">
                                         <div className="flex items-center justify-between mb-0.5">
                                             <p className="text-sm font-bold text-fg">{t.name}</p>
-                                            {theme === t.id && <Check className="w-4 h-4 text-brand-400 shrink-0" />}
+                                            {theme === t.id && <Check className="w-4 h-4 text-brand-400" />}
                                         </div>
-                                        <p className="text-xs text-fg-muted transition-colors group-hover:text-fg-subtle leading-relaxed">{t.desc}</p>
+                                        <p className="text-xs text-fg-muted transition-colors group-hover:text-fg-subtle">{t.desc}</p>
                                     </div>
                                 </button>
                             ))}
