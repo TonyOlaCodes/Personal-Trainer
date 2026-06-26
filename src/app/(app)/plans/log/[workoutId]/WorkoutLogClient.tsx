@@ -4,10 +4,9 @@ import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
     Timer, Flame, Check, HelpCircle,
-    Trash2, Plus, InfoIcon, Award, Video, Play, Zap, X, ChevronLeft
+    Trash2, Plus, InfoIcon, Award, Play, Zap, X, ChevronLeft
 } from "lucide-react";
 import { cn, generateId, formatDate, isSameCalendarDay, parseLogDate, toDateKey, toLoggedAtIso, calculateOneRM } from "@/lib/utils";
-import { uploadMediaFile } from "@/lib/compressImage";
 import { appendReturnTo, getReturnToFromSearchParams } from "@/lib/navigation";
 import { isCardio, ExerciseAutocomplete } from "@/components/shared/ExerciseAutocomplete";
 import { WorkoutFeelingPicker } from "@/components/shared/WorkoutFeelingPicker";
@@ -38,7 +37,6 @@ interface SetLog {
     isCompleted: boolean;
     isWarmup: boolean;
     videoUrl?: string;
-    isUploading?: boolean;
 }
 
 interface ActiveLogSet {
@@ -484,24 +482,11 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                 ...prev,
                 [exId]: prev[exId].map((set, i) => i === setIdx ? { ...set, ...finalUpdates } : set),
             };
-            if (Object.keys(finalUpdates).some(k => ["isCompleted", "weightKg", "reps", "rpe", "videoUrl"].includes(k))) {
+            if (Object.keys(finalUpdates).some(k => ["isCompleted", "weightKg", "reps", "rpe"].includes(k))) {
                 saveProgress(next);
             }
             return next;
         });
-    };
-
-    const handleUploadVideo = async (exId: string, setIdx: number, file: File | undefined) => {
-        if (!file) return;
-        try {
-            updateSet(exId, setIdx, { isUploading: true });
-            const url = await uploadMediaFile(file);
-            updateSet(exId, setIdx, { videoUrl: url, isUploading: false });
-        } catch (e) {
-            console.error(e);
-            updateSet(exId, setIdx, { isUploading: false });
-            alert(e instanceof Error ? e.message : "Error uploading video.");
-        }
     };
 
     const addSet = (exId: string) => {
@@ -893,21 +878,6 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
 
                                     const setActions = sessionActive ? (
                                         <div className="flex items-center justify-end gap-1 shrink-0">
-                                            <label className="cursor-pointer">
-                                                <input
-                                                    type="file"
-                                                    accept="video/*"
-                                                    className="hidden"
-                                                    onChange={(e) => handleUploadVideo(ex.id, sIdx, e.target.files?.[0])}
-                                                />
-                                                <div className={cn(
-                                                    "w-8 h-10 rounded-lg flex items-center justify-center transition-all",
-                                                    set.isUploading ? "animate-pulse bg-brand-500/20 text-brand-400" :
-                                                    set.videoUrl ? "bg-brand-500/20 text-brand-400" : "bg-surface-elevated text-fg-muted hover:bg-brand-950/20 hover:text-brand-400"
-                                                )}>
-                                                    <Video className="w-4 h-4" />
-                                                </div>
-                                            </label>
                                             <button
                                                 onClick={() => updateSet(ex.id, sIdx, { isCompleted: !set.isCompleted })}
                                                 className={cn(
