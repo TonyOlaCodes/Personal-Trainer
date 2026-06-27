@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { SettingsClient } from "./SettingsClient";
 import { getDailyMetricTargets } from "@/lib/dailyMetrics";
-import { ensureNotificationPreferenceColumns } from "@/lib/notifications";
+import { ensureNotificationPreferenceColumns, getCoachNotifyOnClientMessage } from "@/lib/notifications";
 import { ensureUserProfileColumns } from "@/lib/userProfile";
 import { SafeFallback, rethrowNextInternalErrors } from "@/components/shared/SafeFallback";
 import { formatErrorDetails } from "@/lib/ensureAppSchema";
@@ -36,7 +36,6 @@ export default async function SettingsPage() {
                     notifyOnWorkoutFeedback: true,
                     notifyOnMissedCheckIn: true,
                     notifyOnMissedWorkout: true,
-                    notifyOnClientMessage: true,
                     notifyOnWorkoutTime: true,
                     notifyOnCheckInTime: true,
                     notifyOnMetricUpdateTime: true,
@@ -70,12 +69,13 @@ export default async function SettingsPage() {
 
         const dailyMetricTargets = await getDailyMetricTargets(user.id);
         const hiddenGoals = (user as any).hiddenGoals ?? [];
+        const notifyOnClientMessage = await getCoachNotifyOnClientMessage(user.id);
 
         return (
             <>
                 <TopBar title="Settings" subtitle="Manage your account preferences" />
                 <SettingsClient
-                    user={{ ...user, hiddenGoals, ...dailyMetricTargets }}
+                    user={{ ...user, hiddenGoals, notifyOnClientMessage, ...dailyMetricTargets }}
                 />
             </>
         );

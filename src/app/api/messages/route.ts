@@ -18,6 +18,11 @@ import { isCoachRole } from "@/lib/roles";
 import { getLastActiveMap, touchUserLastActive } from "@/lib/userPresence";
 import { getActiveSessionsForClients } from "@/lib/coachChat";
 import { withResolvedUpload, withResolvedAvatar, normalizeStoredUploadUrl } from "@/lib/uploadUrls";
+import {
+    markIncomingDeliveredForPeers,
+    markMessagesDelivered,
+    markMessagesSeen,
+} from "@/lib/messageReadReceipts";
 
 // GET messages
 export async function GET(req: Request) {
@@ -61,15 +66,7 @@ export async function GET(req: Request) {
         const totalUnread = await getTotalUnreadDirectCount(user.id, peerIds);
 
         if (peerIds.length > 0) {
-            await prisma.message.updateMany({
-                where: {
-                    receiverId: user.id,
-                    senderId: { in: peerIds },
-                    isGeneral: false,
-                    status: "SENT",
-                },
-                data: { status: "DELIVERED" },
-            });
+            await markIncomingDeliveredForPeers(user.id, peerIds);
         }
 
         const presence = isCoachRole(user.role)
@@ -157,15 +154,9 @@ export async function GET(req: Request) {
         .map((m) => m.id);
 
     if (isDirectThread && incomingUnreadIds.length > 0) {
-        await prisma.message.updateMany({
-            where: { id: { in: incomingUnreadIds } },
-            data: { status: "SEEN", isRead: true },
-        });
+        await markMessagesSeen(incomingUnreadIds);
     } else if (incomingSentIds.length > 0) {
-        await prisma.message.updateMany({
-            where: { id: { in: incomingSentIds } },
-            data: { status: "DELIVERED" },
-        });
+        await markMessagesDelivered(incomingSentIds);
     }
 
     const statusOverrides = new Map<string, "DELIVERED" | "SEEN">();
@@ -331,10 +322,7 @@ export async function PATCH(req: Request) {
     // Mark as seen
     if (action === "markSeen") {
         if (msg.senderId !== user.id) {
-            await prisma.message.update({
-                where: { id },
-                data: { status: "SEEN", isRead: true }
-            });
+            await markMessagesSeen([id]);
         }
         return NextResponse.json({ ok: true });
     }

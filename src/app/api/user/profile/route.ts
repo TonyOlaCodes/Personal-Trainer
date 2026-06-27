@@ -2,7 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { normalizeCalories, normalizeSleepHours, normalizeSteps, updateDailyMetricTargets } from "@/lib/dailyMetrics";
-import { ensureNotificationPreferenceColumns } from "@/lib/notifications";
+import { ensureNotificationPreferenceColumns, getCoachNotifyOnClientMessage, setCoachNotifyOnClientMessage } from "@/lib/notifications";
 import { ensureUserProfileColumns } from "@/lib/userProfile";
 import { normalizeNotifyTime } from "@/lib/coachNotificationSchedule";
 import { normalizeStoredUploadUrl, withResolvedAvatar } from "@/lib/uploadUrls";
@@ -67,6 +67,8 @@ export async function PATCH(req: Request) {
         await ensureNotificationPreferenceColumns();
         await ensureUserProfileColumns();
 
+        const notifyOnClientMessageUpdate = parsed.notifyOnClientMessage;
+
         let updated;
         try {
             updated = await prisma.user.update({
@@ -92,7 +94,6 @@ export async function PATCH(req: Request) {
                     ...(parsed.notifyOnWorkoutFeedback !== undefined && { notifyOnWorkoutFeedback: parsed.notifyOnWorkoutFeedback }),
                     ...(parsed.notifyOnMissedCheckIn !== undefined && { notifyOnMissedCheckIn: parsed.notifyOnMissedCheckIn }),
                     ...(parsed.notifyOnMissedWorkout !== undefined && { notifyOnMissedWorkout: parsed.notifyOnMissedWorkout }),
-                    ...(parsed.notifyOnClientMessage !== undefined && { notifyOnClientMessage: parsed.notifyOnClientMessage }),
                     ...(parsed.notifyOnWorkoutTime !== undefined && {
                         notifyOnWorkoutTime: parsed.notifyOnWorkoutTime ? normalizeNotifyTime(parsed.notifyOnWorkoutTime) : null,
                     }),
@@ -129,6 +130,10 @@ export async function PATCH(req: Request) {
                     ...(parsed.weightKg !== undefined && { weightKg: Math.round(parsed.weightKg * 100) / 100 }),
                 },
             });
+        }
+
+        if (notifyOnClientMessageUpdate !== undefined) {
+            await setCoachNotifyOnClientMessage(updated.id, notifyOnClientMessageUpdate);
         }
 
         if (

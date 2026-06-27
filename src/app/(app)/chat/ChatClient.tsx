@@ -97,10 +97,7 @@ type CoachListFilter =
     | "online"
     | "inWorkout"
     | "missedWorkout"
-    | "checkInDue"
-    | "recentlyActive"
-    | "premium"
-    | "free";
+    | "checkInDue";
 
 const COACH_FILTER_OPTIONS: { id: CoachListFilter; label: string }[] = [
     { id: "unread", label: "Unread" },
@@ -108,10 +105,20 @@ const COACH_FILTER_OPTIONS: { id: CoachListFilter; label: string }[] = [
     { id: "inWorkout", label: "In workout" },
     { id: "missedWorkout", label: "Missed workout" },
     { id: "checkInDue", label: "Check-in due" },
-    { id: "recentlyActive", label: "Recently active" },
-    { id: "premium", label: "Premium" },
-    { id: "free", label: "Free" },
 ];
+
+const SWIPE_REPLY_THRESHOLD = 55;
+const SWIPE_REPLY_MAX = 72;
+
+function computeReplySwipeOffset(dx: number, isMine: boolean) {
+    const towardReply = isMine ? -dx : dx;
+    if (towardReply <= 0) return dx * 0.2;
+    return isMine ? -Math.min(towardReply, SWIPE_REPLY_MAX) : Math.min(towardReply, SWIPE_REPLY_MAX);
+}
+
+function replySwipeProgress(offsetX: number) {
+    return Math.min(Math.abs(offsetX) / SWIPE_REPLY_THRESHOLD, 1);
+}
 
 const REACTION_EMOJIS = ["👍", "🔥", "💪", "❤️", "😂", "🎯"];
 const CHAT_MEDIA_THUMB =
@@ -216,7 +223,19 @@ export function ChatClient({
     const messageRowRefs = useRef<Record<string, HTMLDivElement | null>>({});
     const draftInputRef = useRef("");
     const activeDraftKeyRef = useRef<string | null>(null);
-    const swipeTouchRef = useRef({ startX: 0, startY: 0, active: false });
+    const swipeTouchRef = useRef({
+        messageId: null as string | null,
+        isMine: false,
+        startX: 0,
+        startY: 0,
+        tracking: false,
+        isHorizontal: false,
+    });
+    const [swipeReplyVisual, setSwipeReplyVisual] = useState<{
+        messageId: string;
+        offsetX: number;
+        animating?: boolean;
+    } | null>(null);
 
     const draftContextKey = useMemo(
         () => (isHydrated ? getChatDraftKey(tab, selectedConv?.userId ?? null) : null),
@@ -251,22 +270,83 @@ export function ChatClient({
         inputRef.current?.focus();
     }, []);
 
-    const handleMessageTouchStart = (e: React.TouchEvent) => {
+    const resetSwipeReplyVisual = useCallback((messageId: string) => {
+        setSwipeReplyVisual({ messageId, offsetX: 0, animating: true });
+        window.setTimeout(() => {
+            setSwipeReplyVisual((prev) => (prev?.messageId === messageId ? null : prev));
+        }, 220);
+    }, []);
+
+    const handleMessageTouchStart = (messageId: string, isMine: boolean) => (e: React.TouchEvent) => {
         if (!window.matchMedia("(max-width: 639px)").matches) return;
         swipeTouchRef.current = {
+            messageId,
+            isMine,
             startX: e.touches[0].clientX,
             startY: e.touches[0].clientY,
-            active: true,
+            tracking: true,
+            isHorizontal: false,
         };
+        setSwipeReplyVisual({ messageId, offsetX: 0 });
     };
 
-    const handleMessageTouchEnd = (msg: Message) => (e: React.TouchEvent) => {
-        if (!swipeTouchRef.current.active) return;
-        swipeTouchRef.current.active = false;
-        const dx = e.changedTouches[0].clientX - swipeTouchRef.current.startX;
-        const dy = Math.abs(e.changedTouches[0].clientY - swipeTouchRef.current.startY);
-        if (dy > 50) return;
-        if (Math.abs(dx) > 55) startReplyTo(msg);
+    const handleMessageTouchMove = (e: React.TouchEvent) => {
+        const swipe = swipeTouchRef.current;
+        if (!swipe.tracking || !swipe.messageId) return;
+
+        const dx = e.touches[0].clientX - swipe.startX;
+        const dy = e.touches[0].clientY - swipe.startY;
+
+        if (!swipe.isHorizontal) {
+            if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy) * 1.2) {
+                swipe.isHorizontal = true;
+            } else if (Math.abs(dy) > 12) {
+                swipe.tracking = false;
+                setSwipeReplyVisual(null);
+                return;
+            } else {
+                return;
+            }
+        }
+
+        setSwipeReplyVisual({
+            messageId: swipe.messageId,
+            offsetX: computeReplySwipeOffset(dx, swipe.isMine),
+        });
+    };
+
+    const handleMessageTouchEnd = (msg: Message, isMine: boolean) => (e: React.TouchEvent) => {
+        const swipe = swipeTouchRef.current;
+        if (!swipe.tracking || swipe.messageId !== msg.id) {
+            setSwipeReplyVisual(null);
+            return;
+        }
+
+        swipe.tracking = false;
+        const rawDx = e.changedTouches[0].clientX - swipe.startX;
+        const dy = Math.abs(e.changedTouches[0].clientY - swipe.startY);
+        const offsetX = swipe.isHorizontal ? computeReplySwipeOffset(rawDx, isMine) : rawDx;
+        const towardReply = isMine ? -offsetX : offsetX;
+
+        if (!swipe.isHorizontal || dy > 50) {
+            resetSwipeReplyVisual(msg.id);
+            return;
+        }
+
+        if (Math.abs(towardReply) >= SWIPE_REPLY_THRESHOLD) {
+            resetSwipeReplyVisual(msg.id);
+            startReplyTo(msg);
+            return;
+        }
+
+        resetSwipeReplyVisual(msg.id);
+    };
+
+    const handleMessageTouchCancel = () => {
+        const messageId = swipeTouchRef.current.messageId;
+        swipeTouchRef.current.tracking = false;
+        if (messageId) resetSwipeReplyVisual(messageId);
+        else setSwipeReplyVisual(null);
     };
 
     const scrollMessagesToBottom = useCallback(() => {
@@ -695,12 +775,6 @@ export function ChatClient({
                         return Boolean(conv.missedWorkout);
                     case "checkInDue":
                         return Boolean(conv.checkInDue);
-                    case "recentlyActive":
-                        return presence.level === "online" || presence.level === "recent";
-                    case "premium":
-                        return conv.role === "PREMIUM";
-                    case "free":
-                        return conv.role === "FREE";
                     default:
                         return true;
                 }
@@ -1250,16 +1324,6 @@ export function ChatClient({
                             );
                         })
                     )}
-
-                    {isCoachUser && tab === "direct" && canUseDirectChat && (
-                        <div className="p-3 border-t border-surface-border shrink-0">
-                            <CoachChatTools
-                                conversations={sortedConversations}
-                                coachPlans={coachPlans}
-                                onComplete={fetchMessages}
-                            />
-                        </div>
-                    )}
                 </div>
                 </div>
             )}
@@ -1623,8 +1687,10 @@ export function ChatClient({
                                     <div
                                         ref={(el) => { messageRowRefs.current[msg.id] = el; }}
                                         className={cn("flex items-end gap-2 group w-full touch-pan-y", isMine && "justify-end")}
-                                        onTouchStart={handleMessageTouchStart}
-                                        onTouchEnd={handleMessageTouchEnd(msg)}
+                                        onTouchStart={handleMessageTouchStart(msg.id, isMine)}
+                                        onTouchMove={handleMessageTouchMove}
+                                        onTouchEnd={handleMessageTouchEnd(msg, isMine)}
+                                        onTouchCancel={handleMessageTouchCancel}
                                         onClick={(e) => {
                                             if (window.matchMedia("(min-width: 640px)").matches) return;
                                             const target = e.target as HTMLElement;
@@ -1650,7 +1716,33 @@ export function ChatClient({
                                             />
                                         )}
 
-                                        <div className={cn("relative w-fit max-w-[min(62%,17rem)] min-w-0 overflow-visible", isMine && "items-end flex flex-col")}>
+                                        <div
+                                            className={cn("relative w-fit max-w-[min(62%,17rem)] min-w-0 overflow-visible", isMine && "items-end flex flex-col")}
+                                            style={{
+                                                transform: swipeReplyVisual?.messageId === msg.id
+                                                    ? `translateX(${swipeReplyVisual.offsetX}px)`
+                                                    : undefined,
+                                                transition: swipeReplyVisual?.messageId === msg.id && !swipeReplyVisual.animating
+                                                    ? "none"
+                                                    : "transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1)",
+                                                willChange: swipeReplyVisual?.messageId === msg.id ? "transform" : undefined,
+                                            }}
+                                        >
+                                            {swipeReplyVisual?.messageId === msg.id && replySwipeProgress(swipeReplyVisual.offsetX) > 0.05 && (
+                                                <div
+                                                    className={cn(
+                                                        "absolute top-1/2 -translate-y-1/2 flex items-center justify-center w-8 h-8 rounded-full bg-brand-500/15 text-brand-400 pointer-events-none",
+                                                        isMine ? "-right-10" : "-left-10"
+                                                    )}
+                                                    style={{
+                                                        opacity: replySwipeProgress(swipeReplyVisual.offsetX),
+                                                        transform: `translateY(-50%) scale(${0.65 + replySwipeProgress(swipeReplyVisual.offsetX) * 0.35})`,
+                                                    }}
+                                                    aria-hidden
+                                                >
+                                                    <Reply className="w-4 h-4" />
+                                                </div>
+                                            )}
                                             {/* Sender name */}
                                             {!isMine && (
                                                 <ProfileLink

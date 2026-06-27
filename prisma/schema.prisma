@@ -87,6 +87,7 @@ model User {
   notifyOnWorkout      Boolean  @default(true)
   notifyOnCheckIn      Boolean  @default(true)
   notifyOnMetricUpdate Boolean  @default(true)
+  notifyOnClientMessage Boolean @default(true)
 
   // Notification preferences (client-facing)
   notifyOnCoachMessage    Boolean @default(true)

@@ -144,11 +144,35 @@ export async function getCoachNotificationSchedule(coachId: string): Promise<Coa
     };
 }
 
+export async function getCoachNotifyOnClientMessage(userId: string): Promise<boolean> {
+    await ensureNotificationPreferenceColumns();
+    const rows = await prisma.$queryRaw<Array<{ value: boolean }>>`
+        SELECT COALESCE("notifyOnClientMessage", true) as value
+        FROM "users"
+        WHERE id = ${userId}
+        LIMIT 1
+    `;
+    return rows[0]?.value ?? true;
+}
+
+export async function setCoachNotifyOnClientMessage(userId: string, enabled: boolean): Promise<void> {
+    await ensureNotificationPreferenceColumns();
+    await prisma.$executeRaw`
+        UPDATE "users"
+        SET "notifyOnClientMessage" = ${enabled}
+        WHERE id = ${userId}
+    `;
+}
+
 export async function userWantsNotification(
     userId: string,
     pref: CoachNotificationPref | ClientNotificationPref | CoachClientMessagePref
 ): Promise<boolean> {
     await ensureNotificationPreferenceColumns();
+
+    if (pref === "notifyOnClientMessage") {
+        return getCoachNotifyOnClientMessage(userId);
+    }
 
     const user = await prisma.user.findUnique({
         where: { id: userId },
@@ -162,7 +186,6 @@ export async function userWantsNotification(
             notifyOnPlanUpdate: true,
             notifyOnCheckInReview: true,
             notifyOnWorkoutFeedback: true,
-            notifyOnClientMessage: true,
         },
     });
 
