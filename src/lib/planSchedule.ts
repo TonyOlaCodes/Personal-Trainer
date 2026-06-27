@@ -1,4 +1,13 @@
+import { APP_TIMEZONE } from "@/lib/appTimezone";
+import { getLocalTimeParts } from "@/lib/coachNotificationSchedule";
+import {
+    resolveScheduleWeeksForDate,
+    type PlanScheduleRevisionRecord,
+} from "@/lib/planScheduleHistory";
+import { parseLogDate } from "@/lib/utils";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
+
+export type { PlanScheduleRevisionRecord } from "@/lib/planScheduleHistory";
 
 export interface PlanWorkoutLike {
     id: string;
@@ -17,16 +26,27 @@ export interface ActiveUserPlanLike {
     plan: {
         weeks: PlanWeekLike[];
     };
+    scheduleRevisions?: PlanScheduleRevisionRecord[];
 }
 
 /** Resolve the scheduled workout for a calendar date from an active user plan. */
 export function getPlannedWorkoutForDate(
     activeUserPlan: ActiveUserPlanLike | null | undefined,
-    date: Date
+    date: Date,
+    options?: { today?: Date }
 ): PlanWorkoutLike | null {
     if (!activeUserPlan?.plan?.weeks?.length) return null;
 
-    const weeks = activeUserPlan.plan.weeks;
+    const today = options?.today
+        ?? parseLogDate(getLocalTimeParts(new Date(), APP_TIMEZONE).dateKey);
+    const weeks = resolveScheduleWeeksForDate(
+        activeUserPlan.plan.weeks,
+        activeUserPlan.scheduleRevisions ?? [],
+        date,
+        today
+    );
+    if (weeks.length === 0) return null;
+
     const startedAt = new Date(activeUserPlan.startedAt);
     startedAt.setHours(0, 0, 0, 0);
 

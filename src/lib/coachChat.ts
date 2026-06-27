@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { createNotification, notifyClientOfCoachMessage, userWantsNotification } from "@/lib/notifications";
+import { createNotification, notifyClientOfCoachBroadcast, notifyClientOfCoachMessage, userWantsNotification } from "@/lib/notifications";
 import { requireCoachCanEditClient } from "@/lib/apiAuth";
 import type { User } from "@prisma/client";
 
@@ -96,12 +96,17 @@ export async function createCoachDirectMessage(input: {
             select: { id: true, coachId: true },
         });
         if (client && (input.coach.role === "SUPER_ADMIN" || client.coachId === input.coach.id)) {
-            await notifyClientOfCoachMessage({
+            const notifyInput = {
                 clientUserId: client.id,
                 coachId: input.coach.id,
                 coachName: input.coach.name ?? input.coach.email ?? "Your coach",
                 route: `/chat?with=${input.coach.id}`,
-            });
+            };
+            if (input.actionType === "BROADCAST") {
+                await notifyClientOfCoachBroadcast(notifyInput);
+            } else {
+                await notifyClientOfCoachMessage(notifyInput);
+            }
         }
     }
 

@@ -8,6 +8,7 @@ import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
 import { getDailyMetricTargets } from "@/lib/dailyMetrics";
 import { ensureBodyweightTable } from "@/lib/bodyweight";
 import { dedupeCoachPlansByName, normalizePlanIdForPicker } from "@/lib/coachPlans";
+import { getActiveSessionsForClients } from "@/lib/coachChat";
 
 export const metadata = { title: "Coach Dashboard" };
 
@@ -133,6 +134,7 @@ export default async function CoachDashboardPage() {
         })
     );
     const extraDataByClientId = new Map(clientExtraData.map((item) => [item.id, item]));
+    const activeSessions = await getActiveSessionsForClients(clientIds);
 
     return (
         <>
@@ -176,6 +178,7 @@ export default async function CoachDashboardPage() {
                                 bodyweightKg: checkIn.bodyweightKg,
                             })),
                             bodyweightHistory: bodyweightByClientId.get(c.id) ?? [],
+                            activeSession: activeSessions[c.id] ?? null,
                         };
                     })}
                     recentCheckIns={recentCheckIns.map(ci => ({

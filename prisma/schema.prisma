@@ -172,10 +172,24 @@ model Plan {
   weeks       Week[]
   userPlans   UserPlan[]
   accessCodes AccessCode[]
+  scheduleRevisions PlanScheduleRevision[]
 
   creator User? @relation("CreatedPlans", fields: [creatorId], references: [id])
 
   @@map("plans")
+}
+
+model PlanScheduleRevision {
+  id            String   @id @default(cuid())
+  planId        String
+  effectiveFrom DateTime @db.Date
+  priorWeeks    Json
+  createdAt     DateTime @default(now())
+
+  plan Plan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId, effectiveFrom])
+  @@map("plan_schedule_revisions")
 }
 
 model UserPlan {

@@ -12,6 +12,7 @@ import { SafeFallback, rethrowNextInternalErrors } from "@/components/shared/Saf
 import { formatErrorDetails } from "@/lib/ensureAppSchema";
 import { dedupeCoachPlansByName } from "@/lib/coachPlans";
 import { getUserPinnedExercises } from "@/lib/pinnedExercises";
+import { getActiveSessionsForClients } from "@/lib/coachChat";
 
 export const metadata = { title: "Client Details" };
 
@@ -137,6 +138,11 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         const w2 = (completedLogs ?? []).filter(log => log.loggedAt && log.loggedAt >= thirtyDaysAgo && log.loggedAt < fifteenDaysAgo).length;
         const adherenceTrend = w1 > w2 ? "UP" : w1 < w2 ? "DOWN" : "STABLE";
 
+        const activeSessions = isInactiveClient
+            ? {}
+            : await getActiveSessionsForClients([target.id]);
+        const activeSession = activeSessions[target.id] ?? null;
+
         return (
             <>
                 <TopBar
@@ -165,6 +171,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                             adherencePercentage,
                             adherenceTrend,
                             lastActiveAt: target.lastActiveAt?.toISOString() || null,
+                            activeSession,
                             hiddenGoals: target.hiddenGoals ?? [],
                             targetCalories: clientMetricTargets.targetCalories,
                             targetSteps: clientMetricTargets.targetSteps,

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
+import { loadPlanScheduleRevisions, type PlanScheduleRevisionRecord } from "@/lib/planScheduleHistory";
 import { toDateKey } from "@/lib/utils";
 import { cleanupStaleInProgressSessions } from "@/lib/workoutSessionCleanup";
 
@@ -39,6 +40,7 @@ export interface ClientCalendarPayload {
         workoutId: string;
         workoutName: string;
     }>;
+    scheduleRevisions: PlanScheduleRevisionRecord[];
 }
 
 export async function loadClientCalendarData(userId: string): Promise<ClientCalendarPayload> {
@@ -86,6 +88,9 @@ export async function loadClientCalendarData(userId: string): Promise<ClientCale
     ]);
 
     const activePlan = userPlan?.plan ?? null;
+    const scheduleRevisions = activePlan
+        ? await loadPlanScheduleRevisions(activePlan.id)
+        : [];
 
     return {
         activePlan: activePlan
@@ -129,5 +134,6 @@ export async function loadClientCalendarData(userId: string): Promise<ClientCale
             workoutId: l.workoutId,
             workoutName: l.workout.name,
         })),
+        scheduleRevisions,
     };
 }

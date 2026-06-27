@@ -7,6 +7,7 @@ export interface CalendarComplianceInput {
     activePlan: { weeks: ActiveUserPlanLike["plan"]["weeks"] } | null;
     planStartedAt: string | null;
     loggedDates: Array<{ date: string }>;
+    scheduleRevisions?: ActiveUserPlanLike["scheduleRevisions"];
 }
 
 export interface CalendarComplianceResult {
@@ -25,6 +26,7 @@ function toActiveUserPlan(input: CalendarComplianceInput): ActiveUserPlanLike | 
     return {
         startedAt: input.planStartedAt,
         plan: { weeks: input.activePlan.weeks },
+        scheduleRevisions: input.scheduleRevisions,
     };
 }
 
@@ -92,10 +94,6 @@ export function computeComplianceForMonth(
     reference: Date,
     options?: CalendarComplianceOptions
 ): CalendarComplianceResult {
-    if (isFutureCalendarMonth(reference, year, monthIndex)) {
-        return { completed: 0, due: 0, percent: null };
-    }
-
     const monthStart = parseLogDate(`${year}-${String(monthIndex + 1).padStart(2, "0")}-01`);
     const isCurrentMonth = isSameCalendarMonth(reference, year, monthIndex);
     const rangeEnd = isCurrentMonth ? reference : getMonthEnd(monthStart);
@@ -129,7 +127,7 @@ export function computeWorkoutCompliance(
 
     for (const dateKey of eachDateKeyInclusive(startKey, endKey)) {
         const day = parseLogDate(dateKey);
-        const planned = getPlannedWorkoutForDate(activeUserPlan, day);
+        const planned = getPlannedWorkoutForDate(activeUserPlan, day, { today });
         if (!planned) continue;
 
         const isLogged = loggedSet.has(dateKey);
@@ -155,7 +153,7 @@ export function hasPendingTodayWorkout(input: CalendarComplianceInput, today: Da
     const todayKey = toDateKey(today);
     if (input.loggedDates.some((l) => l.date === todayKey)) return false;
 
-    return Boolean(getPlannedWorkoutForDate(activeUserPlan, parseLogDate(todayKey)));
+    return Boolean(getPlannedWorkoutForDate(activeUserPlan, parseLogDate(todayKey), { today }));
 }
 
 export function computeWeeklyCompliance(

@@ -53,6 +53,7 @@ interface Client {
     adherencePercentage?: number;
     adherenceTrend?: "UP" | "DOWN" | "STABLE";
     lastActiveAt?: string | null;
+    activeSession?: { workoutName: string; logId: string; workoutId: string } | null;
     hiddenGoals?: string[];
 }
 
@@ -268,8 +269,8 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
     };
 
     const presence = useMemo(
-        () => getPresenceIndicator(client.lastActiveAt),
-        [client.lastActiveAt]
+        () => client.activeSession ? null : getPresenceIndicator(client.lastActiveAt),
+        [client.lastActiveAt, client.activeSession]
     );
 
     const filteredBodyweightHistory = useMemo(() => {
@@ -456,8 +457,19 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                         <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 justify-center sm:justify-start">
                             <h2 className="text-2xl font-bold text-fg tracking-tight">{client.name || "Strength Athlete"}</h2>
                             <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface-muted/50 border border-surface-border w-fit h-fit mx-auto sm:mx-0">
-                                <span className={cn("w-1.5 h-1.5 rounded-full", presence.dotClassName)} />
-                                <span className="text-[9px] text-fg-subtle font-black uppercase tracking-wider">{presence.label}</span>
+                                {client.activeSession ? (
+                                    <>
+                                        <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
+                                        <span className="text-[9px] text-success font-black uppercase tracking-wider">
+                                            In workout · {client.activeSession.workoutName}
+                                        </span>
+                                    </>
+                                ) : presence ? (
+                                    <>
+                                        <span className={cn("w-1.5 h-1.5 rounded-full", presence.dotClassName)} />
+                                        <span className="text-[9px] text-fg-subtle font-black uppercase tracking-wider">{presence.label}</span>
+                                    </>
+                                ) : null}
                             </div>
                         </div>
                         <p className="text-sm text-fg-muted mb-1 mt-1 sm:mt-0">{client.email}</p>
@@ -483,9 +495,9 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                             !canEdit && "opacity-50 pointer-events-none"
                         )}
                         aria-disabled={!canEdit}
-                        title={canEdit ? "Open full chat with athlete" : "Cannot message inactive accounts"}
+                        title={canEdit ? "Message athlete" : "Cannot message inactive accounts"}
                     >
-                        <MessageSquare className="w-4 h-4" /> Open Full Chat
+                        <MessageSquare className="w-4 h-4" /> Message
                     </Link>
                 </div>
             </div>

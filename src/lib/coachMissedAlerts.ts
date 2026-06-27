@@ -16,7 +16,8 @@ import {
     userWantsNotification,
 } from "@/lib/notifications";
 import { getPlannedWorkoutForDate, activeWorkoutWhere } from "@/lib/planSchedule";
-import { getWeekNumber } from "@/lib/utils";
+import { loadPlanScheduleRevisionsByPlanIds } from "@/lib/planScheduleHistory";
+import { getWeekNumber, parseLogDate } from "@/lib/utils";
 import { isInactiveAccount } from "@/lib/userDeactivation";
 
 function startOfIsoWeek(dateKey: string, timezone: string) {
@@ -185,6 +186,7 @@ async function processMissedWorkoutsForCoach(
                     startedAt: true,
                     plan: {
                         select: {
+                            id: true,
                             weeks: {
                                 orderBy: { weekNumber: "asc" },
                                 select: {
@@ -215,13 +217,31 @@ async function processMissedWorkoutsForCoach(
         },
     });
 
+    const planIds = [...new Set(
+        clients
+            .map((client) => client.plans[0]?.plan.id)
+            .filter((id): id is string => Boolean(id))
+    )];
+    const revisionsByPlanId = await loadPlanScheduleRevisionsByPlanIds(planIds);
+    const today = parseLogDate(getLocalTimeParts(new Date(), timezone).dateKey);
+
     let sent = 0;
     for (const client of clients) {
         if (isInactiveAccount(client)) continue;
 
         const activeUserPlan = client.plans[0] ?? null;
         const [y, m, d] = dateKey.split("-").map(Number);
-        const plannedWorkout = getPlannedWorkoutForDate(activeUserPlan, new Date(Date.UTC(y, m - 1, d, 12, 0, 0, 0)));
+        const plannedWorkout = getPlannedWorkoutForDate(
+            activeUserPlan
+                ? {
+                    startedAt: activeUserPlan.startedAt,
+                    plan: activeUserPlan.plan,
+                    scheduleRevisions: revisionsByPlanId[activeUserPlan.plan.id] ?? [],
+                }
+                : null,
+            new Date(Date.UTC(y, m - 1, d, 12, 0, 0, 0)),
+            { today }
+        );
         if (!plannedWorkout) continue;
 
         const completed = client.workoutLogs.some((log) => log.workoutId === plannedWorkout.id);

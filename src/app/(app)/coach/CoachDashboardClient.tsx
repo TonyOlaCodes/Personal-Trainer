@@ -21,6 +21,7 @@ interface Client {
     email: string;
     avatarUrl?: string | null;
     lastActiveAt?: string | null;
+    activeSession?: { workoutName: string; logId: string; workoutId: string } | null;
     isDeleted?: boolean;
     hasCheckInSchedule?: boolean;
     checkInSchedule: { day: number | null; frequencyWeeks: number | null; startDate: string | null };
@@ -400,7 +401,8 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                             </div>
                         ) : (
                             sortedClients.map((c) => {
-                                const presence = c.isDeleted ? null : getPresenceIndicator(c.lastActiveAt);
+                                const session = c.isDeleted ? null : c.activeSession ?? null;
+                                const presence = c.isDeleted || session ? null : getPresenceIndicator(c.lastActiveAt);
                                 return (
                                 <Link
                                     key={c.id}
@@ -420,7 +422,12 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                                             )}>
                                                 {c.avatarUrl ? <img src={resolveUploadUrl(c.avatarUrl)} alt="avatar" className="w-full h-full object-cover rounded-2xl" /> : getInitials(c.name)}
                                             </div>
-                                            {presence && (
+                                            {session ? (
+                                                <span
+                                                    className="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-surface-card bg-success animate-pulse"
+                                                    title={`In workout: ${session.workoutName}`}
+                                                />
+                                            ) : presence ? (
                                                 <span
                                                     className={cn(
                                                         "absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-surface-card",
@@ -428,7 +435,7 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                                                     )}
                                                     title={presence.label}
                                                 />
-                                            )}
+                                            ) : null}
                                         </div>
                                         <div className="min-w-0 flex-1">
                                             <div className="flex items-center gap-2">
@@ -442,7 +449,12 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                                                     </span>
                                                 )}
                                             </div>
-                                            {presence ? (
+                                            {session ? (
+                                                <p className="text-[10px] text-success font-bold truncate flex items-center gap-1">
+                                                    <Activity className="w-3 h-3 shrink-0" />
+                                                    In workout · {session.workoutName}
+                                                </p>
+                                            ) : presence ? (
                                                 <p className="text-[10px] text-fg-subtle truncate">{presence.label}</p>
                                             ) : (
                                                 <p className="text-xs text-fg-muted truncate">{c.isDeleted ? "Inactive account" : c.email}</p>

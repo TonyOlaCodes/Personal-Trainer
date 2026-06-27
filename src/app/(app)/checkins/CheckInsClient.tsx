@@ -43,11 +43,10 @@ interface Props {
     checkIns: CheckIn[]; isCoach: boolean; userRole: string;
     targetWeightKg?: number | null;
     workoutsThisWeek: number; workoutsTarget: number;
-    bodyweightWeeklyAverage: {
+    bodyweightSinceLastCheckIn: {
         averageWeightKg: number | null;
         entries: number;
-        previousAverageWeightKg: number | null;
-        previousEntries: number;
+        windowLabel: string;
     };
     checkInDueState: {
         isConfigured: boolean;
@@ -288,10 +287,7 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highl
         async function loadSummary() {
             setLoadingSummary(true);
             try {
-                const params = new URLSearchParams({
-                    date: checkInDate,
-                    ...(c.bodyweightKg != null ? { bodyweightKg: String(c.bodyweightKg) } : {}),
-                });
+                const params = new URLSearchParams({ date: checkInDate });
                 if (isCoach && c.userId) params.set("clientId", c.userId);
 
                 const res = await fetch(`/api/checkins/period-summary?${params.toString()}`);
@@ -307,7 +303,7 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highl
 
         loadSummary();
         return () => { cancelled = true; };
-    }, [open, checkInDate, isCoach, c.userId, c.bodyweightKg]);
+    }, [open, checkInDate, isCoach, c.userId]);
 
     const remove = async () => {
         if (!confirm("Delete this check-in? This cannot be undone.")) return;
@@ -564,7 +560,7 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highl
 /* ═══════════════════════════════════════════════════════════════
    Main Component
    ═══════════════════════════════════════════════════════════════ */
-export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWeightKg, workoutsThisWeek, workoutsTarget, bodyweightWeeklyAverage, checkInDueState, checkInSchedule, hiddenGoals }: Props) {
+export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWeightKg, workoutsThisWeek, workoutsTarget, bodyweightSinceLastCheckIn, checkInDueState, checkInSchedule, hiddenGoals }: Props) {
     const searchParams = useSearchParams();
     const highlightedCheckInId = searchParams.get("highlight");
     const statusParam = searchParams.get("status");
@@ -576,10 +572,6 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
     // Form
     const [editMode, setEditMode] = useState(false);
     const [checkInId, setCheckInId] = useState<string | null>(null);
-    const [weeklyAverageWeight, setWeeklyAverageWeight] = useState(bodyweightWeeklyAverage.averageWeightKg);
-    const [weeklyAverageEntries, setWeeklyAverageEntries] = useState(bodyweightWeeklyAverage.entries);
-    const [previousWeeklyAverageWeight, setPreviousWeeklyAverageWeight] = useState(bodyweightWeeklyAverage.previousAverageWeightKg);
-    const [loadingWeeklyAverage, setLoadingWeeklyAverage] = useState(false);
     const [energy, setEnergy] = useState(0);
     const [sleep, setSleep] = useState(0);
     const [diet, setDiet] = useState(0);
@@ -641,38 +633,6 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
     }, [selectedDate, checkIns]);
 
     useEffect(() => {
-        let cancelled = false;
-
-        async function loadWeeklyAverage() {
-            if (isCoach) return;
-            setLoadingWeeklyAverage(true);
-            try {
-                const res = await fetch(`/api/bodyweight?date=${selectedDate}`);
-                const data = await res.json();
-                if (!res.ok || cancelled) return;
-                setWeeklyAverageWeight(data.weeklyAverage?.averageWeightKg ?? null);
-                setWeeklyAverageEntries(data.weeklyAverage?.entries ?? 0);
-                setPreviousWeeklyAverageWeight(data.weeklyAverage?.previousAverageWeightKg ?? null);
-            } catch (e) {
-                console.error(e);
-                if (!cancelled) {
-                    setWeeklyAverageWeight(null);
-                    setWeeklyAverageEntries(0);
-                    setPreviousWeeklyAverageWeight(null);
-                }
-            } finally {
-                if (!cancelled) setLoadingWeeklyAverage(false);
-            }
-        }
-
-        loadWeeklyAverage();
-
-        return () => {
-            cancelled = true;
-        };
-    }, [selectedDate, isCoach]);
-
-    useEffect(() => {
         if (isCoach) return;
         let cancelled = false;
 
@@ -684,11 +644,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                 const dateForSummary = (isLogging || editMode)
                     ? selectedDate
                     : (currentEntry?.createdAt.slice(0, 10) ?? selectedDate);
-                const week = getWeekNumber(new Date(dateForSummary));
-                const entry = checkIns.find((c) => c.weekNumber === week);
                 const params = new URLSearchParams({ date: dateForSummary });
-                const bw = weeklyAverageWeight ?? entry?.bodyweightKg ?? currentEntry?.bodyweightKg;
-                if (bw != null) params.set("bodyweightKg", String(bw));
 
                 const res = await fetch(`/api/checkins/period-summary?${params.toString()}`);
                 const data = await res.json();
@@ -703,7 +659,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
 
         loadPeriodSummary();
         return () => { cancelled = true; };
-    }, [selectedDate, isCoach, weeklyAverageWeight, checkIns, isLogging, editMode]);
+    }, [selectedDate, isCoach, checkIns, isLogging, editMode]);
 
     if (!isPremium && !isCoach) {
         return (
@@ -747,7 +703,12 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
 
     // Stats based on selection or defaults
     const prevCheckIn  = checkIns.find(c => c.weekNumber < (editMode ? selectedWeek : currentWeekReal));
-    const currentBw    = periodSummary?.weight?.currentKg ?? weeklyAverageWeight ?? existingEntry?.bodyweightKg ?? (selectedWeek === currentWeekReal ? currentWeekEntry?.bodyweightKg : null) ?? null;
+    const currentBw = (isLogging || editMode)
+        ? (periodSummary?.weight?.currentKg ?? bodyweightSinceLastCheckIn.averageWeightKg)
+        : (periodSummary?.weight?.currentKg
+            ?? existingEntry?.bodyweightKg
+            ?? (selectedWeek === currentWeekReal ? currentWeekEntry?.bodyweightKg : null)
+            ?? bodyweightSinceLastCheckIn.averageWeightKg);
     const isWeightHidden = Array.isArray(hiddenGoals) && hiddenGoals.includes("weight");
     const isSleepHidden = Array.isArray(hiddenGoals) && hiddenGoals.includes("sleep");
 
@@ -1026,7 +987,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                                 <div className="flex-1">
                                     <div className="flex items-center gap-2">
                                         <p className="font-black text-fg">Week {currentWeekReal} Complete</p>
-                                        {!isWeightHidden && periodSummary?.weight?.changeKg != null && (
+                                        {!isWeightHidden && periodSummary?.weight?.changeKg != null && periodSummary.weight.hasPreviousCheckIn && (
                                             <span className={cn(
                                                 "text-[9px] font-black px-1.5 py-0.5 rounded-md border",
                                                 periodSummary.weight.towardGoal
@@ -1274,17 +1235,15 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                     <div className="flex items-center justify-between rounded-2xl bg-surface-muted/30 border border-surface-border/40 px-4 py-3">
                         <div>
                             <p className="text-2xl font-black text-fg leading-none">
-                                {loadingWeeklyAverage ? "..." : currentBw ? `${currentBw.toFixed(2)} kg` : "—"}
+                                {loadingPeriodSummary ? "..." : currentBw ? `${currentBw.toFixed(2)} kg` : "—"}
                             </p>
                             <p className="text-[10px] font-bold text-fg-muted mt-1 uppercase">
-                                {(periodSummary?.weight?.entries ?? 0) > 0
-                                    ? `${periodSummary?.weight?.entries} log${periodSummary?.weight?.entries === 1 ? "" : "s"} in ${periodSummary?.periodLabel ?? "this period"}`
-                                    : weeklyAverageEntries > 0
-                                    ? `${weeklyAverageEntries} log${weeklyAverageEntries === 1 ? "" : "s"} this week`
+                                {(periodSummary?.weight?.entries ?? bodyweightSinceLastCheckIn.entries) > 0
+                                    ? `${periodSummary?.weight?.entries ?? bodyweightSinceLastCheckIn.entries} log${(periodSummary?.weight?.entries ?? bodyweightSinceLastCheckIn.entries) === 1 ? "" : "s"} ${periodSummary?.weight?.windowLabel ?? bodyweightSinceLastCheckIn.windowLabel}`
                                     : "Log weight on the dashboard to auto-fill"}
                             </p>
                         </div>
-                        {periodSummary?.weight?.changeKg != null && (
+                        {periodSummary?.weight?.changeKg != null && periodSummary.weight.hasPreviousCheckIn && (
                             <span className={cn(
                                 "text-sm font-black px-3 py-1.5 rounded-xl border",
                                 periodSummary.weight.towardGoal ? "text-success bg-success/10 border-success/25" : periodSummary.weight.towardGoal === false ? "text-red-400 bg-red-400/10 border-red-400/25" : "text-fg-muted bg-surface-muted border-surface-border"

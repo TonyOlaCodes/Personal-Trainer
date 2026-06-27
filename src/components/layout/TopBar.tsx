@@ -32,6 +32,17 @@ function CoachMessageNotificationText({ message }: { message: string }) {
     );
 }
 
+function CoachBroadcastNotificationText({ message }: { message: string }) {
+    const coachName = message || "Your coach";
+    return (
+        <>
+            <span className="font-bold text-fg">{coachName}</span>
+            <span className="text-brand-400 font-black tracking-wide"> (Coach)</span>
+            <span className="text-warning font-bold"> — Important broadcast</span>
+        </>
+    );
+}
+
 function AnnouncementNotificationText({ message }: { message: string }) {
     const match = message.match(/^Message from (.+?):/);
     if (!match) return <span>{message}</span>;
@@ -276,6 +287,8 @@ export function TopBar({ title, subtitle, showToday = false, streak, hideSearch 
                                                         <p className={cn("text-sm break-words min-w-0 flex-1", !n.read ? "font-bold text-fg" : "font-medium text-fg-muted")}>
                                                             {n.type === NOTIFICATION_TYPES.NEW_CHAT_MESSAGE ? (
                                                                 <CoachMessageNotificationText message={n.message} />
+                                                            ) : n.type === NOTIFICATION_TYPES.COACH_BROADCAST ? (
+                                                                <CoachBroadcastNotificationText message={n.message} />
                                                             ) : n.type === NOTIFICATION_TYPES.GLOBAL_ANNOUNCEMENT ? (
                                                                 <AnnouncementNotificationText message={n.message} />
                                                             ) : (

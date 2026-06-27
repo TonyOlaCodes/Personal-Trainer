@@ -11,6 +11,7 @@ import { ensureUserProfileColumns } from "@/lib/userProfile";
 import { ensureChatTypingTable } from "@/lib/chatTyping";
 import { ensureMessageActionColumns } from "@/lib/coachChat";
 import { ensureAnnouncementsTable } from "@/lib/announcements";
+import { ensurePlanScheduleRevisionsTable } from "@/lib/planScheduleHistory";
 
 let appSchemaReady = false;
 let appSchemaPromise: Promise<void> | null = null;
@@ -37,6 +38,7 @@ export async function ensureAppSchema() {
             ensureChatTypingTable(),
             ensureMessageActionColumns(),
             ensureAnnouncementsTable(),
+            ensurePlanScheduleRevisionsTable(),
         ]);
         appSchemaReady = true;
     })();

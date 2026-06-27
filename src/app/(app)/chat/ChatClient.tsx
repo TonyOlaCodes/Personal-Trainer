@@ -181,7 +181,7 @@ export function ChatClient({
     const [showMentionDropdown, setShowMentionDropdown] = useState(false);
     const [mentionQuery, setMentionQuery] = useState("");
     const [showPinned, setShowPinned] = useState(false);
-    const [mobileShowChat, setMobileShowChat] = useState(true);
+    const [showConversationThread, setShowConversationThread] = useState(false);
     const [conversationActivity, setConversationActivity] = useState<Record<string, string>>({});
     const [conversationPresence, setConversationPresence] = useState<Record<string, string | null>>({});
     const [activeSessions, setActiveSessions] = useState<Record<string, ActiveSession>>({});
@@ -368,7 +368,7 @@ export function ChatClient({
     const selectConversation = useCallback((conversation: Conversation) => {
         setSelectedConv(conversation);
         setTab("direct");
-        setMobileShowChat(true);
+        setShowConversationThread(true);
         setActiveMessageId(null);
         setUnreadCounts((prev) => {
             if (!prev[conversation.userId]) return prev;
@@ -402,23 +402,23 @@ export function ChatClient({
         if (matchedConversation) {
             setTab("direct");
             setSelectedConv(matchedConversation);
-            setMobileShowChat(true);
+            setShowConversationThread(true);
             persistChatSelection("direct", matchedConversation);
         } else if (savedTab === "direct" && canUseDirectChat) {
             const conversation = resolveDirectConversation(conversations, savedConversationId, null, initialActivity);
             setTab("direct");
             setSelectedConv(conversation);
-            setMobileShowChat(Boolean(conversation));
+            setShowConversationThread(Boolean(conversation));
             if (conversation) persistChatSelection("direct", conversation);
         } else if (savedTab === "general" || !savedTab) {
             setTab("general");
             setSelectedConv(null);
-            setMobileShowChat(true);
+            setShowConversationThread(true);
             persistChatSelection("general");
         } else {
             setTab("general");
             setSelectedConv(null);
-            setMobileShowChat(true);
+            setShowConversationThread(true);
             persistChatSelection("general");
         }
 
@@ -433,19 +433,19 @@ export function ChatClient({
         persistChatSelection(newTab, newTab === "direct" ? selectedConv : null);
 
         if (newTab === "general") {
-            setMobileShowChat(true);
+            setShowConversationThread(true);
             return;
         }
 
         if (!canUseDirectChat) {
-            setMobileShowChat(true);
+            setShowConversationThread(true);
             return;
         }
 
         const savedConversationId = localStorage.getItem(LAST_CHAT_CONVERSATION_KEY);
         const conversation = resolveDirectConversation(conversations, savedConversationId, selectedConv, conversationActivity);
         setSelectedConv(conversation);
-        setMobileShowChat(Boolean(conversation));
+        setShowConversationThread(Boolean(conversation));
         if (conversation) persistChatSelection("direct", conversation);
     };
 
@@ -681,7 +681,7 @@ export function ChatClient({
     useEffect(() => {
         shouldForceScrollRef.current = true;
         isNearBottomRef.current = true;
-    }, [tab, selectedConv?.userId, mobileShowChat]);
+    }, [tab, selectedConv?.userId, showConversationThread]);
 
     useEffect(() => {
         const container = messagesScrollRef.current;
@@ -691,7 +691,7 @@ export function ChatClient({
         };
         container.addEventListener("scroll", onScroll, { passive: true });
         return () => container.removeEventListener("scroll", onScroll);
-    }, [tab, selectedConv?.userId, mobileShowChat, isHydrated]);
+    }, [tab, selectedConv?.userId, showConversationThread, isHydrated]);
 
     useEffect(() => {
         const container = messagesScrollRef.current;
@@ -1126,9 +1126,11 @@ export function ChatClient({
         [unreadCounts]
     );
 
-    /* ─── Sidebar Content ────────────────────────────── */
-    const renderSidebar = () => (
-        <div className="w-full sm:w-72 border-r border-surface-border flex flex-col bg-surface-card h-full min-h-0">
+    const showConversationList = tab === "direct" && (!selectedConv || !showConversationThread);
+
+    /* ─── Conversation list (inside main chat panel) ── */
+    const renderConversationPanel = () => (
+        <div className="flex-1 flex flex-col bg-surface-card min-h-0 w-full">
             {/* Tab Switcher */}
             <div className="p-3 border-b border-surface-border flex items-center gap-2">
                 <div className="flex gap-1 bg-surface-muted p-1 rounded-xl flex-1">
@@ -1152,7 +1154,7 @@ export function ChatClient({
                         <Globe className="w-3 h-3" /> Community
                     </button>
                 </div>
-                <Link href="/settings" className="btn-icon shrink-0 sm:hidden" aria-label="Settings">
+                <Link href="/settings" className="btn-icon shrink-0" aria-label="Settings">
                     <Settings className="w-4 h-4" />
                 </Link>
             </div>
@@ -1247,18 +1249,17 @@ export function ChatClient({
                                 )}
                             >
                                 <div className="relative w-10 h-10 shrink-0">
-                                    <ProfileLink
-                                        userId={conv.userId}
-                                        name={conv.name}
-                                        avatarUrl={conv.avatarUrl}
-                                        role={conv.role}
-                                        showAvatar
-                                        avatarSize="md"
-                                        stopPropagation
-                                        disabled={conv.isDeleted}
-                                        className="relative w-10 h-10"
-                                        nameClassName="sr-only"
-                                    />
+                                    <span className="w-10 h-10 rounded-full bg-gradient-brand flex items-center justify-center font-bold text-white overflow-hidden">
+                                        {conv.avatarUrl ? (
+                                            <img
+                                                src={resolveUploadUrl(conv.avatarUrl)}
+                                                alt={conv.name}
+                                                className="w-full h-full object-cover"
+                                            />
+                                        ) : (
+                                            getInitials(conv.name)
+                                        )}
+                                    </span>
                                     {canViewLastOnline && presence && (
                                         <span
                                             className={cn(
@@ -1277,20 +1278,12 @@ export function ChatClient({
                                 </div>
                                 <div className="min-w-0 flex-1">
                                     <div className="flex items-center justify-between gap-1">
-                                        <ProfileLink
-                                            userId={conv.userId}
-                                            name={
-                                                <>
-                                                    {conv.name}
-                                                    {conv.isDeleted && <span className="text-[9px] text-danger/80 ml-1.5 font-bold uppercase tracking-wider">(Deleted)</span>}
-                                                </>
-                                            }
-                                            role={conv.role}
-                                            stopPropagation
-                                            disabled={conv.isDeleted}
-                                            nameClassName="text-sm font-bold truncate"
-                                            className="min-w-0"
-                                        />
+                                        <span className={cn("text-sm font-bold truncate", getRoleNameClass(conv.role))}>
+                                            {conv.name}
+                                            {conv.isDeleted && (
+                                                <span className="text-[9px] text-danger/80 ml-1.5 font-bold uppercase tracking-wider">(Deleted)</span>
+                                            )}
+                                        </span>
                                         <div className="flex items-center gap-1 shrink-0">
                                             {activityLabel && (
                                                 <span className="text-[9px] text-fg-subtle font-medium whitespace-nowrap">
@@ -1368,91 +1361,82 @@ export function ChatClient({
                 />
             )}
 
-            {/* Desktop Sidebar */}
-            <div className="hidden sm:flex">
-                {renderSidebar()}
-            </div>
-
-            {/* Mobile: Show sidebar or chat */}
-            {!mobileShowChat && (
-                <div className="sm:hidden flex-1 flex flex-col min-w-0 min-h-0">
-                    {renderSidebar()}
-                </div>
-            )}
-
-            {/* Chat Area */}
-            <div className={cn("flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden", !mobileShowChat && "hidden sm:flex")}>
+            {/* Single chat panel — list and thread share the same area */}
+            <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden w-full">
+                {showConversationList ? (
+                    renderConversationPanel()
+                ) : (
+                <>
                 {/* ── Header ── */}
                 <div className="h-14 flex items-center justify-between px-5 border-b border-surface-border bg-surface-card/95 backdrop-blur-md shrink-0 z-10">
-                    <div className="flex items-center gap-3">
-                        <button 
-                            className="sm:hidden flex items-center gap-1 text-brand-400 font-bold hover:text-brand-300 transition-colors bg-brand-400/10 hover:bg-brand-400/20 px-2 py-1.5 rounded-lg -ml-2" 
-                            onClick={() => setMobileShowChat(false)}
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                        {tab === "direct" && selectedConv && (
+                        <button
+                            type="button"
+                            className="flex items-center gap-1 text-brand-400 font-bold hover:text-brand-300 transition-colors bg-brand-400/10 hover:bg-brand-400/20 px-2 py-1.5 rounded-lg shrink-0"
+                            onClick={() => setShowConversationThread(false)}
+                            aria-label="Back to conversations"
                         >
                             <ChevronDown className="w-5 h-5 rotate-90" />
                         </button>
+                        )}
                         {tab === "general" ? (
                             <>
-                                <Globe className="w-5 h-5 text-brand-400" />
+                                <Globe className="w-5 h-5 text-brand-400 shrink-0" />
                                 <div>
                                     <p className="font-bold text-sm">Community Chat</p>
                                     <p className="text-[10px] text-fg-muted font-medium">Public · all members</p>
                                 </div>
                             </>
                         ) : selectedConv ? (
-                            <>
-                                <div className="relative w-8 h-8 shrink-0">
-                                    <ProfileLink
-                                        userId={selectedConv.userId}
-                                        name={selectedConv.name}
-                                        avatarUrl={selectedConv.avatarUrl}
-                                        role={selectedConv.role}
-                                        showAvatar
-                                        avatarSize="sm"
-                                        disabled={selectedConv.isDeleted}
-                                        className="w-8 h-8"
-                                        nameClassName="sr-only"
-                                    />
-                                    {selectedPresence && (
-                                        <span
-                                            className={cn(
-                                                "absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-surface-card",
-                                                selectedPresence.dotClassName
+                            <div className="flex flex-col min-w-0 flex-1">
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <div className="relative shrink-0">
+                                        <ProfileLink
+                                            userId={selectedConv.userId}
+                                            name={selectedConv.name}
+                                            avatarUrl={selectedConv.avatarUrl}
+                                            role={selectedConv.role}
+                                            showAvatar
+                                            avatarSize="sm"
+                                            disabled={selectedConv.isDeleted}
+                                            className="gap-2.5"
+                                            nameClassName={cn(
+                                                "font-bold text-sm truncate hover:text-brand-400 transition-colors",
+                                                getRoleNameClass(selectedConv.role)
                                             )}
-                                            title={selectedPresence.label}
                                         />
-                                    )}
+                                        {selectedPresence && (
+                                            <span
+                                                className={cn(
+                                                    "absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-surface-card pointer-events-none",
+                                                    selectedPresence.dotClassName
+                                                )}
+                                                title={selectedPresence.label}
+                                            />
+                                        )}
+                                    </div>
                                 </div>
-                                <div>
-                                    <ProfileLink
-                                        userId={selectedConv.userId}
-                                        name={selectedConv.name}
-                                        role={selectedConv.role}
-                                        disabled={selectedConv.isDeleted}
-                                        nameClassName="font-bold text-sm"
-                                    />
-                                    <p className="text-[10px] text-fg-muted font-medium">Direct message · private</p>
-                                    {peerTyping ? (
-                                        <p className="text-[10px] text-brand-400 font-medium flex items-center gap-1.5">
-                                            typing
-                                            <TypingDots />
-                                        </p>
-                                    ) : selectedActiveSession ? (
-                                        <p className="text-[10px] text-success font-bold flex items-center gap-1 truncate">
-                                            <Activity className="w-3 h-3 shrink-0" />
-                                            In workout · {selectedActiveSession.workoutName}
-                                        </p>
-                                    ) : canViewLastOnline && selectedPresence ? (
-                                        <p className="text-[10px] text-fg-subtle font-medium truncate">{selectedPresence.label}</p>
-                                    ) : null}
-                                </div>
-                            </>
+                                {peerTyping ? (
+                                    <p className="text-[10px] text-brand-400 font-medium flex items-center gap-1.5 mt-0.5">
+                                        typing
+                                        <TypingDots />
+                                    </p>
+                                ) : selectedActiveSession ? (
+                                    <p className="text-[10px] text-success font-bold flex items-center gap-1 truncate mt-0.5">
+                                        <Activity className="w-3 h-3 shrink-0" />
+                                        In workout · {selectedActiveSession.workoutName}
+                                    </p>
+                                ) : canViewLastOnline && selectedPresence ? (
+                                    <p className="text-[10px] text-fg-subtle font-medium truncate mt-0.5">{selectedPresence.label}</p>
+                                ) : null}
+                            </div>
                         ) : (
                             <p className="text-fg-muted text-sm">Select a conversation</p>
                         )}
                     </div>
 
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 shrink-0">
                     {pinnedMessages.length > 0 && (
                         <button
                             onClick={(e) => { e.stopPropagation(); setShowPinned(!showPinned); }}
@@ -1464,7 +1448,7 @@ export function ChatClient({
                             </span>
                         </button>
                     )}
-                    <Link href="/settings" className="btn-icon sm:hidden" aria-label="Settings">
+                    <Link href="/settings" className="btn-icon" aria-label="Settings">
                         <Settings className="w-4 h-4" />
                     </Link>
                     </div>
@@ -1996,6 +1980,8 @@ export function ChatClient({
                             </button>
                         </div>
                     </div>
+                )}
+                </>
                 )}
             </div>
         </div>

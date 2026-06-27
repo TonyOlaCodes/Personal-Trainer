@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { ensureBodyweightTable } from "@/lib/bodyweight";
+import { addDaysToDateStr, ensureBodyweightTable, getBodyweightAverageInRange } from "@/lib/bodyweight";
 import { ensureDailyMetricsTable, getDailyMetricTargets } from "@/lib/dailyMetrics";
 import { getUserCheckInSchedule, type CheckInSchedule } from "@/lib/checkInSchedule";
 import { getWorkoutsTargetFromUserPlan } from "@/lib/planTrainingTarget";
@@ -10,12 +10,18 @@ export type CheckInPeriodSummary = {
     periodLabel: string;
     frequencyWeeks: number;
     weight: {
+        /** Period average bodyweight (primary stat). */
         currentKg: number | null;
+        /** Average bodyweight during the previous check-in period. */
         baselineKg: number | null;
+        /** Period average minus previous check-in period average. */
         changeKg: number | null;
         entries: number;
         towardGoal: boolean | null;
         targetKg: number | null;
+        hasPreviousCheckIn: boolean;
+        /** Human-readable window for the current average, e.g. "since last check-in". */
+        windowLabel: string;
         message: string;
         detail: string;
     } | null;
@@ -39,6 +45,7 @@ export type CheckInPeriodSummary = {
         completed: number;
         skipped: number;
         target: number;
+        completionPercent: number;
         message: string;
         detail: string;
     };
@@ -56,39 +63,92 @@ export function getCheckInPeriodLabel(frequencyWeeks: number): string {
     return `the last ${frequencyWeeks} weeks`;
 }
 
+/** Max kg change per week considered "on track" for bulking / cutting / maintenance. */
+const GRADUAL_GAIN_KG_PER_WEEK = 1.0;
+const GRADUAL_LOSS_KG_PER_WEEK = 1.2;
+const MAINTENANCE_KG_PER_WEEK = 0.8;
+
 export function isWeightChangeTowardGoal(
     changeKg: number,
     goal: string | null | undefined,
-    targetKg: number | null | undefined,
-    startWeight: number,
-    endWeight: number
+    frequencyWeeks: number
 ): boolean {
-    if (changeKg === 0) return true;
+    const weeks = Math.max(1, frequencyWeeks);
+    const absChange = Math.abs(changeKg);
 
-    if (targetKg != null && targetKg > 0) {
-        const startDistance = Math.abs(startWeight - targetKg);
-        const endDistance = Math.abs(endWeight - targetKg);
-        if (endDistance < startDistance) return true;
-        if (endDistance > startDistance) return false;
-    }
+    if (absChange < 0.15) return true;
 
     switch (goal) {
-        case "LOSE_WEIGHT":
-            return changeKg < 0;
         case "GAIN_MUSCLE":
         case "STRENGTH":
-            return changeKg > 0;
+            return changeKg > 0 && changeKg <= GRADUAL_GAIN_KG_PER_WEEK * weeks;
+        case "LOSE_WEIGHT":
+            return changeKg < 0 && absChange <= GRADUAL_LOSS_KG_PER_WEEK * weeks;
         case "RECOMPOSITION":
-            if (targetKg != null && targetKg > 0) {
-                return Math.abs(endWeight - targetKg) <= Math.abs(startWeight - targetKg);
-            }
-            return changeKg < 0;
+            return absChange <= MAINTENANCE_KG_PER_WEEK * weeks;
         default:
-            if (targetKg != null && targetKg > 0) {
-                return Math.abs(endWeight - targetKg) < Math.abs(startWeight - targetKg);
-            }
-            return changeKg <= 0;
+            return absChange <= MAINTENANCE_KG_PER_WEEK * weeks;
     }
+}
+
+function getCheckInBodyweightWindow(
+    periodEndDate: string,
+    priorCheckInDate: string | null,
+    accountCreatedAt: Date
+): { startDateStr: string; endDateStr: string } {
+    const endDateStr = periodEndDate;
+    const accountStart = accountCreatedAt.toISOString().slice(0, 10);
+    const startDateStr = priorCheckInDate ? addDaysToDateStr(priorCheckInDate, 1) : accountStart;
+
+    return {
+        startDateStr: startDateStr > endDateStr ? endDateStr : startDateStr,
+        endDateStr,
+    };
+}
+
+async function findPreviousCheckIn(userId: string, referenceDate: string) {
+    return prisma.checkIn.findFirst({
+        where: {
+            userId,
+            createdAt: { lt: new Date(`${referenceDate}T00:00:00.000`) },
+        },
+        orderBy: { createdAt: "desc" },
+        select: { createdAt: true, bodyweightKg: true },
+    });
+}
+
+/** Average bodyweight logged since the user's previous check-in (or since account start). */
+export async function getBodyweightAverageSinceLastCheckIn(
+    userId: string,
+    referenceDate: string,
+    accountCreatedAt: Date
+): Promise<{
+    averageWeightKg: number | null;
+    entries: number;
+    startDateStr: string;
+    endDateStr: string;
+    hasPreviousCheckIn: boolean;
+    windowLabel: string;
+}> {
+    await ensureBodyweightTable();
+
+    const previousCheckIn = await findPreviousCheckIn(userId, referenceDate);
+    const priorCheckInDate = previousCheckIn?.createdAt.toISOString().slice(0, 10) ?? null;
+    const window = getCheckInBodyweightWindow(referenceDate, priorCheckInDate, accountCreatedAt);
+    const { averageWeightKg, entries } = await getBodyweightAverageInRange(
+        userId,
+        window.startDateStr,
+        window.endDateStr
+    );
+
+    return {
+        averageWeightKg,
+        entries,
+        startDateStr: window.startDateStr,
+        endDateStr: window.endDateStr,
+        hasPreviousCheckIn: previousCheckIn != null,
+        windowLabel: previousCheckIn ? "since last check-in" : "logged so far",
+    };
 }
 
 function round2(n: number) {
@@ -104,45 +164,89 @@ function caloriesMetGoal(average: number, target: number, goal: string | null | 
 function buildWeightAdvice(
     changeKg: number | null,
     towardGoal: boolean | null,
-    targetKg: number | null,
-    periodLabel: string
+    goal: string | null | undefined,
+    weightWindowLabel: string,
+    hasPreviousCheckIn: boolean
 ): { message: string; detail: string } {
-    if (changeKg === null) {
+    if (!hasPreviousCheckIn) {
         return {
-            message: "No weight data yet",
-            detail: `Log your weight a few times over ${periodLabel} so we can track the trend.`,
+            message: "First check-in baseline",
+            detail: `Keep logging your weight ${weightWindowLabel} — next check-in will compare against this period.`,
         };
     }
 
+    if (changeKg === null) {
+        return {
+            message: "No weight data yet",
+            detail: `Log your weight a few times ${weightWindowLabel} so we can compare against your last check-in.`,
+        };
+    }
+
+    const isBulking = goal === "GAIN_MUSCLE" || goal === "STRENGTH";
+    const isCutting = goal === "LOSE_WEIGHT";
+    const isMaintenance = !isBulking && !isCutting;
+
     if (towardGoal === true) {
-        if (targetKg && Math.abs(changeKg) < 0.15) {
+        if (Math.abs(changeKg) < 0.15) {
             return {
-                message: "Holding steady",
-                detail: "Weight barely moved — that's fine if you're close to goal. Keep logging daily.",
+                message: isMaintenance ? "Holding steady" : "Minimal change",
+                detail: isMaintenance
+                    ? "Your average stayed close to last check-in — exactly what you want on maintenance."
+                    : isBulking
+                        ? "Weight barely moved since last check-in. A small bump in calories can help if you want more gain."
+                        : "Weight barely moved since last check-in. Small tweaks to intake may help if you want a steadier cut.",
+            };
+        }
+        if (isBulking) {
+            return {
+                message: "Gradual gain on track",
+                detail: `Up ${Math.abs(changeKg).toFixed(1)} kg since last check-in — a steady bulk pace. Keep protein high and training consistent.`,
+            };
+        }
+        if (isCutting) {
+            return {
+                message: "Gradual loss on track",
+                detail: `Down ${Math.abs(changeKg).toFixed(1)} kg since last check-in — a sustainable cut pace. Keep logging and protect recovery.`,
             };
         }
         return {
-            message: "Moving the right way",
-            detail: changeKg < 0
-                ? "You're trending down. Stay consistent with meals and daily weigh-ins."
-                : changeKg > 0
-                    ? "You're trending up. Keep protein up and stay on your training plan."
-                    : "You're on track versus your goal. Same approach next period.",
+            message: "Staying on target",
+            detail: `Your average stayed close to last check-in (${changeKg > 0 ? "+" : ""}${changeKg.toFixed(1)} kg). Solid maintenance work.`,
         };
     }
 
     if (towardGoal === false) {
+        if (isBulking) {
+            return changeKg < 0
+                ? {
+                    message: "Weight dipped",
+                    detail: `Down ${Math.abs(changeKg).toFixed(1)} kg since last check-in while bulking. Add calories or reduce cardio to get back on track.`,
+                }
+                : {
+                    message: "Gain came too fast",
+                    detail: `Up ${changeKg.toFixed(1)} kg since last check-in — faster than ideal for a lean bulk. Ease calories slightly if body fat is climbing.`,
+                };
+        }
+        if (isCutting) {
+            return changeKg > 0
+                ? {
+                    message: "Weight crept up",
+                    detail: `Up ${changeKg.toFixed(1)} kg since last check-in while cutting. Review portions and daily steps.`,
+                }
+                : {
+                    message: "Loss came too fast",
+                    detail: `Down ${Math.abs(changeKg).toFixed(1)} kg since last check-in — faster than ideal. Eat a little more to protect muscle and energy.`,
+                };
+        }
         return {
-            message: "Went the wrong direction",
-            detail: changeKg > 0
-                ? "Weight crept up this period. Review portions and try to hit your step target most days."
-                : "Weight dropped more than planned. Make sure you're eating enough to recover and train well.",
+            message: "Bigger swing than planned",
+            detail: `${changeKg > 0 ? "+" : ""}${changeKg.toFixed(1)} kg since last check-in — larger than ideal for maintenance. Review intake and activity.`,
         };
     }
 
     return {
         message: changeKg === 0 ? "No change" : changeKg > 0 ? "Trending up" : "Trending down",
-        detail: "Set a target weight with your coach to see if this change fits your plan.",
+        detail: `${changeKg > 0 ? "+" : ""}${changeKg.toFixed(1)} kg since last check-in.`,
     };
 }
 
@@ -208,36 +312,75 @@ function buildStepsAdvice(average: number | null, target: number | null, metGoal
     };
 }
 
-function buildWorkoutAdvice(completed: number, skipped: number, target: number): { message: string; detail: string } {
+function workoutCompletionPercent(completed: number, target: number): number {
+    if (target <= 0) return completed > 0 ? 100 : 0;
+    return Math.min(100, Math.round((completed / target) * 100));
+}
+
+function buildWorkoutAdvice(completed: number, target: number): { message: string; detail: string; completionPercent: number } {
+    const percent = workoutCompletionPercent(completed, target);
+    const sessionLabel = `${completed} of ${target} planned workout${target === 1 ? "" : "s"}`;
+
     if (target <= 0) {
         return {
+            completionPercent: percent,
             message: `${completed} session${completed === 1 ? "" : "s"} logged`,
             detail: "No session target set for this period.",
         };
     }
 
-    const rate = completed / target;
-    if (rate >= 1) {
+    if (percent >= 100) {
         return {
-            message: "Training locked in",
-            detail: skipped === 0
-                ? "You hit every planned session. Keep that rhythm going."
-                : "You got the work in. Same effort next period.",
+            completionPercent: percent,
+            message: "Perfect consistency",
+            detail: `You completed every planned workout this period (${completed}/${target} — ${percent}%).`,
         };
     }
 
-    if (rate >= 0.75) {
+    if (percent >= 90) {
         return {
-            message: "Mostly consistent",
-            detail: skipped > 0
-                ? `You missed ${skipped} session${skipped === 1 ? "" : "s"}. Block those days on your calendar for next period.`
-                : "Good week overall — push for full attendance next time.",
+            completionPercent: percent,
+            message: "Excellent consistency",
+            detail: `You stayed on track and only missed very little, if anything (${sessionLabel} — ${percent}%).`,
+        };
+    }
+
+    if (percent >= 75) {
+        return {
+            completionPercent: percent,
+            message: "Good consistency",
+            detail: `Overall a solid period, but there's still room for improvement (${sessionLabel} — ${percent}%).`,
+        };
+    }
+
+    if (percent >= 50) {
+        return {
+            completionPercent: percent,
+            message: "Moderate consistency",
+            detail: `You completed over half of your planned workouts, but aim to be more consistent next period (${sessionLabel} — ${percent}%).`,
+        };
+    }
+
+    if (percent >= 25) {
+        return {
+            completionPercent: percent,
+            message: "Low consistency",
+            detail: `You missed most of your planned workouts. Try to identify what got in the way and improve next period (${sessionLabel} — ${percent}%).`,
+        };
+    }
+
+    if (percent >= 1) {
+        return {
+            completionPercent: percent,
+            message: "Very low consistency",
+            detail: `Training was minimal this period. Focus on rebuilding your routine one session at a time (${sessionLabel} — ${percent}%).`,
         };
     }
 
     return {
-        message: "Sessions missed",
-        detail: `Only ${completed} of ${target} planned sessions done. Pick your must-do days and protect them next period.`,
+        completionPercent: percent,
+        message: "No workouts completed",
+        detail: `You didn't complete any planned workouts this period (${completed}/${target} — 0%). Prioritise getting back into your routine next week.`,
     };
 }
 
@@ -252,6 +395,39 @@ function buildOverallMessage(parts: { good: number; bad: number; neutral: number
         return "Mixed period — some wins, some gaps. Focus on the one area that flagged red.";
     }
     return "Decent baseline. Log a bit more daily and it'll be easier to spot what to adjust.";
+}
+
+function getCheckInPeriodBounds(
+    referenceDate: string,
+    frequencyWeeks: number,
+    accountCreatedAt: Date
+): { startDateStr: string; endDateStr: string; effectiveStart: Date; end: Date } {
+    const periodDays = getCheckInPeriodDays({ frequencyWeeks });
+    const end = new Date(`${referenceDate}T23:59:59.999`);
+    const referenceMidday = new Date(`${referenceDate}T12:00:00`);
+
+    let periodStart: Date;
+    let endDateStr = referenceDate;
+
+    if (frequencyWeeks <= 1) {
+        periodStart = startOfWeek(referenceMidday, { weekStartsOn: 1 });
+        const weekEnd = endOfWeek(referenceMidday, { weekStartsOn: 1 });
+        if (weekEnd.getTime() < end.getTime()) {
+            end.setTime(weekEnd.getTime());
+            end.setHours(23, 59, 59, 999);
+        }
+    } else {
+        periodStart = new Date(referenceMidday);
+        periodStart.setDate(periodStart.getDate() - periodDays);
+        periodStart.setHours(0, 0, 0, 0);
+    }
+
+    const accountStart = new Date(accountCreatedAt);
+    accountStart.setHours(0, 0, 0, 0);
+    const effectiveStart = accountStart > periodStart ? accountStart : periodStart;
+    const startDateStr = effectiveStart.toISOString().slice(0, 10);
+
+    return { startDateStr, endDateStr, effectiveStart, end };
 }
 
 export async function getWorkoutsTargetPerWeek(userId: string): Promise<number> {
@@ -299,7 +475,6 @@ export async function getCheckInPeriodSummary(
     options?: {
         schedule?: CheckInSchedule;
         hiddenGoals?: string[];
-        fallbackBodyweightKg?: number | null;
     }
 ): Promise<CheckInPeriodSummary> {
     await Promise.all([ensureBodyweightTable(), ensureDailyMetricsTable()]);
@@ -324,111 +499,74 @@ export async function getCheckInPeriodSummary(
     const periodDays = getCheckInPeriodDays(schedule);
     const periodLabel = getCheckInPeriodLabel(frequencyWeeks);
 
-    const end = new Date(`${referenceDate}T23:59:59.999`);
-    const referenceMidday = new Date(`${referenceDate}T12:00:00`);
+    const { startDateStr, endDateStr, effectiveStart, end } = getCheckInPeriodBounds(
+        referenceDate,
+        frequencyWeeks,
+        user.createdAt
+    );
 
-    let periodStart: Date;
-    let effectiveStart: Date;
-    let startDateStr: string;
-    let endDateStr = referenceDate;
-
-    if (frequencyWeeks <= 1) {
-        periodStart = startOfWeek(referenceMidday, { weekStartsOn: 1 });
-        const weekEnd = endOfWeek(referenceMidday, { weekStartsOn: 1 });
-        if (weekEnd.getTime() < end.getTime()) {
-            end.setTime(weekEnd.getTime());
-            end.setHours(23, 59, 59, 999);
-        }
-    } else {
-        periodStart = new Date(referenceMidday);
-        periodStart.setDate(periodStart.getDate() - periodDays);
-        periodStart.setHours(0, 0, 0, 0);
-    }
-
-    const accountStart = new Date(user.createdAt);
-    accountStart.setHours(0, 0, 0, 0);
-    effectiveStart = accountStart > periodStart ? accountStart : periodStart;
-    startDateStr = effectiveStart.toISOString().slice(0, 10);
-
-    const baselineDateStr = startDateStr;
-    const accountAgeMs = end.getTime() - accountStart.getTime();
-    const accountYoungerThanPeriod = accountAgeMs < periodDays * 86400000;
+    const previousCheckIn = await findPreviousCheckIn(userId, referenceDate);
+    const hasPreviousCheckIn = previousCheckIn != null;
+    const priorCheckInDate = previousCheckIn?.createdAt.toISOString().slice(0, 10) ?? null;
 
     let weightSummary: CheckInPeriodSummary["weight"] = null;
     if (!isWeightHidden) {
-        const periodRows = await prisma.$queryRaw<Array<{ entries: bigint }>>`
-            SELECT COUNT(*)::bigint AS "entries"
-            FROM "bodyweight_logs"
-            WHERE "userId" = ${userId}
-                AND "loggedDate" >= ${startDateStr}::date
-                AND "loggedDate" <= ${endDateStr}::date
-        `;
+        const currentWindow = getCheckInBodyweightWindow(referenceDate, priorCheckInDate, user.createdAt);
+        const periodRows = await getBodyweightAverageInRange(
+            userId,
+            currentWindow.startDateStr,
+            currentWindow.endDateStr
+        );
 
-        const latestInPeriod = await prisma.$queryRaw<Array<{ weightKg: number }>>`
-            SELECT "weightKg"
-            FROM "bodyweight_logs"
-            WHERE "userId" = ${userId}
-                AND "loggedDate" >= ${startDateStr}::date
-                AND "loggedDate" <= ${endDateStr}::date
-            ORDER BY "loggedDate" DESC
-            LIMIT 1
-        `;
+        const averageKg = periodRows.averageWeightKg != null ? round2(periodRows.averageWeightKg) : null;
 
-        const baselineRows = accountYoungerThanPeriod
-            ? []
-            : await prisma.$queryRaw<Array<{ weightKg: number }>>`
-                SELECT "weightKg"
-                FROM "bodyweight_logs"
-                WHERE "userId" = ${userId}
-                    AND "loggedDate" < ${baselineDateStr}::date
-                ORDER BY "loggedDate" DESC
-                LIMIT 1
-            `;
+        let baselineKg: number | null = null;
+        if (hasPreviousCheckIn && previousCheckIn) {
+            const priorPriorCheckIn = await prisma.checkIn.findFirst({
+                where: {
+                    userId,
+                    createdAt: { lt: previousCheckIn.createdAt },
+                },
+                orderBy: { createdAt: "desc" },
+                select: { createdAt: true },
+            });
+            const priorPriorDate = priorPriorCheckIn?.createdAt.toISOString().slice(0, 10) ?? null;
+            const prevWindow = getCheckInBodyweightWindow(
+                previousCheckIn.createdAt.toISOString().slice(0, 10),
+                priorPriorDate,
+                user.createdAt
+            );
+            const prevPeriodRows = await getBodyweightAverageInRange(
+                userId,
+                prevWindow.startDateStr,
+                prevWindow.endDateStr
+            );
 
-        const firstInPeriod = await prisma.$queryRaw<Array<{ weightKg: number }>>`
-            SELECT "weightKg"
-            FROM "bodyweight_logs"
-            WHERE "userId" = ${userId}
-                AND "loggedDate" >= ${startDateStr}::date
-                AND "loggedDate" <= ${endDateStr}::date
-            ORDER BY "loggedDate" ASC
-            LIMIT 1
-        `;
+            if (prevPeriodRows.averageWeightKg != null) {
+                baselineKg = round2(prevPeriodRows.averageWeightKg);
+            } else if (previousCheckIn.bodyweightKg != null) {
+                baselineKg = round2(previousCheckIn.bodyweightKg);
+            }
+        }
 
-        const earliestRows = await prisma.$queryRaw<Array<{ weightKg: number }>>`
-            SELECT "weightKg"
-            FROM "bodyweight_logs"
-            WHERE "userId" = ${userId}
-            ORDER BY "loggedDate" ASC
-            LIMIT 1
-        `;
-
-        const currentKg = latestInPeriod[0]?.weightKg != null
-            ? round2(latestInPeriod[0].weightKg)
-            : options?.fallbackBodyweightKg ?? null;
-        const baselineKg = accountYoungerThanPeriod
-            ? (earliestRows[0]?.weightKg != null ? round2(earliestRows[0].weightKg) : null)
-            : baselineRows[0]?.weightKg != null
-                ? round2(baselineRows[0].weightKg)
-                : firstInPeriod[0]?.weightKg != null
-                    ? round2(firstInPeriod[0].weightKg)
-                    : earliestRows[0]?.weightKg != null
-                        ? round2(earliestRows[0].weightKg)
-                        : null;
-
-        const changeKg = currentKg != null && baselineKg != null ? round2(currentKg - baselineKg) : null;
-        const towardGoal = changeKg != null && baselineKg != null && currentKg != null
-            ? isWeightChangeTowardGoal(changeKg, user.goal, user.targetWeightKg, baselineKg, currentKg)
+        const changeKg = averageKg != null && baselineKg != null && hasPreviousCheckIn
+            ? round2(averageKg - baselineKg)
+            : null;
+        const towardGoal = changeKg != null
+            ? isWeightChangeTowardGoal(changeKg, user.goal, frequencyWeeks)
             : null;
 
-        const advice = buildWeightAdvice(changeKg, towardGoal, user.targetWeightKg, periodLabel);
+        const weightWindowLabel = hasPreviousCheckIn ? "since last check-in" : "logged so far";
+        const advice = buildWeightAdvice(changeKg, towardGoal, user.goal, weightWindowLabel, hasPreviousCheckIn);
         weightSummary = {
-            currentKg,
+            currentKg: averageKg,
             baselineKg,
             changeKg,
-            entries: Number(periodRows[0]?.entries ?? 0),
+            entries: periodRows.entries,
             towardGoal,
             targetKg: user.targetWeightKg,
+            hasPreviousCheckIn,
+            windowLabel: weightWindowLabel,
             message: advice.message,
             detail: advice.detail,
         };
@@ -493,7 +631,7 @@ export async function getCheckInPeriodSummary(
     const completed = Number(completedRows[0]?.count ?? 0);
     const targetWorkouts = workoutsPerWeek * frequencyWeeks;
     const skipped = Math.max(0, targetWorkouts - completed);
-    const workoutAdvice = buildWorkoutAdvice(completed, skipped, targetWorkouts);
+    const workoutAdvice = buildWorkoutAdvice(completed, targetWorkouts);
 
     let good = 0;
     let bad = 0;
@@ -506,7 +644,8 @@ export async function getCheckInPeriodSummary(
     if (weightSummary) tally(weightSummary.towardGoal);
     if (caloriesSummary) tally(caloriesSummary.metGoal);
     if (stepsSummary) tally(stepsSummary.metGoal);
-    tally(completed >= targetWorkouts ? true : completed >= targetWorkouts * 0.75 ? null : false);
+    const workoutPercent = workoutAdvice.completionPercent;
+    tally(workoutPercent >= 100 ? true : workoutPercent >= 75 ? null : false);
 
     return {
         periodDays,
@@ -519,6 +658,7 @@ export async function getCheckInPeriodSummary(
             completed,
             skipped,
             target: targetWorkouts,
+            completionPercent: workoutAdvice.completionPercent,
             message: workoutAdvice.message,
             detail: workoutAdvice.detail,
         },

@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { CheckInsClient } from "./CheckInsClient";
 import { startOfWeek, endOfWeek } from "date-fns";
-import { getBodyweightWeeklyAverage } from "@/lib/bodyweight";
+import { getBodyweightAverageSinceLastCheckIn } from "@/lib/checkInPeriodSummary";
 import { getWorkoutsTargetFromUserPlan } from "@/lib/planTrainingTarget";
 import { getCheckInDueState, getUserCheckInSchedule } from "@/lib/checkInSchedule";
 import { SafeFallback, rethrowNextInternalErrors } from "@/components/shared/SafeFallback";
@@ -83,9 +83,9 @@ export default async function CheckInsPage() {
         const workoutsThisWeek = user.workoutLogs?.length ?? 0;
         const now = new Date();
         const todayDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-        const bodyweightWeeklyAverage = isCoach
-            ? { averageWeightKg: null, entries: 0, previousAverageWeightKg: null, previousEntries: 0 }
-            : await getBodyweightWeeklyAverage(user.id, todayDate);
+        const bodyweightSinceLastCheckIn = isCoach
+            ? { averageWeightKg: null, entries: 0, windowLabel: "since last check-in" as const }
+            : await getBodyweightAverageSinceLastCheckIn(user.id, todayDate, user.createdAt);
         const checkInSchedule = isCoach ? null : await getUserCheckInSchedule(user.id);
         const checkInDueState = checkInSchedule
             ? getCheckInDueState(checkInSchedule, new Date())
@@ -138,7 +138,7 @@ export default async function CheckInsPage() {
                         targetWeightKg={user.targetWeightKg}
                         workoutsThisWeek={workoutsThisWeek}
                         workoutsTarget={workoutsTarget}
-                        bodyweightWeeklyAverage={bodyweightWeeklyAverage}
+                        bodyweightSinceLastCheckIn={bodyweightSinceLastCheckIn}
                         checkInDueState={checkInDueState}
                         checkInSchedule={checkInSchedule ?? undefined}
                         hiddenGoals={user.hiddenGoals ?? []}

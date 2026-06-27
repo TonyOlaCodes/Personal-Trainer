@@ -15,7 +15,6 @@ export async function GET(req: Request) {
         const url = new URL(req.url);
         const date = url.searchParams.get("date") ?? new Date().toISOString().slice(0, 10);
         const clientId = url.searchParams.get("clientId");
-        const fallbackBodyweight = url.searchParams.get("bodyweightKg");
 
         let targetUserId = actor.id;
         let hiddenGoals = actor.hiddenGoals ?? [];
@@ -40,7 +39,6 @@ export async function GET(req: Request) {
         const summary = await getCheckInPeriodSummary(targetUserId, date, {
             schedule,
             hiddenGoals,
-            fallbackBodyweightKg: fallbackBodyweight ? Number(fallbackBodyweight) : null,
         });
 
         return NextResponse.json(summary);

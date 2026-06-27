@@ -65,12 +65,12 @@ export function CheckInPeriodSummaryPanel({
                         </div>
                         <p className="text-xl font-black text-fg">
                             {summary.weight.currentKg != null ? `${summary.weight.currentKg.toFixed(1)} kg` : "—"}
-                            <span className="text-[10px] font-bold text-fg-muted ml-2">latest</span>
+                            <span className="text-[10px] font-bold text-fg-muted ml-2">avg {summary.weight.windowLabel}</span>
                         </p>
-                        {summary.weight.changeKg != null && (
+                        {summary.weight.changeKg != null && summary.weight.hasPreviousCheckIn && (
                             <p className={cn("text-xs font-bold flex items-center gap-1", summary.weight.towardGoal ? "text-success" : summary.weight.towardGoal === false ? "text-red-400" : "text-fg-muted")}>
                                 <WeightIcon className="w-3.5 h-3.5" />
-                                {summary.weight.changeKg > 0 ? "+" : ""}{summary.weight.changeKg.toFixed(1)} kg vs start of period
+                                {summary.weight.changeKg > 0 ? "+" : ""}{summary.weight.changeKg.toFixed(1)} kg since last check-in
                             </p>
                         )}
                         {summary.weight.targetKg && summary.weight.currentKg && (
@@ -90,16 +90,21 @@ export function CheckInPeriodSummaryPanel({
                     <p className="text-xl font-black text-fg">
                         {summary.workouts.completed}
                         <span className="text-sm text-fg-muted font-bold"> / {summary.workouts.target}</span>
+                        {summary.workouts.target > 0 && (
+                            <span className="text-sm text-fg-muted font-bold ml-1">({summary.workouts.completionPercent}%)</span>
+                        )}
                     </p>
                     <p className="text-[10px] text-fg-muted uppercase tracking-wider">
                         {summary.workouts.skipped > 0
-                            ? `${summary.workouts.skipped} skipped`
-                            : "All planned sessions done"}
+                            ? `${summary.workouts.skipped} missed`
+                            : summary.workouts.target > 0 && summary.workouts.completed >= summary.workouts.target
+                                ? "All planned sessions done"
+                                : "Planned sessions"}
                     </p>
                     <StatAdvice
                         message={summary.workouts.message}
                         detail={summary.workouts.detail}
-                        met={summary.workouts.completed >= summary.workouts.target}
+                        met={summary.workouts.completionPercent >= 100}
                     />
                 </div>
 

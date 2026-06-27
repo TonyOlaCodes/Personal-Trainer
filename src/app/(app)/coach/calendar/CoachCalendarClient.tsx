@@ -12,7 +12,6 @@ import {
     computeMonthlyCompliance,
     computeWeeklyCompliance,
     complianceTone,
-    isFutureCalendarMonth,
     isSameCalendarMonth,
 } from "@/lib/calendarCompliance";
 import Link from "next/link";
@@ -111,13 +110,13 @@ export function CoachCalendarClient({ clients, selectedClientId, selectedClientN
             activePlan: calendar?.activePlan ?? null,
             planStartedAt: calendar?.planStartedAt ?? null,
             loggedDates: calendar?.loggedDates ?? [],
+            scheduleRevisions: calendar?.scheduleRevisions ?? [],
         }),
         [calendar]
     );
 
     const complianceOptions = { excludeTodayUntilLogged: true } as const;
     const isViewingCurrentMonth = isSameCalendarMonth(now, calendarView.year, calendarView.month);
-    const isViewingFutureMonth = isFutureCalendarMonth(now, calendarView.year, calendarView.month);
 
     const weekCompliance = useMemo(
         () => computeWeeklyCompliance(complianceInput, now, complianceOptions),
@@ -202,7 +201,7 @@ export function CoachCalendarClient({ clients, selectedClientId, selectedClientN
                 </div>
             </div>
 
-            {calendar?.activePlan && !isViewingFutureMonth && (
+            {calendar?.activePlan && (
                 isViewingCurrentMonth ? (
                     <div className="grid grid-cols-2 gap-2 sm:gap-3">
                         <ComplianceCard
@@ -251,6 +250,7 @@ export function CoachCalendarClient({ clients, selectedClientId, selectedClientN
                     planStartedAt={calendar.planStartedAt}
                     loggedDates={calendar.loggedDates}
                     inProgressSessions={calendar.inProgressSessions}
+                    scheduleRevisions={calendar.scheduleRevisions}
                     view={calendarView}
                     onViewChange={setCalendarView}
                     coachView={{

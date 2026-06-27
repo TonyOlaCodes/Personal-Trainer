@@ -6,6 +6,10 @@ import {
     softHideExercise,
 } from "@/lib/dataSafety";
 import {
+    maybeRecordPlanScheduleRevision,
+    serializePlanWeeksForSchedule,
+} from "@/lib/planScheduleHistory";
+import {
     ACTIVE_WORKOUT_DAY_MAX,
     ARCHIVED_WORKOUT_DAY_BASE,
     activeWorkoutWhere,
@@ -224,6 +228,12 @@ export async function updatePlanPreservingHistory(
     weeks: PlanWeekPayload[]
 ) {
     return prisma.$transaction(async (tx) => {
+        const beforePlan = await tx.plan.findUniqueOrThrow({
+            where: { id: planId },
+            include: planInclude,
+        });
+        const priorWeeks = serializePlanWeeksForSchedule(beforePlan.weeks);
+
         await tx.plan.update({
             where: { id: planId },
             data: { name, description },
@@ -261,9 +271,13 @@ export async function updatePlanPreservingHistory(
             await syncWeekWorkouts(tx, week.id, weekPayload.workouts);
         }
 
-        return tx.plan.findUniqueOrThrow({
+        const updatedPlan = await tx.plan.findUniqueOrThrow({
             where: { id: planId },
             include: planInclude,
         });
+        const newWeeks = serializePlanWeeksForSchedule(updatedPlan.weeks);
+        await maybeRecordPlanScheduleRevision(tx, planId, priorWeeks, newWeeks);
+
+        return updatedPlan;
     });
 }

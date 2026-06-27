@@ -34,6 +34,7 @@ export default async function CalendarPage() {
                     planStartedAt={calendar.planStartedAt}
                     loggedDates={calendar.loggedDates}
                     inProgressSessions={calendar.inProgressSessions}
+                    scheduleRevisions={calendar.scheduleRevisions}
                 />
             </div>
         </>

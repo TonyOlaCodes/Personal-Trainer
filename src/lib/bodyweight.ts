@@ -90,6 +90,40 @@ export async function getBodyweightSummary(userId: string, date: string) {
     });
 }
 
+export function addDaysToDateStr(dateStr: string, days: number): string {
+    const d = new Date(`${dateStr}T12:00:00`);
+    d.setDate(d.getDate() + days);
+    return d.toISOString().slice(0, 10);
+}
+
+/** Average bodyweight between two dates (inclusive). */
+export async function getBodyweightAverageInRange(
+    userId: string,
+    startDateStr: string,
+    endDateStr: string
+): Promise<{ averageWeightKg: number | null; entries: number }> {
+    return runWithRetry(async () => {
+        await ensureBodyweightTable();
+
+        const rows = await prisma.$queryRaw<Array<{ averageWeightKg: number | null; entries: bigint }>>`
+            SELECT AVG("weightKg")::float AS "averageWeightKg", COUNT(*)::bigint AS "entries"
+            FROM "bodyweight_logs"
+            WHERE "userId" = ${userId}
+                AND "loggedDate" >= ${startDateStr}::date
+                AND "loggedDate" <= ${endDateStr}::date
+        `;
+
+        const averageWeightKg = rows[0]?.averageWeightKg != null
+            ? Math.round(rows[0].averageWeightKg * 100) / 100
+            : null;
+
+        return {
+            averageWeightKg,
+            entries: Number(rows[0]?.entries ?? 0),
+        };
+    });
+}
+
 export async function getBodyweightWeeklyAverage(userId: string, date: string) {
     return runWithRetry(async () => {
         await ensureBodyweightTable();

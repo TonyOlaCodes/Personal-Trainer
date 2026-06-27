@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import {
     ChevronLeft, ChevronRight,
     Info, Clock,
@@ -13,6 +13,7 @@ import Link from "next/link";
 import { ReturnLink } from "@/components/shared/ReturnLink";
 import { cn, toDateKey, parseLogDate } from "@/lib/utils";
 import { useCurrentDate } from "@/hooks/useCurrentDate";
+import { getPlannedWorkoutForDate, type PlanScheduleRevisionRecord } from "@/lib/planSchedule";
 
 /* ─────────────────────────── Types ─────────────────────────── */
 interface PlanExercise { name: string; sets: number; reps: string; }
@@ -53,6 +54,7 @@ interface Props {
     planStartedAt: string | null;
     loggedDates: LoggedDate[];
     inProgressSessions: InProgressSession[];
+    scheduleRevisions?: PlanScheduleRevisionRecord[];
     coachView?: {
         clientId: string;
         clientName: string;
@@ -73,6 +75,7 @@ export function CalendarClient({
     planStartedAt,
     loggedDates,
     inProgressSessions,
+    scheduleRevisions = [],
     coachView,
     view: controlledView,
     onViewChange,
@@ -130,35 +133,37 @@ export function CalendarClient({
         return map;
     }, [inProgressSessions]);
 
-    const getPlannedWorkoutForDate = (date: Date): PlanWorkout | null => {
-        if (!activePlan || !planStartedAt) return null;
-        if (activePlan.weeks.length === 0) return null;
-        const start = new Date(planStartedAt);
-        start.setHours(0, 0, 0, 0);
-        
-        // Use relative days from start date
-        const diffDaysTotal = Math.floor((date.getTime() - start.getTime()) / 86400000);
-        if (diffDaysTotal < 0) return null;
+    const activeUserPlan = useMemo(
+        () => (activePlan && planStartedAt
+            ? {
+                startedAt: planStartedAt,
+                plan: { weeks: activePlan.weeks },
+                scheduleRevisions,
+            }
+            : null),
+        [activePlan, planStartedAt, scheduleRevisions]
+    );
 
-        const weekIdx = Math.floor(diffDaysTotal / 7) % activePlan.weeks.length;
-        const jsDow = date.getDay();
-        const monBasedDow = jsDow === 0 ? 6 : jsDow - 1;
-        const fallbackDayNumber = monBasedDow + 1;
+    const todayDate = useMemo(() => parseLogDate(todayKey), [todayKey]);
 
-        const week = activePlan.weeks[weekIdx];
-        if (!week) return null;
+    const resolvePlannedWorkoutForDate = useCallback((date: Date): PlanWorkout | null => {
+        const planned = getPlannedWorkoutForDate(activeUserPlan, date, { today: todayDate });
+        if (!planned) return null;
 
-        const usesOneIndexedWeekdays = week.workouts.length >= 5
-            && week.workouts.every(w => w.dayOfWeek !== null && w.dayOfWeek !== undefined && w.dayOfWeek === w.dayNumber);
-        const targetDayOfWeek = usesOneIndexedWeekdays
-            ? (monBasedDow === 6 ? 0 : monBasedDow + 1)
-            : monBasedDow;
-        
-        const workout = week.workouts.find(w => w.dayOfWeek === targetDayOfWeek)
-                    || week.workouts.find(w => (w.dayOfWeek === null || w.dayOfWeek === undefined) && w.dayNumber === fallbackDayNumber);
-        
-        return workout ?? null;
-    };
+        for (const week of activePlan?.weeks ?? []) {
+            const match = week.workouts.find((workout) => workout.id === planned.id);
+            if (match) return match;
+        }
+
+        const snapshotExercises = (planned as PlanWorkout & { exercises?: PlanExercise[] }).exercises;
+        return {
+            id: planned.id,
+            name: planned.name,
+            dayNumber: planned.dayNumber,
+            dayOfWeek: planned.dayOfWeek ?? null,
+            exercises: snapshotExercises ?? [],
+        };
+    }, [activePlan?.weeks, activeUserPlan, todayDate]);
 
     /* ─── Calendar Generation ─── */
     const firstDay = new Date(view.year, view.month, 1);
@@ -178,7 +183,7 @@ export function CalendarClient({
         return new Date(y, m - 1, d);
     }, [selectedDateKey]);
     const selectedLogs = logMap[selectedDateKey] ?? [];
-    const selectedPlanned = getPlannedWorkoutForDate(selectedDate);
+    const selectedPlanned = resolvePlannedWorkoutForDate(selectedDate);
     const resumeSession = selectedPlanned
         ? inProgressByDate[selectedDateKey]?.find((s) => s.workoutId === selectedPlanned.id) ?? null
         : null;
@@ -266,7 +271,7 @@ export function CalendarClient({
                             const dayLogs = day ? logMap[dateKey] : null;
                             const log = dayLogs?.[0] ?? null;
                             const dayInProgress = !dayLogs?.length ? inProgressByDate[dateKey]?.[0] ?? null : null;
-                            const planned = dateObj ? getPlannedWorkoutForDate(dateObj) : null;
+                            const planned = dateObj ? resolvePlannedWorkoutForDate(dateObj) : null;
                             const isPast = dateKey !== "" && dateKey < todayKey;
                             const isTodayDay = dateKey === todayKey;
                             const selected = dateKey === selectedDateKey;
