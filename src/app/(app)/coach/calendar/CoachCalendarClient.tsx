@@ -65,15 +65,15 @@ function ComplianceCard({
     }[tone];
 
     return (
-        <div className={cn("card p-4 border", cardClass)}>
-            <div className="flex items-center gap-2 mb-1">
-                <TrendingUp className={cn("w-4 h-4", valueClass)} />
-                <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">{label}</span>
+        <div className={cn("card border p-3 sm:p-4 min-w-0", cardClass)}>
+            <div className="flex items-center gap-1.5 sm:gap-2 mb-1">
+                <TrendingUp className={cn("w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0", valueClass)} />
+                <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-fg-subtle truncate">{label}</span>
             </div>
-            <p className={cn("text-3xl font-black tabular-nums", valueClass)}>
+            <p className={cn("text-2xl sm:text-3xl font-black tabular-nums", valueClass)}>
                 {percent !== null ? `${percent}%` : "—"}
             </p>
-            <p className="text-[10px] text-fg-muted font-bold mt-0.5">
+            <p className="text-[9px] sm:text-[10px] text-fg-muted font-bold mt-0.5 leading-tight">
                 {due > 0 ? `${completed}/${due} workouts` : "No sessions due yet"} · {sublabel}
             </p>
         </div>
@@ -207,7 +207,7 @@ export function CoachCalendarClient({ clients, selectedClientId, selectedClientN
 
             {calendar?.activePlan && !isViewingFutureMonth && (
                 isViewingCurrentMonth ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-2 gap-2 sm:gap-3">
                         <ComplianceCard
                             label="This Week"
                             sublabel="Since Monday"

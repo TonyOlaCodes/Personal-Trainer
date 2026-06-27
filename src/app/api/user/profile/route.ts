@@ -42,8 +42,8 @@ const profileSchema = z.object({
     notifyOnWorkoutTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$|^$/).nullable().optional(),
     notifyOnCheckInTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$|^$/).nullable().optional(),
     notifyOnMetricUpdateTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$|^$/).nullable().optional(),
-    notifyOnMissedCheckInTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
-    notifyOnMissedWorkoutTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
+    notifyOnMissedCheckInTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable().optional(),
+    notifyOnMissedWorkoutTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable().optional(),
 });
 
 export async function PATCH(req: Request) {
@@ -95,10 +95,14 @@ export async function PATCH(req: Request) {
                         notifyOnMetricUpdateTime: parsed.notifyOnMetricUpdateTime ? normalizeNotifyTime(parsed.notifyOnMetricUpdateTime) : null,
                     }),
                     ...(parsed.notifyOnMissedCheckInTime !== undefined && {
-                        notifyOnMissedCheckInTime: normalizeNotifyTime(parsed.notifyOnMissedCheckInTime) ?? "09:00",
+                        notifyOnMissedCheckInTime: parsed.notifyOnMissedCheckInTime
+                            ? normalizeNotifyTime(parsed.notifyOnMissedCheckInTime)
+                            : null,
                     }),
                     ...(parsed.notifyOnMissedWorkoutTime !== undefined && {
-                        notifyOnMissedWorkoutTime: normalizeNotifyTime(parsed.notifyOnMissedWorkoutTime) ?? "09:00",
+                        notifyOnMissedWorkoutTime: parsed.notifyOnMissedWorkoutTime
+                            ? normalizeNotifyTime(parsed.notifyOnMissedWorkoutTime)
+                            : null,
                     }),
                 },
             });

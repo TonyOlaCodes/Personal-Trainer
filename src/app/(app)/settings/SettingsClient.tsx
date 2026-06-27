@@ -793,27 +793,24 @@ export function SettingsClient({ user }: Props) {
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             {[
-                                { id: "midnight", name: "Midnight Glow", desc: "Default indigo/purple aesthetic", bg: "bg-[#6366f1]" },
-                                { id: "emerald", name: "Electric Emerald", desc: "Vibrant greens for performance", bg: "bg-[#10b981]" },
-                                { id: "solar", name: "Solar Flare", desc: "Energetic orange and ambers", bg: "bg-[#f59e0b]" },
-                                { id: "ocean", name: "Ocean Breeze", desc: "Cool cyans and deep blues", bg: "bg-[#06b6d4]" },
-                                { id: "rose", name: "Crimson Peak", desc: "High intensity red tones", bg: "bg-[#f43f5e]" },
+                                { id: "midnight", name: "Midnight Glow", bg: "bg-[#6366f1]" },
+                                { id: "emerald", name: "Electric Emerald", bg: "bg-[#10b981]" },
+                                { id: "solar", name: "Solar Flare", bg: "bg-[#f59e0b]" },
+                                { id: "ocean", name: "Ocean Breeze", bg: "bg-[#06b6d4]" },
+                                { id: "rose", name: "Crimson Peak", bg: "bg-[#f43f5e]" },
                             ].map((t) => (
                                 <button
                                     key={t.id}
                                     onClick={() => setTheme(t.id)}
                                     className={cn(
-                                        "p-4 rounded-2xl border transition-all text-left flex items-start gap-4 group hover:border-brand-500/50",
+                                        "p-4 rounded-2xl border transition-all text-left flex items-center gap-4 group hover:border-brand-500/50",
                                         theme === t.id ? "bg-brand-500/10 border-brand-500 shadow-glow-sm" : "bg-surface-muted/50 border-surface-border"
                                     )}
                                 >
                                     <div className={cn("w-10 h-10 rounded-xl shrink-0 shadow-sm transition-transform group-hover:scale-105", t.bg)} />
-                                    <div className="flex-1">
-                                        <div className="flex items-center justify-between mb-0.5">
-                                            <p className="text-sm font-bold text-fg">{t.name}</p>
-                                            {theme === t.id && <Check className="w-4 h-4 text-brand-400" />}
-                                        </div>
-                                        <p className="text-xs text-fg-muted transition-colors group-hover:text-fg-subtle">{t.desc}</p>
+                                    <div className="flex flex-1 items-center justify-between gap-2">
+                                        <p className="text-sm font-bold text-fg">{t.name}</p>
+                                        {theme === t.id && <Check className="w-4 h-4 text-brand-400 shrink-0" />}
                                     </div>
                                 </button>
                             ))}
