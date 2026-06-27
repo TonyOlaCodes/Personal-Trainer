@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
     Users, Activity, Calendar, MessageSquare,
     MapPin, Info, Dumbbell, Award, Scale, MoreHorizontal, ChevronRight, CheckCircle2, Edit3, Zap, Settings,
-    Trash2, AlertTriangle, Clock, Search, X, Send, Pin
+    Trash2, AlertTriangle, Clock, Search, X, Pin
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
@@ -19,7 +19,6 @@ import { RecentSessionsExplorer, PREVIEW_LIMIT } from "@/components/shared/Recen
 import { cn, formatDate, getInitials } from "@/lib/utils";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { formatCoachPlanLabel } from "@/lib/coachPlans";
-import { useScrollLock } from "@/hooks/useScrollLock";
 import { getPresenceIndicator } from "@/lib/userPresence";
 
 const CHECK_IN_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -148,25 +147,6 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
     );
     const [weightTimeframe, setWeightTimeframe] = useState<"week" | "month" | "year" | "all">("all");
     
-    // Quick Chat and Real-time Presence state hooks
-    const [showQuickChat, setShowQuickChat] = useState(false);
-    const [chatMessages, setChatMessages] = useState<any[]>([]);
-    const [chatInput, setChatInput] = useState("");
-    const [sendingChat, setSendingChat] = useState(false);
-    const chatScrollRef = useRef<HTMLDivElement>(null);
-    const isNearBottomRef = useRef(true);
-    const shouldForceScrollRef = useRef(false);
-
-    useScrollLock(showQuickChat);
-
-    const scrollChatToBottom = () => {
-        const container = chatScrollRef.current;
-        if (!container) return;
-        container.scrollTop = container.scrollHeight;
-    };
-
-    const isScrollNearBottom = (container: HTMLDivElement) =>
-        container.scrollHeight - container.scrollTop - container.clientHeight < 80;
     const [showAllSessions, setShowAllSessions] = useState(false);
     const [sessionsInitialId, setSessionsInitialId] = useState<string | null>(null);
 
@@ -291,96 +271,6 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
         () => getPresenceIndicator(client.lastActiveAt),
         [client.lastActiveAt]
     );
-
-    // Quick Chat Fetch & Polling
-    useEffect(() => {
-        if (!showQuickChat) return;
-
-        const fetchChat = async () => {
-            try {
-                const res = await fetch(`/api/messages?with=${client.id}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    setChatMessages(data);
-                }
-            } catch (e) {
-                console.error("Failed to load chat in detail view", e);
-            }
-        };
-
-        fetchChat();
-        const interval = setInterval(fetchChat, 3000);
-        return () => clearInterval(interval);
-    }, [showQuickChat, client.id]);
-
-    useEffect(() => {
-        if (showQuickChat) {
-            shouldForceScrollRef.current = true;
-            isNearBottomRef.current = true;
-        }
-    }, [showQuickChat]);
-
-    useEffect(() => {
-        const container = chatScrollRef.current;
-        if (!container || !showQuickChat) return;
-        const onScroll = () => {
-            isNearBottomRef.current = isScrollNearBottom(container);
-        };
-        container.addEventListener("scroll", onScroll, { passive: true });
-        return () => container.removeEventListener("scroll", onScroll);
-    }, [showQuickChat]);
-
-    useEffect(() => {
-        if (!showQuickChat) return;
-        if (!shouldForceScrollRef.current && !isNearBottomRef.current) return;
-        requestAnimationFrame(() => {
-            scrollChatToBottom();
-            shouldForceScrollRef.current = false;
-            isNearBottomRef.current = true;
-        });
-    }, [chatMessages, showQuickChat]);
-
-    const sendChatMessage = async () => {
-        if (!canEdit || !chatInput.trim() || sendingChat) return;
-        setSendingChat(true);
-
-        const text = chatInput.trim();
-        setChatInput("");
-
-        // Optimistic UI update
-        const tempId = `temp-${Date.now()}`;
-        const optimisticMsg = {
-            id: tempId,
-            content: text,
-            createdAt: new Date().toISOString(),
-            sender: { id: currentUserId, role: "COACH" },
-        };
-        shouldForceScrollRef.current = true;
-        setChatMessages(prev => [...prev, optimisticMsg]);
-
-        try {
-            const res = await fetch("/api/messages", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    content: text,
-                    isGeneral: false,
-                    receiverId: client.id,
-                    type: "TEXT",
-                }),
-            });
-            if (res.ok) {
-                const newRealMsg = await res.json();
-                setChatMessages(prev => prev.map(m => m.id === tempId ? newRealMsg : m));
-            } else {
-                setChatMessages(prev => prev.filter(m => m.id !== tempId));
-            }
-        } catch (e) {
-            setChatMessages(prev => prev.filter(m => m.id !== tempId));
-        } finally {
-            setSendingChat(false);
-        }
-    };
 
     const filteredBodyweightHistory = useMemo(() => {
         if (weightTimeframe === "all") return bodyweightHistory;
@@ -586,18 +476,17 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                     </div>
                 </div>
                 <div className="flex gap-3">
-                    <button 
-                        onClick={() => setShowQuickChat(true)} 
-                        disabled={!canEdit}
-                        title={canEdit ? "Message athlete" : "Cannot message inactive accounts"}
+                    <Link
+                        href={`/chat?with=${client.id}`}
                         className={cn(
-                            "btn-secondary px-6 h-11 transition-all",
-                            !canEdit && "opacity-50 cursor-not-allowed",
-                            showQuickChat && "bg-brand-500/20 text-brand-400 border-brand-500/30"
+                            "btn-secondary px-6 h-11 transition-all inline-flex items-center gap-2",
+                            !canEdit && "opacity-50 pointer-events-none"
                         )}
+                        aria-disabled={!canEdit}
+                        title={canEdit ? "Open full chat with athlete" : "Cannot message inactive accounts"}
                     >
-                        <MessageSquare className="w-4 h-4" /> Message
-                    </button>
+                        <MessageSquare className="w-4 h-4" /> Open Full Chat
+                    </Link>
                 </div>
             </div>
 
@@ -1601,95 +1490,6 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
             </div>
             )}
 
-            {/* Quick Chat Slide-over Sheet */}
-            {showQuickChat && (
-                <div className="fixed inset-0 z-50 overflow-hidden flex justify-end">
-                    {/* Backdrop */}
-                    <div 
-                        className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity animate-fade-in"
-                        onClick={() => setShowQuickChat(false)}
-                    />
-                    
-                    {/* Drawer Content */}
-                    <div className="relative w-full max-w-md h-full bg-surface-card border-l border-surface-border shadow-modal flex flex-col z-10 animate-slide-left">
-                        {/* Header */}
-                        <div className="p-4 border-b border-surface-border flex items-center justify-between bg-surface-muted/30">
-                            <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-xl bg-gradient-brand flex items-center justify-center text-sm font-bold text-white shadow-glow-brand-sm shrink-0">
-                                    {client.avatarUrl ? <img src={resolveUploadUrl(client.avatarUrl)} alt="avatar" className="w-full h-full object-cover rounded-xl" /> : getInitials(client.name)}
-                                </div>
-                                <div className="min-w-0">
-                                    <p className="font-bold text-sm text-fg truncate">{client.name}</p>
-                                    <div className="flex items-center gap-1.5 mt-0.5">
-                                        <span className={cn("w-1.5 h-1.5 rounded-full", presence.dotClassName)} />
-                                        <span className="text-[8px] text-fg-subtle font-black uppercase tracking-wider">{presence.label}</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <button 
-                                onClick={() => setShowQuickChat(false)}
-                                className="btn-icon w-8 h-8 rounded-lg bg-surface hover:bg-surface-elevated text-fg-muted hover:text-fg transition-all"
-                            >
-                                <X className="w-4 h-4" />
-                            </button>
-                        </div>
-                        
-                        {/* Messages Log */}
-                        <div ref={chatScrollRef} className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-3 no-scrollbar bg-surface/10">
-                            {chatMessages.length === 0 ? (
-                                <div className="h-full flex flex-col items-center justify-center text-center p-6 opacity-60">
-                                    <MessageSquare className="w-10 h-10 text-brand-400/50 mb-3" />
-                                    <p className="text-xs font-black uppercase tracking-widest text-fg-subtle">No messages yet</p>
-                                    <p className="text-[10px] text-fg-muted mt-1 max-w-[200px]">Send a note to keep your athlete on track.</p>
-                                </div>
-                            ) : (
-                                chatMessages.map((msg) => {
-                                    const isSelf = msg.sender.id === currentUserId;
-                                    return (
-                                        <div 
-                                            key={msg.id} 
-                                            className={cn("flex flex-col max-w-[80%] space-y-1", isSelf ? "ml-auto items-end" : "mr-auto items-start")}
-                                        >
-                                            <div className={cn(
-                                                "p-3 rounded-2xl text-xs font-medium leading-relaxed shadow-sm",
-                                                isSelf 
-                                                    ? "bg-brand-500 text-white rounded-tr-none shadow-glow-brand-sm" 
-                                                    : "bg-surface-elevated text-fg border border-surface-border rounded-tl-none"
-                                            )}>
-                                                {msg.content}
-                                            </div>
-                                            <span className="text-[8px] text-fg-subtle px-1">
-                                                {formatDate(msg.createdAt)}
-                                            </span>
-                                        </div>
-                                    );
-                                })
-                            )}
-                        </div>
-                        
-                        {/* Input Footer */}
-                        <div className="p-4 border-t border-surface-border bg-surface-card flex gap-2 items-center">
-                            <input 
-                                type="text"
-                                className="input flex-1 h-10 text-xs bg-surface-muted/50 focus:border-brand-500/40 rounded-xl"
-                                placeholder="Write instructions..."
-                                value={chatInput}
-                                onChange={(e) => setChatInput(e.target.value)}
-                                onKeyDown={(e) => {
-                                    if (e.key === "Enter") sendChatMessage();
-                                }}
-                            />
-                            <button 
-                                onClick={sendChatMessage}
-                                disabled={sendingChat || !chatInput.trim()}
-                                className="btn-primary h-10 w-10 p-0 flex items-center justify-center rounded-xl shadow-glow-brand shrink-0"
-                            >
-                                <Send className="w-4 h-4" />
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }

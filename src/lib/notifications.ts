@@ -30,6 +30,8 @@ export type ClientNotificationPref =
     | "notifyOnWorkoutFeedback"
     | "notifyOnMissedCheckIn";
 
+export type CoachClientMessagePref = "notifyOnClientMessage";
+
 let notificationsReady = false;
 let notificationColumnsReady = false;
 let pendingCoachNotificationsReady = false;
@@ -47,6 +49,7 @@ export async function ensureNotificationPreferenceColumns() {
         `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notifyOnWorkoutFeedback" BOOLEAN NOT NULL DEFAULT true`,
         `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notifyOnMissedCheckIn" BOOLEAN NOT NULL DEFAULT true`,
         `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notifyOnMissedWorkout" BOOLEAN NOT NULL DEFAULT true`,
+        `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notifyOnClientMessage" BOOLEAN NOT NULL DEFAULT true`,
         `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notificationTimezone" TEXT NOT NULL DEFAULT '${APP_TIMEZONE}'`,
         `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notifyOnWorkoutTime" TEXT`,
         `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "notifyOnCheckInTime" TEXT`,
@@ -143,7 +146,7 @@ export async function getCoachNotificationSchedule(coachId: string): Promise<Coa
 
 export async function userWantsNotification(
     userId: string,
-    pref: CoachNotificationPref | ClientNotificationPref
+    pref: CoachNotificationPref | ClientNotificationPref | CoachClientMessagePref
 ): Promise<boolean> {
     await ensureNotificationPreferenceColumns();
 
@@ -159,6 +162,7 @@ export async function userWantsNotification(
             notifyOnPlanUpdate: true,
             notifyOnCheckInReview: true,
             notifyOnWorkoutFeedback: true,
+            notifyOnClientMessage: true,
         },
     });
 
@@ -243,6 +247,50 @@ export async function notifyClientOfCoachMessage(input: {
         message,
         entityType: "CHAT_MESSAGE",
         entityId: input.coachId,
+        route: input.route,
+    });
+}
+
+/** One unread client-message alert per client; updates timestamp if more messages arrive. */
+export async function notifyCoachOfClientMessage(input: {
+    coachId: string;
+    clientUserId: string;
+    clientName: string;
+    route: string;
+}) {
+    if (!(await userWantsNotification(input.coachId, "notifyOnClientMessage"))) return;
+
+    await ensureNotificationsTable();
+
+    const message = input.clientName.trim() || "Your client";
+    const existing = await prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT "id"
+        FROM "notifications"
+        WHERE "userId" = ${input.coachId}
+          AND "type" = 'NEW_CLIENT_CHAT_MESSAGE'
+          AND "entityId" = ${input.clientUserId}
+          AND "read" = false
+        ORDER BY "createdAt" DESC
+        LIMIT 1
+    `;
+
+    if (existing[0]) {
+        await prisma.$executeRaw`
+            UPDATE "notifications"
+            SET "message" = ${message},
+                "route" = ${input.route},
+                "createdAt" = CURRENT_TIMESTAMP
+            WHERE "id" = ${existing[0].id}
+        `;
+        return;
+    }
+
+    await createNotification({
+        userId: input.coachId,
+        type: "NEW_CLIENT_CHAT_MESSAGE",
+        message,
+        entityType: "CHAT_MESSAGE",
+        entityId: input.clientUserId,
         route: input.route,
     });
 }

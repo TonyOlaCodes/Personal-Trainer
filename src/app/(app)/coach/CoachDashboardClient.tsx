@@ -10,6 +10,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { cn, formatDate, getInitials } from "@/lib/utils";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
+import { getPresenceIndicator } from "@/lib/userPresence";
 import { PendingReviewsModal, type PendingReviewItem } from "@/components/shared/PendingReviewsModal";
 
 const CHECK_IN_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -19,6 +20,7 @@ interface Client {
     name: string;
     email: string;
     avatarUrl?: string | null;
+    lastActiveAt?: string | null;
     isDeleted?: boolean;
     hasCheckInSchedule?: boolean;
     checkInSchedule: { day: number | null; frequencyWeeks: number | null; startDate: string | null };
@@ -397,7 +399,9 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                                 <p className="text-fg-muted">You have no clients assigned yet.</p>
                             </div>
                         ) : (
-                            sortedClients.map((c) => (
+                            sortedClients.map((c) => {
+                                const presence = c.isDeleted ? null : getPresenceIndicator(c.lastActiveAt);
+                                return (
                                 <Link
                                     key={c.id}
                                     href={`/coach/client/${c.id}`}
@@ -409,13 +413,24 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                                     )}
                                 >
                                     <div className="flex items-center gap-4 mb-4">
-                                        <div className={cn(
-                                            "w-12 h-12 rounded-2xl flex items-center justify-center text-sm font-bold text-white shadow-glow-sm overflow-hidden",
-                                            c.isDeleted ? "bg-surface-muted text-fg-subtle" : "bg-gradient-brand"
-                                        )}>
-                                            {c.avatarUrl ? <img src={resolveUploadUrl(c.avatarUrl)} alt="avatar" className="w-full h-full object-cover rounded-2xl" /> : getInitials(c.name)}
+                                        <div className="relative shrink-0">
+                                            <div className={cn(
+                                                "w-12 h-12 rounded-2xl flex items-center justify-center text-sm font-bold text-white shadow-glow-sm overflow-hidden",
+                                                c.isDeleted ? "bg-surface-muted text-fg-subtle" : "bg-gradient-brand"
+                                            )}>
+                                                {c.avatarUrl ? <img src={resolveUploadUrl(c.avatarUrl)} alt="avatar" className="w-full h-full object-cover rounded-2xl" /> : getInitials(c.name)}
+                                            </div>
+                                            {presence && (
+                                                <span
+                                                    className={cn(
+                                                        "absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-surface-card",
+                                                        presence.dotClassName
+                                                    )}
+                                                    title={presence.label}
+                                                />
+                                            )}
                                         </div>
-                                        <div className="min-w-0">
+                                        <div className="min-w-0 flex-1">
                                             <div className="flex items-center gap-2">
                                                 <p className="font-bold text-fg group-hover:text-brand-400 transition-colors truncate">{c.name}</p>
                                                 {c.isDeleted && (
@@ -427,7 +442,11 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                                                     </span>
                                                 )}
                                             </div>
-                                            <p className="text-xs text-fg-muted truncate">{c.isDeleted ? "Inactive account" : c.email}</p>
+                                            {presence ? (
+                                                <p className="text-[10px] text-fg-subtle truncate">{presence.label}</p>
+                                            ) : (
+                                                <p className="text-xs text-fg-muted truncate">{c.isDeleted ? "Inactive account" : c.email}</p>
+                                            )}
                                         </div>
                                     </div>
                                     <div className="grid grid-cols-2 gap-2 border-t border-surface-border pt-4">
@@ -441,7 +460,8 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                                         </div>
                                     </div>
                                 </Link>
-                            ))
+                                );
+                            })
                         )}
                     </div>
                     {deletedClients.length > 0 && (

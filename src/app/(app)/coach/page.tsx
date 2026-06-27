@@ -21,7 +21,7 @@ export default async function CoachDashboardPage() {
             clients: {
                 select: {
                     id: true, name: true, email: true, role: true, avatarUrl: true,
-                    isDeleted: true, isDeactivated: true,
+                    isDeleted: true, isDeactivated: true, lastActiveAt: true,
                     goal: true, targetWeightKg: true, weightKg: true,
                     workoutLogs: {
                         where: { status: "COMPLETED" },
@@ -146,6 +146,7 @@ export default async function CoachDashboardPage() {
                             name: c.name || "Unnamed Client",
                             email: c.email,
                             avatarUrl: c.avatarUrl,
+                            lastActiveAt: c.lastActiveAt?.toISOString() ?? null,
                             isDeleted: c.isDeleted || c.isDeactivated || c.email.endsWith("@deleted.local"),
                             goal: c.goal,
                             currentWeightKg: c.weightKg,

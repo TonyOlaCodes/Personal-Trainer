@@ -67,27 +67,44 @@ export function PublicProfileClient({ userId, currentUserId }: Props) {
 
     useEffect(() => {
         let cancelled = false;
+        let attempt = 0;
+        const maxAttempts = 3;
 
-        (async () => {
+        const loadProfile = async () => {
             setLoading(true);
-            setError(null);
+            if (attempt === 0) setError(null);
             try {
                 const res = await fetch(`/api/users/${userId}/profile`);
                 const data = await res.json();
                 if (!res.ok) {
+                    if (res.status >= 500 && attempt < maxAttempts - 1) {
+                        attempt += 1;
+                        await new Promise((resolve) => setTimeout(resolve, 800 * attempt));
+                        if (!cancelled) void loadProfile();
+                        return;
+                    }
                     if (!cancelled) setError(data.error ?? "Could not load profile");
                     return;
                 }
                 if (!cancelled) {
                     setProfile(data.profile);
                     setViewer(data.viewer);
+                    setError(null);
                 }
             } catch {
+                if (attempt < maxAttempts - 1) {
+                    attempt += 1;
+                    await new Promise((resolve) => setTimeout(resolve, 800 * attempt));
+                    if (!cancelled) void loadProfile();
+                    return;
+                }
                 if (!cancelled) setError("Connection error");
             } finally {
                 if (!cancelled) setLoading(false);
             }
-        })();
+        };
+
+        void loadProfile();
 
         return () => { cancelled = true; };
     }, [userId]);
@@ -123,6 +140,13 @@ export function PublicProfileClient({ userId, currentUserId }: Props) {
                 <Lock className="w-10 h-10 text-fg-subtle mx-auto mb-4" />
                 <h2 className="text-xl font-black text-fg mb-2">Profile unavailable</h2>
                 <p className="text-sm text-fg-muted">{error ?? "This profile could not be loaded."}</p>
+                <button
+                    type="button"
+                    onClick={() => window.location.reload()}
+                    className="btn-secondary mt-4 text-xs h-10 px-4"
+                >
+                    Try again
+                </button>
             </div>
         );
     }

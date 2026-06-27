@@ -12,6 +12,7 @@ import {
     ClipboardList,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useChatUnread, formatUnreadBadge } from "@/components/chat/ChatUnreadProvider";
 
 interface MobileNavItem {
     href: string;
@@ -38,6 +39,8 @@ interface MobileTabBarProps {
 
 export function MobileTabBar({ userRole = "FREE" }: MobileTabBarProps) {
     const pathname = usePathname();
+    const { totalUnread } = useChatUnread();
+    const chatBadge = formatUnreadBadge(totalUnread);
 
     const filteredItems = mobileNavItems.filter((item) => {
         if (item.hideRoles && item.hideRoles.includes(userRole)) return false;
@@ -55,19 +58,27 @@ export function MobileTabBar({ userRole = "FREE" }: MobileTabBarProps) {
             <div className="flex items-center justify-around px-2 py-2 overflow-hidden gap-1 w-full max-w-full">
                 {filteredItems.map((item) => {
                     const active = pathname.startsWith(item.href);
+                    const badge = item.href === "/chat" ? chatBadge : undefined;
                     return (
                         <Link
                             key={item.href}
                             id={`nav-${item.label.toLowerCase().replace(" ", "")}`}
                             href={item.href}
                             className={cn(
-                                "flex flex-col items-center justify-center gap-1 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-tight transition-all duration-200 flex-1 min-w-0",
+                                "relative flex flex-col items-center justify-center gap-1 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-tight transition-all duration-200 flex-1 min-w-0",
                                 active 
                                     ? "text-brand-400 bg-brand-500/10" 
                                     : "text-fg-subtle hover:text-fg hover:bg-surface-muted/50"
                             )}
                         >
-                            <item.icon className={cn("w-4.5 h-4.5 transition-transform duration-200 shrink-0", active && "scale-110")} />
+                            <span className="relative">
+                                <item.icon className={cn("w-4.5 h-4.5 transition-transform duration-200 shrink-0", active && "scale-110")} />
+                                {badge && (
+                                    <span className="absolute -top-1.5 -right-2 min-w-[0.875rem] h-3.5 px-0.5 rounded-full bg-brand-500 text-white text-[8px] font-black flex items-center justify-center leading-none">
+                                        {badge}
+                                    </span>
+                                )}
+                            </span>
                             <span className="truncate w-full text-center leading-none">{item.label}</span>
                         </Link>
                     );

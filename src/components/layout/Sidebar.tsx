@@ -21,6 +21,7 @@ import {
     UserPlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useChatUnread, formatUnreadBadge } from "@/components/chat/ChatUnreadProvider";
 
 interface NavItem {
     href: string;
@@ -54,6 +55,8 @@ interface SidebarProps {
 export function Sidebar({ userRole = "FREE", initialCollapsed = false }: SidebarProps) {
     const pathname = usePathname();
     const [collapsed, setCollapsed] = useState(initialCollapsed);
+    const { totalUnread } = useChatUnread();
+    const chatBadge = formatUnreadBadge(totalUnread);
 
     // Sync collapsed state to document style property and cookie
     useEffect(() => {
@@ -100,6 +103,7 @@ export function Sidebar({ userRole = "FREE", initialCollapsed = false }: Sidebar
             <nav className={cn("flex-1 py-4 space-y-1 overflow-y-auto no-scrollbar", collapsed ? "px-1.5" : "px-3")}>
                 {filteredItems.map((item) => {
                     const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);
+                    const badge = item.href === "/chat" ? chatBadge : item.badge;
                     return (
                         <Link
                             key={item.href}
@@ -107,14 +111,19 @@ export function Sidebar({ userRole = "FREE", initialCollapsed = false }: Sidebar
                             href={item.href}
                             className={cn(
                                 active ? "sidebar-link-active" : "sidebar-link",
-                                collapsed ? "w-10 h-10 p-0 mx-auto justify-center gap-0" : "gap-3"
+                                collapsed ? "w-10 h-10 p-0 mx-auto justify-center gap-0 relative" : "gap-3"
                             )}
                             title={collapsed ? item.label : undefined}
                         >
                             <item.icon className="w-4.5 h-4.5 flex-shrink-0" style={{ width: "1.125rem", height: "1.125rem" }} />
+                            {collapsed && badge && (
+                                <span className="absolute -top-0.5 -right-0.5 min-w-[1rem] h-4 px-1 rounded-full bg-brand-500 text-white text-[9px] font-black flex items-center justify-center">
+                                    {badge}
+                                </span>
+                            )}
                             {!collapsed && <span className="animate-fade-in">{item.label}</span>}
-                            {(item.badge && !collapsed) && (
-                                <span className="ml-auto badge-brand text-[10px]">{item.badge}</span>
+                            {(badge && !collapsed) && (
+                                <span className="ml-auto badge-brand text-[10px]">{badge}</span>
                             )}
                         </Link>
                     );

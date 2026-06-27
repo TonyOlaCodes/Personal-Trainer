@@ -12,6 +12,8 @@ import {
 } from "@/lib/apiAuth";
 import { isInactiveAccount } from "@/lib/userDeactivation";
 import { getDirectMessageActivity } from "@/lib/chatActivity";
+import { getUnreadCountsByPeer, getTotalUnreadDirectCount } from "@/lib/chatUnread";
+import { notifyCoachOfClientMessage } from "@/lib/notifications";
 import { isCoachRole } from "@/lib/roles";
 import { getLastActiveMap, touchUserLastActive } from "@/lib/userPresence";
 import { getActiveSessionsForClients } from "@/lib/coachChat";
@@ -29,7 +31,8 @@ export async function GET(req: Request) {
     const isGeneral = url.searchParams.get("general") === "true";
     const withUserId = url.searchParams.get("with");
     const activityOnly = url.searchParams.get("activity") === "true";
-    const limit = parseInt(url.searchParams.get("limit") ?? "80");
+    const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "80", 10) || 80, 100);
+    const before = url.searchParams.get("before");
 
     if (activityOnly) {
         if (user.role === "FREE") {
@@ -54,6 +57,8 @@ export async function GET(req: Request) {
         }
 
         const activity = await getDirectMessageActivity(user.id, peerIds);
+        const unread = await getUnreadCountsByPeer(user.id, peerIds);
+        const totalUnread = await getTotalUnreadDirectCount(user.id, peerIds);
 
         if (peerIds.length > 0) {
             await prisma.message.updateMany({
@@ -77,6 +82,8 @@ export async function GET(req: Request) {
 
         return NextResponse.json({
             activity,
+            unread,
+            totalUnread,
             ...(presence ? { presence } : {}),
             ...(activeSessions ? { activeSessions } : {}),
         });
@@ -112,8 +119,12 @@ export async function GET(req: Request) {
         return NextResponse.json({ error: "Specify general=true or with=userId" }, { status: 400 });
     }
 
+    const cursorWhere: Prisma.MessageWhereInput = before
+        ? { ...where, createdAt: { lt: new Date(before) } }
+        : where;
+
     const messages = await prisma.message.findMany({
-        where,
+        where: cursorWhere,
         include: {
             sender: { select: { id: true, name: true, avatarUrl: true, role: true, isDeleted: true, deletedName: true } },
             replyTo: {
@@ -129,9 +140,11 @@ export async function GET(req: Request) {
                 }
             }
         },
-        orderBy: { createdAt: "asc" },
+        orderBy: { createdAt: "desc" },
         take: limit,
     });
+
+    messages.reverse();
 
     const isDirectThread = Boolean(withUserId && !isGeneral);
 
@@ -175,7 +188,10 @@ export async function GET(req: Request) {
         }),
     }));
 
-    return NextResponse.json(mappedMessages);
+    return NextResponse.json({
+        messages: mappedMessages,
+        hasMore: messages.length === limit,
+    });
 }
 
 const msgSchema = z.object({
@@ -271,6 +287,21 @@ export async function POST(req: Request) {
                 clientUserId: receiver.id,
                 coachId: user.id,
                 coachName: user.name ?? user.email ?? "Your coach",
+                route: `/chat?with=${user.id}`,
+            });
+        }
+    }
+
+    if (!isGeneral && receiverId && user.role === "PREMIUM" && user.coachId) {
+        const receiver = await prisma.user.findUnique({
+            where: { id: receiverId },
+            select: { id: true, role: true },
+        });
+        if (receiver && ["COACH", "SUPER_ADMIN"].includes(receiver.role) && user.coachId === receiver.id) {
+            await notifyCoachOfClientMessage({
+                coachId: receiver.id,
+                clientUserId: user.id,
+                clientName: user.name ?? user.email ?? "Your client",
                 route: `/chat?with=${user.id}`,
             });
         }

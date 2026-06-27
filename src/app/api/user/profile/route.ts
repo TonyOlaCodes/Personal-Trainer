@@ -42,6 +42,7 @@ const profileSchema = z.object({
     notifyOnWorkoutFeedback: z.boolean().optional(),
     notifyOnMissedCheckIn: z.boolean().optional(),
     notifyOnMissedWorkout: z.boolean().optional(),
+    notifyOnClientMessage: z.boolean().optional(),
     notifyOnWorkoutTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$|^$/).nullable().optional(),
     notifyOnCheckInTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$|^$/).nullable().optional(),
     notifyOnMetricUpdateTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$|^$/).nullable().optional(),
@@ -91,6 +92,7 @@ export async function PATCH(req: Request) {
                     ...(parsed.notifyOnWorkoutFeedback !== undefined && { notifyOnWorkoutFeedback: parsed.notifyOnWorkoutFeedback }),
                     ...(parsed.notifyOnMissedCheckIn !== undefined && { notifyOnMissedCheckIn: parsed.notifyOnMissedCheckIn }),
                     ...(parsed.notifyOnMissedWorkout !== undefined && { notifyOnMissedWorkout: parsed.notifyOnMissedWorkout }),
+                    ...(parsed.notifyOnClientMessage !== undefined && { notifyOnClientMessage: parsed.notifyOnClientMessage }),
                     ...(parsed.notifyOnWorkoutTime !== undefined && {
                         notifyOnWorkoutTime: parsed.notifyOnWorkoutTime ? normalizeNotifyTime(parsed.notifyOnWorkoutTime) : null,
                     }),

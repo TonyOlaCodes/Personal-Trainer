@@ -4,17 +4,29 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
     Send, Image as ImageIcon, Globe, MessageSquare, Star, X, Pencil, Trash2,
     Check, MoreVertical, Reply, Pin, SmilePlus, CheckCheck, ChevronDown, AtSign, Settings,
-    Dumbbell, ClipboardList, Activity
+    Dumbbell, ClipboardList, Activity, Search, Megaphone, Loader2, Shield
 } from "lucide-react";
 import Link from "next/link";
 import { getInitials, formatRelative, cn, roleLabels, getRoleNameClass } from "@/lib/utils";
 import { getPresenceIndicator } from "@/lib/userPresence";
 import { sortConversationsByActivity } from "@/lib/chatActivity";
+import {
+    formatConversationActivityTime,
+    getMessageDateGroupLabel,
+    shouldShowMessageDateGroup,
+} from "@/lib/chatTime";
+import {
+    clearChatDraft,
+    getChatDraftKey,
+    loadChatDraft,
+    saveChatDraft,
+} from "@/lib/chatDrafts";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { uploadMediaFile } from "@/lib/compressImage";
 import { MediaLightbox } from "@/components/shared/MediaLightbox";
 import { ProfileLink } from "@/components/shared/ProfileLink";
 import { CoachChatTools } from "@/components/chat/CoachChatTools";
+import { useChatUnread } from "@/components/chat/ChatUnreadProvider";
 import type { CoachPlanRecord } from "@/lib/coachPlans";
 
 /* ─── Types ──────────────────────────────────────────── */
@@ -42,7 +54,7 @@ interface Message {
     isPinned: boolean;
     status: "SENT" | "DELIVERED" | "SEEN";
     mentions: string[];
-    actionType?: "PLAN_ASSIGNED" | "CHECKIN_REQUEST" | null;
+    actionType?: "PLAN_ASSIGNED" | "CHECKIN_REQUEST" | "BROADCAST" | null;
     actionEntityId?: string | null;
     createdAt: string;
     updatedAt?: string | null;
@@ -60,11 +72,15 @@ interface ActiveSession {
 interface Conversation {
     userId: string;
     name: string;
+    email?: string;
     role: string;
     avatarUrl?: string | null;
     isDeleted?: boolean;
+    isDeactivated?: boolean;
     lastMessageAt?: string | null;
     lastActiveAt?: string | null;
+    checkInDue?: boolean;
+    missedWorkout?: boolean;
 }
 
 interface Props {
@@ -73,7 +89,29 @@ interface Props {
     conversations: Conversation[];
     canUseDirectChat?: boolean;
     coachPlans?: CoachPlanRecord[];
+    initialUnread?: Record<string, number>;
 }
+
+type CoachListFilter =
+    | "unread"
+    | "online"
+    | "inWorkout"
+    | "missedWorkout"
+    | "checkInDue"
+    | "recentlyActive"
+    | "premium"
+    | "free";
+
+const COACH_FILTER_OPTIONS: { id: CoachListFilter; label: string }[] = [
+    { id: "unread", label: "Unread" },
+    { id: "online", label: "Online" },
+    { id: "inWorkout", label: "In workout" },
+    { id: "missedWorkout", label: "Missed workout" },
+    { id: "checkInDue", label: "Check-in due" },
+    { id: "recentlyActive", label: "Recently active" },
+    { id: "premium", label: "Premium" },
+    { id: "free", label: "Free" },
+];
 
 const REACTION_EMOJIS = ["👍", "🔥", "💪", "❤️", "😂", "🎯"];
 const CHAT_MEDIA_THUMB =
@@ -108,9 +146,11 @@ export function ChatClient({
     conversations,
     canUseDirectChat = true,
     coachPlans = [],
+    initialUnread = {},
 }: Props) {
     const isCoachUser = currentUserRole === "COACH" || currentUserRole === "SUPER_ADMIN";
     const canViewLastOnline = currentUserRole === "COACH" || currentUserRole === "SUPER_ADMIN";
+    const { refresh: refreshGlobalUnread } = useChatUnread();
     const [tab, setTab] = useState<"direct" | "general">("general");
     const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
     const [isHydrated, setIsHydrated] = useState(false);
@@ -138,6 +178,11 @@ export function ChatClient({
     const [conversationActivity, setConversationActivity] = useState<Record<string, string>>({});
     const [conversationPresence, setConversationPresence] = useState<Record<string, string | null>>({});
     const [activeSessions, setActiveSessions] = useState<Record<string, ActiveSession>>({});
+    const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>(initialUnread);
+    const [coachSearch, setCoachSearch] = useState("");
+    const [coachFilters, setCoachFilters] = useState<CoachListFilter[]>([]);
+    const [loadingOlder, setLoadingOlder] = useState(false);
+    const [hasMoreMessages, setHasMoreMessages] = useState(false);
 
     const isFetchingRef = useRef(false);
 
@@ -169,6 +214,60 @@ export function ChatClient({
     const shouldForceScrollRef = useRef(false);
 
     const messageRowRefs = useRef<Record<string, HTMLDivElement | null>>({});
+    const draftInputRef = useRef("");
+    const activeDraftKeyRef = useRef<string | null>(null);
+    const swipeTouchRef = useRef({ startX: 0, startY: 0, active: false });
+
+    const draftContextKey = useMemo(
+        () => (isHydrated ? getChatDraftKey(tab, selectedConv?.userId ?? null) : null),
+        [isHydrated, tab, selectedConv?.userId]
+    );
+
+    useEffect(() => {
+        if (!isHydrated) return;
+        activeDraftKeyRef.current = draftContextKey;
+        const loaded = draftContextKey ? loadChatDraft(draftContextKey) : "";
+        draftInputRef.current = loaded;
+        setInput(loaded);
+        return () => {
+            const key = activeDraftKeyRef.current;
+            if (key) saveChatDraft(key, draftInputRef.current);
+        };
+    }, [draftContextKey, isHydrated]);
+
+    useEffect(() => {
+        if (!isHydrated || !draftContextKey) return;
+        const timer = window.setTimeout(() => {
+            saveChatDraft(draftContextKey, draftInputRef.current);
+        }, 300);
+        return () => window.clearTimeout(timer);
+    }, [input, draftContextKey, isHydrated]);
+
+    const startReplyTo = useCallback((msg: Message) => {
+        setReplyTo(msg);
+        setActiveMessageId(null);
+        setMenuOpenId(null);
+        setReactionPickerId(null);
+        inputRef.current?.focus();
+    }, []);
+
+    const handleMessageTouchStart = (e: React.TouchEvent) => {
+        if (!window.matchMedia("(max-width: 639px)").matches) return;
+        swipeTouchRef.current = {
+            startX: e.touches[0].clientX,
+            startY: e.touches[0].clientY,
+            active: true,
+        };
+    };
+
+    const handleMessageTouchEnd = (msg: Message) => (e: React.TouchEvent) => {
+        if (!swipeTouchRef.current.active) return;
+        swipeTouchRef.current.active = false;
+        const dx = e.changedTouches[0].clientX - swipeTouchRef.current.startX;
+        const dy = Math.abs(e.changedTouches[0].clientY - swipeTouchRef.current.startY);
+        if (dy > 50) return;
+        if (Math.abs(dx) > 55) startReplyTo(msg);
+    };
 
     const scrollMessagesToBottom = useCallback(() => {
         const container = messagesScrollRef.current;
@@ -191,6 +290,12 @@ export function ChatClient({
         setTab("direct");
         setMobileShowChat(true);
         setActiveMessageId(null);
+        setUnreadCounts((prev) => {
+            if (!prev[conversation.userId]) return prev;
+            const next = { ...prev };
+            delete next[conversation.userId];
+            return next;
+        });
         persistChatSelection("direct", conversation);
     }, [persistChatSelection]);
 
@@ -275,6 +380,21 @@ export function ChatClient({
                 if (data.activity) {
                     setConversationActivity((prev) => ({ ...prev, ...data.activity }));
                 }
+                if (data.unread) {
+                    setUnreadCounts((prev) => {
+                        const next = { ...prev };
+                        if (tab === "direct" && selectedConv) {
+                            delete next[selectedConv.userId];
+                        }
+                        for (const [peerId, count] of Object.entries(data.unread as Record<string, number>)) {
+                            if (tab === "direct" && selectedConv?.userId === peerId) continue;
+                            if (count > 0) next[peerId] = count;
+                            else delete next[peerId];
+                        }
+                        return next;
+                    });
+                }
+                void refreshGlobalUnread();
                 if (canViewLastOnline && data.presence) {
                     setConversationPresence((prev) => ({ ...prev, ...data.presence }));
                 }
@@ -292,7 +412,7 @@ export function ChatClient({
         }, 3000);
 
         return () => clearInterval(interval);
-    }, [isHydrated, canUseDirectChat, canViewLastOnline, isCoachUser]);
+    }, [isHydrated, canUseDirectChat, canViewLastOnline, isCoachUser, tab, selectedConv?.userId, refreshGlobalUnread]);
 
     useEffect(() => {
         if (!activeMessageId && !menuOpenId && !reactionPickerId) return;
@@ -302,6 +422,17 @@ export function ChatClient({
         const row = messageRowRefs.current[targetId];
         row?.scrollIntoView({ block: "nearest", behavior: "smooth" });
     }, [activeMessageId, menuOpenId, reactionPickerId]);
+
+    const parseMessagesResponse = useCallback((data: unknown): { messages: Message[]; hasMore: boolean } => {
+        if (Array.isArray(data)) {
+            return { messages: data as Message[], hasMore: false };
+        }
+        const payload = data as { messages?: Message[]; hasMore?: boolean };
+        return {
+            messages: payload.messages ?? [],
+            hasMore: Boolean(payload.hasMore),
+        };
+    }, []);
 
     /* ─── Fetch Messages ────────────────────────────── */
     const fetchMessages = useCallback(async () => {
@@ -316,20 +447,71 @@ export function ChatClient({
             const res = await fetch(url);
             if (res.ok) {
                 const data = await res.json();
-                setMessages(data);
+                const { messages: fetched, hasMore } = parseMessagesResponse(data);
+                setMessages(fetched);
+                setHasMoreMessages(hasMore);
 
-                if (tab === "direct" && selectedConv && data.length > 0) {
-                    const lastMessage = data[data.length - 1] as Message;
-                    setConversationActivity((prev) => ({
-                        ...prev,
-                        [selectedConv.userId]: lastMessage.createdAt,
-                    }));
+                if (tab === "direct" && selectedConv) {
+                    setUnreadCounts((prev) => {
+                        if (!prev[selectedConv.userId]) return prev;
+                        const next = { ...prev };
+                        delete next[selectedConv.userId];
+                        return next;
+                    });
+                    void refreshGlobalUnread();
+                    if (fetched.length > 0) {
+                        const lastMessage = fetched[fetched.length - 1] as Message;
+                        setConversationActivity((prev) => ({
+                            ...prev,
+                            [selectedConv.userId]: lastMessage.createdAt,
+                        }));
+                    }
                 }
             }
         } finally {
             isFetchingRef.current = false;
         }
-    }, [tab, selectedConv, currentUserId, isHydrated]);
+    }, [tab, selectedConv, isHydrated, parseMessagesResponse, refreshGlobalUnread]);
+
+    const loadOlderMessages = useCallback(async () => {
+        if (loadingOlder || !hasMoreMessages || messages.length === 0) return;
+        const oldest = messages[0];
+        if (!oldest) return;
+
+        setLoadingOlder(true);
+        try {
+            let url = "";
+            if (tab === "general") {
+                url = `/api/messages?general=true&before=${encodeURIComponent(oldest.createdAt)}`;
+            } else if (tab === "direct" && selectedConv) {
+                url = `/api/messages?with=${selectedConv.userId}&before=${encodeURIComponent(oldest.createdAt)}`;
+            } else {
+                return;
+            }
+
+            const container = messagesScrollRef.current;
+            const prevHeight = container?.scrollHeight ?? 0;
+
+            const res = await fetch(url);
+            if (!res.ok) return;
+            const data = await res.json();
+            const { messages: older, hasMore } = parseMessagesResponse(data);
+            if (older.length === 0) {
+                setHasMoreMessages(false);
+                return;
+            }
+
+            setMessages((prev) => [...older, ...prev]);
+            setHasMoreMessages(hasMore);
+
+            requestAnimationFrame(() => {
+                if (!container) return;
+                container.scrollTop = container.scrollHeight - prevHeight;
+            });
+        } finally {
+            setLoadingOlder(false);
+        }
+    }, [loadingOlder, hasMoreMessages, messages, tab, selectedConv, parseMessagesResponse]);
 
     useEffect(() => {
         fetchMessages();
@@ -479,6 +661,53 @@ export function ChatClient({
         );
     }, [conversations, conversationActivity]);
 
+    const toggleCoachFilter = (filter: CoachListFilter) => {
+        setCoachFilters((prev) =>
+            prev.includes(filter) ? prev.filter((f) => f !== filter) : [...prev, filter]
+        );
+    };
+
+    const filteredConversations = useMemo(() => {
+        if (!isCoachUser) return sortedConversations;
+
+        const query = coachSearch.trim().toLowerCase();
+        return sortedConversations.filter((conv) => {
+            if (query) {
+                const haystack = `${conv.name} ${conv.email ?? ""}`.toLowerCase();
+                if (!haystack.includes(query)) return false;
+            }
+
+            if (coachFilters.length === 0) return true;
+
+            return coachFilters.every((filter) => {
+                const presence = getPresenceIndicator(resolveLastActive(conv.userId));
+                const session = activeSessions[conv.userId];
+                const unread = unreadCounts[conv.userId] ?? 0;
+
+                switch (filter) {
+                    case "unread":
+                        return unread > 0;
+                    case "online":
+                        return presence.level === "online";
+                    case "inWorkout":
+                        return Boolean(session);
+                    case "missedWorkout":
+                        return Boolean(conv.missedWorkout);
+                    case "checkInDue":
+                        return Boolean(conv.checkInDue);
+                    case "recentlyActive":
+                        return presence.level === "online" || presence.level === "recent";
+                    case "premium":
+                        return conv.role === "PREMIUM";
+                    case "free":
+                        return conv.role === "FREE";
+                    default:
+                        return true;
+                }
+            });
+        });
+    }, [sortedConversations, isCoachUser, coachSearch, coachFilters, activeSessions, unreadCounts, resolveLastActive]);
+
     const lastOutgoingMessageId = useMemo(() => {
         if (tab !== "direct") return null;
         for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -493,6 +722,7 @@ export function ChatClient({
     /* ─── Input Handling ────────────────────────────── */
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const val = e.target.value;
+        draftInputRef.current = val;
         setInput(val);
 
         if (tab === "direct" && selectedConv && !selectedConv.isDeleted) {
@@ -576,7 +806,9 @@ export function ChatClient({
         }
 
         // Instantly clear inputs for zero latency feel
+        draftInputRef.current = "";
         setInput("");
+        if (draftContextKey) clearChatDraft(draftContextKey);
         setStagedMedia(null);
         setReplyTo(null);
 
@@ -802,6 +1034,24 @@ export function ChatClient({
         return null;
     };
 
+    const renderBroadcastLabel = (msg: Message, isMine: boolean) => {
+        if (msg.actionType !== "BROADCAST") return null;
+        return (
+            <div className={cn(
+                "flex items-center gap-1.5 mb-1.5 text-[9px] font-black uppercase tracking-widest",
+                isMine ? "text-white/80" : "text-warning"
+            )}>
+                <Megaphone className="w-3 h-3 shrink-0" />
+                Coach broadcast
+            </div>
+        );
+    };
+
+    const directUnreadTotal = useMemo(
+        () => Object.values(unreadCounts).reduce((sum, count) => sum + count, 0),
+        [unreadCounts]
+    );
+
     /* ─── Sidebar Content ────────────────────────────── */
     const renderSidebar = () => (
         <div className="w-full sm:w-72 border-r border-surface-border flex flex-col bg-surface-card h-full min-h-0">
@@ -810,17 +1060,22 @@ export function ChatClient({
                 <div className="flex gap-1 bg-surface-muted p-1 rounded-xl flex-1">
                     <button
                         onClick={() => handleTabChange("direct")}
-                        className={cn("flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[11px] font-bold transition-all",
+                        className={cn("flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[11px] font-bold transition-all relative",
                             tab === "direct" ? "bg-surface-card text-fg shadow-sm" : "text-fg-muted hover:text-fg")}
                     >
                         <MessageSquare className="w-3 h-3" /> Direct
+                        {directUnreadTotal > 0 && (
+                            <span className="min-w-[1rem] h-4 px-1 rounded-full bg-brand-500 text-white text-[9px] font-black flex items-center justify-center">
+                                {directUnreadTotal > 99 ? "99+" : directUnreadTotal}
+                            </span>
+                        )}
                     </button>
                     <button
                         onClick={() => handleTabChange("general")}
                         className={cn("flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[11px] font-bold transition-all",
                             tab === "general" ? "bg-surface-card text-fg shadow-sm" : "text-fg-muted hover:text-fg")}
                     >
-                        <Globe className="w-3 h-3" /> Global
+                        <Globe className="w-3 h-3" /> Community
                     </button>
                 </div>
                 <Link href="/settings" className="btn-icon shrink-0 sm:hidden" aria-label="Settings">
@@ -830,20 +1085,81 @@ export function ChatClient({
 
             {/* Conversation List */}
             {tab === "direct" && (
+                <div className="flex-1 flex flex-col min-h-0">
+                    {isCoachUser && canUseDirectChat && (
+                        <div className="p-2 border-b border-surface-border space-y-2 shrink-0">
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-fg-subtle" />
+                                <input
+                                    type="search"
+                                    value={coachSearch}
+                                    onChange={(e) => setCoachSearch(e.target.value)}
+                                    placeholder="Search name or email..."
+                                    className="input w-full h-9 pl-9 text-xs"
+                                />
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                                {COACH_FILTER_OPTIONS.map((option) => (
+                                    <button
+                                        key={option.id}
+                                        type="button"
+                                        onClick={() => toggleCoachFilter(option.id)}
+                                        className={cn(
+                                            "px-2 py-1 rounded-lg text-[9px] font-bold uppercase tracking-wide border transition-colors",
+                                            coachFilters.includes(option.id)
+                                                ? "bg-brand-500/10 border-brand-500/30 text-brand-400"
+                                                : "border-surface-border text-fg-muted hover:bg-surface-muted"
+                                        )}
+                                    >
+                                        {option.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                 <div className="flex-1 overflow-y-auto p-2 space-y-0.5 no-scrollbar">
                     {!canUseDirectChat ? (
                         <div className="p-6 text-center space-y-3">
                             <p className="text-sm font-bold text-fg">Direct coach chat is Premium</p>
-                            <p className="text-xs text-fg-muted">Redeem an access code from your coach in Settings to unlock 1-on-1 messaging. Global chat is still available.</p>
+                            <p className="text-xs text-fg-muted">Redeem an access code from your coach in Settings to unlock 1-on-1 messaging. Community chat is still available.</p>
                         </div>
-                    ) : sortedConversations.length === 0 ? (
-                        <p className="text-xs text-fg-muted text-center p-6">No conversations yet</p>
+                    ) : currentUserRole === "PREMIUM" && conversations.length === 0 ? (
+                        <div className="p-6 text-center space-y-4">
+                            <div className="w-12 h-12 rounded-2xl bg-brand-500/10 flex items-center justify-center mx-auto">
+                                <MessageSquare className="w-6 h-6 text-brand-400" />
+                            </div>
+                            <div className="space-y-2">
+                                <p className="text-sm font-bold text-fg">No coach assigned yet</p>
+                                <p className="text-xs text-fg-muted leading-relaxed">
+                                    Your Premium account is active, but you haven&apos;t been linked to a coach yet. Nothing is broken — once your coach assigns you, direct messaging will appear here.
+                                </p>
+                            </div>
+                            <div className="flex flex-col gap-2">
+                                <Link href="/settings" className="btn-primary text-xs h-10">
+                                    Redeem Coach Code
+                                </Link>
+                                <a
+                                    href="mailto:support@fitcoachpro.app"
+                                    className="btn-secondary text-xs h-10"
+                                >
+                                    Contact Support
+                                </a>
+                            </div>
+                        </div>
+                    ) : filteredConversations.length === 0 ? (
+                        <p className="text-xs text-fg-muted text-center p-6">
+                            {coachSearch || coachFilters.length > 0 ? "No conversations match your search or filters." : "No conversations yet"}
+                        </p>
                     ) : (
-                        sortedConversations.map((conv) => {
+                        filteredConversations.map((conv) => {
                             const session = activeSessions[conv.userId];
                             const presence = canViewLastOnline && !session
                                 ? getPresenceIndicator(resolveLastActive(conv.userId))
                                 : null;
+                            const unread = unreadCounts[conv.userId] ?? 0;
+                            const lastMsgAt = conversationActivity[conv.userId] ?? conv.lastMessageAt ?? null;
+                            const activityLabel = formatConversationActivityTime(lastMsgAt);
 
                             return (
                             <button
@@ -901,9 +1217,21 @@ export function ChatClient({
                                             nameClassName="text-sm font-bold truncate"
                                             className="min-w-0"
                                         />
-                                        {["COACH", "SUPER_ADMIN"].includes(conv.role) && (
-                                            <Star className="w-3 h-3 text-brand-400 fill-brand-400 shrink-0" />
-                                        )}
+                                        <div className="flex items-center gap-1 shrink-0">
+                                            {activityLabel && (
+                                                <span className="text-[9px] text-fg-subtle font-medium whitespace-nowrap">
+                                                    {activityLabel}
+                                                </span>
+                                            )}
+                                            {unread > 0 && (
+                                                <span className="min-w-[1.125rem] h-[1.125rem] px-1 rounded-full bg-brand-500 text-white text-[9px] font-black flex items-center justify-center">
+                                                    {unread > 99 ? "99+" : unread}
+                                                </span>
+                                            )}
+                                            {["COACH", "SUPER_ADMIN"].includes(conv.role) && (
+                                                <Star className="w-3 h-3 text-brand-400 fill-brand-400 shrink-0" />
+                                            )}
+                                        </div>
                                     </div>
                                     {canViewLastOnline && session ? (
                                         <p className="text-[10px] text-success font-bold truncate flex items-center gap-1">
@@ -933,6 +1261,7 @@ export function ChatClient({
                         </div>
                     )}
                 </div>
+                </div>
             )}
 
             {tab === "general" && (
@@ -940,7 +1269,18 @@ export function ChatClient({
                     <div>
                         <Globe className="w-10 h-10 text-brand-400/30 mx-auto mb-3" />
                         <p className="text-sm font-bold text-fg-muted">Community Chat</p>
-                        <p className="text-[10px] text-fg-subtle mt-1 mb-6">Open to all members</p>
+                        <p className="text-[10px] text-fg-subtle mt-1 mb-4">Public conversations between all members</p>
+                        {isAdmin && (
+                            <div className="text-left bg-surface-muted/40 border border-surface-border rounded-xl p-3 space-y-2">
+                                <div className="flex items-center gap-2 text-brand-400">
+                                    <Shield className="w-3.5 h-3.5" />
+                                    <span className="text-[10px] font-black uppercase tracking-widest">Moderation</span>
+                                </div>
+                                <p className="text-[10px] text-fg-muted leading-relaxed">
+                                    Tap any message to delete inappropriate content. Pinned messages appear at the top for everyone. Official platform announcements appear separately as popups — not in this feed.
+                                </p>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
@@ -991,8 +1331,8 @@ export function ChatClient({
                             <>
                                 <Globe className="w-5 h-5 text-brand-400" />
                                 <div>
-                                    <p className="font-bold text-sm">General Chat</p>
-                                    <p className="text-[10px] text-fg-muted font-medium">Community</p>
+                                    <p className="font-bold text-sm">Community Chat</p>
+                                    <p className="text-[10px] text-fg-muted font-medium">Public · all members</p>
                                 </div>
                             </>
                         ) : selectedConv ? (
@@ -1027,6 +1367,7 @@ export function ChatClient({
                                         disabled={selectedConv.isDeleted}
                                         nameClassName="font-bold text-sm"
                                     />
+                                    <p className="text-[10px] text-fg-muted font-medium">Direct message · private</p>
                                     {peerTyping ? (
                                         <p className="text-[10px] text-brand-400 font-medium flex items-center gap-1.5">
                                             typing
@@ -1039,9 +1380,7 @@ export function ChatClient({
                                         </p>
                                     ) : canViewLastOnline && selectedPresence ? (
                                         <p className="text-[10px] text-fg-subtle font-medium truncate">{selectedPresence.label}</p>
-                                    ) : (
-                                        <p className="text-[10px] text-fg-muted font-medium">{roleLabels[selectedConv.role] ?? selectedConv.role}</p>
-                                    )}
+                                    ) : null}
                                 </div>
                             </>
                         ) : (
@@ -1108,6 +1447,25 @@ export function ChatClient({
                         }
                     }}
                 >
+                    {hasMoreMessages && messages.length > 0 && (
+                        <div className="flex justify-center pb-2">
+                            <button
+                                type="button"
+                                onClick={() => void loadOlderMessages()}
+                                disabled={loadingOlder}
+                                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-surface-muted text-fg-muted hover:text-fg hover:bg-surface-elevated transition-colors disabled:opacity-50"
+                            >
+                                {loadingOlder ? (
+                                    <>
+                                        <Loader2 className="w-3 h-3 animate-spin" />
+                                        Loading...
+                                    </>
+                                ) : (
+                                    "Load older messages"
+                                )}
+                            </button>
+                        </div>
+                    )}
                     {messages.length === 0 ? (
                         <div className="flex items-center justify-center h-full">
                             <div className="text-center">
@@ -1124,7 +1482,7 @@ export function ChatClient({
 
                             // Show date separator
                             const prevMsg = idx > 0 ? messages[idx - 1] : null;
-                            const showDate = !prevMsg || new Date(msg.createdAt).toDateString() !== new Date(prevMsg.createdAt).toDateString();
+                            const showDate = shouldShowMessageDateGroup(msg.createdAt, prevMsg?.createdAt);
 
                             const renderMessageActions = () => {
                                 if (isEditing) return null;
@@ -1153,7 +1511,7 @@ export function ChatClient({
                             const renderActionButtons = (popoverAlign: string) => (
                                 <>
                                         <button
-                                            onClick={(e) => { e.stopPropagation(); setReplyTo(msg); inputRef.current?.focus(); }}
+                                            onClick={(e) => { e.stopPropagation(); startReplyTo(msg); }}
                                             className="btn-icon w-7 h-7 rounded-lg"
                                             title="Reply"
                                         >
@@ -1256,7 +1614,7 @@ export function ChatClient({
                                         <div className="flex items-center gap-3 py-3">
                                             <div className="flex-1 h-px bg-surface-border" />
                                             <span className="text-[10px] font-bold text-fg-subtle uppercase tracking-widest">
-                                                {new Date(msg.createdAt).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                                                {getMessageDateGroupLabel(msg.createdAt)}
                                             </span>
                                             <div className="flex-1 h-px bg-surface-border" />
                                         </div>
@@ -1264,7 +1622,9 @@ export function ChatClient({
 
                                     <div
                                         ref={(el) => { messageRowRefs.current[msg.id] = el; }}
-                                        className={cn("flex items-end gap-2 group w-full", isMine && "justify-end")}
+                                        className={cn("flex items-end gap-2 group w-full touch-pan-y", isMine && "justify-end")}
+                                        onTouchStart={handleMessageTouchStart}
+                                        onTouchEnd={handleMessageTouchEnd(msg)}
                                         onClick={(e) => {
                                             if (window.matchMedia("(min-width: 640px)").matches) return;
                                             const target = e.target as HTMLElement;
@@ -1334,9 +1694,13 @@ export function ChatClient({
                                             ) : msg.type === "TEXT" ? (
                                                 <div className={cn(
                                                      isMine ? "bubble-sent break-words" : "bubble-received break-words",
+                                                     msg.actionType === "BROADCAST" && (isMine
+                                                        ? "ring-2 ring-warning/40 bg-warning/20"
+                                                        : "ring-2 ring-warning/30 bg-warning/5 border border-warning/20"),
                                                      (!isMine && msg.mentions?.includes(currentUserId)) && "border-l-4 border-l-warning bg-warning/5 border-y-warning/20 border-r-warning/20 shadow-[0_0_12px_rgba(245,158,11,0.15)] text-fg",
                                                      msg.isPinned && "ring-1 ring-brand-400/30"
                                                  )}>
+                                                    {renderBroadcastLabel(msg, isMine)}
                                                     {renderContent(msg.content || "")}
                                                     {msg.updatedAt && (new Date(msg.updatedAt).getTime() - new Date(msg.createdAt).getTime() > 1000) && (
                                                         <span className="text-[9px] opacity-50 ml-2 italic">(edited)</span>
@@ -1441,7 +1805,7 @@ export function ChatClient({
                         <p className="text-[10px] text-fg-subtle mt-0.5">This user&apos;s account has been deleted. You cannot send new messages.</p>
                     </div>
                 ) : (
-                    <div className="px-4 sm:px-5 py-3 border-t border-surface-border bg-surface-card shrink-0">
+                    <div className="px-4 sm:px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-surface-border bg-surface-card shrink-0">
                         {isCoachUser && tab === "direct" && selectedConv && !selectedConv.isDeleted && (
                             <div className="mb-2">
                                 <CoachChatTools

@@ -41,6 +41,7 @@ interface Props {
         notifyOnWorkoutFeedback?: boolean;
         notifyOnMissedCheckIn?: boolean;
         notifyOnMissedWorkout?: boolean;
+        notifyOnClientMessage?: boolean;
         notifyOnWorkoutTime?: string | null;
         notifyOnCheckInTime?: string | null;
         notifyOnMetricUpdateTime?: string | null;
@@ -116,6 +117,7 @@ export function SettingsClient({ user }: Props) {
     const [notifyOnWorkoutFeedback, setNotifyOnWorkoutFeedback] = useState(user.notifyOnWorkoutFeedback ?? true);
     const [notifyOnMissedCheckIn, setNotifyOnMissedCheckIn] = useState(user.notifyOnMissedCheckIn ?? true);
     const [notifyOnMissedWorkout, setNotifyOnMissedWorkout] = useState(user.notifyOnMissedWorkout ?? true);
+    const [notifyOnClientMessage, setNotifyOnClientMessage] = useState(user.notifyOnClientMessage ?? true);
     const [notifyOnWorkoutTime, setNotifyOnWorkoutTime] = useState(user.notifyOnWorkoutTime ?? "");
     const [notifyOnCheckInTime, setNotifyOnCheckInTime] = useState(user.notifyOnCheckInTime ?? "");
     const [notifyOnMetricUpdateTime, setNotifyOnMetricUpdateTime] = useState(user.notifyOnMetricUpdateTime ?? "");
@@ -137,6 +139,7 @@ export function SettingsClient({ user }: Props) {
             payload.notifyOnMetricUpdate = notifyOnMetricUpdate;
             payload.notifyOnMissedCheckIn = notifyOnMissedCheckIn;
             payload.notifyOnMissedWorkout = notifyOnMissedWorkout;
+            payload.notifyOnClientMessage = notifyOnClientMessage;
             payload.notifyOnWorkoutTime = notifyOnWorkout && notifyOnWorkoutTime ? notifyOnWorkoutTime : null;
             payload.notifyOnCheckInTime = notifyOnCheckIn && notifyOnCheckInTime ? notifyOnCheckInTime : null;
             payload.notifyOnMetricUpdateTime = notifyOnMetricUpdate && notifyOnMetricUpdateTime ? notifyOnMetricUpdateTime : null;
@@ -159,6 +162,7 @@ export function SettingsClient({ user }: Props) {
         notifyOnMetricUpdate,
         notifyOnMissedCheckIn,
         notifyOnMissedWorkout,
+        notifyOnClientMessage,
         notifyOnWorkoutTime,
         notifyOnCheckInTime,
         notifyOnMetricUpdateTime,
@@ -746,6 +750,12 @@ export function SettingsClient({ user }: Props) {
                         {showCoachNotifications && (
                             <div className="space-y-3">
                                 <p className="text-xs font-black uppercase tracking-widest text-fg-subtle">Coach alerts</p>
+                                <NotificationToggle
+                                    label="Client sends a direct message"
+                                    description="When a client messages you in chat."
+                                    checked={notifyOnClientMessage}
+                                    onChange={setNotifyOnClientMessage}
+                                />
                                 <CoachNotificationToggle
                                     label="Client completes a workout"
                                     description="When a client finishes a logged session."

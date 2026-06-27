@@ -3,7 +3,7 @@ import { createNotification, notifyClientOfCoachMessage, userWantsNotification }
 import { requireCoachCanEditClient } from "@/lib/apiAuth";
 import type { User } from "@prisma/client";
 
-export type ChatActionType = "PLAN_ASSIGNED" | "CHECKIN_REQUEST";
+export type ChatActionType = "PLAN_ASSIGNED" | "CHECKIN_REQUEST" | "BROADCAST";
 
 let messageActionColumnsReady = false;
 
@@ -196,7 +196,12 @@ export async function broadcastCoachMessage(
 
     const sent: string[] = [];
     for (const clientId of targetIds) {
-        await createCoachDirectMessage({ coach, clientId, content });
+        await createCoachDirectMessage({
+            coach,
+            clientId,
+            content,
+            actionType: "BROADCAST",
+        });
         sent.push(clientId);
     }
 

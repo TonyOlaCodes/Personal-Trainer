@@ -184,18 +184,18 @@ export function CoachChatTools({ conversations, coachPlans, selectedClientId, on
             </div>
 
             {modal && (
-                <ModalOverlay onClose={closeModal}>
+                <ModalOverlay onClose={closeModal} className="pb-20 md:pb-4">
                     <div
-                        className="bg-surface-card w-full sm:max-w-md max-h-[85vh] rounded-t-[2rem] sm:rounded-3xl border border-surface-border shadow-glow-brand-lg overflow-hidden animate-slide-up flex flex-col"
+                        className="bg-surface-card w-full sm:max-w-md max-h-[min(85dvh,calc(100dvh-5.5rem))] sm:max-h-[85vh] rounded-t-[2rem] sm:rounded-3xl border border-surface-border shadow-glow-brand-lg overflow-hidden animate-slide-up flex flex-col mb-0"
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div className="flex items-center justify-between gap-4 px-5 py-4 border-b border-surface-border shrink-0">
                             <div className="min-w-0">
-                                <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">Coach Chat</p>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">Coach Broadcast</p>
                                 <h3 className="text-lg font-black text-fg truncate">
                                     {modal === "plan" && "Send Workout Plan"}
                                     {modal === "checkin" && "Request Check-In"}
-                                    {modal === "broadcast" && "Broadcast Message"}
+                                    {modal === "broadcast" && "Broadcast to Clients"}
                                 </h3>
                             </div>
                             <button type="button" onClick={closeModal} className="btn-icon shrink-0">
@@ -312,7 +312,7 @@ export function CoachChatTools({ conversations, coachPlans, selectedClientId, on
                             )}
                         </div>
 
-                        <div className="px-5 py-4 border-t border-surface-border shrink-0 flex gap-2">
+                        <div className="px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] border-t border-surface-border shrink-0 flex gap-2 bg-surface-card">
                             <button type="button" onClick={closeModal} className="btn-secondary flex-1">
                                 Cancel
                             </button>
