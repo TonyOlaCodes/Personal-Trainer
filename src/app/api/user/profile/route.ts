@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { normalizeCalories, normalizeSleepHours, normalizeSteps, updateDailyMetricTargets } from "@/lib/dailyMetrics";
 import { ensureNotificationPreferenceColumns } from "@/lib/notifications";
+import { ensureUserProfileColumns } from "@/lib/userProfile";
 import { normalizeNotifyTime } from "@/lib/coachNotificationSchedule";
 import { normalizeStoredUploadUrl, withResolvedAvatar } from "@/lib/uploadUrls";
 import { z } from "zod";
@@ -30,6 +31,8 @@ const profileSchema = z.object({
     targetSteps: z.number().nullable().optional(),
     targetSleepHours: z.number().nullable().optional(),
     hiddenGoals: z.array(z.string()).optional(),
+    bio: z.string().max(280).nullable().optional(),
+    isPrivateProfile: z.boolean().optional(),
     notifyOnWorkout: z.boolean().optional(),
     notifyOnCheckIn: z.boolean().optional(),
     notifyOnMetricUpdate: z.boolean().optional(),
@@ -61,6 +64,7 @@ export async function PATCH(req: Request) {
                 : undefined;
 
         await ensureNotificationPreferenceColumns();
+        await ensureUserProfileColumns();
 
         let updated;
         try {
@@ -76,6 +80,8 @@ export async function PATCH(req: Request) {
                     ...(parsed.targetWeightKg !== undefined && { targetWeightKg: Math.round(parsed.targetWeightKg * 100) / 100 }),
                     ...(parsed.weightKg !== undefined && { weightKg: Math.round(parsed.weightKg * 100) / 100 }),
                     ...(parsed.hiddenGoals !== undefined && { hiddenGoals: parsed.hiddenGoals }),
+                    ...(parsed.bio !== undefined && { bio: parsed.bio?.trim() ? parsed.bio.trim() : null }),
+                    ...(parsed.isPrivateProfile !== undefined && { isPrivateProfile: parsed.isPrivateProfile }),
                     ...(parsed.notifyOnWorkout !== undefined && { notifyOnWorkout: parsed.notifyOnWorkout }),
                     ...(parsed.notifyOnCheckIn !== undefined && { notifyOnCheckIn: parsed.notifyOnCheckIn }),
                     ...(parsed.notifyOnMetricUpdate !== undefined && { notifyOnMetricUpdate: parsed.notifyOnMetricUpdate }),

@@ -16,6 +16,7 @@ import { DEFAULT_MISSED_NOTIFY_TIME } from "@/lib/coachNotificationSchedule";
 
 interface Props {
     user: {
+        id: string;
         name?: string | null;
         email: string;
         role: string;
@@ -45,6 +46,8 @@ interface Props {
         notifyOnMetricUpdateTime?: string | null;
         notifyOnMissedCheckInTime?: string | null;
         notifyOnMissedWorkoutTime?: string | null;
+        bio?: string | null;
+        isPrivateProfile?: boolean;
     };
 }
 
@@ -71,6 +74,8 @@ export function SettingsClient({ user }: Props) {
 
     // Profile form states
     const [name, setName] = useState(user.name || "");
+    const [bio, setBio] = useState(user.bio || "");
+    const [isPrivateProfile, setIsPrivateProfile] = useState(user.isPrivateProfile ?? false);
     const [avatarUrl, setAvatarUrl] = useState(user.avatarUrl || "");
     const [profileSaving, setProfileSaving] = useState(false);
     const [profileSaved, setProfileSaved] = useState(false);
@@ -199,7 +204,7 @@ export function SettingsClient({ user }: Props) {
         return () => window.clearTimeout(timer);
     }, [activeTab, buildNotificationPayload, router]);
 
-    const saveProfileFields = useCallback(async (fields: { name?: string; avatarUrl?: string }) => {
+    const saveProfileFields = useCallback(async (fields: { name?: string; avatarUrl?: string; bio?: string | null; isPrivateProfile?: boolean }) => {
         setProfileSaving(true);
         setProfileSaved(false);
         try {
@@ -231,11 +236,16 @@ export function SettingsClient({ user }: Props) {
         }
 
         const timer = window.setTimeout(() => {
-            void saveProfileFields({ name, avatarUrl: avatarUrl || "" });
+            void saveProfileFields({
+                name,
+                avatarUrl: avatarUrl || "",
+                bio: bio.trim() ? bio.trim() : null,
+                isPrivateProfile,
+            });
         }, 450);
 
         return () => window.clearTimeout(timer);
-    }, [activeTab, name, avatarUrl, saveProfileFields]);
+    }, [activeTab, name, avatarUrl, bio, isPrivateProfile, saveProfileFields]);
 
     // Access code state
     const [secretCode, setSecretCode] = useState("");
@@ -437,6 +447,47 @@ export function SettingsClient({ user }: Props) {
                                 <label className="text-[10px] font-black text-fg-subtle uppercase tracking-widest px-1">Email</label>
                                 <input type="email" className="input h-12 bg-surface-muted/30 cursor-not-allowed text-fg-subtle" defaultValue={user.email} disabled />
                             </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black text-fg-subtle uppercase tracking-widest px-1">Bio</label>
+                            <textarea
+                                className="input min-h-[96px] text-sm font-medium resize-y"
+                                placeholder="Tell others a little about your training (optional)"
+                                maxLength={280}
+                                value={bio}
+                                onChange={(e) => setBio(e.target.value)}
+                            />
+                            <p className="text-[10px] text-fg-subtle px-1">{bio.length}/280</p>
+                        </div>
+
+                        <div className="p-5 rounded-2xl border border-surface-border bg-surface-muted/30 space-y-4">
+                            <div className="flex items-start justify-between gap-4">
+                                <div>
+                                    <p className="text-sm font-black text-fg">Private profile</p>
+                                    <p className="text-xs text-fg-muted mt-1">
+                                        Hide your profile and public plans from other users. Your assigned coach and admins can still view them.
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    role="switch"
+                                    aria-checked={isPrivateProfile}
+                                    onClick={() => setIsPrivateProfile((prev) => !prev)}
+                                    className={cn(
+                                        "relative w-11 h-6 rounded-full transition-colors shrink-0",
+                                        isPrivateProfile ? "bg-brand-500" : "bg-surface-muted border border-surface-border"
+                                    )}
+                                >
+                                    <span className={cn(
+                                        "absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform",
+                                        isPrivateProfile && "translate-x-5"
+                                    )} />
+                                </button>
+                            </div>
+                            <Link href={`/profile/${user.id}`} className="text-xs font-bold text-brand-400 hover:text-brand-300">
+                                View your public profile →
+                            </Link>
                         </div>
 
                         {user.role === "FREE" && (

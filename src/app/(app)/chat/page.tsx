@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getDirectMessageActivity } from "@/lib/chatActivity";
 import { withResolvedAvatar } from "@/lib/uploadUrls";
+import { dedupeCoachPlansByName } from "@/lib/coachPlans";
 import { ChatClient } from "./ChatClient";
 
 export const metadata = { title: "Chat" };
@@ -75,6 +76,16 @@ export default async function ChatPage() {
         }));
     }
 
+    let coachPlans: { id: string; name: string; type?: string }[] = [];
+    if (user.role === "COACH" || user.role === "SUPER_ADMIN") {
+        const rawPlans = await prisma.plan.findMany({
+            where: user.role === "COACH" ? { creatorId: user.id } : {},
+            select: { id: true, name: true, type: true, updatedAt: true, creatorId: true },
+            orderBy: { updatedAt: "desc" },
+        });
+        coachPlans = dedupeCoachPlansByName(rawPlans).map(({ id, name, type }) => ({ id, name, type }));
+    }
+
     if (conversations.length > 0 && user.role !== "FREE") {
         const activity = await getDirectMessageActivity(
             user.id,
@@ -93,6 +104,7 @@ export default async function ChatPage() {
                 currentUserRole={user.role}
                 conversations={conversations}
                 canUseDirectChat={user.role !== "FREE"}
+                coachPlans={coachPlans}
             />
         </div>
     );

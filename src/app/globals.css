@@ -178,10 +178,10 @@
 
   /* ── Chat bubbles ── */
   .bubble-sent {
-    @apply bg-gradient-to-br from-brand-500 to-indigo-500 text-white rounded-2xl rounded-br-sm px-4 py-2.5 max-w-xs text-sm;
+    @apply bg-gradient-to-br from-brand-500 to-indigo-500 text-white rounded-2xl rounded-br-sm px-4 py-2.5 max-w-full text-sm;
   }
   .bubble-received {
-    @apply bg-surface-muted text-fg rounded-2xl rounded-bl-sm px-4 py-2.5 max-w-xs text-sm border border-surface-border;
+    @apply bg-surface-muted text-fg rounded-2xl rounded-bl-sm px-4 py-2.5 max-w-full text-sm border border-surface-border;
   }
 }
 

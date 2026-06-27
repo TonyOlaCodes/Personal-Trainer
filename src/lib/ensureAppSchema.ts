@@ -7,6 +7,10 @@ import { ensureExerciseDictionary } from "@/lib/exerciseDictionary";
 import { ensureUnitSystemColumn } from "@/lib/units";
 import { ensureNotificationPreferenceColumns, ensureNotificationsTable, ensurePendingCoachNotificationsTable } from "@/lib/notifications";
 import { ensurePinnedExercisesColumn } from "@/lib/pinnedExercises";
+import { ensureUserProfileColumns } from "@/lib/userProfile";
+import { ensureChatTypingTable } from "@/lib/chatTyping";
+import { ensureMessageActionColumns } from "@/lib/coachChat";
+import { ensureAnnouncementsTable } from "@/lib/announcements";
 
 let appSchemaReady = false;
 let appSchemaPromise: Promise<void> | null = null;
@@ -29,6 +33,10 @@ export async function ensureAppSchema() {
             ensureNotificationsTable(),
             ensurePendingCoachNotificationsTable(),
             ensurePinnedExercisesColumn(),
+            ensureUserProfileColumns(),
+            ensureChatTypingTable(),
+            ensureMessageActionColumns(),
+            ensureAnnouncementsTable(),
         ]);
         appSchemaReady = true;
     })();

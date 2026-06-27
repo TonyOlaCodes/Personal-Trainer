@@ -182,18 +182,15 @@ export function CoachCalendarClient({ clients, selectedClientId, selectedClientN
 
     return (
         <div className="space-y-6 animate-fade-in">
-            <div className="flex flex-col sm:flex-row sm:items-end gap-4 justify-between">
-                <div className="space-y-1">
-                    <p className="text-[10px] font-black tracking-[0.2em] text-brand-400 uppercase">Client Schedule</p>
-                    <h2 className="text-2xl font-black text-fg tracking-tight">{selectedClientName}</h2>
-                </div>
-                <div className="relative min-w-[200px] max-w-xs">
+            <div className="space-y-2">
+                <p className="text-[10px] font-black tracking-[0.2em] text-brand-400 uppercase">Client Schedule</p>
+                <div className="relative w-full max-w-md">
                     <label htmlFor="coach-calendar-client" className="sr-only">Select client</label>
                     <select
                         id="coach-calendar-client"
                         value={selectedClientId ?? ""}
                         onChange={(e) => onClientChange(e.target.value)}
-                        className="w-full appearance-none pl-4 pr-10 py-3 rounded-xl bg-surface-card border border-surface-border text-sm font-bold text-fg focus:outline-none focus:ring-2 focus:ring-brand-400/40"
+                        className="w-full appearance-none pl-4 pr-11 py-3.5 rounded-xl bg-surface-card border border-surface-border text-xl sm:text-2xl font-black text-fg tracking-tight focus:outline-none focus:ring-2 focus:ring-brand-400/40"
                     >
                         {clients.map((c) => (
                             <option key={c.id} value={c.id}>
@@ -201,7 +198,7 @@ export function CoachCalendarClient({ clients, selectedClientId, selectedClientN
                             </option>
                         ))}
                     </select>
-                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-subtle pointer-events-none" />
+                    <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-fg-subtle pointer-events-none" />
                 </div>
             </div>
 

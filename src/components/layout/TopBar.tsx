@@ -32,6 +32,19 @@ function CoachMessageNotificationText({ message }: { message: string }) {
     );
 }
 
+function AnnouncementNotificationText({ message }: { message: string }) {
+    const match = message.match(/^Message from (.+?):/);
+    if (!match) return <span>{message}</span>;
+    const rest = message.slice(match[0].length).trim();
+    return (
+        <>
+            <span className="text-fg-muted font-medium">Message from </span>
+            <span className="font-bold text-fg">{match[1]}</span>
+            {rest && <span className="text-fg-muted font-medium"> — {rest}</span>}
+        </>
+    );
+}
+
 function LiveTodayHeader() {
     const now = useCurrentDate();
     return (
@@ -263,6 +276,8 @@ export function TopBar({ title, subtitle, showToday = false, streak, hideSearch 
                                                         <p className={cn("text-sm break-words min-w-0 flex-1", !n.read ? "font-bold text-fg" : "font-medium text-fg-muted")}>
                                                             {n.type === NOTIFICATION_TYPES.NEW_CHAT_MESSAGE ? (
                                                                 <CoachMessageNotificationText message={n.message} />
+                                                            ) : n.type === NOTIFICATION_TYPES.GLOBAL_ANNOUNCEMENT ? (
+                                                                <AnnouncementNotificationText message={n.message} />
                                                             ) : (
                                                                 n.message
                                                             )}

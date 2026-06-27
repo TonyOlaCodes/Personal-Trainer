@@ -3,15 +3,19 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
     Send, Image as ImageIcon, Globe, MessageSquare, Star, X, Pencil, Trash2,
-    Check, MoreVertical, Reply, Pin, SmilePlus, CheckCheck, ChevronDown, AtSign, Settings
+    Check, MoreVertical, Reply, Pin, SmilePlus, CheckCheck, ChevronDown, AtSign, Settings,
+    Dumbbell, ClipboardList, Activity
 } from "lucide-react";
 import Link from "next/link";
-import { getInitials, formatRelative, cn, roleLabels } from "@/lib/utils";
+import { getInitials, formatRelative, cn, roleLabels, getRoleNameClass } from "@/lib/utils";
 import { getPresenceIndicator } from "@/lib/userPresence";
 import { sortConversationsByActivity } from "@/lib/chatActivity";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { uploadMediaFile } from "@/lib/compressImage";
 import { MediaLightbox } from "@/components/shared/MediaLightbox";
+import { ProfileLink } from "@/components/shared/ProfileLink";
+import { CoachChatTools } from "@/components/chat/CoachChatTools";
+import type { CoachPlanRecord } from "@/lib/coachPlans";
 
 /* ─── Types ──────────────────────────────────────────── */
 interface ReplyPreview {
@@ -38,11 +42,19 @@ interface Message {
     isPinned: boolean;
     status: "SENT" | "DELIVERED" | "SEEN";
     mentions: string[];
+    actionType?: "PLAN_ASSIGNED" | "CHECKIN_REQUEST" | null;
+    actionEntityId?: string | null;
     createdAt: string;
     updatedAt?: string | null;
     replyTo?: ReplyPreview | null;
     reactions: ReactionData[];
     sender: { id: string; name?: string | null; avatarUrl?: string | null; role: string };
+}
+
+interface ActiveSession {
+    workoutName: string;
+    logId: string;
+    workoutId: string;
 }
 
 interface Conversation {
@@ -60,6 +72,7 @@ interface Props {
     currentUserRole: string;
     conversations: Conversation[];
     canUseDirectChat?: boolean;
+    coachPlans?: CoachPlanRecord[];
 }
 
 const REACTION_EMOJIS = ["👍", "🔥", "💪", "❤️", "😂", "🎯"];
@@ -89,7 +102,14 @@ function resolveDirectConversation(
 }
 
 /* ─── Component ──────────────────────────────────────── */
-export function ChatClient({ currentUserId, currentUserRole, conversations, canUseDirectChat = true }: Props) {
+export function ChatClient({
+    currentUserId,
+    currentUserRole,
+    conversations,
+    canUseDirectChat = true,
+    coachPlans = [],
+}: Props) {
+    const isCoachUser = currentUserRole === "COACH" || currentUserRole === "SUPER_ADMIN";
     const canViewLastOnline = currentUserRole === "COACH" || currentUserRole === "SUPER_ADMIN";
     const [tab, setTab] = useState<"direct" | "general">("general");
     const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
@@ -117,6 +137,9 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
     const [mobileShowChat, setMobileShowChat] = useState(true);
     const [conversationActivity, setConversationActivity] = useState<Record<string, string>>({});
     const [conversationPresence, setConversationPresence] = useState<Record<string, string | null>>({});
+    const [activeSessions, setActiveSessions] = useState<Record<string, ActiveSession>>({});
+
+    const isFetchingRef = useRef(false);
 
     const resolveLastActive = useCallback((userId: string) => {
         if (conversationPresence[userId] !== undefined) {
@@ -124,6 +147,11 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
         }
         return conversations.find((conversation) => conversation.userId === userId)?.lastActiveAt ?? null;
     }, [conversationPresence, conversations]);
+
+    const selectedActiveSession = useMemo(() => {
+        if (!selectedConv) return null;
+        return activeSessions[selectedConv.userId] ?? null;
+    }, [selectedConv, activeSessions]);
 
     const selectedPresence = useMemo(() => {
         if (!canViewLastOnline || !selectedConv) return null;
@@ -133,10 +161,14 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
     const messagesScrollRef = useRef<HTMLDivElement>(null);
     const fileRef = useRef<HTMLInputElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
-    const isFetchingRef = useRef(false);
+    const [peerTyping, setPeerTyping] = useState(false);
+    const typingPingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const typingActiveRef = useRef(false);
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const isNearBottomRef = useRef(true);
     const shouldForceScrollRef = useRef(false);
+
+    const messageRowRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
     const scrollMessagesToBottom = useCallback(() => {
         const container = messagesScrollRef.current;
@@ -246,6 +278,9 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                 if (canViewLastOnline && data.presence) {
                     setConversationPresence((prev) => ({ ...prev, ...data.presence }));
                 }
+                if (isCoachUser && data.activeSessions) {
+                    setActiveSessions((prev) => ({ ...prev, ...data.activeSessions }));
+                }
             } catch {
                 // ignore polling errors
             }
@@ -257,7 +292,16 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
         }, 3000);
 
         return () => clearInterval(interval);
-    }, [isHydrated, canUseDirectChat, canViewLastOnline]);
+    }, [isHydrated, canUseDirectChat, canViewLastOnline, isCoachUser]);
+
+    useEffect(() => {
+        if (!activeMessageId && !menuOpenId && !reactionPickerId) return;
+        if (window.matchMedia("(min-width: 640px)").matches) return;
+        const targetId = menuOpenId ?? reactionPickerId ?? activeMessageId;
+        if (!targetId) return;
+        const row = messageRowRefs.current[targetId];
+        row?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }, [activeMessageId, menuOpenId, reactionPickerId]);
 
     /* ─── Fetch Messages ────────────────────────────── */
     const fetchMessages = useCallback(async () => {
@@ -281,20 +325,6 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                         [selectedConv.userId]: lastMessage.createdAt,
                     }));
                 }
-
-                // Mark seen for messages visible
-                const unseenIds = data
-                    .filter((m: Message) => m.sender.id !== currentUserId && m.status !== "SEEN")
-                    .map((m: Message) => m.id);
-                if (unseenIds.length > 0) {
-                    for (const id of unseenIds.slice(-5)) {
-                        fetch("/api/messages", {
-                            method: "PATCH",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ id, action: "markSeen" })
-                        });
-                    }
-                }
             }
         } finally {
             isFetchingRef.current = false;
@@ -316,6 +346,75 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
             document.removeEventListener("visibilitychange", startPolling);
         };
     }, [fetchMessages]);
+
+    const sendTypingSignal = useCallback(async (typing: boolean) => {
+        if (tab !== "direct" || !selectedConv || selectedConv.isDeleted) return;
+        try {
+            await fetch("/api/messages/typing", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ withUserId: selectedConv.userId, typing }),
+            });
+        } catch {
+            // ignore typing errors
+        }
+    }, [tab, selectedConv]);
+
+    const stopTyping = useCallback(() => {
+        if (typingPingRef.current) clearTimeout(typingPingRef.current);
+        typingActiveRef.current = false;
+        void sendTypingSignal(false);
+    }, [sendTypingSignal]);
+
+    const pulseTyping = useCallback(() => {
+        if (tab !== "direct" || !selectedConv || selectedConv.isDeleted) return;
+        if (!typingActiveRef.current) {
+            typingActiveRef.current = true;
+            void sendTypingSignal(true);
+        }
+        if (typingPingRef.current) clearTimeout(typingPingRef.current);
+        typingPingRef.current = setTimeout(() => {
+            typingActiveRef.current = false;
+            void sendTypingSignal(false);
+        }, 3500);
+    }, [tab, selectedConv, sendTypingSignal]);
+
+    useEffect(() => {
+        if (!isHydrated || tab !== "direct" || !selectedConv || selectedConv.isDeleted) {
+            setPeerTyping(false);
+            return;
+        }
+
+        const fetchTyping = async () => {
+            try {
+                const res = await fetch(`/api/messages/typing?with=${encodeURIComponent(selectedConv.userId)}`);
+                if (!res.ok) return;
+                const data = await res.json();
+                setPeerTyping(Boolean(data.typing));
+            } catch {
+                // ignore
+            }
+        };
+
+        fetchTyping();
+        const interval = setInterval(() => {
+            if (document.visibilityState === "visible") fetchTyping();
+        }, 2000);
+
+        return () => {
+            clearInterval(interval);
+            setPeerTyping(false);
+        };
+    }, [isHydrated, tab, selectedConv?.userId, selectedConv?.isDeleted]);
+
+    useEffect(() => {
+        return () => {
+            if (typingPingRef.current) clearTimeout(typingPingRef.current);
+            if (typingActiveRef.current) {
+                typingActiveRef.current = false;
+            }
+        };
+    }, [selectedConv?.userId, tab]);
 
     useEffect(() => {
         shouldForceScrollRef.current = true;
@@ -380,10 +479,26 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
         );
     }, [conversations, conversationActivity]);
 
+    const lastOutgoingMessageId = useMemo(() => {
+        if (tab !== "direct") return null;
+        for (let i = messages.length - 1; i >= 0; i -= 1) {
+            const message = messages[i];
+            if (message.sender.id === currentUserId && !message.isGeneral) {
+                return message.id;
+            }
+        }
+        return null;
+    }, [messages, currentUserId, tab]);
+
     /* ─── Input Handling ────────────────────────────── */
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const val = e.target.value;
         setInput(val);
+
+        if (tab === "direct" && selectedConv && !selectedConv.isDeleted) {
+            if (val.trim()) pulseTyping();
+            else stopTyping();
+        }
 
         // Check for @ trigger
         const lastAt = val.lastIndexOf("@");
@@ -419,6 +534,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
 
     const send = async () => {
         if ((!input.trim() && !stagedMedia) || sending) return;
+        stopTyping();
         setSending(true);
 
         const currentInput = input.trim() || undefined;
@@ -590,11 +706,100 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
         });
     };
 
-    // Status icon
-    const StatusIcon = ({ status }: { status: string }) => {
-        if (status === "SEEN") return <CheckCheck className="w-3.5 h-3.5 text-brand-400" />;
-        if (status === "DELIVERED") return <CheckCheck className="w-3.5 h-3.5 text-fg-subtle" />;
-        return <Check className="w-3.5 h-3.5 text-fg-subtle" />;
+    const STATUS_LABELS: Record<Message["status"], string> = {
+        SENT: "Sent",
+        DELIVERED: "Delivered",
+        SEEN: "Seen",
+    };
+
+    const StatusIcon = ({ status }: { status: Message["status"] }) => {
+        const label = STATUS_LABELS[status] ?? "Sent";
+        if (status === "SEEN") {
+            return (
+                <span className="inline-flex items-center" title={label} aria-label={label}>
+                    <CheckCheck className="w-3.5 h-3.5 text-brand-400" />
+                </span>
+            );
+        }
+        if (status === "DELIVERED") {
+            return (
+                <span className="inline-flex items-center" title={label} aria-label={label}>
+                    <CheckCheck className="w-3.5 h-3.5 text-fg-subtle" />
+                </span>
+            );
+        }
+        return (
+            <span className="inline-flex items-center" title={label} aria-label={label}>
+                <Check className="w-3.5 h-3.5 text-fg-subtle" />
+            </span>
+        );
+    };
+
+    const TypingDots = () => (
+        <span className="inline-flex items-center gap-1" aria-label="Typing">
+            <span className="w-1.5 h-1.5 rounded-full bg-brand-400 animate-bounce [animation-delay:0ms]" />
+            <span className="w-1.5 h-1.5 rounded-full bg-brand-400 animate-bounce [animation-delay:120ms]" />
+            <span className="w-1.5 h-1.5 rounded-full bg-brand-400 animate-bounce [animation-delay:240ms]" />
+        </span>
+    );
+
+    const renderActionCard = (msg: Message, isMine: boolean) => {
+        if (!msg.actionType) return null;
+
+        if (msg.actionType === "PLAN_ASSIGNED") {
+            const href = msg.actionEntityId ? `/plans?highlight=${msg.actionEntityId}` : "/plans";
+            return (
+                <Link
+                    href={href}
+                    className={cn(
+                        "mt-2 flex items-center gap-3 p-3 rounded-xl border transition-colors",
+                        isMine
+                            ? "bg-white/10 border-white/20 hover:bg-white/15"
+                            : "bg-brand-500/5 border-brand-500/20 hover:bg-brand-500/10"
+                    )}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className={cn(
+                        "w-9 h-9 rounded-lg flex items-center justify-center shrink-0",
+                        isMine ? "bg-white/15" : "bg-brand-500/15"
+                    )}>
+                        <Dumbbell className={cn("w-4 h-4", isMine ? "text-white" : "text-brand-400")} />
+                    </div>
+                    <div className="min-w-0">
+                        <p className={cn("text-xs font-black", isMine ? "text-white" : "text-fg")}>Workout plan assigned</p>
+                        <p className={cn("text-[10px] font-medium", isMine ? "text-white/70" : "text-brand-400")}>View plan →</p>
+                    </div>
+                </Link>
+            );
+        }
+
+        if (msg.actionType === "CHECKIN_REQUEST") {
+            return (
+                <Link
+                    href="/checkins"
+                    className={cn(
+                        "mt-2 flex items-center gap-3 p-3 rounded-xl border transition-colors",
+                        isMine
+                            ? "bg-white/10 border-white/20 hover:bg-white/15"
+                            : "bg-warning/5 border-warning/20 hover:bg-warning/10"
+                    )}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className={cn(
+                        "w-9 h-9 rounded-lg flex items-center justify-center shrink-0",
+                        isMine ? "bg-white/15" : "bg-warning/15"
+                    )}>
+                        <ClipboardList className={cn("w-4 h-4", isMine ? "text-white" : "text-warning")} />
+                    </div>
+                    <div className="min-w-0">
+                        <p className={cn("text-xs font-black", isMine ? "text-white" : "text-fg")}>Check-in requested</p>
+                        <p className={cn("text-[10px] font-medium", isMine ? "text-white/70" : "text-warning")}>Submit check-in →</p>
+                    </div>
+                </Link>
+            );
+        }
+
+        return null;
     };
 
     /* ─── Sidebar Content ────────────────────────────── */
@@ -635,7 +840,8 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                         <p className="text-xs text-fg-muted text-center p-6">No conversations yet</p>
                     ) : (
                         sortedConversations.map((conv) => {
-                            const presence = canViewLastOnline
+                            const session = activeSessions[conv.userId];
+                            const presence = canViewLastOnline && !session
                                 ? getPresenceIndicator(resolveLastActive(conv.userId))
                                 : null;
 
@@ -651,11 +857,18 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                                 )}
                             >
                                 <div className="relative w-10 h-10 shrink-0">
-                                    <div className="w-10 h-10 rounded-full bg-gradient-brand flex items-center justify-center text-xs font-bold text-white overflow-hidden">
-                                        {conv.avatarUrl
-                                            ? <img src={resolveUploadUrl(conv.avatarUrl)} alt={conv.name} className="w-full h-full object-cover" />
-                                            : getInitials(conv.name)}
-                                    </div>
+                                    <ProfileLink
+                                        userId={conv.userId}
+                                        name={conv.name}
+                                        avatarUrl={conv.avatarUrl}
+                                        role={conv.role}
+                                        showAvatar
+                                        avatarSize="md"
+                                        stopPropagation
+                                        disabled={conv.isDeleted}
+                                        className="relative w-10 h-10"
+                                        nameClassName="sr-only"
+                                    />
                                     {canViewLastOnline && presence && (
                                         <span
                                             className={cn(
@@ -665,18 +878,39 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                                             title={presence.label}
                                         />
                                     )}
+                                    {canViewLastOnline && session && (
+                                        <span
+                                            className="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-surface bg-success animate-pulse"
+                                            title={`In workout: ${session.workoutName}`}
+                                        />
+                                    )}
                                 </div>
                                 <div className="min-w-0 flex-1">
                                     <div className="flex items-center justify-between gap-1">
-                                        <p className="text-sm font-bold text-fg truncate">
-                                            {conv.name}
-                                            {conv.isDeleted && <span className="text-[9px] text-danger/80 ml-1.5 font-bold uppercase tracking-wider">(Deleted)</span>}
-                                        </p>
+                                        <ProfileLink
+                                            userId={conv.userId}
+                                            name={
+                                                <>
+                                                    {conv.name}
+                                                    {conv.isDeleted && <span className="text-[9px] text-danger/80 ml-1.5 font-bold uppercase tracking-wider">(Deleted)</span>}
+                                                </>
+                                            }
+                                            role={conv.role}
+                                            stopPropagation
+                                            disabled={conv.isDeleted}
+                                            nameClassName="text-sm font-bold truncate"
+                                            className="min-w-0"
+                                        />
                                         {["COACH", "SUPER_ADMIN"].includes(conv.role) && (
                                             <Star className="w-3 h-3 text-brand-400 fill-brand-400 shrink-0" />
                                         )}
                                     </div>
-                                    {canViewLastOnline && presence ? (
+                                    {canViewLastOnline && session ? (
+                                        <p className="text-[10px] text-success font-bold truncate flex items-center gap-1">
+                                            <Activity className="w-3 h-3 shrink-0" />
+                                            In workout · {session.workoutName}
+                                        </p>
+                                    ) : canViewLastOnline && presence ? (
                                         <p className="text-[10px] text-fg-subtle truncate">{presence.label}</p>
                                     ) : (
                                         <p className="text-[10px] uppercase font-bold tracking-widest text-fg-subtle">
@@ -687,6 +921,16 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                             </button>
                             );
                         })
+                    )}
+
+                    {isCoachUser && tab === "direct" && canUseDirectChat && (
+                        <div className="p-3 border-t border-surface-border shrink-0">
+                            <CoachChatTools
+                                conversations={sortedConversations}
+                                coachPlans={coachPlans}
+                                onComplete={fetchMessages}
+                            />
+                        </div>
                     )}
                 </div>
             )}
@@ -754,11 +998,17 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                         ) : selectedConv ? (
                             <>
                                 <div className="relative w-8 h-8 shrink-0">
-                                    <div className="w-8 h-8 rounded-full bg-gradient-brand flex items-center justify-center text-xs font-bold text-white overflow-hidden">
-                                        {selectedConv.avatarUrl
-                                            ? <img src={resolveUploadUrl(selectedConv.avatarUrl)} alt={selectedConv.name} className="w-full h-full object-cover" />
-                                            : getInitials(selectedConv.name)}
-                                    </div>
+                                    <ProfileLink
+                                        userId={selectedConv.userId}
+                                        name={selectedConv.name}
+                                        avatarUrl={selectedConv.avatarUrl}
+                                        role={selectedConv.role}
+                                        showAvatar
+                                        avatarSize="sm"
+                                        disabled={selectedConv.isDeleted}
+                                        className="w-8 h-8"
+                                        nameClassName="sr-only"
+                                    />
                                     {selectedPresence && (
                                         <span
                                             className={cn(
@@ -770,8 +1020,24 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                                     )}
                                 </div>
                                 <div>
-                                    <p className="font-bold text-sm">{selectedConv.name}</p>
-                                    {canViewLastOnline && selectedPresence ? (
+                                    <ProfileLink
+                                        userId={selectedConv.userId}
+                                        name={selectedConv.name}
+                                        role={selectedConv.role}
+                                        disabled={selectedConv.isDeleted}
+                                        nameClassName="font-bold text-sm"
+                                    />
+                                    {peerTyping ? (
+                                        <p className="text-[10px] text-brand-400 font-medium flex items-center gap-1.5">
+                                            typing
+                                            <TypingDots />
+                                        </p>
+                                    ) : selectedActiveSession ? (
+                                        <p className="text-[10px] text-success font-bold flex items-center gap-1 truncate">
+                                            <Activity className="w-3 h-3 shrink-0" />
+                                            In workout · {selectedActiveSession.workoutName}
+                                        </p>
+                                    ) : canViewLastOnline && selectedPresence ? (
                                         <p className="text-[10px] text-fg-subtle font-medium truncate">{selectedPresence.label}</p>
                                     ) : (
                                         <p className="text-[10px] text-fg-muted font-medium">{roleLabels[selectedConv.role] ?? selectedConv.role}</p>
@@ -810,7 +1076,13 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                         </div>
                         {pinnedMessages.map(pm => (
                             <div key={pm.id} className="flex items-center gap-2 text-xs text-fg-muted">
-                                <span className="font-bold text-fg">{pm.sender.name}:</span>
+                                <ProfileLink
+                                    userId={pm.sender.id}
+                                    name={`${pm.sender.name}:`}
+                                    role={pm.sender.role}
+                                    nameClassName="font-bold"
+                                    className="inline-flex shrink-0"
+                                />
                                 <span className="truncate">{pm.content || "[media]"}</span>
                             </div>
                         ))}
@@ -818,6 +1090,15 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                 )}
 
                 {/* ── Messages ── */}
+                {tab === "direct" && peerTyping && selectedConv && (
+                    <div className="px-5 py-2 border-b border-surface-border/60 bg-brand-500/5 shrink-0">
+                        <p className="text-[11px] text-brand-400 font-medium flex items-center gap-2">
+                            <span className="font-bold">{selectedConv.name}</span>
+                            is typing
+                            <TypingDots />
+                        </p>
+                    </div>
+                )}
                 <div
                     ref={messagesScrollRef}
                     className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 py-4 space-y-3 no-scrollbar"
@@ -845,109 +1126,130 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                             const prevMsg = idx > 0 ? messages[idx - 1] : null;
                             const showDate = !prevMsg || new Date(msg.createdAt).toDateString() !== new Date(prevMsg.createdAt).toDateString();
 
-                            const showMessageActions = activeMessageId === msg.id || menuOpenId === msg.id || reactionPickerId === msg.id;
+                            const renderMessageActions = () => {
+                                if (isEditing) return null;
 
-                            const messageActions = !isEditing ? (
-                                <div
-                                    data-chat-action
-                                    className={cn(
-                                        "flex-shrink-0 items-center gap-0.5 self-center mb-5 transition-opacity",
-                                        showMessageActions
-                                            ? "flex opacity-100"
-                                            : "hidden sm:flex opacity-0 sm:group-hover:opacity-100"
-                                    )}
-                                >
+                                const visible = activeMessageId === msg.id || menuOpenId === msg.id || reactionPickerId === msg.id;
+                                const popoverAlign = isMine ? "right-0 left-auto" : "left-0 right-auto";
+                                const actionVisibility = visible
+                                    ? "opacity-100 pointer-events-auto"
+                                    : "opacity-0 pointer-events-none sm:group-hover:opacity-100 sm:group-hover:pointer-events-auto";
+
+                                return (
+                                    <div
+                                        data-chat-action
+                                        aria-hidden={!visible}
+                                        className={cn(
+                                            "absolute z-20 flex items-center gap-0.5 transition-opacity",
+                                            isMine ? "right-0 top-full mt-1 sm:top-1/2 sm:mt-0 sm:-translate-y-1/2 sm:right-full sm:mr-1.5" : "left-0 top-full mt-1 sm:top-1/2 sm:mt-0 sm:-translate-y-1/2 sm:left-full sm:ml-1.5",
+                                            actionVisibility
+                                        )}
+                                    >
+                                        {renderActionButtons(popoverAlign)}
+                                    </div>
+                                );
+                            };
+
+                            const renderActionButtons = (popoverAlign: string) => (
+                                <>
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); setReplyTo(msg); inputRef.current?.focus(); }}
+                                            className="btn-icon w-7 h-7 rounded-lg"
+                                            title="Reply"
+                                        >
+                                            <Reply className="w-3.5 h-3.5" />
+                                        </button>
+
+                                        <div className="relative">
                                             <button
-                                                onClick={(e) => { e.stopPropagation(); setReplyTo(msg); inputRef.current?.focus(); }}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setActiveMessageId(msg.id);
+                                                    setReactionPickerId(reactionPickerId === msg.id ? null : msg.id);
+                                                    setMenuOpenId(null);
+                                                }}
                                                 className="btn-icon w-7 h-7 rounded-lg"
-                                                title="Reply"
+                                                title="React"
                                             >
-                                                <Reply className="w-3.5 h-3.5" />
+                                                <SmilePlus className="w-3.5 h-3.5" />
                                             </button>
-
-                                            <div className="relative">
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setActiveMessageId(msg.id);
-                                                        setReactionPickerId(reactionPickerId === msg.id ? null : msg.id);
-                                                        setMenuOpenId(null);
-                                                    }}
-                                                    className="btn-icon w-7 h-7 rounded-lg"
-                                                    title="React"
-                                                >
-                                                    <SmilePlus className="w-3.5 h-3.5" />
-                                                </button>
-                                                {reactionPickerId === msg.id && (
-                                                    <div
-                                                        className="absolute top-full left-0 mt-1 z-50 grid grid-cols-3 sm:flex gap-1.5 bg-surface-elevated border border-surface-border rounded-2xl p-2 shadow-modal animate-scale-in w-max max-w-[min(100vw-2rem,240px)] sm:max-w-none sm:bottom-9 sm:top-auto sm:left-1/2 sm:-translate-x-1/2 sm:mt-0"
-                                                        onClick={e => e.stopPropagation()}
-                                                    >
-                                                        {REACTION_EMOJIS.map(emoji => (
-                                                            <button
-                                                                key={emoji}
-                                                                onClick={() => toggleReaction(msg.id, emoji)}
-                                                                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-muted transition-colors text-base"
-                                                            >
-                                                                {emoji}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            {(isMine || canPin || isAdmin) && (
-                                                <div className="relative">
-                                                    <button
-                                                        onClick={e => {
-                                                            e.stopPropagation();
-                                                            setActiveMessageId(msg.id);
-                                                            setMenuOpenId(menuOpenId === msg.id ? null : msg.id);
-                                                            setReactionPickerId(null);
-                                                        }}
-                                                        className="btn-icon w-7 h-7 rounded-lg"
-                                                    >
-                                                        <MoreVertical className="w-3.5 h-3.5" />
-                                                    </button>
-                                                    {menuOpenId === msg.id && (
-                                                        <div
-                                                            className="absolute top-full left-0 mt-1 z-50 bg-surface-elevated border border-surface-border rounded-xl shadow-modal overflow-hidden min-w-[140px] w-max sm:bottom-9 sm:top-auto sm:left-1/2 sm:-translate-x-1/2 sm:mt-0"
-                                                            onClick={e => e.stopPropagation()}
-                                                        >
-                                                            {canPin && (
-                                                                <button
-                                                                    onClick={() => togglePin(msg.id)}
-                                                                    className="w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-fg hover:bg-surface-muted transition-colors"
-                                                                >
-                                                                    <Pin className="w-3.5 h-3.5 text-brand-400" />
-                                                                    {msg.isPinned ? "Unpin" : "Pin"}
-                                                                </button>
-                                                            )}
-                                                            {isMine && canEdit && (
-                                                                <button
-                                                                    onClick={() => { setEditingId(msg.id); setEditText(msg.content ?? ""); setMenuOpenId(null); }}
-                                                                    className="w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-fg hover:bg-surface-muted transition-colors"
-                                                                >
-                                                                    <Pencil className="w-3.5 h-3.5 text-brand-400" /> Edit
-                                                                </button>
-                                                            )}
-                                                            {(isMine || isAdmin) && (
-                                                                <button
-                                                                    onClick={() => deleteMessage(msg.id)}
-                                                                    className={cn(
-                                                                        "w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-danger hover:bg-danger/5 transition-colors",
-                                                                        (canPin || (isMine && canEdit)) && "border-t border-surface-border"
-                                                                    )}
-                                                                >
-                                                                    <Trash2 className="w-3.5 h-3.5" /> Delete
-                                                                </button>
-                                                            )}
-                                                        </div>
+                                            {reactionPickerId === msg.id && (
+                                                <div
+                                                    className={cn(
+                                                        "absolute top-full mt-1 z-50 grid grid-cols-3 gap-1.5 bg-surface-elevated border border-surface-border rounded-2xl p-2 shadow-modal animate-scale-in w-max max-w-[min(100vw-2rem,240px)]",
+                                                        popoverAlign
                                                     )}
+                                                    onClick={e => e.stopPropagation()}
+                                                >
+                                                    {REACTION_EMOJIS.map(emoji => (
+                                                        <button
+                                                            key={emoji}
+                                                            onClick={() => toggleReaction(msg.id, emoji)}
+                                                            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-muted transition-colors text-base"
+                                                        >
+                                                            {emoji}
+                                                        </button>
+                                                    ))}
                                                 </div>
                                             )}
                                         </div>
-                            ) : null;
+
+                                        {(isMine || canPin || isAdmin) && (
+                                            <div className="relative">
+                                                <button
+                                                    onClick={e => {
+                                                        e.stopPropagation();
+                                                        setActiveMessageId(msg.id);
+                                                        setMenuOpenId(menuOpenId === msg.id ? null : msg.id);
+                                                        setReactionPickerId(null);
+                                                    }}
+                                                    className="btn-icon w-7 h-7 rounded-lg"
+                                                >
+                                                    <MoreVertical className="w-3.5 h-3.5" />
+                                                </button>
+                                                {menuOpenId === msg.id && (
+                                                    <div
+                                                        className={cn(
+                                                            "absolute top-full mt-1 z-50 bg-surface-elevated border border-surface-border rounded-xl shadow-modal overflow-hidden min-w-[140px] w-max",
+                                                            popoverAlign
+                                                        )}
+                                                        onClick={e => e.stopPropagation()}
+                                                    >
+                                                        {canPin && (
+                                                            <button
+                                                                onClick={() => togglePin(msg.id)}
+                                                                className="w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-fg hover:bg-surface-muted transition-colors"
+                                                            >
+                                                                <Pin className="w-3.5 h-3.5 text-brand-400" />
+                                                                {msg.isPinned ? "Unpin" : "Pin"}
+                                                            </button>
+                                                        )}
+                                                        {isMine && canEdit && (
+                                                            <button
+                                                                onClick={() => { setEditingId(msg.id); setEditText(msg.content ?? ""); setMenuOpenId(null); }}
+                                                                className="w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-fg hover:bg-surface-muted transition-colors"
+                                                            >
+                                                                <Pencil className="w-3.5 h-3.5 text-brand-400" /> Edit
+                                                            </button>
+                                                        )}
+                                                        {(isMine || isAdmin) && (
+                                                            <button
+                                                                onClick={() => deleteMessage(msg.id)}
+                                                                className={cn(
+                                                                    "w-full flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-danger hover:bg-danger/5 transition-colors",
+                                                                    (canPin || (isMine && canEdit)) && "border-t border-surface-border"
+                                                                )}
+                                                            >
+                                                                <Trash2 className="w-3.5 h-3.5" /> Delete
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </>
+                                );
+                            };
 
                             return (
                                 <div key={msg.id}>
@@ -962,6 +1264,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                                     )}
 
                                     <div
+                                        ref={(el) => { messageRowRefs.current[msg.id] = el; }}
                                         className={cn("flex items-end gap-2 group w-full", isMine && "justify-end")}
                                         onClick={(e) => {
                                             if (window.matchMedia("(min-width: 640px)").matches) return;
@@ -975,24 +1278,30 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                                     >
                                         {/* Avatar */}
                                         {!isMine && (
-                                            <div className="w-7 h-7 rounded-full bg-gradient-brand flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0 overflow-hidden mb-5">
-                                                {msg.sender.avatarUrl
-                                                    ? <img src={resolveUploadUrl(msg.sender.avatarUrl)} alt={msg.sender.name ?? ""} className="w-full h-full object-cover" />
-                                                    : getInitials(msg.sender.name)}
-                                            </div>
+                                            <ProfileLink
+                                                userId={msg.sender.id}
+                                                name={msg.sender.name}
+                                                avatarUrl={msg.sender.avatarUrl}
+                                                role={msg.sender.role}
+                                                showAvatar
+                                                avatarSize="xs"
+                                                stopPropagation
+                                                className="mb-5 shrink-0"
+                                                nameClassName="sr-only"
+                                            />
                                         )}
 
-                                        {isMine && messageActions}
-
-                                        <div className={cn("max-w-[70%] min-w-0 relative", isMine && "items-end flex flex-col")}>
+                                        <div className={cn("relative w-fit max-w-[min(62%,17rem)] min-w-0 overflow-visible", isMine && "items-end flex flex-col")}>
                                             {/* Sender name */}
                                             {!isMine && (
-                                                <p className="text-[10px] text-fg-muted mb-1 ml-1 flex items-center gap-1.5">
-                                                    {msg.sender.name}
-                                                    {["COACH", "SUPER_ADMIN"].includes(msg.sender.role) && (
-                                                        <span className="text-[8px] px-1 bg-brand-500/20 border border-brand-500/20 text-brand-400 rounded-sm font-black uppercase tracking-tighter">Coach</span>
-                                                    )}
-                                                </p>
+                                                <ProfileLink
+                                                    userId={msg.sender.id}
+                                                    name={msg.sender.name}
+                                                    role={msg.sender.role}
+                                                    stopPropagation
+                                                    className="mb-1 ml-1"
+                                                    nameClassName="text-[10px] font-bold"
+                                                />
                                             )}
 
                                             {/* Reply preview */}
@@ -1033,6 +1342,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                                                     {msg.updatedAt && (new Date(msg.updatedAt).getTime() - new Date(msg.createdAt).getTime() > 1000) && (
                                                         <span className="text-[9px] opacity-50 ml-2 italic">(edited)</span>
                                                     )}
+                                                    {renderActionCard(msg, isMine)}
                                                 </div>
                                             ) : msg.type === "VIDEO" || msg.type === "IMAGE" ? (
                                                 <div className={cn(
@@ -1102,12 +1412,22 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                                             {/* Timestamp + Status */}
                                             <div className={cn("flex items-center gap-1.5 mt-1", isMine && "justify-end")}>
                                                 <p className="text-[10px] text-fg-subtle">{formatRelative(msg.createdAt)}</p>
-                                                {isMine && <StatusIcon status={msg.status} />}
+                                                {isMine && tab === "direct" && !msg.isGeneral && (
+                                                    <>
+                                                        <StatusIcon status={msg.status} />
+                                                        {msg.id === lastOutgoingMessageId && msg.status === "SEEN" && (
+                                                            <span className="text-[9px] font-bold uppercase tracking-wider text-brand-400/80">Seen</span>
+                                                        )}
+                                                        {msg.id === lastOutgoingMessageId && msg.status === "DELIVERED" && (
+                                                            <span className="text-[9px] font-bold uppercase tracking-wider text-fg-subtle">Delivered</span>
+                                                        )}
+                                                    </>
+                                                )}
                                                 {msg.isPinned && <Pin className="w-2.5 h-2.5 text-brand-400" />}
                                             </div>
-                                        </div>
 
-                                        {!isMine && messageActions}
+                                            {renderMessageActions()}
+                                        </div>
                                     </div>
                                 </div>
                             );
@@ -1123,6 +1443,17 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                     </div>
                 ) : (
                     <div className="px-4 sm:px-5 py-3 border-t border-surface-border bg-surface-card shrink-0">
+                        {isCoachUser && tab === "direct" && selectedConv && !selectedConv.isDeleted && (
+                            <div className="mb-2">
+                                <CoachChatTools
+                                    conversations={sortedConversations}
+                                    coachPlans={coachPlans}
+                                    selectedClientId={selectedConv.userId}
+                                    onComplete={fetchMessages}
+                                />
+                            </div>
+                        )}
+
                         {/* Reply preview */}
                         {replyTo && (
                             <div className="flex items-center justify-between gap-3 mb-2 px-3 py-2 bg-surface-muted/50 rounded-xl border-l-2 border-l-brand-500 animate-slide-up">
@@ -1197,6 +1528,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                                 placeholder={replyTo ? "Write a reply..." : stagedMedia ? "Add caption..." : "Message..."}
                                 value={input}
                                 onChange={handleInputChange}
+                                onBlur={stopTyping}
                                 onKeyDown={(e) => e.key === "Enter" && send()}
                             />
                             <button

@@ -156,4 +156,16 @@ export const roleBadgeClass: Record<string, string> = {
     SUPER_ADMIN: "badge-warning",
 };
 
+/** Role-based display name colors (chat, lists) */
+export const roleNameClass: Record<string, string> = {
+    FREE: "text-fg",
+    PREMIUM: "text-brand-400",
+    COACH: "text-warning",
+    SUPER_ADMIN: "text-danger",
+};
+
+export function getRoleNameClass(role: string): string {
+    return roleNameClass[role] ?? "text-fg";
+}
+
 export { calculateOneRM, deriveOneRMFromBestSet } from "@/lib/oneRepMax";

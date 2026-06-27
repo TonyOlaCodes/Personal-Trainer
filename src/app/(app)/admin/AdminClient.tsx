@@ -2,11 +2,12 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Users, Dumbbell, Ticket, Shield, Copy, Check, ChevronRight, Plus, Trash2, UserX, RotateCcw, ArrowUpDown } from "lucide-react";
+import { Users, Dumbbell, Ticket, Shield, Copy, Check, ChevronRight, Plus, Trash2, UserX, RotateCcw, ArrowUpDown, Megaphone } from "lucide-react";
 import { cn, formatDate, getInitials, roleLabels, roleBadgeClass } from "@/lib/utils";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { getAccessCodeStatus } from "@/lib/accessCodeStatus";
 import { PLAN_TEMPLATES } from "@/lib/templates";
+import { AdminAnnouncementsPanel } from "./AdminAnnouncementsPanel";
 
 interface AdminUser {
     id: string;
@@ -84,7 +85,7 @@ interface Props {
     userRole: string;
 }
 
-type Tab = "users" | "coaches" | "plans" | "codes";
+type Tab = "users" | "coaches" | "plans" | "codes" | "announcements";
 type CodeFilter = "ALL" | "ACTIVE" | "USED" | "EXPIRED";
 type UserSortField = "createdAt" | "role" | "name" | "status";
 type SortDir = "asc" | "desc";
@@ -394,6 +395,7 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
                     { id: "coaches", label: "Coaches", icon: Shield },
                     { id: "plans", label: "Plans", icon: Dumbbell },
                     { id: "codes", label: "Codes", icon: Ticket },
+                    { id: "announcements", label: "Announce", icon: Megaphone },
                 ].map((t) => (
                     <button
                         key={t.id}
@@ -939,6 +941,10 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
                         </div>
                     </div>
                 </div>
+            )}
+
+            {tab === "announcements" && (
+                <AdminAnnouncementsPanel users={users} />
             )}
         </div>
     );

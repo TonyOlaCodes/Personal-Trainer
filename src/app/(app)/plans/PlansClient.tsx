@@ -21,6 +21,7 @@ interface Plan {
     authorName?: string | null;
     isOwned: boolean;
     isActive: boolean;
+    isPublic?: boolean;
     weekCount: number;
     startedAt: string;
     tags: string[];
@@ -58,9 +59,11 @@ export function PlansClient({ plans, userRole, activeSession = null }: Props) {
     const [codeMsg, setCodeMsg] = useState("");
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [copiedId, setCopiedId] = useState<string | null>(null);
-    const [localActiveSession, setLocalActiveSession] = useState(activeSession);
+    const [localPlans, setLocalPlans] = useState(plans);
+    const [visibilitySavingId, setVisibilitySavingId] = useState<string | null>(null);
 
-    const activePlan = plans.find((p) => p.isActive);
+    const activePlan = localPlans.find((p) => p.isActive);
+    const [localActiveSession, setLocalActiveSession] = useState(activeSession);
 
     const setActive = async (planId: string | null) => {
         await fetch("/api/plans/activate", {
@@ -69,6 +72,29 @@ export function PlansClient({ plans, userRole, activeSession = null }: Props) {
             body: JSON.stringify({ planId }),
         });
         window.location.reload();
+    };
+
+    const togglePlanVisibility = async (planId: string, isPublic: boolean) => {
+        setVisibilitySavingId(planId);
+        try {
+            const res = await fetch(`/api/plans/${planId}/visibility`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ isPublic }),
+            });
+            if (!res.ok) {
+                const data = await res.json();
+                alert(data.error ?? "Could not update plan visibility");
+                return;
+            }
+            setLocalPlans((prev) => prev.map((plan) => (
+                plan.id === planId ? { ...plan, isPublic } : plan
+            )));
+        } catch {
+            alert("Connection error");
+        } finally {
+            setVisibilitySavingId(null);
+        }
     };
 
     const deletePlan = async (planId: string, isOwned: boolean) => {
@@ -116,7 +142,7 @@ export function PlansClient({ plans, userRole, activeSession = null }: Props) {
             <div className="flex items-center justify-between">
                 <div>
                     <h2 className="heading-2">Your Plans</h2>
-                    <p className="subheading mt-1">{plans.length} programme{plans.length !== 1 ? "s" : ""} saved</p>
+                    <p className="subheading mt-1">{localPlans.length} programme{localPlans.length !== 1 ? "s" : ""} saved</p>
                 </div>
                 <Link href="/plans/create" className="btn-primary btn-sm">
                     <Plus className="w-4 h-4" />
@@ -186,7 +212,7 @@ export function PlansClient({ plans, userRole, activeSession = null }: Props) {
             {/* Tab: My Plans */}
             {tab === "mine" && (
                 <div className="space-y-3">
-                    {plans.length === 0 ? (
+                    {localPlans.length === 0 ? (
                         <div className="card p-12 text-center">
                             <Dumbbell className="w-10 h-10 text-fg-subtle mx-auto mb-3" />
                             <p className="font-semibold mb-1">No plans yet</p>
@@ -201,7 +227,7 @@ export function PlansClient({ plans, userRole, activeSession = null }: Props) {
                             </div>
                         </div>
                     ) : (
-                        plans.map((plan) => (
+                        localPlans.map((plan) => (
                             <div key={plan.id} className={cn(
                                 "card-hover p-0 overflow-hidden",
                                 plan.isActive && "border-brand-600/40",
@@ -290,6 +316,31 @@ export function PlansClient({ plans, userRole, activeSession = null }: Props) {
                                         >
                                             {copiedId === plan.id ? <Check className="w-3 h-3" /> : <Share2 className="w-3 h-3" />}
                                             {copiedId === plan.id ? "Copied!" : "Copy"}
+                                        </button>
+                                    </div>
+                                )}
+
+                                {plan.isOwned && plan.type === "USER_CREATED" && (
+                                    <div className="px-5 pb-5 border-t border-surface-border/20 pt-3 flex items-center justify-between gap-3">
+                                        <div>
+                                            <p className="text-xs font-black text-fg">Public on profile</p>
+                                            <p className="text-[10px] text-fg-muted mt-0.5">Let others copy this plan from your public profile</p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            role="switch"
+                                            aria-checked={Boolean(plan.isPublic)}
+                                            disabled={visibilitySavingId === plan.id}
+                                            onClick={() => togglePlanVisibility(plan.id, !plan.isPublic)}
+                                            className={cn(
+                                                "relative w-11 h-6 rounded-full transition-colors shrink-0 disabled:opacity-50",
+                                                plan.isPublic ? "bg-brand-500" : "bg-surface-muted border border-surface-border"
+                                            )}
+                                        >
+                                            <span className={cn(
+                                                "absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform",
+                                                plan.isPublic && "translate-x-5"
+                                            )} />
                                         </button>
                                     </div>
                                 )}

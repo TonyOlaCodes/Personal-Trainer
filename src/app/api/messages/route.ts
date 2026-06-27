@@ -14,6 +14,7 @@ import { isInactiveAccount } from "@/lib/userDeactivation";
 import { getDirectMessageActivity } from "@/lib/chatActivity";
 import { isCoachRole } from "@/lib/roles";
 import { getLastActiveMap, touchUserLastActive } from "@/lib/userPresence";
+import { getActiveSessionsForClients } from "@/lib/coachChat";
 import { withResolvedUpload, withResolvedAvatar, normalizeStoredUploadUrl } from "@/lib/uploadUrls";
 
 // GET messages
@@ -53,11 +54,32 @@ export async function GET(req: Request) {
         }
 
         const activity = await getDirectMessageActivity(user.id, peerIds);
+
+        if (peerIds.length > 0) {
+            await prisma.message.updateMany({
+                where: {
+                    receiverId: user.id,
+                    senderId: { in: peerIds },
+                    isGeneral: false,
+                    status: "SENT",
+                },
+                data: { status: "DELIVERED" },
+            });
+        }
+
         const presence = isCoachRole(user.role)
             ? await getLastActiveMap(peerIds)
             : undefined;
 
-        return NextResponse.json({ activity, ...(presence ? { presence } : {}) });
+        const activeSessions = isCoachRole(user.role)
+            ? await getActiveSessionsForClients(peerIds)
+            : undefined;
+
+        return NextResponse.json({
+            activity,
+            ...(presence ? { presence } : {}),
+            ...(activeSessions ? { activeSessions } : {}),
+        });
     }
 
     let where: Prisma.MessageWhereInput | null = null;
@@ -111,20 +133,40 @@ export async function GET(req: Request) {
         take: limit,
     });
 
-    // Mark unread messages as delivered
-    const unreadIds = messages
-        .filter(m => m.senderId !== user.id && m.status === "SENT")
-        .map(m => m.id);
+    const isDirectThread = Boolean(withUserId && !isGeneral);
 
-    if (unreadIds.length > 0) {
+    // Delivered: app received the message. Seen: recipient is viewing this thread.
+    const incomingSentIds = messages
+        .filter((m) => m.senderId !== user.id && m.status === "SENT")
+        .map((m) => m.id);
+    const incomingUnreadIds = messages
+        .filter((m) => m.senderId !== user.id && m.status !== "SEEN")
+        .map((m) => m.id);
+
+    if (isDirectThread && incomingUnreadIds.length > 0) {
         await prisma.message.updateMany({
-            where: { id: { in: unreadIds } },
-            data: { status: "DELIVERED" }
+            where: { id: { in: incomingUnreadIds } },
+            data: { status: "SEEN", isRead: true },
         });
+    } else if (incomingSentIds.length > 0) {
+        await prisma.message.updateMany({
+            where: { id: { in: incomingSentIds } },
+            data: { status: "DELIVERED" },
+        });
+    }
+
+    const statusOverrides = new Map<string, "DELIVERED" | "SEEN">();
+    if (isDirectThread) {
+        for (const id of incomingUnreadIds) statusOverrides.set(id, "SEEN");
+    } else {
+        for (const id of incomingSentIds) statusOverrides.set(id, "DELIVERED");
     }
 
     const mappedMessages = messages.map(m => withResolvedUpload({
         ...m,
+        actionType: (m as { actionType?: string | null }).actionType ?? null,
+        actionEntityId: (m as { actionEntityId?: string | null }).actionEntityId ?? null,
+        status: statusOverrides.get(m.id) ?? m.status,
         sender: withResolvedAvatar({
             id: m.sender.id,
             name: (m.sender as any).isDeleted ? ((m.sender as any).deletedName ?? "Deleted User") : (m.sender.name ?? "User"),

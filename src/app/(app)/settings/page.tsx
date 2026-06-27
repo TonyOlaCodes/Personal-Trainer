@@ -5,6 +5,7 @@ import { TopBar } from "@/components/layout/TopBar";
 import { SettingsClient } from "./SettingsClient";
 import { getDailyMetricTargets } from "@/lib/dailyMetrics";
 import { ensureNotificationPreferenceColumns } from "@/lib/notifications";
+import { ensureUserProfileColumns } from "@/lib/userProfile";
 import { SafeFallback, rethrowNextInternalErrors } from "@/components/shared/SafeFallback";
 import { formatErrorDetails } from "@/lib/ensureAppSchema";
 
@@ -40,6 +41,8 @@ export default async function SettingsPage() {
                     notifyOnMetricUpdateTime: true,
                     notifyOnMissedCheckInTime: true,
                     notifyOnMissedWorkoutTime: true,
+                    bio: true,
+                    isPrivateProfile: true,
                 },
             });
         } catch (dbErr) {
@@ -62,6 +65,7 @@ export default async function SettingsPage() {
         if (!user) redirect("/sign-in");
 
         await ensureNotificationPreferenceColumns();
+        await ensureUserProfileColumns();
 
         const dailyMetricTargets = await getDailyMetricTargets(user.id);
         const hiddenGoals = (user as any).hiddenGoals ?? [];

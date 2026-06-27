@@ -41,7 +41,6 @@ export default async function AdminPage() {
                 coach: { select: { id: true, name: true, email: true } },
             },
             orderBy: { createdAt: "desc" },
-            take: 50,
         }),
         prisma.plan.findMany({
             where: { creatorId: { in: creativeIds } },

@@ -4,6 +4,7 @@ import { Suspense, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Walkthrough } from "@/components/shared/Walkthrough";
+import { DashboardAnnouncementBanners } from "@/components/shared/DashboardAnnouncementBanners";
 import { RecentSessionsExplorer, PREVIEW_LIMIT } from "@/components/shared/RecentSessionsExplorer";
 import { ReturnLink } from "@/components/shared/ReturnLink";
 import { ActiveSessionBanner } from "@/components/shared/ActiveSessionBanner";
@@ -617,6 +618,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                 }}
             />
             {showTour && <Walkthrough steps={tourSteps} onComplete={() => setShowTour(false)} />}
+            <DashboardAnnouncementBanners />
 
             {/* Greeting */}
             <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">

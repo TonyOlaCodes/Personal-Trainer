@@ -144,9 +144,13 @@ model User {
   reactions         Reaction[]
   notifications     Notification[]
   workoutNotes      WorkoutNote[] @relation("CoachWorkoutNotes")
+  createdAnnouncements Announcement[] @relation("CreatedAnnouncements")
+  announcementDismissals AnnouncementDismissal[]
   clientGoals       ClientGoals?
   hiddenGoals       String[] @default([])
   pinnedExercises   String[] @default([])
+  bio               String?
+  isPrivateProfile  Boolean  @default(false)
 
   @@map("users")
 }
@@ -354,6 +358,8 @@ model Message {
   isPinned     Boolean       @default(false)
   replyToId    String?
   mentions     String[]      // array of user IDs mentioned
+  actionType   String?       // PLAN_ASSIGNED, CHECKIN_REQUEST
+  actionEntityId String?
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
@@ -432,4 +438,36 @@ model ClientGoals {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("client_goals")
+}
+
+model Announcement {
+  id                  String    @id @default(cuid())
+  title               String
+  body                String
+  targetAudience      String
+  targetUserIds       String[]
+  scheduledAt         DateTime?
+  expiresAt           DateTime?
+  dashboardBannerDays Int       @default(7)
+  createdById         String
+  notificationsSentAt DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  creator    User                    @relation("CreatedAnnouncements", fields: [createdById], references: [id], onDelete: Cascade)
+  dismissals AnnouncementDismissal[]
+
+  @@map("announcements")
+}
+
+model AnnouncementDismissal {
+  userId         String
+  announcementId String
+  dismissedAt    DateTime @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+
+  @@id([userId, announcementId])
+  @@map("announcement_dismissals")
 }
