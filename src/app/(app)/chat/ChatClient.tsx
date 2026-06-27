@@ -1247,9 +1247,8 @@ export function ChatClient({
                                                 )}
                                             </div>
                                         )}
-                                    </>
-                                );
-                            };
+                                </>
+                            );
 
                             return (
                                 <div key={msg.id}>
