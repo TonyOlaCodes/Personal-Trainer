@@ -8,6 +8,8 @@ import { calculateOneRM, isBetterSet } from "@/lib/oneRepMax";
 import { ensureBodyweightTable } from "@/lib/bodyweight";
 import { getUserPinnedExercises } from "@/lib/pinnedExercises";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
     try {
         const { userId } = await auth();

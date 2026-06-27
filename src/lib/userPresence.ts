@@ -1,8 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { formatRelative } from "@/lib/utils";
 
-const ONLINE_THRESHOLD_MS = 2 * 60 * 1000;
-const TOUCH_INTERVAL_MS = 2 * 60 * 1000;
+/** Show "Online now" when last activity is within this window. */
+export const ONLINE_THRESHOLD_MS = 5 * 60 * 1000;
+/** Throttle DB writes for lastActiveAt (heartbeat runs at this interval). */
+export const PRESENCE_HEARTBEAT_MS = 60 * 1000;
+const TOUCH_INTERVAL_MS = PRESENCE_HEARTBEAT_MS;
 export const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 export type PresenceLevel = "online" | "recent" | "inactive";
@@ -13,7 +16,7 @@ export interface PresenceIndicator {
     label: string;
 }
 
-/** Update lastActiveAt at most once every two minutes. */
+/** Update lastActiveAt at most once per heartbeat interval. */
 export async function touchUserLastActive(userId: string): Promise<void> {
     const cutoff = new Date(Date.now() - TOUCH_INTERVAL_MS);
     await prisma.user.updateMany({

@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { cn, toDateKey, parseLogDate } from "@/lib/utils";
 import { appendReturnTo, getReturnToFromSearchParams } from "@/lib/navigation";
+import { notifyWorkoutStatsChanged } from "@/lib/workoutStatsRefresh";
 
 interface Props {
     logId: string;
@@ -53,6 +54,7 @@ export function SessionActions({ logId, workoutId, loggedAt }: Props) {
         try {
             const res = await fetch(`/api/logs/${logId}`, { method: "DELETE" });
             if (res.ok) {
+                notifyWorkoutStatsChanged();
                 router.push(returnTo);
                 router.refresh();
             } else {

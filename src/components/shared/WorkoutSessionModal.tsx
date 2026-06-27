@@ -7,6 +7,7 @@ import { cn, formatDate, calculateOneRM } from "@/lib/utils";
 import { isCardio } from "@/components/shared/ExerciseAutocomplete";
 import { WorkoutFeelingEditor } from "@/components/shared/WorkoutFeelingEditor";
 import { workoutFeelingEmoji } from "@/lib/workoutFeeling";
+import { notifyWorkoutStatsChanged } from "@/lib/workoutStatsRefresh";
 
 interface SessionSet {
     id: string;
@@ -139,6 +140,7 @@ export function WorkoutSessionModal({
         try {
             const res = await fetch(`/api/logs/${sessionId}`, { method: "DELETE" });
             if (res.ok) {
+                notifyWorkoutStatsChanged();
                 onDeleted?.();
                 onClose();
             } else {

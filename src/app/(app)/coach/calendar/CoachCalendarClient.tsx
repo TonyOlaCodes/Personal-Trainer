@@ -12,11 +12,12 @@ import {
     computeMonthlyCompliance,
     computeWeeklyCompliance,
     complianceTone,
-    hasPendingTodayWorkout,
     isFutureCalendarMonth,
     isSameCalendarMonth,
 } from "@/lib/calendarCompliance";
 import Link from "next/link";
+
+const LAST_COACH_CALENDAR_CLIENT_KEY = "coach_calendar_last_client_id";
 
 const MONTHS = [
     "January", "February", "March", "April", "May", "June",
@@ -139,14 +140,30 @@ export function CoachCalendarClient({ clients, selectedClientId, selectedClientN
         [complianceInput, calendarView.year, calendarView.month, now]
     );
 
-    const pendingToday = useMemo(
-        () => hasPendingTodayWorkout(complianceInput, now),
-        [complianceInput, now]
-    );
-
     const onClientChange = (clientId: string) => {
+        localStorage.setItem(LAST_COACH_CALENDAR_CLIENT_KEY, clientId);
         router.push(`/coach/calendar?clientId=${encodeURIComponent(clientId)}`);
     };
+
+    // Restore last viewed client when opening /coach/calendar without ?clientId=
+    useEffect(() => {
+        if (clients.length === 0) return;
+
+        const urlClientId = new URLSearchParams(window.location.search).get("clientId");
+        const isValid = (id: string) => clients.some((c) => c.id === id);
+
+        if (urlClientId && isValid(urlClientId)) {
+            localStorage.setItem(LAST_COACH_CALENDAR_CLIENT_KEY, urlClientId);
+            return;
+        }
+
+        if (!urlClientId) {
+            const saved = localStorage.getItem(LAST_COACH_CALENDAR_CLIENT_KEY);
+            if (saved && isValid(saved)) {
+                router.replace(`/coach/calendar?clientId=${encodeURIComponent(saved)}`);
+            }
+        }
+    }, [clients, router]);
 
     if (clients.length === 0) {
         return (
@@ -193,14 +210,14 @@ export function CoachCalendarClient({ clients, selectedClientId, selectedClientN
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <ComplianceCard
                             label="This Week"
-                            sublabel={pendingToday ? "Through yesterday" : "Since Monday"}
+                            sublabel="Since Monday"
                             completed={weekCompliance.completed}
                             due={weekCompliance.due}
                             percent={weekCompliance.percent}
                         />
                         <ComplianceCard
                             label="This Month"
-                            sublabel={pendingToday ? "Through yesterday" : "Month to date"}
+                            sublabel="Month to date"
                             completed={monthCompliance.completed}
                             due={monthCompliance.due}
                             percent={monthCompliance.percent}

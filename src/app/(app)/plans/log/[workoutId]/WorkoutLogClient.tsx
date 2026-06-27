@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { cn, generateId, formatDate, isSameCalendarDay, parseLogDate, toDateKey, toLoggedAtIso, calculateOneRM } from "@/lib/utils";
 import { appendReturnTo, getReturnToFromSearchParams } from "@/lib/navigation";
+import { notifyWorkoutStatsChanged } from "@/lib/workoutStatsRefresh";
 import { isCardio, ExerciseAutocomplete } from "@/components/shared/ExerciseAutocomplete";
 import { WorkoutFeelingPicker } from "@/components/shared/WorkoutFeelingPicker";
 import { useScrollLock } from "@/hooks/useScrollLock";
@@ -657,6 +658,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                 const saved = await res.json();
                 localStorage.removeItem(localStorageKey);
                 setShowFinishModal(false);
+                notifyWorkoutStatsChanged();
                 router.push(appendReturnTo(`/plans/log/view/${saved.id}`, returnTo));
                 router.refresh();
             } else {
@@ -698,6 +700,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
         try {
             const res = await fetch(`/api/logs/${activeLogId}`, { method: "DELETE" });
             if (res.ok) {
+                notifyWorkoutStatsChanged();
                 router.push(returnTo);
                 router.refresh();
             }
@@ -759,7 +762,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                 )}
             </div>
 
-            <div className="flex-1 p-4 pt-20 pb-24 overflow-y-auto no-scrollbar md:pl-[var(--sidebar-width) + 1rem]">
+            <div className="flex-1 p-4 pt-20 pb-[calc(6.5rem+env(safe-area-inset-bottom,0px))] overflow-y-auto no-scrollbar md:pl-[calc(var(--sidebar-width)+1rem)] md:pb-28">
                 <div className="max-w-2xl mx-auto space-y-6">
                     {scheduledDayLabel && (
                         <div className="card p-3 border-brand-500/30 bg-brand-950/20 text-center">
@@ -1189,7 +1192,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
             )}
 
             {sessionActive && !showFinishModal && (
-            <div className="fixed bottom-0 inset-x-0 p-4 bg-surface p-safe-area md:hidden border-t border-surface-border glass z-30">
+            <div className="fixed bottom-0 inset-x-0 z-40 p-4 pt-3 border-t border-surface-border bg-surface glass md:hidden pb-[max(1rem,env(safe-area-inset-bottom))]">
                 <button
                     onClick={handleInitiateFinish}
                     className="btn-primary w-full h-12 text-base shadow-glow-brand"
@@ -1200,7 +1203,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
             )}
 
             {!sessionActive && (
-            <div className="fixed bottom-0 inset-x-0 p-4 bg-surface p-safe-area border-t border-surface-border glass md:pl-[var(--sidebar-width)]">
+            <div className="fixed bottom-0 inset-x-0 z-40 p-4 pt-3 border-t border-surface-border bg-surface glass md:pl-[var(--sidebar-width)] pb-[max(1rem,env(safe-area-inset-bottom))]">
                 <button
                     onClick={handleStartWorkout}
                     disabled={isStarting || isCheckingSession}

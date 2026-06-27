@@ -406,7 +406,6 @@ export function SettingsClient({ user }: Props) {
                             <div className="text-center sm:text-left space-y-1">
                                 <h3 className="text-2xl font-black text-fg tracking-tight">{name || "Athlete Identity"}</h3>
                                 <p className="text-sm text-fg-muted">{user.email}</p>
-                                <p className="text-xs text-fg-subtle">Name and photo save automatically.</p>
                                 <div className="mt-3 flex flex-wrap gap-2 justify-center sm:justify-start">
                                     <span className="px-3 py-1 rounded-full bg-brand-400/10 border border-brand-400/20 text-[10px] font-black text-brand-400 uppercase tracking-widest">{user.role}</span>
                                     {user.onboardingDone && <span className="px-3 py-1 rounded-full bg-success/10 border border-success/20 text-[10px] font-black text-success uppercase tracking-widest">Certified Athlete</span>}
@@ -832,11 +831,11 @@ export function SettingsClient({ user }: Props) {
                         </div>
                         <div>
                             <h4 className="font-bold text-fg">Need help?</h4>
-                            <p className="text-sm text-fg-muted">Email {supportEmail} or support the app.</p>
+                            <p className="text-[15px] text-fg-muted leading-snug">Email {supportEmail} or support the app.</p>
                         </div>
                     </div>
                     <div className="flex flex-wrap gap-2 justify-end">
-                        <Link href="/donate" className="btn-ghost whitespace-nowrap text-xs font-bold uppercase tracking-wide">
+                        <Link href="/donate" className="btn-ghost whitespace-nowrap font-bold uppercase tracking-wide">
                             Support the app
                         </Link>
                         <button

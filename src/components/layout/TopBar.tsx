@@ -10,7 +10,7 @@ import { useRole } from "@/lib/RoleContext";
 import { formatRelative, roleLabels, roleBadgeClass, formatDate, getDayName, cn } from "@/lib/utils";
 import { useCurrentDate } from "@/hooks/useCurrentDate";
 import { useScrollLock } from "@/hooks/useScrollLock";
-import { getQuickReplyTemplate, supportsQuickReply } from "@/lib/notificationTypes";
+import { getQuickReplyTemplate, supportsQuickReply, NOTIFICATION_TYPES } from "@/lib/notificationTypes";
 
 
 interface TopBarProps {
@@ -19,6 +19,17 @@ interface TopBarProps {
     showToday?: boolean;
     streak?: number;
     hideSearch?: boolean;
+}
+
+function CoachMessageNotificationText({ message }: { message: string }) {
+    const coachName = message === "New message from your coach" ? "Your coach" : message;
+    return (
+        <>
+            <span className="font-bold text-fg">{coachName}</span>
+            <span className="text-brand-400 font-black tracking-wide"> (Coach)</span>
+            <span className="text-fg-muted font-medium"> — New message</span>
+        </>
+    );
 }
 
 function LiveTodayHeader() {
@@ -250,7 +261,11 @@ export function TopBar({ title, subtitle, showToday = false, streak, hideSearch 
                                                 >
                                                     <div className="flex items-start justify-between mb-1 gap-2 min-w-0">
                                                         <p className={cn("text-sm break-words min-w-0 flex-1", !n.read ? "font-bold text-fg" : "font-medium text-fg-muted")}>
-                                                            {n.message}
+                                                            {n.type === NOTIFICATION_TYPES.NEW_CHAT_MESSAGE ? (
+                                                                <CoachMessageNotificationText message={n.message} />
+                                                            ) : (
+                                                                n.message
+                                                            )}
                                                         </p>
                                                         {!n.read && <span className="w-2 h-2 rounded-full bg-brand-400 mt-1.5 shrink-0" />}
                                                     </div>

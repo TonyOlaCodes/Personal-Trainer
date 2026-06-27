@@ -11,10 +11,11 @@ import { CheckInsClient } from "@/app/(app)/checkins/CheckInsClient";
 import { Dumbbell, ChevronRight, Clock, Flame, Activity, Calendar, Ticket, Check, Edit3, Trash2, Scale, Utensils, Footprints, Moon, AlertCircle, X } from "lucide-react";
 import { formatDate, formatRelative, cn, toDateKey, parseLogDate, toLoggedAtIso } from "@/lib/utils";
 import { appendReturnTo } from "@/lib/navigation";
+import { notifyWorkoutStatsChanged } from "@/lib/workoutStatsRefresh";
 import { useCurrentPath } from "@/hooks/useNavigation";
 import { useCurrentDate } from "@/hooks/useCurrentDate";
 import { useScrollLock } from "@/hooks/useScrollLock";
-import { isCardio } from "@/components/shared/ExerciseAutocomplete";
+import { formatWeightDistanceFromGoal } from "@/lib/bodyweight";
 
 interface Exercise {
     id: string;
@@ -44,7 +45,8 @@ interface Props {
         name?: string | null; 
         role: string; 
         weightKg?: number | null; 
-        targetWeightKg?: number | null; 
+        targetWeightKg?: number | null;
+        goal?: string | null;
         hiddenGoals?: string[];
     };
     activePlan: { name: string } | null;
@@ -236,6 +238,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                     setSessionsExplorerOpen(false);
                     setSessionsExplorerInitialId(null);
                 }
+                notifyWorkoutStatsChanged();
                 router.refresh();
             } else {
                 alert("Failed to delete session.");
@@ -408,6 +411,14 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
     const bodyweightStatus = () => {
         if (weightMsg) return weightMsg;
         if (weightLogged) {
+            const current = parseFloat(weight);
+            if (
+                user.targetWeightKg != null
+                && user.targetWeightKg > 0
+                && Number.isFinite(current)
+            ) {
+                return formatWeightDistanceFromGoal(current, user.targetWeightKg, user.goal);
+            }
             return isWeightDateToday ? "Logged today" : "Logged";
         }
         return "Tap to log weight";
@@ -424,7 +435,19 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
 
     const getMetricInsight = (key: string, logged: boolean) => {
         if (key === "weight") {
-            return logged ? "Weight stable this week" : "Log today for trends";
+            if (logged && user.targetWeightKg != null && user.targetWeightKg > 0) {
+                return `Goal ${user.targetWeightKg.toFixed(1)} kg`;
+            }
+            if (logged && selectedPreviousWeight != null && weight) {
+                const current = parseFloat(weight);
+                if (Number.isFinite(current)) {
+                    const delta = Math.round((current - selectedPreviousWeight) * 10) / 10;
+                    if (Math.abs(delta) < 0.05) return "Same as last log";
+                    const sign = delta > 0 ? "+" : "";
+                    return `${sign}${delta.toFixed(1)} kg vs last log`;
+                }
+            }
+            return logged ? "Weight logged" : "Log today for trends";
         }
         if (key === "calories") {
             return logged ? "Fueling recovery" : "Log to check limit";

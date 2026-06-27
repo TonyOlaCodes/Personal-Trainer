@@ -10,6 +10,7 @@ import { ensureAppSchema, formatErrorDetails } from "@/lib/ensureAppSchema";
 import { SafeFallback } from "@/components/shared/SafeFallback";
 import { deactivateCoachActivePlans, isCoachRole } from "@/lib/roles";
 import { touchUserLastActive } from "@/lib/userPresence";
+import { PresenceHeartbeat } from "@/components/layout/PresenceHeartbeat";
 
 export default async function AppLayout({
     children,
@@ -60,6 +61,7 @@ export default async function AppLayout({
 
     return (
         <RoleProvider role={userRole}>
+            <PresenceHeartbeat />
             <div className="min-h-screen bg-surface w-full max-w-full">
                 {/* Prevent layout shifts by injecting sidebar width before browser renders */}
                 <style dangerouslySetInnerHTML={{ __html: `:root { --sidebar-width: ${isSidebarCollapsed ? '72px' : '260px'}; }` }} />

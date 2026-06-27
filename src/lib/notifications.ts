@@ -203,6 +203,50 @@ export async function createNotification(input: {
     `;
 }
 
+/** One unread coach-message alert per coach; updates timestamp if more messages arrive. */
+export async function notifyClientOfCoachMessage(input: {
+    clientUserId: string;
+    coachId: string;
+    coachName: string;
+    route: string;
+}) {
+    if (!(await userWantsNotification(input.clientUserId, "notifyOnCoachMessage"))) return;
+
+    await ensureNotificationsTable();
+
+    const message = input.coachName.trim() || "Your coach";
+    const existing = await prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT "id"
+        FROM "notifications"
+        WHERE "userId" = ${input.clientUserId}
+          AND "type" = 'NEW_CHAT_MESSAGE'
+          AND "entityId" = ${input.coachId}
+          AND "read" = false
+        ORDER BY "createdAt" DESC
+        LIMIT 1
+    `;
+
+    if (existing[0]) {
+        await prisma.$executeRaw`
+            UPDATE "notifications"
+            SET "message" = ${message},
+                "route" = ${input.route},
+                "createdAt" = CURRENT_TIMESTAMP
+            WHERE "id" = ${existing[0].id}
+        `;
+        return;
+    }
+
+    await createNotification({
+        userId: input.clientUserId,
+        type: "NEW_CHAT_MESSAGE",
+        message,
+        entityType: "CHAT_MESSAGE",
+        entityId: input.coachId,
+        route: input.route,
+    });
+}
+
 async function enqueuePendingCoachNotification(input: {
     coachId: string;
     prefKey: CoachNotificationPref;

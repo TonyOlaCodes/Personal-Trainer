@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
     LineChart, Line, AreaChart, Area, BarChart, Bar, Cell,
     XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -21,6 +21,7 @@ import { ReturnLink } from "@/components/shared/ReturnLink";
 import { ExerciseHistoryTooltipContent } from "@/components/shared/ExerciseHistoryTooltip";
 import { deriveOneRMFromBestSet } from "@/lib/exerciseHistory";
 import { MAX_PINNED_EXERCISES, normalizePinnedExercises, orderExerciseNames } from "@/lib/pinnedExercises";
+import { useWorkoutStatsRefresh } from "@/hooks/useWorkoutStatsRefresh";
 import { format, startOfWeek } from "date-fns";
 
 interface Props {
@@ -178,6 +179,7 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
     const [selectedWeekIndex, setSelectedWeekIndex] = useState<number | null>(null);
     const [isHydrated, setIsHydrated] = useState(false);
     const [pinnedExercises, setPinnedExercises] = useState<string[]>([]);
+    const hasLoadedOnceRef = useRef(false);
 
     useScrollLock(showExerciseModal && Boolean(selectedExercise));
 
@@ -185,7 +187,7 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
         setIsHydrated(true);
     }, []);
 
-    const persistPinnedExercises = async (nextPinned: string[]) => {
+    const persistPinnedExercises = useCallback(async (nextPinned: string[]) => {
         const res = await fetch("/api/user/pinned-exercises", {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
@@ -195,48 +197,66 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
             const data = await res.json().catch(() => ({}));
             throw new Error(data.error || "Failed to save pinned exercises");
         }
-    };
+    }, []);
+
+    const loadStats = useCallback(async (options?: { silent?: boolean }) => {
+        if (!isPremium) {
+            setLoading(false);
+            return;
+        }
+
+        if (!options?.silent) setLoading(true);
+
+        try {
+            const res = await fetch("/api/stats", { cache: "no-store" });
+            const d = await res.json();
+            setData(d);
+
+            const exercises = Object.keys(d?.exerciseHistory ?? {});
+            let pinned = normalizePinnedExercises(d?.pinnedExercises, exercises);
+
+            if (!hasLoadedOnceRef.current && pinned.length === 0 && typeof window !== "undefined") {
+                const stored = localStorage.getItem("pinned_exercises");
+                if (stored) {
+                    try {
+                        const legacy = normalizePinnedExercises(JSON.parse(stored), exercises);
+                        if (legacy.length > 0) {
+                            pinned = legacy;
+                            await persistPinnedExercises(legacy);
+                            localStorage.removeItem("pinned_exercises");
+                        }
+                    } catch {
+                        // ignore invalid legacy storage
+                    }
+                }
+            }
+
+            setPinnedExercises(pinned);
+            setSelectedExercise((prev) => {
+                if (prev && exercises.includes(prev)) return prev;
+                if (pinned.length > 0) return pinned[0];
+                return exercises[0] ?? "";
+            });
+
+            if (d?.volumes?.weekly?.length) {
+                setSelectedWeekIndex((prev) =>
+                    prev === null || !options?.silent ? d.volumes.weekly.length - 1 : prev
+                );
+            }
+
+            hasLoadedOnceRef.current = true;
+        } catch {
+            // keep prior data on silent refresh failure
+        } finally {
+            setLoading(false);
+        }
+    }, [isPremium, persistPinnedExercises]);
 
     useEffect(() => {
-        if (!isPremium) { setLoading(false); return; }
-        fetch("/api/stats")
-            .then(res => res.json())
-            .then(async (d) => {
-                setData(d);
-                const exercises = Object.keys(d?.exerciseHistory ?? {});
-                let pinned = normalizePinnedExercises(d?.pinnedExercises, exercises);
+        void loadStats();
+    }, [loadStats]);
 
-                if (pinned.length === 0 && typeof window !== "undefined") {
-                    const stored = localStorage.getItem("pinned_exercises");
-                    if (stored) {
-                        try {
-                            const legacy = normalizePinnedExercises(JSON.parse(stored), exercises);
-                            if (legacy.length > 0) {
-                                pinned = legacy;
-                                await persistPinnedExercises(legacy);
-                                localStorage.removeItem("pinned_exercises");
-                            }
-                        } catch {
-                            // ignore invalid legacy storage
-                        }
-                    }
-                }
-
-                setPinnedExercises(pinned);
-                if (exercises.length > 0) {
-                    if (pinned.length > 0) {
-                        setSelectedExercise(pinned[0]);
-                    } else {
-                        setSelectedExercise(exercises[0]);
-                    }
-                }
-                if (d?.volumes?.weekly?.length) {
-                    setSelectedWeekIndex(d.volumes.weekly.length - 1);
-                }
-                setLoading(false);
-            })
-            .catch(() => setLoading(false));
-    }, [isPremium]);
+    useWorkoutStatsRefresh(isPremium, loadStats);
 
     const weeklyVolumes = useMemo(() => data?.volumes?.weekly ?? [], [data]);
     const activeWeekIndex = selectedWeekIndex ?? Math.max(0, weeklyVolumes.length - 1);

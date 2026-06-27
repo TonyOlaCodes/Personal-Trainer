@@ -4,10 +4,9 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { canAccessClient } from "@/lib/apiAuth";
 import {
-    createNotification,
     getNotifications,
     markNotificationRead,
-    userWantsNotification,
+    notifyClientOfCoachMessage,
 } from "@/lib/notifications";
 import { getQuickReplyTemplate, supportsQuickReply } from "@/lib/notificationTypes";
 
@@ -64,16 +63,12 @@ export async function POST(req: Request) {
         },
     });
 
-    if (await userWantsNotification(clientId, "notifyOnCoachMessage")) {
-        await createNotification({
-            userId: clientId,
-            type: "NEW_CHAT_MESSAGE",
-            message: "New message from your coach",
-            entityType: "CHAT_MESSAGE",
-            entityId: message.id,
-            route: `/chat?with=${user.id}`,
-        });
-    }
+    await notifyClientOfCoachMessage({
+        clientUserId: clientId,
+        coachId: user.id,
+        coachName: user.name ?? user.email ?? "Your coach",
+        route: `/chat?with=${user.id}`,
+    });
 
     await markNotificationRead(user.id, notification.id);
 

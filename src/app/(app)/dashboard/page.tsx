@@ -275,7 +275,7 @@ export default async function DashboardPage() {
                 <TopBar showToday streak={streak} hideSearch={true} />
                 <div className="p-6 max-w-5xl mx-auto">
                         <DashboardClient
-                            user={{ name: user.name, role: user.role, weightKg: user.weightKg, targetWeightKg: user.targetWeightKg, hiddenGoals: user.hiddenGoals ?? [] }}
+                            user={{ name: user.name, role: user.role, weightKg: user.weightKg, targetWeightKg: user.targetWeightKg, goal: user.goal, hiddenGoals: user.hiddenGoals ?? [] }}
                             activePlan={activePlan ? { name: activePlan.name } : null}
                             todayWorkout={todayWorkout}
                             nextTrainingDay={nextTrainingDay}

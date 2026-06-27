@@ -45,6 +45,11 @@ export function MobileTabBar({ userRole = "FREE" }: MobileTabBarProps) {
         return item.roles.includes(userRole);
     });
 
+    const hideOnWorkoutLog =
+        pathname.startsWith("/plans/log/") && !pathname.startsWith("/plans/log/view/");
+
+    if (hideOnWorkoutLog) return null;
+
     return (
         <nav className="md:hidden fixed bottom-0 inset-x-0 z-50 glass glass-border border-t border-surface-border safe-area-pb">
             <div className="flex items-center justify-around px-2 py-2 overflow-hidden gap-1 w-full max-w-full">
