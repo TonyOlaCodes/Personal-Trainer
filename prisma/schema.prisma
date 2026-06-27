@@ -99,8 +99,8 @@ model User {
   notifyOnWorkoutTime     String?
   notifyOnCheckInTime     String?
   notifyOnMetricUpdateTime String?
-  notifyOnMissedCheckInTime String? @default("18:00")
-  notifyOnMissedWorkoutTime String? @default("18:00")
+  notifyOnMissedCheckInTime String? @default("09:00")
+  notifyOnMissedWorkoutTime String? @default("09:00")
 
   // Onboarding Step 1
   goal              Goal?
@@ -146,6 +146,7 @@ model User {
   workoutNotes      WorkoutNote[] @relation("CoachWorkoutNotes")
   clientGoals       ClientGoals?
   hiddenGoals       String[] @default([])
+  pinnedExercises   String[] @default([])
 
   @@map("users")
 }

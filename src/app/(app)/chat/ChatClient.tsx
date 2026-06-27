@@ -676,7 +676,9 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                                             <Star className="w-3 h-3 text-brand-400 fill-brand-400 shrink-0" />
                                         )}
                                     </div>
-                                    {!canViewLastOnline && (
+                                    {canViewLastOnline && presence ? (
+                                        <p className="text-[10px] text-fg-subtle truncate">{presence.label}</p>
+                                    ) : (
                                         <p className="text-[10px] uppercase font-bold tracking-widest text-fg-subtle">
                                             {conv.isDeleted ? "Inactive" : (roleLabels[conv.role] ?? conv.role)}
                                         </p>
@@ -769,7 +771,9 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                                 </div>
                                 <div>
                                     <p className="font-bold text-sm">{selectedConv.name}</p>
-                                    {!canViewLastOnline && (
+                                    {canViewLastOnline && selectedPresence ? (
+                                        <p className="text-[10px] text-fg-subtle font-medium truncate">{selectedPresence.label}</p>
+                                    ) : (
                                         <p className="text-[10px] text-fg-muted font-medium">{roleLabels[selectedConv.role] ?? selectedConv.role}</p>
                                     )}
                                 </div>

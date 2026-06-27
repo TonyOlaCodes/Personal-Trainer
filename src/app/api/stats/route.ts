@@ -6,6 +6,7 @@ import { ensureDailyMetricsTable, getDailyMetricTargets } from "@/lib/dailyMetri
 import { createExerciseSessionEntry, mergeSetIntoExerciseSession, normalizeExerciseHistory } from "@/lib/exerciseHistory";
 import { calculateOneRM, isBetterSet } from "@/lib/oneRepMax";
 import { ensureBodyweightTable } from "@/lib/bodyweight";
+import { getUserPinnedExercises } from "@/lib/pinnedExercises";
 
 export async function GET() {
     try {
@@ -20,6 +21,7 @@ export async function GET() {
         });
         if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
         await ensureDailyMetricsTable();
+        const pinnedExercises = await getUserPinnedExercises(user.id);
 
     // Fetch completed workout logs
     const logs = await prisma.workoutLog.findMany({
@@ -421,7 +423,8 @@ export async function GET() {
             topExercises,
             lastWorkout: lastWorkoutSummary,
             weeklySummary,
-            volumes
+            volumes,
+            pinnedExercises,
         });
     } catch (error) {
         console.error("Error in GET /api/stats:", error);

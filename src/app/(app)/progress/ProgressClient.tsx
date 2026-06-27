@@ -20,6 +20,7 @@ import { PremiumLockScreen } from "@/components/shared/PremiumLockScreen";
 import { ReturnLink } from "@/components/shared/ReturnLink";
 import { ExerciseHistoryTooltipContent } from "@/components/shared/ExerciseHistoryTooltip";
 import { deriveOneRMFromBestSet } from "@/lib/exerciseHistory";
+import { MAX_PINNED_EXERCISES, normalizePinnedExercises, orderExerciseNames } from "@/lib/pinnedExercises";
 import { format, startOfWeek } from "date-fns";
 
 interface Props {
@@ -182,34 +183,49 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
 
     useEffect(() => {
         setIsHydrated(true);
-        if (typeof window !== "undefined") {
-            const stored = localStorage.getItem("pinned_exercises");
-            if (stored) {
-                try {
-                    setPinnedExercises(JSON.parse(stored));
-                } catch (e) {
-                    console.error("[ProgressClient] Failed to load pinned exercises:", e);
-                }
-            }
-        }
     }, []);
+
+    const persistPinnedExercises = async (nextPinned: string[]) => {
+        const res = await fetch("/api/user/pinned-exercises", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ pinnedExercises: nextPinned }),
+        });
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || "Failed to save pinned exercises");
+        }
+    };
 
     useEffect(() => {
         if (!isPremium) { setLoading(false); return; }
         fetch("/api/stats")
             .then(res => res.json())
-            .then(d => {
+            .then(async (d) => {
                 setData(d);
                 const exercises = Object.keys(d?.exerciseHistory ?? {});
-                if (exercises.length > 0) {
+                let pinned = normalizePinnedExercises(d?.pinnedExercises, exercises);
+
+                if (pinned.length === 0 && typeof window !== "undefined") {
                     const stored = localStorage.getItem("pinned_exercises");
-                    let pinned: string[] = [];
                     if (stored) {
-                        try { pinned = JSON.parse(stored); } catch {}
+                        try {
+                            const legacy = normalizePinnedExercises(JSON.parse(stored), exercises);
+                            if (legacy.length > 0) {
+                                pinned = legacy;
+                                await persistPinnedExercises(legacy);
+                                localStorage.removeItem("pinned_exercises");
+                            }
+                        } catch {
+                            // ignore invalid legacy storage
+                        }
                     }
-                    const activePinned = pinned.filter(p => exercises.includes(p));
-                    if (activePinned.length > 0) {
-                        setSelectedExercise(activePinned[0]);
+                }
+
+                setPinnedExercises(pinned);
+                if (exercises.length > 0) {
+                    if (pinned.length > 0) {
+                        setSelectedExercise(pinned[0]);
                     } else {
                         setSelectedExercise(exercises[0]);
                     }
@@ -239,20 +255,25 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
         : previousWeekVolume;
     const selectedWeekComparisonLabel = isCurrentCalendarWeek ? weekToDateVsLabel : "previous week";
 
-    const togglePinExercise = (ex: string, e: React.MouseEvent) => {
+    const togglePinExercise = async (ex: string, e: React.MouseEvent) => {
         e.stopPropagation();
         let nextPinned = [...pinnedExercises];
         if (pinnedExercises.includes(ex)) {
             nextPinned = nextPinned.filter(name => name !== ex);
         } else {
-            if (pinnedExercises.length >= 3) {
-                alert("You can only pin up to 3 exercises. Please unpin an exercise first.");
+            if (pinnedExercises.length >= MAX_PINNED_EXERCISES) {
+                alert(`You can only pin up to ${MAX_PINNED_EXERCISES} exercises. Please unpin an exercise first.`);
                 return;
             }
             nextPinned.push(ex);
         }
         setPinnedExercises(nextPinned);
-        localStorage.setItem("pinned_exercises", JSON.stringify(nextPinned));
+        try {
+            await persistPinnedExercises(nextPinned);
+        } catch (error) {
+            setPinnedExercises(pinnedExercises);
+            alert(error instanceof Error ? error.message : "Failed to save pinned exercises");
+        }
     };
 
     const getRegex = (q: string) => {
@@ -265,16 +286,7 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
         if (!data) return [];
         const names = Object.keys(data?.exerciseHistory ?? {});
         const filtered = names.filter(ex => exerciseSearchQuery ? getRegex(exerciseSearchQuery).test(ex) : true);
-        return [...filtered].sort((a, b) => {
-            const aPinned = pinnedExercises.includes(a);
-            const bPinned = pinnedExercises.includes(b);
-            if (aPinned && !bPinned) return -1;
-            if (!aPinned && bPinned) return 1;
-            if (aPinned && bPinned) {
-                return pinnedExercises.indexOf(a) - pinnedExercises.indexOf(b);
-            }
-            return 0;
-        });
+        return orderExerciseNames(filtered, pinnedExercises);
     }, [data, exerciseSearchQuery, pinnedExercises]);
 
     const selectedExerciseHistory = useMemo(() => {

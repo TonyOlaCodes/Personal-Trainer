@@ -1,18 +1,27 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, UserCircle, TrendingUp } from "lucide-react";
-import { CalendarClient } from "@/app/(app)/calendar/CalendarClient";
-import { cn } from "@/lib/utils";
+import { CalendarClient, type CalendarView } from "@/app/(app)/calendar/CalendarClient";
+import { cn, toDateKey } from "@/lib/utils";
 import { useCurrentDate } from "@/hooks/useCurrentDate";
 import type { ClientCalendarPayload } from "@/lib/clientCalendarData";
 import {
+    computeComplianceForMonth,
     computeMonthlyCompliance,
     computeWeeklyCompliance,
     complianceTone,
+    hasPendingTodayWorkout,
+    isFutureCalendarMonth,
+    isSameCalendarMonth,
 } from "@/lib/calendarCompliance";
 import Link from "next/link";
+
+const MONTHS = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+];
 
 interface ClientOption {
     id: string;
@@ -73,6 +82,28 @@ function ComplianceCard({
 export function CoachCalendarClient({ clients, selectedClientId, selectedClientName, calendar }: Props) {
     const router = useRouter();
     const now = useCurrentDate();
+    const todayKey = toDateKey(now);
+    const prevTodayKeyRef = useRef(todayKey);
+
+    const [calendarView, setCalendarView] = useState<CalendarView>(() => {
+        const [y, m] = todayKey.split("-").map(Number);
+        return { year: y, month: m - 1 };
+    });
+
+    useEffect(() => {
+        const prevTodayKey = prevTodayKeyRef.current;
+        if (prevTodayKey === todayKey) return;
+        prevTodayKeyRef.current = todayKey;
+
+        setCalendarView((current) => {
+            const [prevYear, prevMonth] = prevTodayKey.split("-").map(Number);
+            const [ty, tm] = todayKey.split("-").map(Number);
+            if (current.year === prevYear && current.month === prevMonth - 1) {
+                return { year: ty, month: tm - 1 };
+            }
+            return current;
+        });
+    }, [todayKey]);
 
     const complianceInput = useMemo(
         () => ({
@@ -83,9 +114,35 @@ export function CoachCalendarClient({ clients, selectedClientId, selectedClientN
         [calendar]
     );
 
-    const weekCompliance = useMemo(() => computeWeeklyCompliance(complianceInput, now), [complianceInput, now]);
+    const complianceOptions = { excludeTodayUntilLogged: true } as const;
+    const isViewingCurrentMonth = isSameCalendarMonth(now, calendarView.year, calendarView.month);
+    const isViewingFutureMonth = isFutureCalendarMonth(now, calendarView.year, calendarView.month);
 
-    const monthCompliance = useMemo(() => computeMonthlyCompliance(complianceInput, now), [complianceInput, now]);
+    const weekCompliance = useMemo(
+        () => computeWeeklyCompliance(complianceInput, now, complianceOptions),
+        [complianceInput, now]
+    );
+
+    const monthCompliance = useMemo(
+        () => computeMonthlyCompliance(complianceInput, now, complianceOptions),
+        [complianceInput, now]
+    );
+
+    const viewedMonthCompliance = useMemo(
+        () => computeComplianceForMonth(
+            complianceInput,
+            calendarView.year,
+            calendarView.month,
+            now,
+            complianceOptions
+        ),
+        [complianceInput, calendarView.year, calendarView.month, now]
+    );
+
+    const pendingToday = useMemo(
+        () => hasPendingTodayWorkout(complianceInput, now),
+        [complianceInput, now]
+    );
 
     const onClientChange = (clientId: string) => {
         router.push(`/coach/calendar?clientId=${encodeURIComponent(clientId)}`);
@@ -131,23 +188,33 @@ export function CoachCalendarClient({ clients, selectedClientId, selectedClientN
                 </div>
             </div>
 
-            {calendar?.activePlan && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {calendar?.activePlan && !isViewingFutureMonth && (
+                isViewingCurrentMonth ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <ComplianceCard
+                            label="This Week"
+                            sublabel={pendingToday ? "Through yesterday" : "Since Monday"}
+                            completed={weekCompliance.completed}
+                            due={weekCompliance.due}
+                            percent={weekCompliance.percent}
+                        />
+                        <ComplianceCard
+                            label="This Month"
+                            sublabel={pendingToday ? "Through yesterday" : "Month to date"}
+                            completed={monthCompliance.completed}
+                            due={monthCompliance.due}
+                            percent={monthCompliance.percent}
+                        />
+                    </div>
+                ) : (
                     <ComplianceCard
-                        label="This Week"
-                        sublabel="Since Monday"
-                        completed={weekCompliance.completed}
-                        due={weekCompliance.due}
-                        percent={weekCompliance.percent}
+                        label={`${MONTHS[calendarView.month]} ${calendarView.year}`}
+                        sublabel="Full month completion"
+                        completed={viewedMonthCompliance.completed}
+                        due={viewedMonthCompliance.due}
+                        percent={viewedMonthCompliance.percent}
                     />
-                    <ComplianceCard
-                        label="This Month"
-                        sublabel="Month to date"
-                        completed={monthCompliance.completed}
-                        due={monthCompliance.due}
-                        percent={monthCompliance.percent}
-                    />
-                </div>
+                )
             )}
 
             {!calendar?.activePlan ? (
@@ -170,6 +237,8 @@ export function CoachCalendarClient({ clients, selectedClientId, selectedClientN
                     planStartedAt={calendar.planStartedAt}
                     loggedDates={calendar.loggedDates}
                     inProgressSessions={calendar.inProgressSessions}
+                    view={calendarView}
+                    onViewChange={setCalendarView}
                     coachView={{
                         clientId: selectedClientId!,
                         clientName: selectedClientName,

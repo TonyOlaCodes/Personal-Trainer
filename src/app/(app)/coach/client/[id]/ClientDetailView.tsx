@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import {
     Users, Activity, Calendar, MessageSquare,
     MapPin, Info, Dumbbell, Award, Scale, MoreHorizontal, ChevronRight, CheckCircle2, Edit3, Zap, Settings,
-    Trash2, AlertTriangle, Clock, Search, X, Send
+    Trash2, AlertTriangle, Clock, Search, X, Send, Pin
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
@@ -14,6 +14,7 @@ import Link from "next/link";
 import { ReturnLink } from "@/components/shared/ReturnLink";
 import { ExerciseHistoryTooltipContent } from "@/components/shared/ExerciseHistoryTooltip";
 import { deriveOneRMFromBestSet } from "@/lib/exerciseHistory";
+import { MAX_PINNED_EXERCISES, normalizePinnedExercises, orderExerciseNames } from "@/lib/pinnedExercises";
 import { RecentSessionsExplorer, PREVIEW_LIMIT } from "@/components/shared/RecentSessionsExplorer";
 import { cn, formatDate, getInitials } from "@/lib/utils";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
@@ -97,10 +98,11 @@ interface Props {
     workoutHistory: WorkoutHistoryEntry[];
     exerciseHistory: Record<string, Array<{ date: string, weight: number, reps: number, volume: number, oneRM: number }>>;
     exerciseLastDone: Record<string, number>;
+    initialPinnedExercises?: string[];
     readOnly?: boolean;
 }
 
-export function ClientDetailView({ client, currentUserId, availablePlans, logs, checkIns, bodyweightHistory, workoutNotes, workoutHistory, exerciseHistory, exerciseLastDone, readOnly = false }: Props) {
+export function ClientDetailView({ client, currentUserId, availablePlans, logs, checkIns, bodyweightHistory, workoutNotes, workoutHistory, exerciseHistory, exerciseLastDone, initialPinnedExercises = [], readOnly = false }: Props) {
     const canEdit = !readOnly;
     const [assigning, setAssigning] = useState(false);
     const [assignMode, setAssignMode] = useState<"MENU" | "LIST" | "IMPORT">("MENU");
@@ -141,6 +143,9 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
 
     const [selectedExercise, setSelectedExercise] = useState<string>("");
     const [exerciseSearchQuery, setExerciseSearchQuery] = useState("");
+    const [pinnedExercises, setPinnedExercises] = useState<string[]>(() =>
+        normalizePinnedExercises(initialPinnedExercises, Object.keys(exerciseHistory))
+    );
     const [weightTimeframe, setWeightTimeframe] = useState<"week" | "month" | "year" | "all">("all");
     
     // Quick Chat and Real-time Presence state hooks
@@ -446,14 +451,55 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
 
     const exerciseListOrdered = useMemo(() => {
         const names = Object.keys(exerciseHistory);
-        return names.sort((a, b) => (exerciseLastDone[b] || 0) - (exerciseLastDone[a] || 0));
-    }, [exerciseHistory, exerciseLastDone]);
+        return orderExerciseNames(
+            names,
+            pinnedExercises,
+            (a, b) => (exerciseLastDone[b] || 0) - (exerciseLastDone[a] || 0)
+        );
+    }, [exerciseHistory, exerciseLastDone, pinnedExercises]);
+
+    useEffect(() => {
+        setPinnedExercises(normalizePinnedExercises(initialPinnedExercises, Object.keys(exerciseHistory)));
+    }, [initialPinnedExercises, exerciseHistory]);
 
     useEffect(() => {
         if (!selectedExercise && exerciseListOrdered.length > 0) {
             setSelectedExercise(exerciseListOrdered[0]);
         }
     }, [exerciseListOrdered, selectedExercise]);
+
+    const togglePinExercise = async (ex: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (readOnly) return;
+
+        let nextPinned = [...pinnedExercises];
+        if (pinnedExercises.includes(ex)) {
+            nextPinned = nextPinned.filter((name) => name !== ex);
+        } else {
+            if (pinnedExercises.length >= MAX_PINNED_EXERCISES) {
+                alert(`You can only pin up to ${MAX_PINNED_EXERCISES} exercises. Please unpin an exercise first.`);
+                return;
+            }
+            nextPinned.push(ex);
+        }
+
+        const previous = pinnedExercises;
+        setPinnedExercises(nextPinned);
+        try {
+            const res = await fetch("/api/user/pinned-exercises", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ pinnedExercises: nextPinned, userId: client.id }),
+            });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error(data.error || "Failed to save pinned exercises");
+            }
+        } catch (error) {
+            setPinnedExercises(previous);
+            alert(error instanceof Error ? error.message : "Failed to save pinned exercises");
+        }
+    };
 
     const getRegex = (q: string) => {
         try {
@@ -1447,12 +1493,18 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                      const hist = exerciseHistory[ex] || [];
                                      const latest = hist[hist.length - 1];
                                      const isActive = selectedExercise === ex;
+                                     const isPinned = pinnedExercises.includes(ex);
                                      return (
-                                         <button
+                                         <div
                                              key={ex}
+                                             role="button"
+                                             tabIndex={0}
                                              onClick={() => setSelectedExercise(ex)}
+                                             onKeyDown={(e) => {
+                                                 if (e.key === "Enter" || e.key === " ") setSelectedExercise(ex);
+                                             }}
                                              className={cn(
-                                                 "w-full flex items-center justify-between p-3 rounded-xl transition-all text-left",
+                                                 "w-full flex items-center justify-between p-3 rounded-xl transition-all text-left cursor-pointer group",
                                                  isActive ? "bg-brand-500/10 border border-brand-500/20" : "hover:bg-surface-elevated border border-transparent"
                                              )}
                                          >
@@ -1465,8 +1517,26 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                                      <p className="text-[10px] text-fg-muted truncate">Best: {latest?.weight}kg · {hist.length} sessions</p>
                                                  </div>
                                              </div>
-                                             <ChevronRight className={cn("w-4 h-4 shrink-0 transition-opacity", isActive ? "text-brand-400 opacity-100" : "opacity-0")} />
-                                         </button>
+                                             <div className="flex items-center gap-1 shrink-0">
+                                                 {!readOnly && (
+                                                     <button
+                                                         type="button"
+                                                         onClick={(e) => togglePinExercise(ex, e)}
+                                                         className={cn(
+                                                             "p-1.5 rounded-lg transition-all hover:bg-surface-muted/80",
+                                                             isPinned ? "text-brand-400 opacity-100" : "text-fg-subtle opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                                         )}
+                                                         title={isPinned ? "Unpin exercise" : "Pin exercise"}
+                                                     >
+                                                         <Pin className={cn("w-3.5 h-3.5", isPinned && "fill-brand-400")} />
+                                                     </button>
+                                                 )}
+                                                 {isPinned && readOnly && (
+                                                     <Pin className="w-3.5 h-3.5 text-brand-400 fill-brand-400 shrink-0" />
+                                                 )}
+                                                 <ChevronRight className={cn("w-4 h-4 shrink-0 transition-opacity", isActive ? "text-brand-400 opacity-100" : "opacity-0")} />
+                                             </div>
+                                         </div>
                                      );
                                  })
                              )}

@@ -11,6 +11,7 @@ import { createExerciseSessionEntry, mergeSetIntoExerciseSession, normalizeExerc
 import { SafeFallback, rethrowNextInternalErrors } from "@/components/shared/SafeFallback";
 import { formatErrorDetails } from "@/lib/ensureAppSchema";
 import { dedupeCoachPlansByName } from "@/lib/coachPlans";
+import { getUserPinnedExercises } from "@/lib/pinnedExercises";
 
 export const metadata = { title: "Client Details" };
 
@@ -46,7 +47,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             target.isDeactivated ||
             target.email.endsWith("@deleted.local");
 
-        const [activePlan, availablePlans, checkInSchedule, bodyweightRows, workoutNotesRows, completedLogs, clientMetricTargets] = await Promise.all([
+        const [activePlan, availablePlans, checkInSchedule, bodyweightRows, workoutNotesRows, completedLogs, clientMetricTargets, pinnedExercises] = await Promise.all([
             Promise.resolve(target.plans[0]?.plan ?? null),
             prisma.plan.findMany({
                 where: { creatorId: actor.id },
@@ -86,7 +87,8 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                 },
                 orderBy: { loggedAt: "asc" }
             }),
-            getDailyMetricTargets(target.id)
+            getDailyMetricTargets(target.id),
+            getUserPinnedExercises(target.id),
         ]);
 
         const exerciseHistory: Record<string, any[]> = {};
@@ -202,6 +204,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                         }))}
                         exerciseHistory={normalizedExerciseHistory}
                         exerciseLastDone={exerciseLastDone}
+                        initialPinnedExercises={pinnedExercises}
                     />
                 </div>
             </>

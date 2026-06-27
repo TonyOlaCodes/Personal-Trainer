@@ -6,6 +6,7 @@ import { ensureUserAccountStatusColumns } from "@/lib/userDeactivation";
 import { ensureExerciseDictionary } from "@/lib/exerciseDictionary";
 import { ensureUnitSystemColumn } from "@/lib/units";
 import { ensureNotificationPreferenceColumns, ensureNotificationsTable, ensurePendingCoachNotificationsTable } from "@/lib/notifications";
+import { ensurePinnedExercisesColumn } from "@/lib/pinnedExercises";
 
 let appSchemaReady = false;
 let appSchemaPromise: Promise<void> | null = null;
@@ -27,6 +28,7 @@ export async function ensureAppSchema() {
             ensureNotificationPreferenceColumns(),
             ensureNotificationsTable(),
             ensurePendingCoachNotificationsTable(),
+            ensurePinnedExercisesColumn(),
         ]);
         appSchemaReady = true;
     })();

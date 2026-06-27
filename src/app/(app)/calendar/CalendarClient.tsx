@@ -43,6 +43,11 @@ interface InProgressSession {
     workoutName: string;
 }
 
+export interface CalendarView {
+    year: number;
+    month: number;
+}
+
 interface Props {
     activePlan: ActivePlan | null;
     planStartedAt: string | null;
@@ -53,6 +58,8 @@ interface Props {
         clientName: string;
         planId: string | null;
     };
+    view?: CalendarView;
+    onViewChange?: (view: CalendarView) => void;
 }
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -61,17 +68,32 @@ const MONTHS = [
     "July", "August", "September", "October", "November", "December",
 ];
 
-export function CalendarClient({ activePlan, planStartedAt, loggedDates, inProgressSessions, coachView }: Props) {
+export function CalendarClient({
+    activePlan,
+    planStartedAt,
+    loggedDates,
+    inProgressSessions,
+    coachView,
+    view: controlledView,
+    onViewChange,
+}: Props) {
     const isCoachView = Boolean(coachView);
     const planId = coachView?.planId ?? activePlan?.id ?? null;
     const now = useCurrentDate();
     const todayKey = toDateKey(now);
     const prevTodayKeyRef = useRef(todayKey);
 
-    const [view, setView] = useState(() => {
+    const [internalView, setInternalView] = useState<CalendarView>(() => {
         const [y, m] = todayKey.split("-").map(Number);
         return { year: y, month: m - 1 };
     });
+    const isControlled = controlledView !== undefined && onViewChange !== undefined;
+    const view = isControlled ? controlledView! : internalView;
+    const setView = (updater: CalendarView | ((prev: CalendarView) => CalendarView)) => {
+        const next = typeof updater === "function" ? updater(view) : updater;
+        if (isControlled) onViewChange!(next);
+        else setInternalView(next);
+    };
     const [selectedDateKey, setSelectedDateKey] = useState<string>(todayKey);
 
     useEffect(() => {

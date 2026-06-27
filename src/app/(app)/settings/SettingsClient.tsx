@@ -72,9 +72,11 @@ export function SettingsClient({ user }: Props) {
     // Profile form states
     const [name, setName] = useState(user.name || "");
     const [avatarUrl, setAvatarUrl] = useState(user.avatarUrl || "");
-    const [saving, setSaving] = useState(false);
+    const [profileSaving, setProfileSaving] = useState(false);
+    const [profileSaved, setProfileSaved] = useState(false);
     const [uploading, setUploading] = useState(false);
     const fileRef = useRef<HTMLInputElement>(null);
+    const profileReadyRef = useRef(false);
 
     // Goals form states
     const [goal, setGoal] = useState(user.goal || "");
@@ -197,6 +199,44 @@ export function SettingsClient({ user }: Props) {
         return () => window.clearTimeout(timer);
     }, [activeTab, buildNotificationPayload, router]);
 
+    const saveProfileFields = useCallback(async (fields: { name?: string; avatarUrl?: string }) => {
+        setProfileSaving(true);
+        setProfileSaved(false);
+        try {
+            const res = await fetch("/api/user/profile", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(fields),
+            });
+            if (res.ok) {
+                setProfileSaved(true);
+                router.refresh();
+                window.setTimeout(() => setProfileSaved(false), 2000);
+            } else {
+                const data = await res.json();
+                alert(data.error || "Failed to save profile");
+            }
+        } catch {
+            alert("Connection error.");
+        } finally {
+            setProfileSaving(false);
+        }
+    }, [router]);
+
+    useEffect(() => {
+        if (activeTab !== "profile") return;
+        if (!profileReadyRef.current) {
+            profileReadyRef.current = true;
+            return;
+        }
+
+        const timer = window.setTimeout(() => {
+            void saveProfileFields({ name, avatarUrl: avatarUrl || "" });
+        }, 450);
+
+        return () => window.clearTimeout(timer);
+    }, [activeTab, name, avatarUrl, saveProfileFields]);
+
     // Access code state
     const [secretCode, setSecretCode] = useState("");
     const [redeeming, setRedeeming] = useState(false);
@@ -226,28 +266,6 @@ export function SettingsClient({ user }: Props) {
     const handleRemoveAvatar = () => {
         setAvatarUrl("");
         if (fileRef.current) fileRef.current.value = "";
-    };
-
-    const handleSave = async () => {
-        setSaving(true);
-        try {
-            const res = await fetch("/api/user/profile", {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name, avatarUrl: avatarUrl || "" })
-            });
-            if (res.ok) {
-                alert("Profile Updated Successfully!");
-                window.location.reload();
-            } else {
-                const data = await res.json();
-                alert(data.error || "Update failed");
-            }
-        } catch {
-            alert("Connection error.");
-        } finally {
-            setSaving(false);
-        }
     };
 
     const handleGoalSave = async () => {
@@ -349,7 +367,8 @@ export function SettingsClient({ user }: Props) {
                 {/* ─── Profile ─── */}
                 {activeTab === "profile" && (
                     <div className="card p-8 space-y-8 animate-slide-up bg-gradient-to-br from-surface-card to-brand-950/5">
-                        <div className="flex flex-col sm:flex-row items-center gap-6">
+                        <div className="flex items-start justify-between gap-3">
+                            <div className="flex flex-col sm:flex-row items-center gap-6 flex-1 min-w-0">
                             <div className="flex flex-col items-center gap-2">
                             <div className="relative group">
                                 <div className="w-24 h-24 rounded-3xl bg-surface-muted overflow-hidden border-2 border-surface-border shadow-glow-sm flex items-center justify-center">
@@ -376,7 +395,7 @@ export function SettingsClient({ user }: Props) {
                                 <button
                                     type="button"
                                     onClick={handleRemoveAvatar}
-                                    disabled={uploading || saving}
+                                    disabled={uploading || profileSaving}
                                     className="text-[10px] font-black uppercase tracking-widest text-fg-muted hover:text-danger transition-colors disabled:opacity-50"
                                 >
                                     Remove photo
@@ -387,11 +406,21 @@ export function SettingsClient({ user }: Props) {
                             <div className="text-center sm:text-left space-y-1">
                                 <h3 className="text-2xl font-black text-fg tracking-tight">{name || "Athlete Identity"}</h3>
                                 <p className="text-sm text-fg-muted">{user.email}</p>
+                                <p className="text-xs text-fg-subtle">Name and photo save automatically.</p>
                                 <div className="mt-3 flex flex-wrap gap-2 justify-center sm:justify-start">
                                     <span className="px-3 py-1 rounded-full bg-brand-400/10 border border-brand-400/20 text-[10px] font-black text-brand-400 uppercase tracking-widest">{user.role}</span>
                                     {user.onboardingDone && <span className="px-3 py-1 rounded-full bg-success/10 border border-success/20 text-[10px] font-black text-success uppercase tracking-widest">Certified Athlete</span>}
                                 </div>
                             </div>
+                            </div>
+                            {(profileSaving || profileSaved) && (
+                                <span className={cn(
+                                    "text-[10px] font-black uppercase tracking-widest shrink-0",
+                                    profileSaving ? "text-fg-muted" : "text-success"
+                                )}>
+                                    {profileSaving ? "Saving…" : "Saved"}
+                                </span>
+                            )}
                         </div>
 
                         <div className="grid sm:grid-cols-2 gap-6">
@@ -434,16 +463,6 @@ export function SettingsClient({ user }: Props) {
                             </div>
                         )}
 
-                        <div className="pt-4 border-t border-surface-border flex justify-end">
-                            <button
-                                onClick={handleSave}
-                                disabled={saving || uploading}
-                                className="btn-primary w-full sm:w-auto px-10 h-12 shadow-glow-brand flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest"
-                            >
-                                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                                {saving ? "Saving..." : "Save Changes"}
-                            </button>
-                        </div>
                     </div>
                 )}
 
@@ -706,23 +725,23 @@ export function SettingsClient({ user }: Props) {
                                 />
                                 <CoachNotificationToggle
                                     label="Client misses a scheduled check-in"
-                                    description="Daily summary when a client has not submitted their due check-in."
+                                    description="Alert the morning after a due check-in was not submitted."
                                     checked={notifyOnMissedCheckIn}
                                     onChange={setNotifyOnMissedCheckIn}
                                     time={notifyOnMissedCheckInTime}
                                     onTimeChange={setNotifyOnMissedCheckInTime}
                                     requireTime
-                                    timeHint="Checked once per day at this time."
+                                    timeHint="Default 9:00 — the day after the check-in was due."
                                 />
                                 <CoachNotificationToggle
                                     label="Client misses a scheduled workout"
-                                    description="Daily summary when a client did not complete today's planned session."
+                                    description="Alert the morning after a planned session was not completed."
                                     checked={notifyOnMissedWorkout}
                                     onChange={setNotifyOnMissedWorkout}
                                     time={notifyOnMissedWorkoutTime}
                                     onTimeChange={setNotifyOnMissedWorkoutTime}
                                     requireTime
-                                    timeHint="Checked once per day at this time."
+                                    timeHint="Default 9:00 — the day after the workout was due."
                                 />
                             </div>
                         )}

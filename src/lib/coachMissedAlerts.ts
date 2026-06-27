@@ -5,7 +5,8 @@ import {
     DEFAULT_MISSED_NOTIFY_TIME,
     getLocalTimeParts,
     localDayBoundsUtc,
-    shouldRunMissedAlertScan,
+    shiftDateKey,
+    shouldDeliverMissedAlertNow,
 } from "@/lib/coachNotificationSchedule";
 import {
     flushPendingCoachNotifications,
@@ -66,7 +67,9 @@ async function processMissedCheckInsForCoach(
         if (client.checkIns.length > 0) continue;
 
         const schedule = await getUserCheckInSchedule(client.id);
-        const dueState = getCheckInDueState(schedule, new Date());
+        const [sy, sm, sd] = dateKey.split("-").map(Number);
+        const scanDate = new Date(Date.UTC(sy, sm - 1, sd, 12, 0, 0, 0));
+        const dueState = getCheckInDueState(schedule, scanDate);
 
         if (!dueState.isDueToday && !dueState.isOverdue) continue;
 
@@ -123,7 +126,9 @@ async function processMissedCheckInsForClients(dateKey: string, timezone: string
         if (!(await userWantsNotification(client.id, "notifyOnMissedCheckIn"))) continue;
 
         const schedule = await getUserCheckInSchedule(client.id);
-        const dueState = getCheckInDueState(schedule, new Date());
+        const [sy, sm, sd] = dateKey.split("-").map(Number);
+        const scanDate = new Date(Date.UTC(sy, sm - 1, sd, 12, 0, 0, 0));
+        const dueState = getCheckInDueState(schedule, scanDate);
         if (!dueState.isConfigured) continue;
         if (!dueState.isDueToday && !dueState.isOverdue) continue;
 
@@ -246,7 +251,7 @@ async function processMissedWorkoutsForCoach(
     return sent;
 }
 
-/** Hourly/15-min cron: deliver queued alerts and run missed scans at each coach's chosen times. */
+/** Daily cron: deliver queued alerts and run missed scans for the previous due day. */
 export async function processScheduledCoachAlerts(referenceDate = new Date()) {
     const coaches = await prisma.user.findMany({
         where: { role: { in: ["COACH", "SUPER_ADMIN"] } },
@@ -263,8 +268,9 @@ export async function processScheduledCoachAlerts(referenceDate = new Date()) {
     let clientMissedCheckIns = 0;
 
     const appLocal = getLocalTimeParts(referenceDate, APP_TIMEZONE);
-    if (shouldRunMissedAlertScan(referenceDate, APP_TIMEZONE, DEFAULT_MISSED_NOTIFY_TIME)) {
-        clientMissedCheckIns += await processMissedCheckInsForClients(appLocal.dateKey, APP_TIMEZONE);
+    const appScanDateKey = shiftDateKey(appLocal.dateKey, -1);
+    if (shouldDeliverMissedAlertNow(referenceDate, APP_TIMEZONE, DEFAULT_MISSED_NOTIFY_TIME)) {
+        clientMissedCheckIns += await processMissedCheckInsForClients(appScanDateKey, APP_TIMEZONE);
     }
 
     for (const coach of coaches) {
@@ -272,19 +278,20 @@ export async function processScheduledCoachAlerts(referenceDate = new Date()) {
 
         const schedule = await getCoachNotificationSchedule(coach.id);
         const local = getLocalTimeParts(referenceDate, schedule.timezone);
+        const scanDateKey = shiftDateKey(local.dateKey, -1);
 
         if (
             schedule.notifyOnMissedCheckInTime
-            && shouldRunMissedAlertScan(referenceDate, schedule.timezone, schedule.notifyOnMissedCheckInTime)
+            && shouldDeliverMissedAlertNow(referenceDate, schedule.timezone, schedule.notifyOnMissedCheckInTime)
         ) {
-            missedCheckIns += await processMissedCheckInsForCoach(coach.id, local.dateKey, schedule.timezone);
+            missedCheckIns += await processMissedCheckInsForCoach(coach.id, scanDateKey, schedule.timezone);
         }
 
         if (
             schedule.notifyOnMissedWorkoutTime
-            && shouldRunMissedAlertScan(referenceDate, schedule.timezone, schedule.notifyOnMissedWorkoutTime)
+            && shouldDeliverMissedAlertNow(referenceDate, schedule.timezone, schedule.notifyOnMissedWorkoutTime)
         ) {
-            missedWorkouts += await processMissedWorkoutsForCoach(coach.id, local.dateKey, schedule.timezone);
+            missedWorkouts += await processMissedWorkoutsForCoach(coach.id, scanDateKey, schedule.timezone);
         }
     }
 

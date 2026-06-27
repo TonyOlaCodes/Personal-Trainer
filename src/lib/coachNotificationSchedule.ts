@@ -18,7 +18,8 @@ export const COACH_NOTIFY_PREF_TO_TIME_FIELD: Record<CoachNotificationPref, stri
     notifyOnMissedWorkout: "notifyOnMissedWorkoutTime",
 };
 
-export const DEFAULT_MISSED_NOTIFY_TIME = "18:00";
+/** Default: next morning after a missed due day (coach/client can override in Settings). */
+export const DEFAULT_MISSED_NOTIFY_TIME = "09:00";
 
 const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
@@ -108,11 +109,21 @@ export function localNotifyTimeReached(now: Date, timezone: string, notifyTime: 
     return nowMinutes >= targetMinutes;
 }
 
+/** True once local clock is at or past the configured delivery time (for daily cron). */
+export function shouldDeliverMissedAlertNow(now: Date, timezone: string, notifyTime: string): boolean {
+    return localNotifyTimeReached(now, timezone, notifyTime);
+}
+
+/** @deprecated Use shouldDeliverMissedAlertNow */
 export function shouldRunMissedAlertScan(now: Date, timezone: string, notifyTime: string): boolean {
-    return (
-        localTimeMatchesNotifySlot(now, timezone, notifyTime)
-        || localNotifyTimeReached(now, timezone, notifyTime)
-    );
+    return shouldDeliverMissedAlertNow(now, timezone, notifyTime);
+}
+
+export function shiftDateKey(dateKey: string, days: number): string {
+    const [y, m, d] = dateKey.split("-").map(Number);
+    const date = new Date(Date.UTC(y, m - 1, d, 12, 0, 0, 0));
+    date.setUTCDate(date.getUTCDate() + days);
+    return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
 }
 
 /** UTC instant for the next occurrence of HH:mm in the given timezone. */

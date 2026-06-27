@@ -95,10 +95,10 @@ export async function PATCH(req: Request) {
                         notifyOnMetricUpdateTime: parsed.notifyOnMetricUpdateTime ? normalizeNotifyTime(parsed.notifyOnMetricUpdateTime) : null,
                     }),
                     ...(parsed.notifyOnMissedCheckInTime !== undefined && {
-                        notifyOnMissedCheckInTime: normalizeNotifyTime(parsed.notifyOnMissedCheckInTime) ?? "18:00",
+                        notifyOnMissedCheckInTime: normalizeNotifyTime(parsed.notifyOnMissedCheckInTime) ?? "09:00",
                     }),
                     ...(parsed.notifyOnMissedWorkoutTime !== undefined && {
-                        notifyOnMissedWorkoutTime: normalizeNotifyTime(parsed.notifyOnMissedWorkoutTime) ?? "18:00",
+                        notifyOnMissedWorkoutTime: normalizeNotifyTime(parsed.notifyOnMissedWorkoutTime) ?? "09:00",
                     }),
                 },
             });

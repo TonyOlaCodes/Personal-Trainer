@@ -2,6 +2,10 @@
   "crons": [
     {
       "path": "/api/cron/coach-missed-alerts",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/coach-missed-alerts",
       "schedule": "0 18 * * *"
     }
   ]
