@@ -13,7 +13,7 @@ function authorizeCron(req: Request) {
     return authHeader === `Bearer ${secret}`;
 }
 
-/** Every 15 minutes: flush queued coach alerts and run missed scans at each coach's chosen local times. */
+/** Daily cron (18:00 UTC): flush queued coach alerts and run missed check-in/workout scans. */
 export async function GET(req: Request) {
     if (!authorizeCron(req)) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

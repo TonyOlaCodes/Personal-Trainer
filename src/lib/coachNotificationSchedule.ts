@@ -80,12 +80,39 @@ export function getLocalTimeParts(date: Date, timezone: string): {
     };
 }
 
-/** True when local clock matches configured HH:mm (used with 15-minute cron ticks). */
-export function localTimeMatchesNotifySlot(now: Date, timezone: string, notifyTime: string): boolean {
+/** True when local clock matches configured HH:mm (used with cron ticks). */
+export function localTimeMatchesNotifySlot(
+    now: Date,
+    timezone: string,
+    notifyTime: string,
+    windowMinutes = 15
+): boolean {
     const config = parseNotifyTime(notifyTime);
     if (!config) return false;
     const local = getLocalTimeParts(now, timezone);
-    return local.hour === config.hour && local.minute === config.minute;
+    const nowMinutes = local.hour * 60 + local.minute;
+    const targetMinutes = config.hour * 60 + config.minute;
+    if (windowMinutes <= 0) {
+        return nowMinutes === targetMinutes;
+    }
+    return nowMinutes >= targetMinutes && nowMinutes < targetMinutes + windowMinutes;
+}
+
+/** True when local clock is at or past HH:mm (for once-daily cron). */
+export function localNotifyTimeReached(now: Date, timezone: string, notifyTime: string): boolean {
+    const config = parseNotifyTime(notifyTime);
+    if (!config) return false;
+    const local = getLocalTimeParts(now, timezone);
+    const nowMinutes = local.hour * 60 + local.minute;
+    const targetMinutes = config.hour * 60 + config.minute;
+    return nowMinutes >= targetMinutes;
+}
+
+export function shouldRunMissedAlertScan(now: Date, timezone: string, notifyTime: string): boolean {
+    return (
+        localTimeMatchesNotifySlot(now, timezone, notifyTime)
+        || localNotifyTimeReached(now, timezone, notifyTime)
+    );
 }
 
 /** UTC instant for the next occurrence of HH:mm in the given timezone. */

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import {
     User, Bell, Palette,
     HelpCircle, LogOut, ChevronRight, Check,
@@ -120,6 +120,82 @@ export function SettingsClient({ user }: Props) {
     );
     const [notifSaving, setNotifSaving] = useState(false);
     const [notifSaved, setNotifSaved] = useState(false);
+    const notifReadyRef = useRef(false);
+
+    const buildNotificationPayload = useCallback((): Record<string, boolean | string | null> => {
+        const payload: Record<string, boolean | string | null> = {};
+        if (showCoachNotifications) {
+            payload.notifyOnWorkout = notifyOnWorkout;
+            payload.notifyOnCheckIn = notifyOnCheckIn;
+            payload.notifyOnMetricUpdate = notifyOnMetricUpdate;
+            payload.notifyOnMissedCheckIn = notifyOnMissedCheckIn;
+            payload.notifyOnMissedWorkout = notifyOnMissedWorkout;
+            payload.notifyOnWorkoutTime = notifyOnWorkout && notifyOnWorkoutTime ? notifyOnWorkoutTime : null;
+            payload.notifyOnCheckInTime = notifyOnCheckIn && notifyOnCheckInTime ? notifyOnCheckInTime : null;
+            payload.notifyOnMetricUpdateTime = notifyOnMetricUpdate && notifyOnMetricUpdateTime ? notifyOnMetricUpdateTime : null;
+            payload.notifyOnMissedCheckInTime = notifyOnMissedCheckIn ? notifyOnMissedCheckInTime : null;
+            payload.notifyOnMissedWorkoutTime = notifyOnMissedWorkout ? notifyOnMissedWorkoutTime : null;
+        }
+        if (showClientNotifications) {
+            payload.notifyOnCoachMessage = notifyOnCoachMessage;
+            payload.notifyOnPlanUpdate = notifyOnPlanUpdate;
+            payload.notifyOnCheckInReview = notifyOnCheckInReview;
+            payload.notifyOnWorkoutFeedback = notifyOnWorkoutFeedback;
+            payload.notifyOnMissedCheckIn = notifyOnMissedCheckIn;
+        }
+        return payload;
+    }, [
+        showCoachNotifications,
+        showClientNotifications,
+        notifyOnWorkout,
+        notifyOnCheckIn,
+        notifyOnMetricUpdate,
+        notifyOnMissedCheckIn,
+        notifyOnMissedWorkout,
+        notifyOnWorkoutTime,
+        notifyOnCheckInTime,
+        notifyOnMetricUpdateTime,
+        notifyOnMissedCheckInTime,
+        notifyOnMissedWorkoutTime,
+        notifyOnCoachMessage,
+        notifyOnPlanUpdate,
+        notifyOnCheckInReview,
+        notifyOnWorkoutFeedback,
+    ]);
+
+    useEffect(() => {
+        if (activeTab !== "notifications") return;
+        if (!notifReadyRef.current) {
+            notifReadyRef.current = true;
+            return;
+        }
+
+        const timer = window.setTimeout(async () => {
+            setNotifSaving(true);
+            setNotifSaved(false);
+            try {
+                const res = await fetch("/api/user/profile", {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(buildNotificationPayload()),
+                });
+                if (res.ok) {
+                    setNotifSaved(true);
+                    router.refresh();
+                    window.setTimeout(() => setNotifSaved(false), 2000);
+                } else {
+                    const data = await res.json();
+                    alert(data.error || "Failed to save notification settings");
+                }
+            } catch {
+                alert("Connection error.");
+            } finally {
+                setNotifSaving(false);
+            }
+        }, 450);
+
+        return () => window.clearTimeout(timer);
+    }, [activeTab, buildNotificationPayload, router]);
 
     // Access code state
     const [secretCode, setSecretCode] = useState("");
@@ -206,50 +282,6 @@ export function SettingsClient({ user }: Props) {
             alert("Connection error occurred while saving goals.");
         } finally {
             setGoalSaving(false);
-        }
-    };
-
-    const handleNotificationSave = async () => {
-        setNotifSaving(true);
-        try {
-            const payload: Record<string, boolean | string | null> = {};
-            if (showCoachNotifications) {
-                payload.notifyOnWorkout = notifyOnWorkout;
-                payload.notifyOnCheckIn = notifyOnCheckIn;
-                payload.notifyOnMetricUpdate = notifyOnMetricUpdate;
-                payload.notifyOnMissedCheckIn = notifyOnMissedCheckIn;
-                payload.notifyOnMissedWorkout = notifyOnMissedWorkout;
-                payload.notifyOnWorkoutTime = notifyOnWorkout && notifyOnWorkoutTime ? notifyOnWorkoutTime : null;
-                payload.notifyOnCheckInTime = notifyOnCheckIn && notifyOnCheckInTime ? notifyOnCheckInTime : null;
-                payload.notifyOnMetricUpdateTime = notifyOnMetricUpdate && notifyOnMetricUpdateTime ? notifyOnMetricUpdateTime : null;
-                payload.notifyOnMissedCheckInTime = notifyOnMissedCheckIn ? notifyOnMissedCheckInTime : null;
-                payload.notifyOnMissedWorkoutTime = notifyOnMissedWorkout ? notifyOnMissedWorkoutTime : null;
-            }
-            if (showClientNotifications) {
-                payload.notifyOnCoachMessage = notifyOnCoachMessage;
-                payload.notifyOnPlanUpdate = notifyOnPlanUpdate;
-                payload.notifyOnCheckInReview = notifyOnCheckInReview;
-                payload.notifyOnWorkoutFeedback = notifyOnWorkoutFeedback;
-                payload.notifyOnMissedCheckIn = notifyOnMissedCheckIn;
-            }
-
-            const res = await fetch("/api/user/profile", {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload),
-            });
-            if (res.ok) {
-                setNotifSaved(true);
-                router.refresh();
-                setTimeout(() => setNotifSaved(false), 2500);
-            } else {
-                const data = await res.json();
-                alert(data.error || "Failed to save notification settings");
-            }
-        } catch {
-            alert("Connection error.");
-        } finally {
-            setNotifSaving(false);
         }
     };
 
@@ -625,11 +657,21 @@ export function SettingsClient({ user }: Props) {
 
                 {activeTab === "notifications" && (
                     <div className="card p-6 space-y-6 animate-slide-up">
-                        <div>
-                            <h3 className="heading-3">Activity Notifications</h3>
-                            <p className="text-sm text-fg-muted mt-1">
-                                Choose which in-app alerts you receive. Changes apply immediately.
-                            </p>
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <h3 className="heading-3">Activity Notifications</h3>
+                                <p className="text-sm text-fg-muted mt-1">
+                                    Choose which in-app alerts you receive. Changes save automatically.
+                                </p>
+                            </div>
+                            {(notifSaving || notifSaved) && (
+                                <span className={cn(
+                                    "text-[10px] font-black uppercase tracking-widest shrink-0 pt-1",
+                                    notifSaving ? "text-fg-muted" : "text-success"
+                                )}>
+                                    {notifSaving ? "Saving…" : "Saved"}
+                                </span>
+                            )}
                         </div>
 
                         {showCoachNotifications && (
@@ -721,19 +763,6 @@ export function SettingsClient({ user }: Props) {
                             </div>
                         )}
 
-                        <div className="pt-4 border-t border-surface-border flex justify-end">
-                            <button
-                                onClick={handleNotificationSave}
-                                disabled={notifSaving}
-                                className={cn(
-                                    "btn-primary w-full sm:w-auto px-10 h-12 flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest transition-all",
-                                    notifSaved && "bg-success border-success shadow-glow-success"
-                                )}
-                            >
-                                {notifSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : notifSaved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-                                {notifSaving ? "Saving..." : notifSaved ? "Saved!" : "Save Notifications"}
-                            </button>
-                        </div>
                     </div>
                 )}
 

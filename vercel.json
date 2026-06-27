@@ -1,1 +1,8 @@
-{}
+{
+  "crons": [
+    {
+      "path": "/api/cron/coach-missed-alerts",
+      "schedule": "0 18 * * *"
+    }
+  ]
+}

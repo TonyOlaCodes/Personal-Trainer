@@ -5,7 +5,7 @@ import {
     DEFAULT_MISSED_NOTIFY_TIME,
     getLocalTimeParts,
     localDayBoundsUtc,
-    localTimeMatchesNotifySlot,
+    shouldRunMissedAlertScan,
 } from "@/lib/coachNotificationSchedule";
 import {
     flushPendingCoachNotifications,
@@ -263,7 +263,7 @@ export async function processScheduledCoachAlerts(referenceDate = new Date()) {
     let clientMissedCheckIns = 0;
 
     const appLocal = getLocalTimeParts(referenceDate, APP_TIMEZONE);
-    if (localTimeMatchesNotifySlot(referenceDate, APP_TIMEZONE, DEFAULT_MISSED_NOTIFY_TIME)) {
+    if (shouldRunMissedAlertScan(referenceDate, APP_TIMEZONE, DEFAULT_MISSED_NOTIFY_TIME)) {
         clientMissedCheckIns += await processMissedCheckInsForClients(appLocal.dateKey, APP_TIMEZONE);
     }
 
@@ -275,14 +275,14 @@ export async function processScheduledCoachAlerts(referenceDate = new Date()) {
 
         if (
             schedule.notifyOnMissedCheckInTime
-            && localTimeMatchesNotifySlot(referenceDate, schedule.timezone, schedule.notifyOnMissedCheckInTime)
+            && shouldRunMissedAlertScan(referenceDate, schedule.timezone, schedule.notifyOnMissedCheckInTime)
         ) {
             missedCheckIns += await processMissedCheckInsForCoach(coach.id, local.dateKey, schedule.timezone);
         }
 
         if (
             schedule.notifyOnMissedWorkoutTime
-            && localTimeMatchesNotifySlot(referenceDate, schedule.timezone, schedule.notifyOnMissedWorkoutTime)
+            && shouldRunMissedAlertScan(referenceDate, schedule.timezone, schedule.notifyOnMissedWorkoutTime)
         ) {
             missedWorkouts += await processMissedWorkoutsForCoach(coach.id, local.dateKey, schedule.timezone);
         }

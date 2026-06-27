@@ -814,7 +814,15 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                 )}
 
                 {/* ── Messages ── */}
-                <div ref={messagesScrollRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 py-4 space-y-3 no-scrollbar">
+                <div
+                    ref={messagesScrollRef}
+                    className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 py-4 space-y-3 no-scrollbar"
+                    onClick={(e) => {
+                        if ((e.target as HTMLElement).closest("[data-chat-action]")) {
+                            e.stopPropagation();
+                        }
+                    }}
+                >
                     {messages.length === 0 ? (
                         <div className="flex items-center justify-center h-full">
                             <div className="text-center">
@@ -839,8 +847,10 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                                 <div
                                     data-chat-action
                                     className={cn(
-                                        "flex-shrink-0 flex items-center gap-0.5 transition-opacity self-center mb-5",
-                                        showMessageActions ? "opacity-100" : "opacity-0 sm:group-hover:opacity-100"
+                                        "flex-shrink-0 items-center gap-0.5 self-center mb-5 transition-opacity",
+                                        showMessageActions
+                                            ? "flex opacity-100"
+                                            : "hidden sm:flex opacity-0 sm:group-hover:opacity-100"
                                     )}
                                 >
                                             <button
@@ -853,7 +863,12 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
 
                                             <div className="relative">
                                                 <button
-                                                    onClick={(e) => { e.stopPropagation(); setReactionPickerId(reactionPickerId === msg.id ? null : msg.id); }}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setActiveMessageId(msg.id);
+                                                        setReactionPickerId(reactionPickerId === msg.id ? null : msg.id);
+                                                        setMenuOpenId(null);
+                                                    }}
                                                     className="btn-icon w-7 h-7 rounded-lg"
                                                     title="React"
                                                 >
@@ -861,7 +876,7 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                                                 </button>
                                                 {reactionPickerId === msg.id && (
                                                     <div
-                                                        className="absolute bottom-9 left-1/2 -translate-x-1/2 z-50 grid grid-cols-3 sm:flex gap-1.5 bg-surface-elevated border border-surface-border rounded-2xl p-2 shadow-modal animate-scale-in w-max max-w-[150px] sm:max-w-none"
+                                                        className="absolute top-full left-0 mt-1 z-50 grid grid-cols-3 sm:flex gap-1.5 bg-surface-elevated border border-surface-border rounded-2xl p-2 shadow-modal animate-scale-in w-max max-w-[min(100vw-2rem,240px)] sm:max-w-none sm:bottom-9 sm:top-auto sm:left-1/2 sm:-translate-x-1/2 sm:mt-0"
                                                         onClick={e => e.stopPropagation()}
                                                     >
                                                         {REACTION_EMOJIS.map(emoji => (
@@ -880,14 +895,19 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                                             {(isMine || canPin || isAdmin) && (
                                                 <div className="relative">
                                                     <button
-                                                        onClick={e => { e.stopPropagation(); setMenuOpenId(menuOpenId === msg.id ? null : msg.id); }}
+                                                        onClick={e => {
+                                                            e.stopPropagation();
+                                                            setActiveMessageId(msg.id);
+                                                            setMenuOpenId(menuOpenId === msg.id ? null : msg.id);
+                                                            setReactionPickerId(null);
+                                                        }}
                                                         className="btn-icon w-7 h-7 rounded-lg"
                                                     >
                                                         <MoreVertical className="w-3.5 h-3.5" />
                                                     </button>
                                                     {menuOpenId === msg.id && (
                                                         <div
-                                                            className="absolute bottom-9 left-1/2 -translate-x-1/2 z-50 bg-surface-elevated border border-surface-border rounded-xl shadow-modal overflow-hidden min-w-[140px] w-max"
+                                                            className="absolute top-full left-0 mt-1 z-50 bg-surface-elevated border border-surface-border rounded-xl shadow-modal overflow-hidden min-w-[140px] w-max sm:bottom-9 sm:top-auto sm:left-1/2 sm:-translate-x-1/2 sm:mt-0"
                                                             onClick={e => e.stopPropagation()}
                                                         >
                                                             {canPin && (
@@ -943,7 +963,10 @@ export function ChatClient({ currentUserId, currentUserRole, conversations, canU
                                             if (window.matchMedia("(min-width: 640px)").matches) return;
                                             const target = e.target as HTMLElement;
                                             if (target.closest("[data-chat-action], button, a, input, video, img")) return;
+                                            e.stopPropagation();
                                             setActiveMessageId((prev) => (prev === msg.id ? null : msg.id));
+                                            setMenuOpenId(null);
+                                            setReactionPickerId(null);
                                         }}
                                     >
                                         {/* Avatar */}
