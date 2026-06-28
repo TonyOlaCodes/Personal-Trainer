@@ -9,6 +9,7 @@ import {
     type CalendarComplianceInput,
 } from "@/lib/calendarCompliance";
 import { getTotalUnreadDirectCount, getUnreadCountsByPeer } from "@/lib/chatUnread";
+import { getMissedWorkoutsYesterdayForCoach } from "@/lib/coachMissedWorkoutsYesterday";
 import { getPlannedWorkoutForDate, type ActiveUserPlanLike } from "@/lib/planSchedule";
 import { loadPlanScheduleRevisionsByPlanIds } from "@/lib/planScheduleHistory";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
@@ -83,7 +84,7 @@ export interface CoachDashboardInsights {
         pendingCheckIns: number;
         unreadMessages: number;
         activeWorkoutsNow: number;
-        missedWorkoutsToday: number;
+        missedWorkoutsYesterday: number;
         overdueCheckIns: number;
         setupNeeded: number;
     };
@@ -213,6 +214,7 @@ export async function loadCoachDashboardInsights(input: {
         activityPrs,
         activityBodyweight,
         unreadByPeer,
+        missedWorkoutsYesterday,
     ] = await Promise.all([
         activeClientIds.length > 0
             ? prisma.userPlan.findMany({
@@ -367,6 +369,7 @@ export async function loadCoachDashboardInsights(input: {
             `
             : Promise.resolve([]),
         getUnreadCountsByPeer(input.coachId, activeClientIds),
+        getMissedWorkoutsYesterdayForCoach(input.coachId),
     ]);
 
     const planIds = [...new Set(userPlans.map((row) => row.plan.id))];
@@ -395,7 +398,7 @@ export async function loadCoachDashboardInsights(input: {
     }
 
     const clientInsights: Record<string, ClientDashboardInsight> = {};
-    let missedWorkoutsToday = 0;
+    const missedWorkoutsYesterdayCount = missedWorkoutsYesterday.length;
     let overdueCheckIns = 0;
     let setupNeeded = 0;
     const clientsNeedingAttentionIds = new Set<string>();
@@ -424,7 +427,6 @@ export async function loadCoachDashboardInsights(input: {
         };
 
         if (plannedToday && !completedToday && !input.activeSessions[client.id]) {
-            missedWorkoutsToday++;
             clientsNeedingAttentionIds.add(client.id);
         }
 
@@ -547,10 +549,10 @@ export async function loadCoachDashboardInsights(input: {
     const attentionItems: CoachAttentionItem[] = [
         {
             key: "missed-workouts",
-            label: "Missed today's workout",
-            count: missedWorkoutsToday,
-            href: "/coach/calendar",
-            urgent: missedWorkoutsToday > 0,
+            label: "Missed yesterday's workouts",
+            count: missedWorkoutsYesterdayCount,
+            href: "/coach/missed-workouts",
+            urgent: missedWorkoutsYesterdayCount > 0,
         },
         {
             key: "overdue-checkins",
@@ -642,7 +644,7 @@ export async function loadCoachDashboardInsights(input: {
             pendingCheckIns: input.pendingReviewCount,
             unreadMessages: unreadTotal,
             activeWorkoutsNow,
-            missedWorkoutsToday,
+            missedWorkoutsYesterday: missedWorkoutsYesterdayCount,
             overdueCheckIns,
             setupNeeded,
         },

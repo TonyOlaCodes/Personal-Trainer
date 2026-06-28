@@ -34,6 +34,7 @@ interface Props {
     selectedClientId: string | null;
     selectedClientName: string;
     calendar: ClientCalendarPayload | null;
+    initialDateKey?: string | null;
 }
 
 function ComplianceCard({
@@ -79,14 +80,15 @@ function ComplianceCard({
     );
 }
 
-export function CoachCalendarClient({ clients, selectedClientId, selectedClientName, calendar }: Props) {
+export function CoachCalendarClient({ clients, selectedClientId, selectedClientName, calendar, initialDateKey }: Props) {
     const router = useRouter();
     const now = useCurrentDate();
     const todayKey = toDateKey(now);
     const prevTodayKeyRef = useRef(todayKey);
 
     const [calendarView, setCalendarView] = useState<CalendarView>(() => {
-        const [y, m] = todayKey.split("-").map(Number);
+        const sourceKey = initialDateKey ?? todayKey;
+        const [y, m] = sourceKey.split("-").map(Number);
         return { year: y, month: m - 1 };
     });
 
@@ -141,7 +143,9 @@ export function CoachCalendarClient({ clients, selectedClientId, selectedClientN
 
     const onClientChange = (clientId: string) => {
         localStorage.setItem(LAST_COACH_CALENDAR_CLIENT_KEY, clientId);
-        router.push(`/coach/calendar?clientId=${encodeURIComponent(clientId)}`);
+        const params = new URLSearchParams({ clientId });
+        if (initialDateKey) params.set("date", initialDateKey);
+        router.push(`/coach/calendar?${params.toString()}`);
     };
 
     // Restore last viewed client when opening /coach/calendar without ?clientId=
@@ -253,6 +257,8 @@ export function CoachCalendarClient({ clients, selectedClientId, selectedClientN
                     scheduleRevisions={calendar.scheduleRevisions}
                     view={calendarView}
                     onViewChange={setCalendarView}
+                    initialSelectedDateKey={initialDateKey ?? undefined}
+                    focusSelection={Boolean(initialDateKey)}
                     coachView={{
                         clientId: selectedClientId!,
                         clientName: selectedClientName,

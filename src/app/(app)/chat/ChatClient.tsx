@@ -31,6 +31,7 @@ import { useChatUnread } from "@/components/chat/ChatUnreadProvider";
 import type { CoachPlanRecord } from "@/lib/coachPlans";
 import { useWalkthrough } from "@/components/walkthrough/AppWalkthroughProvider";
 import { WalkthroughChatDemo } from "@/components/walkthrough/WalkthroughDemoPanels";
+import { useScrollLock } from "@/hooks/useScrollLock";
 
 /* ─── Types ──────────────────────────────────────────── */
 interface ReplyPreview {
@@ -112,6 +113,7 @@ const COACH_FILTER_OPTIONS: { id: CoachListFilter; label: string }[] = [
 
 const SWIPE_REPLY_THRESHOLD = 55;
 const SWIPE_REPLY_MAX = 72;
+const LONG_PRESS_MS = 450;
 
 function computeReplySwipeOffset(dx: number, isMine: boolean) {
     const towardReply = isMine ? -dx : dx;
@@ -189,6 +191,9 @@ export function ChatClient({
     const [isMdUp, setIsMdUp] = useState(
         () => typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches
     );
+    const [isSmDown, setIsSmDown] = useState(
+        () => typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches
+    );
     const [conversationActivity, setConversationActivity] = useState<Record<string, string>>({});
     const [conversationPresence, setConversationPresence] = useState<Record<string, string | null>>({});
     const [activeSessions, setActiveSessions] = useState<Record<string, ActiveSession>>({});
@@ -243,6 +248,8 @@ export function ChatClient({
         offsetX: number;
         animating?: boolean;
     } | null>(null);
+    const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const longPressOpenedRef = useRef(false);
 
     const draftContextKey = useMemo(
         () => (isHydrated ? getChatDraftKey(tab, selectedConv?.userId ?? null) : null),
@@ -277,13 +284,47 @@ export function ChatClient({
         return () => mq.removeEventListener("change", update);
     }, []);
 
-    const startReplyTo = useCallback((msg: Message) => {
-        setReplyTo(msg);
+    useEffect(() => {
+        const mq = window.matchMedia("(max-width: 639px)");
+        const update = () => setIsSmDown(mq.matches);
+        update();
+        mq.addEventListener("change", update);
+        return () => mq.removeEventListener("change", update);
+    }, []);
+
+    const closeMessageActions = useCallback(() => {
         setActiveMessageId(null);
         setMenuOpenId(null);
         setReactionPickerId(null);
-        inputRef.current?.focus();
     }, []);
+
+    const openMobileMessageActions = useCallback((messageId: string) => {
+        setActiveMessageId(messageId);
+        setMenuOpenId(null);
+        setReactionPickerId(null);
+    }, []);
+
+    const cancelLongPress = useCallback(() => {
+        if (longPressTimerRef.current) {
+            clearTimeout(longPressTimerRef.current);
+            longPressTimerRef.current = null;
+        }
+    }, []);
+
+    useEffect(() => () => cancelLongPress(), [cancelLongPress]);
+
+    const mobileActionMessage = useMemo(
+        () => (activeMessageId ? messages.find((m) => m.id === activeMessageId) ?? null : null),
+        [activeMessageId, messages]
+    );
+
+    useScrollLock(isSmDown && Boolean(mobileActionMessage));
+
+    const startReplyTo = useCallback((msg: Message) => {
+        setReplyTo(msg);
+        closeMessageActions();
+        inputRef.current?.focus();
+    }, [closeMessageActions]);
 
     const resetSwipeReplyVisual = useCallback((messageId: string) => {
         setSwipeReplyVisual({ messageId, offsetX: 0, animating: true });
@@ -294,6 +335,19 @@ export function ChatClient({
 
     const handleMessageTouchStart = (messageId: string, isMine: boolean) => (e: React.TouchEvent) => {
         if (!window.matchMedia("(max-width: 639px)").matches) return;
+
+        longPressOpenedRef.current = false;
+        cancelLongPress();
+        longPressTimerRef.current = window.setTimeout(() => {
+            longPressOpenedRef.current = true;
+            swipeTouchRef.current.tracking = false;
+            setSwipeReplyVisual(null);
+            openMobileMessageActions(messageId);
+            if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+                navigator.vibrate(10);
+            }
+        }, LONG_PRESS_MS);
+
         swipeTouchRef.current = {
             messageId,
             isMine,
@@ -307,6 +361,12 @@ export function ChatClient({
 
     const handleMessageTouchMove = (e: React.TouchEvent) => {
         const swipe = swipeTouchRef.current;
+        if (swipe.tracking && swipe.messageId && longPressTimerRef.current) {
+            const dx = Math.abs(e.touches[0].clientX - swipe.startX);
+            const dy = Math.abs(e.touches[0].clientY - swipe.startY);
+            if (dx > 8 || dy > 8) cancelLongPress();
+        }
+
         if (!swipe.tracking || !swipe.messageId) return;
 
         const dx = e.touches[0].clientX - swipe.startX;
@@ -331,6 +391,14 @@ export function ChatClient({
     };
 
     const handleMessageTouchEnd = (msg: Message, isMine: boolean) => (e: React.TouchEvent) => {
+        cancelLongPress();
+        if (longPressOpenedRef.current) {
+            longPressOpenedRef.current = false;
+            swipeTouchRef.current.tracking = false;
+            setSwipeReplyVisual(null);
+            return;
+        }
+
         const swipe = swipeTouchRef.current;
         if (!swipe.tracking || swipe.messageId !== msg.id) {
             setSwipeReplyVisual(null);
@@ -358,6 +426,8 @@ export function ChatClient({
     };
 
     const handleMessageTouchCancel = () => {
+        cancelLongPress();
+        longPressOpenedRef.current = false;
         const messageId = swipeTouchRef.current.messageId;
         swipeTouchRef.current.tracking = false;
         if (messageId) resetSwipeReplyVisual(messageId);
@@ -511,12 +581,12 @@ export function ChatClient({
 
     useEffect(() => {
         if (!activeMessageId && !menuOpenId && !reactionPickerId) return;
-        if (window.matchMedia("(min-width: 640px)").matches) return;
+        if (!isSmDown) return;
         const targetId = menuOpenId ?? reactionPickerId ?? activeMessageId;
         if (!targetId) return;
         const row = messageRowRefs.current[targetId];
         row?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-    }, [activeMessageId, menuOpenId, reactionPickerId]);
+    }, [activeMessageId, menuOpenId, reactionPickerId, isSmDown]);
 
     const parseMessagesResponse = useCallback((data: unknown): { messages: Message[]; hasMore: boolean } => {
         if (Array.isArray(data)) {
@@ -941,7 +1011,7 @@ export function ChatClient({
     };
 
     const deleteMessage = async (id: string) => {
-        setMenuOpenId(null);
+        closeMessageActions();
         if (!confirm("Delete this message?")) return;
         const res = await fetch("/api/messages", {
             method: "DELETE",
@@ -957,7 +1027,7 @@ export function ChatClient({
     };
 
     const toggleReaction = async (messageId: string, emoji: string) => {
-        setReactionPickerId(null);
+        closeMessageActions();
         const res = await fetch("/api/messages", {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
@@ -970,7 +1040,7 @@ export function ChatClient({
     };
 
     const togglePin = async (id: string) => {
-        setMenuOpenId(null);
+        closeMessageActions();
         const res = await fetch("/api/messages", {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
@@ -1377,7 +1447,7 @@ export function ChatClient({
     return (
         <div
             className="flex overflow-hidden bg-surface animate-fade-in fixed inset-x-0 top-0 bottom-20 z-40 w-full max-w-full md:static md:z-auto md:h-[calc(100dvh-4rem)] md:bottom-auto"
-            onClick={() => { setMenuOpenId(null); setReactionPickerId(null); setActiveMessageId(null); }}
+            onClick={() => closeMessageActions()}
         >
             
             {viewerMedia && (
@@ -1387,6 +1457,117 @@ export function ChatClient({
                     onClose={() => setViewerMedia(null)} 
                 />
             )}
+
+            {isSmDown && mobileActionMessage && (() => {
+                const msg = mobileActionMessage;
+                const isMine = msg.sender.id === currentUserId;
+                const canEditMsg = isMine && msg.type === "TEXT" && !editExpired[msg.id];
+                const previewText =
+                    msg.type === "TEXT"
+                        ? (msg.content?.trim() || "Message")
+                        : msg.type === "IMAGE"
+                            ? "Photo"
+                            : msg.type === "VIDEO"
+                                ? "Video"
+                                : "Message";
+
+                return (
+                    <>
+                        <button
+                            type="button"
+                            aria-label="Close message actions"
+                            className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-[2px] sm:hidden border-0 p-0 cursor-default"
+                            onClick={closeMessageActions}
+                        />
+                        <div
+                            role="dialog"
+                            aria-modal="true"
+                            aria-label="Message actions"
+                            className="fixed inset-x-0 bottom-20 z-[81] px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:hidden max-h-[min(72dvh,calc(100dvh-7rem))] overflow-y-auto overscroll-contain"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="bg-surface-elevated border border-surface-border rounded-2xl shadow-modal overflow-hidden animate-slide-up">
+                                <div className="px-4 py-3 border-b border-surface-border bg-surface-muted/30">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle mb-1">
+                                        {isMine ? "Your message" : msg.sender.name ?? "Message"}
+                                    </p>
+                                    <p className="text-sm text-fg line-clamp-3 break-words">{previewText}</p>
+                                </div>
+
+                                <div className="px-4 py-3 border-b border-surface-border">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle mb-2 text-center">
+                                        React
+                                    </p>
+                                    <div className="flex flex-wrap justify-center gap-2">
+                                        {REACTION_EMOJIS.map((emoji) => (
+                                            <button
+                                                key={emoji}
+                                                type="button"
+                                                onClick={() => void toggleReaction(msg.id, emoji)}
+                                                className="w-11 h-11 flex items-center justify-center rounded-xl bg-surface-muted hover:bg-surface-card border border-surface-border text-xl transition-colors"
+                                            >
+                                                {emoji}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="divide-y divide-surface-border">
+                                    <button
+                                        type="button"
+                                        onClick={() => startReplyTo(msg)}
+                                        className="w-full flex items-center gap-3 px-4 py-3.5 text-sm font-bold text-fg hover:bg-surface-muted transition-colors"
+                                    >
+                                        <Reply className="w-4 h-4 text-brand-400" />
+                                        Reply
+                                    </button>
+                                    {canPin && (
+                                        <button
+                                            type="button"
+                                            onClick={() => void togglePin(msg.id)}
+                                            className="w-full flex items-center gap-3 px-4 py-3.5 text-sm font-bold text-fg hover:bg-surface-muted transition-colors"
+                                        >
+                                            <Pin className="w-4 h-4 text-brand-400" />
+                                            {msg.isPinned ? "Unpin" : "Pin"}
+                                        </button>
+                                    )}
+                                    {isMine && canEditMsg && (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setEditingId(msg.id);
+                                                setEditText(msg.content ?? "");
+                                                closeMessageActions();
+                                            }}
+                                            className="w-full flex items-center gap-3 px-4 py-3.5 text-sm font-bold text-fg hover:bg-surface-muted transition-colors"
+                                        >
+                                            <Pencil className="w-4 h-4 text-brand-400" />
+                                            Edit
+                                        </button>
+                                    )}
+                                    {(isMine || isAdmin) && (
+                                        <button
+                                            type="button"
+                                            onClick={() => void deleteMessage(msg.id)}
+                                            className="w-full flex items-center gap-3 px-4 py-3.5 text-sm font-bold text-danger hover:bg-danger/5 transition-colors"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                            Delete
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={closeMessageActions}
+                                className="w-full mt-2 py-3.5 rounded-2xl bg-surface-card border border-surface-border text-sm font-black text-fg hover:bg-surface-muted transition-colors"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </>
+                );
+            })()}
 
             {/* Chat panels — split on desktop, single pane on mobile */}
             <div className="flex-1 flex flex-col md:flex-row min-w-0 min-h-0 overflow-hidden w-full">
@@ -1584,8 +1765,8 @@ export function ChatClient({
                                         data-chat-action
                                         aria-hidden={!visible}
                                         className={cn(
-                                            "absolute z-20 flex items-center gap-0.5 transition-opacity",
-                                            isMine ? "right-0 top-full mt-1 sm:top-1/2 sm:mt-0 sm:-translate-y-1/2 sm:right-full sm:mr-1.5" : "left-0 top-full mt-1 sm:top-1/2 sm:mt-0 sm:-translate-y-1/2 sm:left-full sm:ml-1.5",
+                                            "absolute z-20 hidden sm:flex items-center gap-0.5 transition-opacity",
+                                            isMine ? "top-1/2 -translate-y-1/2 right-full mr-1.5" : "top-1/2 -translate-y-1/2 left-full ml-1.5",
                                             actionVisibility
                                         )}
                                     >
@@ -1714,7 +1895,8 @@ export function ChatClient({
                                         onTouchEnd={handleMessageTouchEnd(msg, isMine)}
                                         onTouchCancel={handleMessageTouchCancel}
                                         onClick={(e) => {
-                                            if (window.matchMedia("(min-width: 640px)").matches) return;
+                                            if (!isSmDown) return;
+                                            if (longPressOpenedRef.current) return;
                                             const target = e.target as HTMLElement;
                                             if (target.closest("[data-chat-action], button, a, input, video, img")) return;
                                             e.stopPropagation();
@@ -1812,7 +1994,8 @@ export function ChatClient({
                                                         ? "ring-2 ring-warning/40 bg-warning/20"
                                                         : "ring-2 ring-warning/30 bg-warning/5 border border-warning/20"),
                                                      (!isMine && msg.mentions?.includes(currentUserId)) && "border-l-4 border-l-warning bg-warning/5 border-y-warning/20 border-r-warning/20 shadow-[0_0_12px_rgba(245,158,11,0.15)] text-fg",
-                                                     msg.isPinned && "ring-1 ring-brand-400/30"
+                                                     msg.isPinned && "ring-1 ring-brand-400/30",
+                                                     isSmDown && activeMessageId === msg.id && "ring-2 ring-brand-400/50"
                                                  )}>
                                                     {renderBroadcastLabel(msg, isMine)}
                                                     {renderContent(msg.content || "")}

@@ -4,7 +4,13 @@ import Link from "next/link";
 import { ReactNode } from "react";
 import { cn, getInitials, getRoleNameClass } from "@/lib/utils";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
+import { getPublicProfileHref } from "@/lib/profileNavigation";
 
+/**
+ * Links to a user's public profile. Use only in social contexts (chat, search,
+ * profile pages). For the logged-in user's own account in app navigation, use
+ * AccountNav or link to /settings instead.
+ */
 interface ProfileLinkProps {
     userId: string;
     name?: ReactNode;
@@ -69,7 +75,7 @@ export function ProfileLink({
 
     return (
         <Link
-            href={`/profile/${userId}`}
+            href={getPublicProfileHref(userId)}
             className={cn(
                 "inline-flex items-center gap-2 min-w-0 hover:opacity-85 transition-opacity",
                 className

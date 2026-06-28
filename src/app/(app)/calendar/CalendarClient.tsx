@@ -64,6 +64,8 @@ interface Props {
     };
     view?: CalendarView;
     onViewChange?: (view: CalendarView) => void;
+    initialSelectedDateKey?: string;
+    focusSelection?: boolean;
 }
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -81,6 +83,8 @@ export function CalendarClient({
     coachView,
     view: controlledView,
     onViewChange,
+    initialSelectedDateKey,
+    focusSelection = false,
 }: Props) {
     const isCoachView = Boolean(coachView);
     const planId = coachView?.planId ?? activePlan?.id ?? null;
@@ -99,8 +103,25 @@ export function CalendarClient({
         if (isControlled) onViewChange!(next);
         else setInternalView(next);
     };
-    const [selectedDateKey, setSelectedDateKey] = useState<string>(todayKey);
+    const [selectedDateKey, setSelectedDateKey] = useState<string>(initialSelectedDateKey ?? todayKey);
+    const detailPanelRef = useRef<HTMLDivElement>(null);
     const { demoMode } = useWalkthrough();
+
+    useEffect(() => {
+        if (!initialSelectedDateKey) return;
+        setSelectedDateKey(initialSelectedDateKey);
+        const [y, m] = initialSelectedDateKey.split("-").map(Number);
+        setView({ year: y, month: m - 1 });
+    }, [initialSelectedDateKey]);
+
+    useEffect(() => {
+        if (!focusSelection || !initialSelectedDateKey) return;
+        if (selectedDateKey !== initialSelectedDateKey) return;
+        const timer = window.setTimeout(() => {
+            detailPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }, 150);
+        return () => window.clearTimeout(timer);
+    }, [focusSelection, initialSelectedDateKey, selectedDateKey]);
 
     useEffect(() => {
         const prevTodayKey = prevTodayKeyRef.current;
@@ -381,8 +402,16 @@ export function CalendarClient({
             </div>
 
             {/* ── Sidebar Details ── */}
-            <div className="lg:col-span-4 space-y-6 lg:sticky lg:top-10 lg:h-fit">
-                <div className="card p-6 border-brand-500/20 bg-gradient-to-br from-surface-card to-brand-950/10 shadow-glow-sm min-h-[400px]">
+            <div ref={detailPanelRef} className="lg:col-span-4 space-y-6 lg:sticky lg:top-10 lg:h-fit">
+                <div className={cn(
+                    "card p-6 border-brand-500/20 bg-gradient-to-br from-surface-card to-brand-950/10 shadow-glow-sm min-h-[400px]",
+                    focusSelection
+                        && selectedPlanned
+                        && selectedDateKey < todayKey
+                        && selectedLogs.length === 0
+                        && !resumeSession
+                        && "border-danger/40 ring-2 ring-danger/30 streak-fire-glow"
+                )}>
                     <div className="flex items-center justify-between mb-8">
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-xl bg-surface-card flex items-center justify-center border border-surface-border shadow-inner">

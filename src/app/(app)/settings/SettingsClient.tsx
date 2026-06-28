@@ -21,6 +21,7 @@ import {
     type ProfilePrivacy,
     type SocialLinks,
 } from "@/lib/profilePrivacy";
+import { getPublicProfileHref } from "@/lib/profileNavigation";
 
 interface Props {
     user: {
@@ -714,7 +715,7 @@ export function SettingsClient({ user }: Props) {
                                     )} />
                                 </button>
                             </div>
-                            <Link href={`/profile/${user.id}`} className="text-xs font-bold text-brand-400 hover:text-brand-300">
+                            <Link href={getPublicProfileHref(user.id)} className="text-xs font-bold text-brand-400 hover:text-brand-300">
                                 View your public profile →
                             </Link>
                         </div>

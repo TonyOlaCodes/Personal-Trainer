@@ -10,7 +10,7 @@ export const metadata = { title: "Client Calendar" };
 export default async function CoachCalendarPage({
     searchParams,
 }: {
-    searchParams: Promise<{ clientId?: string }>;
+    searchParams: Promise<{ clientId?: string; date?: string }>;
 }) {
     const { userId } = await auth();
     if (!userId) redirect("/sign-in");
@@ -45,6 +45,7 @@ export default async function CoachCalendarPage({
     }
 
     const params = await searchParams;
+    const initialDateKey = params.date?.match(/^\d{4}-\d{2}-\d{2}$/) ? params.date : null;
     const clientOptions = coach.clients.map((c) => ({
         id: c.id,
         name: c.name || "Unnamed Client",
@@ -71,6 +72,7 @@ export default async function CoachCalendarPage({
                     selectedClientId={selectedClient?.id ?? null}
                     selectedClientName={selectedClient?.name ?? "Client"}
                     calendar={calendar}
+                    initialDateKey={initialDateKey}
                 />
             </div>
         </>

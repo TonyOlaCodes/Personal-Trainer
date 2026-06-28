@@ -6,6 +6,7 @@ import { Settings } from "lucide-react";
 import { cn, getInitials } from "@/lib/utils";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { useAppUser } from "@/lib/AppUserContext";
+import { getAccountNavHref, isSettingsPath } from "@/lib/profileNavigation";
 
 type Props = {
     variant?: "sidebar" | "header";
@@ -18,10 +19,10 @@ export function AccountNav({ variant = "sidebar", collapsed = false }: Props) {
 
     if (!user?.id) return null;
 
-    const profileHref = `/profile/${user.id}`;
-    const onProfile = pathname === profileHref || pathname.startsWith(`${profileHref}/`);
-    const onSettings = pathname === "/settings" || pathname.startsWith("/settings/");
-    const displayName = user.name?.trim() || user.email || "Profile";
+    const accountHref = getAccountNavHref();
+    const onSettings = isSettingsPath(pathname);
+    const displayName = user.name?.trim() || user.email || "Account";
+    const accountLabel = user.name?.trim()?.split(" ")[0] ?? "Account";
 
     const avatar = (
         <span
@@ -45,13 +46,13 @@ export function AccountNav({ variant = "sidebar", collapsed = false }: Props) {
     if (variant === "header") {
         return (
             <Link
-                href={profileHref}
+                href={accountHref}
                 className={cn(
                     "rounded-full transition-opacity hover:opacity-90",
-                    onProfile && "ring-2 ring-brand-400/60 ring-offset-2 ring-offset-surface-card"
+                    onSettings && "ring-2 ring-brand-400/60 ring-offset-2 ring-offset-surface-card"
                 )}
-                aria-label="View your profile"
-                title="View profile"
+                aria-label="Open settings"
+                title="Settings"
             >
                 {avatar}
             </Link>
@@ -61,18 +62,20 @@ export function AccountNav({ variant = "sidebar", collapsed = false }: Props) {
     return (
         <div className={cn("space-y-1", collapsed && "flex flex-col items-center")}>
             <Link
-                href={profileHref}
+                href={accountHref}
                 className={cn(
-                    onProfile ? "sidebar-link-active" : "sidebar-link",
+                    onSettings ? "sidebar-link-active" : "sidebar-link",
                     collapsed ? "w-10 h-10 p-0 mx-auto justify-center gap-0" : "gap-3"
                 )}
-                title={collapsed ? "Profile" : undefined}
+                title={collapsed ? accountLabel : undefined}
             >
                 {avatar}
-                {!collapsed && <span className="text-xs font-semibold animate-fade-in truncate">Profile</span>}
+                {!collapsed && (
+                    <span className="text-xs font-semibold animate-fade-in truncate">{accountLabel}</span>
+                )}
             </Link>
             <Link
-                href="/settings"
+                href={accountHref}
                 className={cn(
                     onSettings ? "sidebar-link-active" : "sidebar-link",
                     collapsed ? "w-10 h-10 p-0 mx-auto justify-center gap-0" : "gap-3"

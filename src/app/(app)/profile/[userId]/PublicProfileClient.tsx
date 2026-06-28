@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { cn, getInitials, roleLabels, getRoleNameClass, formatRelative } from "@/lib/utils";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
+import { getPublicProfileHref } from "@/lib/profileNavigation";
 import type { SocialLinks } from "@/lib/profilePrivacy";
 
 interface PublicPlan {
@@ -523,7 +524,7 @@ export function PublicProfileClient({ userId }: Props) {
 
             {profile.mutualCoach && (
                 <Link
-                    href={`/profile/${profile.mutualCoach.id}`}
+                    href={getPublicProfileHref(profile.mutualCoach.id)}
                     className="card p-4 flex items-center gap-4 hover:border-brand-500/30 transition-colors"
                 >
                     <div className="w-12 h-12 rounded-2xl bg-gradient-brand flex items-center justify-center text-sm font-black text-white overflow-hidden shrink-0">
