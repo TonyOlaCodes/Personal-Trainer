@@ -20,7 +20,7 @@ interface Plan {
     description?: string | null;
     type: string;
     shareCode?: string | null;
-    authorName?: string | null;
+    creatorName: string;
     isOwned: boolean;
     isActive: boolean;
     isPublic?: boolean;
@@ -259,12 +259,15 @@ export function PlansClient({ plans, userRole, activeSession = null }: Props) {
                                             {plan.description && (
                                                 <p className="text-sm text-fg-muted truncate">{plan.description}</p>
                                             )}
-                                            <div className="flex items-center gap-3 mt-2 text-xs text-fg-subtle">
+                                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs text-fg-subtle">
                                                 <span className="flex items-center gap-1">
                                                     <Calendar className="w-3 h-3" />
                                                     {plan.weekCount} weeks
                                                 </span>
                                                 <span>Started {formatDate(plan.startedAt)}</span>
+                                                <span className="text-[10px] text-fg-subtle/70">
+                                                    Creator: {plan.creatorName}
+                                                </span>
                                             </div>
                                         </div>
                                     </Link>

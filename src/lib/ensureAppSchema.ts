@@ -12,6 +12,7 @@ import { ensureChatTypingTable } from "@/lib/chatTyping";
 import { ensureMessageActionColumns } from "@/lib/coachChat";
 import { ensureAnnouncementsTable } from "@/lib/announcements";
 import { ensurePlanScheduleRevisionsTable } from "@/lib/planScheduleHistory";
+import { ensurePlanOriginalCreatorColumn } from "@/lib/planCreator";
 import { ensureWalkthroughColumn } from "@/lib/walkthrough/ensureWalkthroughColumn";
 import { ensureGeneralPremiumRole } from "@/lib/ensureGeneralPremiumRole";
 
@@ -41,6 +42,7 @@ export async function ensureAppSchema() {
             ensureMessageActionColumns(),
             ensureAnnouncementsTable(),
             ensurePlanScheduleRevisionsTable(),
+            ensurePlanOriginalCreatorColumn(),
             ensureWalkthroughColumn(),
             ensureGeneralPremiumRole(),
         ]);

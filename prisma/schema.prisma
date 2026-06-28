@@ -144,6 +144,7 @@ model User {
   accessCodesUsed   AccessCode[] @relation("UsedCodes")
   generatedCodes    AccessCode[] @relation("GeneratedCodes")
   createdPlans      Plan[]       @relation("CreatedPlans")
+  originalCreatedPlans Plan[]    @relation("OriginalPlans")
   reactions         Reaction[]
   notifications     Notification[]
   workoutNotes      WorkoutNote[] @relation("CoachWorkoutNotes")
@@ -167,6 +168,7 @@ model Plan {
   description String?
   type        PlanType @default(USER_CREATED)
   creatorId   String?
+  originalCreatorId String?
   isPublic    Boolean  @default(false)
   shareCode   String?  @unique
   imageUrl    String?
@@ -180,6 +182,7 @@ model Plan {
   scheduleRevisions PlanScheduleRevision[]
 
   creator User? @relation("CreatedPlans", fields: [creatorId], references: [id])
+  originalCreator User? @relation("OriginalPlans", fields: [originalCreatorId], references: [id])
 
   @@map("plans")
 }

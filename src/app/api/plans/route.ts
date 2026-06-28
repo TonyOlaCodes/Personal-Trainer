@@ -91,6 +91,7 @@ export async function POST(req: Request) {
             description,
             type: type as never,
             creatorId: user.id,
+            originalCreatorId: user.id,
             shareCode,
             weeks: {
                 create: weeks.map((w) => ({

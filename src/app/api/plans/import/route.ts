@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { isCoachRole } from "@/lib/roles";
+import { clonePlanForUser } from "@/lib/planClone";
 
 export async function POST(req: Request) {
     const { userId } = await auth();
@@ -17,53 +18,16 @@ export async function POST(req: Request) {
         where: { shareCode: code.toUpperCase().trim() },
         include: {
             creator: true,
-            weeks: {
-                include: {
-                    workouts: {
-                        include: { exercises: { where: { isCustom: false }, orderBy: { order: "asc" } } },
-                    },
-                },
-            },
+            originalCreator: { select: { name: true } },
         },
     });
 
     if (!originalPlan) return NextResponse.json({ error: "Plan not found! Verify your share code." }, { status: 404 });
 
-    // Clone it
-    const clonedPlan = await prisma.plan.create({
-        data: {
-            name: `${originalPlan.name} (Imported)`,
-            description: originalPlan.description,
-            type: "USER_CREATED",
-            creatorId: user.id,
-            weeks: {
-                create: originalPlan.weeks.map(w => ({
-                    weekNumber: w.weekNumber,
-                    name: w.name,
-                    workouts: {
-                        create: w.workouts.map(wd => ({
-                            dayNumber: wd.dayNumber,
-                            dayOfWeek: wd.dayOfWeek,
-                            name: wd.name,
-                            notes: wd.notes,
-                            exercises: {
-                                create: wd.exercises.map(ex => ({
-                                    name: ex.name,
-                                    sets: ex.sets,
-                                    reps: ex.reps,
-                                    weightTargetKg: ex.weightTargetKg,
-                                    restSeconds: ex.restSeconds,
-                                    notes: ex.notes,
-                                    order: ex.order,
-                                    muscleGroup: ex.muscleGroup,
-                                }))
-                            }
-                        }))
-                    }
-                }))
-            }
-        }
-    });
+    const clonedPlan = await clonePlanForUser(originalPlan.id, user.id, " (Imported)");
+    if (!clonedPlan) {
+        return NextResponse.json({ error: "Could not import plan" }, { status: 500 });
+    }
 
     if (!isCoachRole(user.role)) {
         await prisma.userPlan.create({
@@ -71,8 +35,13 @@ export async function POST(req: Request) {
         });
     }
 
+    const authorName =
+        originalPlan.originalCreator?.name
+        ?? originalPlan.creator?.name
+        ?? "Anonymous Athlete";
+
     return NextResponse.json({
-        author: originalPlan.creator?.name || "Anonymous Athlete",
+        author: authorName,
         id: clonedPlan.id
     }, { status: 200 });
 }

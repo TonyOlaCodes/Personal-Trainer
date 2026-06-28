@@ -1,11 +1,16 @@
 import { prisma } from "@/lib/prisma";
 import { randomBytes } from "crypto";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
+import { resolvePlanOriginalCreatorId } from "@/lib/planCreator";
 
 export async function clonePlanForUser(sourcePlanId: string, userId: string, nameSuffix = " (Copied)") {
     const originalPlan = await prisma.plan.findUnique({
         where: { id: sourcePlanId },
-        include: {
+        select: {
+            name: true,
+            description: true,
+            creatorId: true,
+            originalCreatorId: true,
             weeks: {
                 orderBy: { weekNumber: "asc" },
                 include: {
@@ -22,6 +27,7 @@ export async function clonePlanForUser(sourcePlanId: string, userId: string, nam
     if (!originalPlan) return null;
 
     const shareCode = randomBytes(4).toString("hex").toUpperCase();
+    const originalCreatorId = resolvePlanOriginalCreatorId(originalPlan);
 
     const clonedPlan = await prisma.plan.create({
         data: {
@@ -29,6 +35,7 @@ export async function clonePlanForUser(sourcePlanId: string, userId: string, nam
             description: originalPlan.description,
             type: "USER_CREATED",
             creatorId: userId,
+            originalCreatorId,
             isPublic: false,
             shareCode,
             weeks: {

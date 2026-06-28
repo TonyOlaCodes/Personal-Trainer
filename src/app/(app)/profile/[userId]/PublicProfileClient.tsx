@@ -21,6 +21,7 @@ interface PublicPlan {
     tags: string[];
     weekCount: number;
     createdAt: string;
+    creatorName: string;
 }
 
 interface PublicAchievement {
@@ -312,6 +313,9 @@ export function PublicProfileClient({ userId }: Props) {
                                     )}
                                     <p className="text-[10px] font-bold uppercase tracking-widest text-fg-subtle mt-2">
                                         {plan.weekCount} week{plan.weekCount === 1 ? "" : "s"}
+                                        <span className="normal-case tracking-normal font-medium text-fg-subtle/70 ml-2">
+                                            · Creator: {plan.creatorName}
+                                        </span>
                                     </p>
                                 </div>
                                 <div className="flex flex-wrap gap-2">

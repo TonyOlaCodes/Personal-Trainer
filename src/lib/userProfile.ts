@@ -215,6 +215,7 @@ export interface PublicProfilePlan {
     tags: string[];
     weekCount: number;
     createdAt: string;
+    creatorName: string;
 }
 
 export interface BuiltPublicProfile {
@@ -580,6 +581,7 @@ export async function buildPublicProfileData(
                     tags: plan.tags,
                     weekCount: plan._count.weeks,
                     createdAt: plan.createdAt.toISOString(),
+                    creatorName: plan.originalCreator?.name ?? plan.creator?.name ?? "Unknown",
                 }));
             })()
         );
@@ -670,6 +672,8 @@ export async function getPublicPlansForUser(ownerUserId: string) {
             tags: true,
             isPublic: true,
             createdAt: true,
+            originalCreator: { select: { name: true } },
+            creator: { select: { name: true } },
             _count: { select: { weeks: true } },
         },
         orderBy: { createdAt: "desc" },

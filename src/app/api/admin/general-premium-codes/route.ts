@@ -31,6 +31,7 @@ async function getOrCreateTemplatePlan(templateId: string, creatorId: string) {
             description: template.description,
             type: "PREBUILT" as never,
             creatorId,
+            originalCreatorId: creatorId,
             shareCode: randomBytes(4).toString("hex").toUpperCase(),
             weeks: {
                 create: [{

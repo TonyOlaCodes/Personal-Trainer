@@ -6,12 +6,22 @@ import { TopBar } from "@/components/layout/TopBar";
 import { PlansClient } from "./PlansClient";
 import { isCoachRole } from "@/lib/roles";
 import { cleanupStaleInProgressSessions } from "@/lib/workoutSessionCleanup";
+import { ensurePlanOriginalCreatorColumn } from "@/lib/planCreator";
 
 export const metadata = { title: "Plans" };
+
+function planCreatorName(plan: {
+    originalCreator?: { name: string | null } | null;
+    creator?: { name: string | null } | null;
+}) {
+    return plan.originalCreator?.name ?? plan.creator?.name ?? "Unknown";
+}
 
 export default async function PlansPage() {
     const { userId } = await auth();
     if (!userId) redirect("/sign-in");
+
+    await ensurePlanOriginalCreatorColumn();
 
     const user = await prisma.user.findUnique({
         where: { clerkId: userId },
@@ -22,6 +32,7 @@ export default async function PlansPage() {
                         include: {
                             _count: { select: { weeks: true } },
                             creator: { select: { name: true } },
+                            originalCreator: { select: { name: true } },
                             weeks: {
                                 include: { _count: { select: { workouts: true } } },
                                 take: 1,
@@ -76,6 +87,7 @@ export default async function PlansPage() {
             include: {
                 _count: { select: { weeks: true } },
                 creator: { select: { name: true } },
+                originalCreator: { select: { name: true } },
                 weeks: {
                     include: { _count: { select: { workouts: true } } },
                     take: 1,
@@ -91,7 +103,7 @@ export default async function PlansPage() {
             description: plan.description,
             type: plan.type,
             shareCode: plan.shareCode,
-            authorName: null as string | null,
+            creatorName: planCreatorName(plan),
             isOwned: true,
             isActive: false,
             isPublic: plan.isPublic,
@@ -100,32 +112,20 @@ export default async function PlansPage() {
             tags: plan.tags,
         }));
     } else {
-        plans = user.plans.map((up) => {
-            const isImported = up.plan.name.includes("(Imported)");
-            const isSomeoneElsesPlan = up.plan.creatorId !== user.id;
-
-            let authorName: string | null = null;
-            if (isSomeoneElsesPlan) {
-                authorName = up.plan.creator?.name ?? "Unknown";
-            } else if (isImported) {
-                authorName = "you";
-            }
-
-            return {
-                id: up.plan.id,
-                name: up.plan.name,
-                description: up.plan.description,
-                type: up.plan.type,
-                shareCode: up.plan.shareCode,
-                authorName,
-                isOwned: !isSomeoneElsesPlan,
-                isActive: up.isActive,
-                isPublic: up.plan.creatorId === user.id ? up.plan.isPublic : false,
-                weekCount: up.plan._count.weeks,
-                startedAt: up.startedAt.toISOString(),
-                tags: up.plan.tags,
-            };
-        });
+        plans = user.plans.map((up) => ({
+            id: up.plan.id,
+            name: up.plan.name,
+            description: up.plan.description,
+            type: up.plan.type,
+            shareCode: up.plan.shareCode,
+            creatorName: planCreatorName(up.plan),
+            isOwned: up.plan.creatorId === user.id,
+            isActive: up.isActive,
+            isPublic: up.plan.creatorId === user.id ? up.plan.isPublic : false,
+            weekCount: up.plan._count.weeks,
+            startedAt: up.startedAt.toISOString(),
+            tags: up.plan.tags,
+        }));
     }
 
     return (
