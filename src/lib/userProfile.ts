@@ -11,6 +11,7 @@ import { getPresenceIndicator } from "@/lib/userPresence";
 import { withResolvedAvatar } from "@/lib/uploadUrls";
 import { getAchievementSummary, type AchievementDisplayItem } from "@/lib/achievements";
 import { getWorkoutStreak } from "@/lib/workoutAdherenceStreak";
+import { resolveLogSetExerciseName } from "@/lib/logSetExerciseName";
 
 export { getWorkoutStreak };
 
@@ -261,8 +262,8 @@ async function getPersonalRecordsForProfile(userId: string, pinned: string[]): P
 
     const bestByExercise = new Map<string, (typeof sets)[number]>();
     for (const set of sets) {
-        const name = set.exercise?.name?.trim();
-        if (!name) continue;
+        const name = resolveLogSetExerciseName(set);
+        if (!name || name === "Unknown") continue;
         const key = name.toLowerCase();
         if (!bestByExercise.has(key)) bestByExercise.set(key, set);
     }
@@ -272,7 +273,7 @@ async function getPersonalRecordsForProfile(userId: string, pinned: string[]): P
         const set = bestByExercise.get(pin.toLowerCase());
         if (!set || set.weightKg == null) continue;
         records.push({
-            exerciseName: set.exercise!.name!.trim(),
+            exerciseName: resolveLogSetExerciseName(set),
             weightKg: Math.round(set.weightKg * 100) / 100,
             reps: set.reps ?? 0,
             loggedAt: set.workoutLog.loggedAt.toISOString(),

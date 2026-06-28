@@ -6,7 +6,7 @@ import {
     ChevronRight,
     Dumbbell, Loader2, AlertTriangle, MessageCircle,
     ClipboardCheck, Clock,
-    Bell, ArrowUpRight, CheckCircle2, Users, UserPlus,
+    ArrowUpRight, CheckCircle2, Users, UserPlus,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -564,14 +564,20 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
 
             {/* Actionable stat cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <Link
-                    href="#clients"
-                    className="stat-card transition-all hover:border-brand-500/40 hover:bg-brand-500/5"
-                >
-                    <Users className="w-4 h-4 text-brand-400 mb-1" />
-                    <p className="stat-value">{clients.length}</p>
-                    <p className="stat-label">Active Clients</p>
-                </Link>
+                <div className="stat-card flex flex-col transition-all hover:border-brand-500/40 hover:bg-brand-500/5">
+                    <Link href="#clients" className="block flex-1 min-h-0">
+                        <Users className="w-4 h-4 text-brand-400 mb-1" />
+                        <p className="stat-value">{clients.length}</p>
+                        <p className="stat-label">Active Clients</p>
+                    </Link>
+                    <Link
+                        href="/coach/invites"
+                        className="mt-3 pt-3 border-t border-surface-border inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-brand-400 hover:text-brand-300 transition-colors"
+                    >
+                        <UserPlus className="w-3.5 h-3.5" />
+                        Invite client
+                    </Link>
+                </div>
                 <button
                     type="button"
                     onClick={() => setShowAttentionInbox(true)}
@@ -613,49 +619,6 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                     <p className="stat-label">In Workout Now</p>
                 </Link>
             </div>
-
-            {/* Needs Attention */}
-            <section id="needs-attention" className="space-y-3 scroll-mt-6">
-                <div className="flex items-center justify-between px-2 gap-3">
-                    <h3 className="heading-3 flex items-center gap-2">
-                        <Bell className="w-5 h-5 text-warning" />
-                        Needs Attention
-                    </h3>
-                    <button
-                        type="button"
-                        onClick={() => setShowAttentionInbox(true)}
-                        className="text-[10px] font-black text-brand-400 hover:text-brand-300 transition-colors uppercase tracking-widest"
-                    >
-                        View all
-                    </button>
-                </div>
-                {totals.clientsNeedingAttention === 0 ? (
-                    <div className="card p-5 flex items-center gap-3 border-success/20 bg-success/5">
-                        <CheckCircle2 className="w-5 h-5 text-success shrink-0" />
-                        <div>
-                            <p className="text-sm font-bold text-fg">All caught up</p>
-                            <p className="text-xs text-fg-muted">No clients need immediate action right now.</p>
-                        </div>
-                    </div>
-                ) : (
-                    <button
-                        type="button"
-                        onClick={() => setShowAttentionInbox(true)}
-                        className="card p-5 w-full text-left hover:border-warning/40 transition-colors border-warning/20 bg-warning/5"
-                    >
-                        <p className="text-sm font-bold text-fg">
-                            {totals.clientsNeedingAttention} item{totals.clientsNeedingAttention === 1 ? "" : "s"} need follow-up
-                        </p>
-                        <p className="text-xs text-fg-muted mt-1">
-                            {insights.attentionInboxPreview.join(" · ")}
-                            {totals.clientsNeedingAttention > 3 ? " · …" : ""}
-                        </p>
-                        <p className="text-[10px] font-black uppercase tracking-widest text-brand-400 mt-3">
-                            Open action inbox →
-                        </p>
-                    </button>
-                )}
-            </section>
 
             {/* Upcoming */}
             <section className="space-y-3">

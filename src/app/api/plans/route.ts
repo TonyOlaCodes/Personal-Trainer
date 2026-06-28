@@ -2,7 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma, ensureDbSchema } from "@/lib/prisma";
 import { z } from "zod";
-import { randomBytes } from "crypto";
+import { generateUniquePlanShareCode } from "@/lib/planShareCode";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
 import { isCoachRole } from "@/lib/roles";
 import { triggerAchievementSync } from "@/lib/achievements";
@@ -83,7 +83,7 @@ export async function POST(req: Request) {
 
     const { name, description, type, weeks } = parsed.data;
     
-    const shareCode = randomBytes(4).toString("hex").toUpperCase();
+    const shareCode = await generateUniquePlanShareCode();
 
     try {
     const plan = await prisma.plan.create({

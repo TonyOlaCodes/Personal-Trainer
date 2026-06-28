@@ -81,6 +81,16 @@ interface NotificationItem {
     supportsQuickReply?: boolean;
 }
 
+function resolveNotificationRoute(notification: NotificationItem): string {
+    if (notification.type === NOTIFICATION_TYPES.CLIENT_MISSED_WORKOUT) {
+        const clientId =
+            notification.clientId
+            ?? (notification.entityType === "USER" ? notification.entityId?.split(":")[0] : null);
+        if (clientId) return `/chat?with=${clientId}`;
+    }
+    return notification.route || "/";
+}
+
 export function TopBar({ title, subtitle, showToday = false, streak, hideSearch = true }: TopBarProps) {
     const router = useRouter();
     const role = useRole();
@@ -142,7 +152,7 @@ export function TopBar({ title, subtitle, showToday = false, streak, hideSearch 
         setNotifications(prev => prev.map(n => n.id === notification.id ? { ...n, read: true } : n));
         setUnreadCount(prev => Math.max(0, prev - (notification.read ? 0 : 1)));
         setShowNotifications(false);
-        router.push(notification.route || "/");
+        router.push(resolveNotificationRoute(notification));
     };
 
     const sendQuickReply = async (notification: NotificationItem) => {

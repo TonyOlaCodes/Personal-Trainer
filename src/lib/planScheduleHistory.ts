@@ -11,7 +11,7 @@ export type ScheduleWorkoutSnapshot = {
     name: string;
     dayNumber: number;
     dayOfWeek: number | null;
-    exercises?: Array<{ name: string; sets: number; reps: string }>;
+    exercises?: Array<{ id?: string; name: string; sets: number; reps: string }>;
 };
 
 export type ScheduleWeekSnapshot = {
@@ -31,7 +31,7 @@ type WeekSource = {
         name: string;
         dayNumber: number;
         dayOfWeek?: number | null;
-        exercises?: Array<{ name: string; sets: number; reps: string }>;
+        exercises?: Array<{ id?: string; name: string; sets: number; reps: string }>;
     }>;
 };
 
@@ -73,6 +73,7 @@ export function serializePlanWeeksForSchedule(weeks: WeekSource[]): ScheduleWeek
                     dayNumber: workout.dayNumber,
                     dayOfWeek: workout.dayOfWeek ?? null,
                     exercises: workout.exercises?.map((exercise) => ({
+                        id: "id" in exercise ? exercise.id : undefined,
                         name: exercise.name,
                         sets: exercise.sets,
                         reps: exercise.reps,

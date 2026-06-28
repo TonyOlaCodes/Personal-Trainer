@@ -20,7 +20,6 @@ import { getPlannedWorkoutForDate, activeWorkoutWhere } from "@/lib/planSchedule
 import { loadPlanScheduleRevisionsByPlanIds } from "@/lib/planScheduleHistory";
 import { getWeekNumber, parseLogDate } from "@/lib/utils";
 import { isInactiveAccount } from "@/lib/userDeactivation";
-import { buildMissedWorkoutCalendarHref } from "@/lib/coachMissedWorkoutsYesterday";
 
 function startOfIsoWeek(dateKey: string, timezone: string) {
     const [y, m, d] = dateKey.split("-").map(Number);
@@ -272,10 +271,7 @@ async function processMissedWorkoutsForCoach(
             message: `${client.name ?? client.email ?? "Client"} missed ${plannedWorkout.name}`,
             entityType: "USER",
             entityId: dedupeEntityId,
-            route: buildMissedWorkoutCalendarHref({
-                clientId: client.id,
-                dateKey,
-            }),
+            route: `/chat?with=${client.id}`,
         });
         sent++;
     }

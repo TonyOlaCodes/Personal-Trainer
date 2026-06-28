@@ -14,6 +14,7 @@ import { formatPlanText, formatWorkoutText } from "@/lib/formatPlanText";
 import { PlanReviewView } from "./PlanReviewView";
 
 interface LocalExercise {
+    id?: string;
     name: string;
     sets: number;
     reps: string;
@@ -36,6 +37,7 @@ interface LocalWeek {
 }
 
 interface PlanExercisePayload {
+    id?: string;
     name: string;
     sets: number;
     reps: string;
@@ -106,6 +108,7 @@ export function PlanCreateClient() {
     }));
 
     const mapExerciseFromApi = (e: PlanExercisePayload): LocalExercise => ({
+        id: e.id,
         name: e.name ?? "",
         sets: typeof e.sets === "number" && Number.isFinite(e.sets) ? e.sets : 3,
         reps: e.reps != null ? String(e.reps) : "10",
@@ -463,6 +466,7 @@ export function PlanCreateClient() {
                     dayOfWeek: wd.dayOfWeek,
                     name: wd.name,
                     exercises: wd.exercises.filter(e => e.name.trim() !== "").map(e => ({
+                        ...(e.id ? { id: e.id } : {}),
                         name: e.name,
                         sets: e.sets,
                         reps: e.reps,
@@ -659,7 +663,7 @@ export function PlanCreateClient() {
                             readOnly={isViewOnly}
                         />
                         {creatorName && (
-                            <p className="text-[10px] text-fg-subtle font-medium">
+                            <p className="text-xs font-semibold text-brand-400">
                                 Created by {creatorName}
                             </p>
                         )}

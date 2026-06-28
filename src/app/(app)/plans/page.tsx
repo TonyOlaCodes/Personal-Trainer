@@ -7,6 +7,7 @@ import { PlansClient } from "./PlansClient";
 import { isCoachRole } from "@/lib/roles";
 import { cleanupStaleInProgressSessions } from "@/lib/workoutSessionCleanup";
 import { ensurePlanOriginalCreatorColumn } from "@/lib/planCreator";
+import { ensurePlansShareCodes } from "@/lib/planShareCode";
 
 export const metadata = { title: "Plans" };
 
@@ -127,6 +128,12 @@ export default async function PlansPage() {
             tags: up.plan.tags,
         }));
     }
+
+    const shareCodes = await ensurePlansShareCodes(plans.map((plan) => plan.id));
+    plans = plans.map((plan) => ({
+        ...plan,
+        shareCode: shareCodes.get(plan.id) ?? plan.shareCode,
+    }));
 
     return (
         <>

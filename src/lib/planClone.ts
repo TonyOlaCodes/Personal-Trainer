@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
-import { randomBytes } from "crypto";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
 import { resolvePlanOriginalCreatorId } from "@/lib/planCreator";
+import { generateUniquePlanShareCode } from "@/lib/planShareCode";
 
 export async function clonePlanForUser(sourcePlanId: string, userId: string, nameSuffix = " (Copied)") {
     const originalPlan = await prisma.plan.findUnique({
@@ -26,7 +26,7 @@ export async function clonePlanForUser(sourcePlanId: string, userId: string, nam
 
     if (!originalPlan) return null;
 
-    const shareCode = randomBytes(4).toString("hex").toUpperCase();
+    const shareCode = await generateUniquePlanShareCode();
     const originalCreatorId = resolvePlanOriginalCreatorId(originalPlan);
 
     const clonedPlan = await prisma.plan.create({

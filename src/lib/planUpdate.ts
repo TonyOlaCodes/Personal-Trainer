@@ -17,6 +17,7 @@ import {
 } from "@/lib/planWorkouts";
 
 export interface PlanExercisePayload {
+    id?: string;
     name: string;
     sets: number;
     reps: string;
@@ -97,9 +98,14 @@ async function syncExercises(
         };
 
         const nameKey = normalizeName(ex.name);
-        let target =
-            (existing[i] && !matchedIds.has(existing[i].id) ? existing[i] : undefined) ??
-            existing.find((row) => !matchedIds.has(row.id) && normalizeName(row.name) === nameKey);
+        let target: (typeof existing)[number] | undefined;
+
+        if (ex.id) {
+            target = existing.find((row) => row.id === ex.id && !matchedIds.has(row.id));
+        }
+        if (!target) {
+            target = existing.find((row) => !matchedIds.has(row.id) && normalizeName(row.name) === nameKey);
+        }
 
         if (target) {
             matchedIds.add(target.id);

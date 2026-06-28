@@ -6,6 +6,7 @@ import { WorkoutLogClient } from "./WorkoutLogClient";
 import { getExerciseMediaByNames } from "@/lib/exerciseMedia";
 import { getLocalDayBounds, parseLogDate, toDateKey } from "@/lib/utils";
 import { withResolvedLogSetMedia } from "@/lib/uploadUrls";
+import { resolveLogSetExerciseName } from "@/lib/logSetExerciseName";
 
 export const metadata = { title: "Logging session" };
 
@@ -95,8 +96,8 @@ export default async function WorkoutLogPage({
     }> = [];
 
     for (const set of recentCompletedSets) {
-        const exerciseName = set.exercise?.name;
-        if (!exerciseName) continue;
+        const exerciseName = resolveLogSetExerciseName(set);
+        if (!exerciseName || exerciseName === "Unknown") continue;
         const key = `${exerciseName.toLowerCase()}::${set.setNumber}`;
         if (seenSetKeys.has(key)) continue;
         seenSetKeys.add(key);

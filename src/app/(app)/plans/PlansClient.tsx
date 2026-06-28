@@ -265,8 +265,8 @@ export function PlansClient({ plans, userRole, activeSession = null }: Props) {
                                                     {plan.weekCount} weeks
                                                 </span>
                                                 <span>Started {formatDate(plan.startedAt)}</span>
-                                                <span className="text-[10px] text-fg-subtle/70">
-                                                    Creator: {plan.creatorName}
+                                                <span className="text-xs font-semibold text-brand-400">
+                                                    Created by {plan.creatorName}
                                                 </span>
                                             </div>
                                         </div>
@@ -309,31 +309,31 @@ export function PlansClient({ plans, userRole, activeSession = null }: Props) {
                                     </div>
                                 </div>
 
-                                {plan.shareCode && (
-                                    <div className="px-5 pb-5 border-t border-surface-border/20 pt-3 flex items-center gap-2">
-                                        <div className="flex items-center gap-2 bg-surface-muted border border-surface-border rounded-xl px-3 py-2 flex-1 min-w-0">
-                                            <Share2 className="w-3.5 h-3.5 text-brand-400 shrink-0" />
-                                            <span className="font-mono font-black text-brand-300 text-xs tracking-widest uppercase">{plan.shareCode}</span>
-                                            <span className="text-[10px] text-fg-subtle ml-1">— Share this code</span>
-                                        </div>
-                                        <button
-                                            onClick={() => {
-                                                navigator.clipboard.writeText(plan.shareCode!);
-                                                setCopiedId(plan.id);
-                                                setTimeout(() => setCopiedId(null), 2000);
-                                            }}
-                                            className={cn(
-                                                "btn-sm flex items-center gap-1.5 transition-all shrink-0",
-                                                copiedId === plan.id
-                                                    ? "bg-success/10 text-success border border-success/30"
-                                                    : "btn-secondary"
-                                            )}
-                                        >
-                                            {copiedId === plan.id ? <Check className="w-3 h-3" /> : <Share2 className="w-3 h-3" />}
-                                            {copiedId === plan.id ? "Copied!" : "Copy"}
-                                        </button>
+                                <div className="px-5 pb-5 border-t border-surface-border/20 pt-3 flex items-center gap-2">
+                                    <div className="flex items-center gap-2 bg-surface-muted border border-surface-border rounded-xl px-3 py-2 flex-1 min-w-0">
+                                        <Share2 className="w-3.5 h-3.5 text-brand-400 shrink-0" />
+                                        <span className="font-mono font-black text-brand-300 text-xs tracking-widest uppercase">{plan.shareCode}</span>
+                                        <span className="text-[10px] text-fg-subtle ml-1">— Share this code</span>
                                     </div>
-                                )}
+                                    <button
+                                        onClick={() => {
+                                            if (!plan.shareCode) return;
+                                            navigator.clipboard.writeText(plan.shareCode);
+                                            setCopiedId(plan.id);
+                                            setTimeout(() => setCopiedId(null), 2000);
+                                        }}
+                                        disabled={!plan.shareCode}
+                                        className={cn(
+                                            "btn-sm flex items-center gap-1.5 transition-all shrink-0",
+                                            copiedId === plan.id
+                                                ? "bg-success/10 text-success border border-success/30"
+                                                : "btn-secondary"
+                                        )}
+                                    >
+                                        {copiedId === plan.id ? <Check className="w-3 h-3" /> : <Share2 className="w-3 h-3" />}
+                                        {copiedId === plan.id ? "Copied!" : "Copy"}
+                                    </button>
+                                </div>
 
                                 {canPublishToProfile && plan.isOwned && plan.type === "USER_CREATED" && (
                                     <div className="px-5 pb-5 border-t border-surface-border/20 pt-3 flex items-center justify-between gap-3">

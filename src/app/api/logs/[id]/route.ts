@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { withResolvedLogSetMedia } from "@/lib/uploadUrls";
+import { resolveLogSetExerciseName } from "@/lib/logSetExerciseName";
 import { getWorkoutNotes } from "@/lib/workoutNotes";
 import { canViewWorkoutLog } from "@/lib/userProfile";
 import { triggerAchievementSync } from "@/lib/achievements";
@@ -62,7 +63,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
                 isWarmup: set.isWarmup,
                 isCompleted: set.isCompleted,
                 videoUrl: set.videoUrl,
-                exercise: set.exercise,
+                exercise: {
+                    ...set.exercise,
+                    name: resolveLogSetExerciseName(set),
+                },
             })),
             coachNotes: coachNotes.map((note) => ({
                 ...note,

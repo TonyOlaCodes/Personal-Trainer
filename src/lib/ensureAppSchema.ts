@@ -18,6 +18,7 @@ import { ensureAchievementsTables } from "@/lib/achievements";
 import { ensureCoachAttentionActionsTable } from "@/lib/coachAttentionActions";
 import { ensureWalkthroughColumn } from "@/lib/walkthrough/ensureWalkthroughColumn";
 import { ensureGeneralPremiumRole } from "@/lib/ensureGeneralPremiumRole";
+import { ensureLogSetExerciseNamesReady } from "@/lib/logSetExerciseName";
 
 let appSchemaReady = false;
 let appSchemaPromise: Promise<void> | null = null;
@@ -51,6 +52,7 @@ export async function ensureAppSchema() {
             ensureCoachAttentionActionsTable(),
             ensureWalkthroughColumn(),
             ensureGeneralPremiumRole(),
+            ensureLogSetExerciseNamesReady(),
         ]);
         appSchemaReady = true;
     })();

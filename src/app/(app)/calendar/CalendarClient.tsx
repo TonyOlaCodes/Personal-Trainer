@@ -408,7 +408,7 @@ export function CalendarClient({
                                                     "w-1.5 h-1.5 rounded-full mt-1.5 mr-1",
                                                     status === 'completed' ? "bg-success shadow-glow-success animate-pulse" :
                                                     status === 'in-progress' ? "bg-warning shadow-glow-warning animate-pulse" :
-                                                    status === 'excused' ? "bg-brand-400 shadow-glow-brand" :
+                                                    status === 'excused' ? "bg-violet-400 shadow-[0_0_8px_rgba(167,139,250,0.45)]" :
                                                     status === 'missed' ? "bg-danger shadow-glow-danger" :
                                                     status === 'scheduled' ? "bg-brand-400 shadow-glow-brand" :
                                                     "bg-surface-border"
@@ -440,18 +440,18 @@ export function CalendarClient({
                                                     <div className="space-y-1">
                                                         <div className={cn(
                                                             "h-1 rounded-full overflow-hidden",
-                                                            status === 'excused' ? "bg-brand-400/20" :
+                                                            status === 'excused' ? "bg-violet-400/20" :
                                                             isPast ? "bg-danger/20" : "bg-brand-400/20"
                                                         )}>
                                                             <div className={cn(
                                                                 "w-full h-full",
-                                                                status === 'excused' ? "bg-brand-400" :
+                                                                status === 'excused' ? "bg-violet-400" :
                                                                 isPast ? "bg-danger" : "bg-brand-400 animate-pulse"
                                                             )} />
                                                         </div>
                                                         <span className={cn(
                                                             "text-[9px] font-black uppercase tracking-tighter truncate block",
-                                                            status === 'excused' ? "text-brand-400" :
+                                                            status === 'excused' ? "text-violet-400" :
                                                             isPast ? "text-danger opacity-60" : "text-brand-400"
                                                         )}>
                                                             {status === 'excused' ? "Excused · " : ""}
@@ -504,7 +504,7 @@ export function CalendarClient({
                                 "w-2.5 h-2.5 rounded-full",
                                 selectedLogs.length > 0 ? "bg-success" :
                                 resumeSession ? "bg-warning animate-pulse" :
-                                selectedIsExcused ? "bg-brand-400" :
+                                selectedIsExcused ? "bg-violet-400" :
                                 (selectedPlanned ? (selectedDateKey < todayKey ? "bg-danger" : "bg-brand-400") : "bg-surface-border")
                             )} />
                         </div>
@@ -598,7 +598,7 @@ export function CalendarClient({
                                     resumeSession
                                         ? "bg-warning-950/20 border-warning-500/20 shadow-glow-warning-sm"
                                         : selectedIsExcused
-                                            ? "bg-brand-950/20 border-brand-500/30 shadow-glow-brand-sm"
+                                            ? "bg-violet-950/25 border-violet-500/30 shadow-[0_0_12px_rgba(139,92,246,0.15)]"
                                         : selectedDateKey < todayKey
                                             ? "bg-danger-950/20 border-danger-500/20"
                                             : "bg-brand-950/20 border-brand-500/20 shadow-glow-brand-sm"
@@ -610,7 +610,7 @@ export function CalendarClient({
                                                 resumeSession
                                                     ? "text-warning"
                                                     : selectedIsExcused
-                                                        ? "text-brand-400"
+                                                        ? "text-violet-400"
                                                     : selectedDateKey < todayKey
                                                         ? "text-danger"
                                                         : "text-brand-400"
@@ -630,7 +630,7 @@ export function CalendarClient({
                                             resumeSession
                                                 ? "text-warning opacity-60"
                                                 : selectedIsExcused
-                                                    ? "text-brand-400 opacity-60"
+                                                    ? "text-violet-400 opacity-60"
                                                 : selectedDateKey < todayKey
                                                     ? "text-danger opacity-40"
                                                     : "text-brand-400"
@@ -681,7 +681,7 @@ export function CalendarClient({
                                                 type="button"
                                                 disabled={statusUpdating}
                                                 onClick={() => void updateWorkoutStatus("excused")}
-                                                className="btn-secondary flex-1 h-11 text-[10px] font-black uppercase tracking-widest border-brand-400/30 text-brand-400 hover:bg-brand-400/10 disabled:opacity-50"
+                                                className="btn-secondary flex-1 h-11 text-[10px] font-black uppercase tracking-widest border-violet-400/30 text-violet-400 hover:bg-violet-400/10 disabled:opacity-50"
                                             >
                                                 {statusUpdating ? "Saving…" : "Mark excused"}
                                             </button>
@@ -786,7 +786,7 @@ export function CalendarClient({
                         <span className="text-[8px] font-black uppercase tracking-tighter text-fg-subtle">In Progress</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                        <div className="w-1.5 h-1.5 rounded-full bg-brand-400" />
+                        <div className="w-1.5 h-1.5 rounded-full bg-violet-400" />
                         <span className="text-[8px] font-black uppercase tracking-tighter text-fg-subtle">Excused</span>
                     </div>
                     <div className="flex items-center gap-1.5">

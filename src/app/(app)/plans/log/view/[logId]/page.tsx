@@ -11,6 +11,7 @@ import { WorkoutFeelingEditor } from "@/components/shared/WorkoutFeelingEditor";
 import { BackButton } from "@/components/shared/BackButton";
 import { defaultHomeForRole } from "@/lib/roles";
 import { canViewWorkoutLog } from "@/lib/userProfile";
+import { resolveLogSetExerciseName } from "@/lib/logSetExerciseName";
 
 export default async function LogViewPage({ params }: { params: Promise<{ logId: string }> }) {
     const { logId } = await params;
@@ -41,19 +42,24 @@ export default async function LogViewPage({ params }: { params: Promise<{ logId:
 
     const isOwner = log.user.id === actor.id;
 
-    // Group sets by exercise
-    const exercisesMap = new Map();
+    // Group sets by exercise using snapshotted names (not live plan order)
+    const exercisesMap = new Map<string, { name: string; muscleGroup: string | null; sets: typeof log.sets; minSet: number }>();
     log.sets.forEach(set => {
+        const name = resolveLogSetExerciseName(set);
         if (!exercisesMap.has(set.exercise.id)) {
             exercisesMap.set(set.exercise.id, {
-                name: set.exercise.name,
+                name,
                 muscleGroup: set.exercise.muscleGroup,
-                sets: []
+                sets: [],
+                minSet: set.setNumber,
             });
         }
-        exercisesMap.get(set.exercise.id).sets.push(set);
+        const group = exercisesMap.get(set.exercise.id)!;
+        group.name = name;
+        group.minSet = Math.min(group.minSet, set.setNumber);
+        group.sets.push(set);
     });
-    const groupedExercises = Array.from(exercisesMap.values());
+    const groupedExercises = Array.from(exercisesMap.values()).sort((a, b) => a.minSet - b.minSet);
 
     return (
         <div className="bg-surface min-h-screen pb-20">

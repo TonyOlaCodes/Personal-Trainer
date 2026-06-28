@@ -628,7 +628,7 @@ export async function notifyCoachOfMissedWorkout(input: {
         message: `${input.clientName} missed ${input.workoutName}`,
         entityType: "USER",
         entityId: `${input.clientId}:${input.dateKey}:${input.workoutId}`,
-        route: `/coach/client/${input.clientId}`,
+        route: `/chat?with=${input.clientId}`,
     });
 }
 

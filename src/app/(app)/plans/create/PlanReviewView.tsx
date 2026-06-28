@@ -136,7 +136,7 @@ export function PlanReviewView({
                         <p className="text-sm text-fg-muted leading-relaxed">{description}</p>
                     )}
                     {creatorName && (
-                        <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">
+                        <p className="text-xs font-semibold text-brand-400">
                             Created by {creatorName}
                         </p>
                     )}

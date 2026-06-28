@@ -6,6 +6,7 @@ import { canLogWorkouts, requireAuthUser, workoutAssignedToUser } from "@/lib/ap
 import { notifyCoachOfClientWorkout } from "@/lib/notifications";
 import { triggerAchievementSync } from "@/lib/achievements";
 import { normalizeStoredUploadUrl } from "@/lib/uploadUrls";
+import { ensureLogSetExerciseNameColumn } from "@/lib/logSetExerciseName";
 import { z } from "zod";
 
 const logSchema = z.object({
@@ -32,6 +33,7 @@ const logSchema = z.object({
 // POST log a completed or in-progress workout
 export async function POST(req: Request) {
     await ensureDbSchema();
+    await ensureLogSetExerciseNameColumn();
     const authResult = await requireAuthUser(req);
     if (authResult.error) return authResult.error;
     const user = authResult.user;
@@ -111,55 +113,60 @@ export async function POST(req: Request) {
               })
             : null;
 
-    // Process exercises to get real IDs safely (avoiding race conditions) and sync layout order
+    // Resolve temp/custom exercise IDs — never mutate plan exercise order from a log save
     const tempToRealId = new Map<string, string>();
-    const updatedRealIds = new Set<string>();
-    
-    for (const s of sets) {
-        let realId = s.exerciseId;
-        if ((s.exerciseId.startsWith("new-") || s.exerciseId.includes(":sub")) && !tempToRealId.has(s.exerciseId)) {
-            const exName = s.exerciseName || "Custom Exercise";
-            
-            // Try to find an existing exercise by name in this specific workout to avoid cluttering with duplicates
-            let existingEx = await prisma.exercise.findFirst({
-                where: { workoutId, name: exName }
-            });
 
-            if (!existingEx) {
-                existingEx = await prisma.exercise.create({
-                    data: {
-                        workoutId,
-                        name: exName,
-                        sets: 1,
-                        reps: "10",
-                        order: s.exerciseOrder ?? 0,
-                        isCustom: true,
-                    }
-                });
-            } else if (s.exerciseOrder !== undefined && existingEx.order !== s.exerciseOrder) {
-                existingEx = await prisma.exercise.update({
-                    where: { id: existingEx.id },
-                    data: { order: s.exerciseOrder }
-                });
-            }
-            realId = existingEx.id;
-            tempToRealId.set(s.exerciseId, realId);
-            updatedRealIds.add(realId);
-        } else {
-            const resolvedId = tempToRealId.get(s.exerciseId) || s.exerciseId;
-            if (s.exerciseOrder !== undefined && !updatedRealIds.has(resolvedId)) {
-                await prisma.exercise.updateMany({
-                    where: { id: resolvedId },
-                    data: { order: s.exerciseOrder }
-                });
-                updatedRealIds.add(resolvedId);
-            }
+    for (const s of sets) {
+        if (!(s.exerciseId.startsWith("new-") || s.exerciseId.includes(":sub"))) continue;
+        if (tempToRealId.has(s.exerciseId)) continue;
+
+        const exName = s.exerciseName || "Custom Exercise";
+        let existingEx = await prisma.exercise.findFirst({
+            where: { workoutId, name: exName },
+        });
+
+        if (!existingEx) {
+            existingEx = await prisma.exercise.create({
+                data: {
+                    workoutId,
+                    name: exName,
+                    sets: 1,
+                    reps: "10",
+                    order: s.exerciseOrder ?? 999,
+                    isCustom: true,
+                },
+            });
+        }
+
+        tempToRealId.set(s.exerciseId, existingEx.id);
+    }
+
+    const exerciseNameById = new Map<string, string>();
+    for (const s of sets) {
+        const resolvedId = tempToRealId.get(s.exerciseId) || s.exerciseId;
+        if (s.exerciseName?.trim()) {
+            exerciseNameById.set(resolvedId, s.exerciseName.trim());
         }
     }
 
-    const setsWithRealIds = sets.map(s => ({
+    const unresolvedIds = [...new Set(
+        sets
+            .map((s) => tempToRealId.get(s.exerciseId) || s.exerciseId)
+            .filter((id) => !exerciseNameById.has(id))
+    )];
+    if (unresolvedIds.length > 0) {
+        const exercises = await prisma.exercise.findMany({
+            where: { id: { in: unresolvedIds } },
+            select: { id: true, name: true },
+        });
+        for (const exercise of exercises) {
+            exerciseNameById.set(exercise.id, exercise.name.trim());
+        }
+    }
+
+    const setsWithRealIds = sets.map((s) => ({
         ...s,
-        exerciseId: tempToRealId.get(s.exerciseId) || s.exerciseId
+        exerciseId: tempToRealId.get(s.exerciseId) || s.exerciseId,
     }));
 
     const logPayload = {
@@ -172,6 +179,7 @@ export async function POST(req: Request) {
 
     const setsCreate = setsWithRealIds.map((s) => ({
         exerciseId: s.exerciseId,
+        exerciseName: exerciseNameById.get(s.exerciseId) ?? s.exerciseName?.trim() ?? "Unknown",
         setNumber: s.setNumber,
         reps: s.reps,
         weightKg: s.weightKg,

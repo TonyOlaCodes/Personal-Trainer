@@ -15,6 +15,7 @@ import { formatErrorDetails } from "@/lib/ensureAppSchema";
 import { dedupeCoachPlansByName } from "@/lib/coachPlans";
 import { getUserPinnedExercises } from "@/lib/pinnedExercises";
 import { getActiveSessionsForClients } from "@/lib/coachChat";
+import { resolveLogSetExerciseName } from "@/lib/logSetExerciseName";
 
 export const metadata = { title: "Client Details" };
 
@@ -111,7 +112,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             
             (log.sets ?? []).forEach((set: any) => {
                 if (!set.exercise || !set.isCompleted || set.isWarmup) return;
-                const exName = set.exercise.name;
+                const exName = resolveLogSetExerciseName(set);
                 const sWeight = set.weightKg || 0;
                 const sReps = set.reps || 0;
                 const sVol = sWeight * sReps;

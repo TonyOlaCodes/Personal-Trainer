@@ -4,6 +4,7 @@ import { loadPlanScheduleRevisions, type PlanScheduleRevisionRecord } from "@/li
 import { getClientAttentionActions, getExcusedMissedWorkoutKeys } from "@/lib/coachAttentionActions";
 import { toDateKey } from "@/lib/utils";
 import { cleanupStaleInProgressSessions } from "@/lib/workoutSessionCleanup";
+import { resolveLogSetExerciseName } from "@/lib/logSetExerciseName";
 
 export interface ClientCalendarPayload {
     activePlan: {
@@ -126,7 +127,7 @@ export async function loadClientCalendarData(userId: string): Promise<ClientCale
             workoutId: l.workoutId,
             duration: (l as { duration?: number | null }).duration ?? null,
             sets: l.sets.map((s) => ({
-                exerciseName: s.exercise.name,
+                exerciseName: resolveLogSetExerciseName(s),
                 setNumber: s.setNumber,
                 reps: s.reps,
                 weightKg: s.weightKg,

@@ -7,6 +7,7 @@ import { createExerciseSessionEntry, mergeSetIntoExerciseSession, normalizeExerc
 import { calculateOneRM, isBetterSet } from "@/lib/oneRepMax";
 import { ensureBodyweightTable } from "@/lib/bodyweight";
 import { getUserPinnedExercises } from "@/lib/pinnedExercises";
+import { ensureLogSetExerciseNamesReady, resolveLogSetExerciseName } from "@/lib/logSetExerciseName";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,7 @@ export async function GET() {
         });
         if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
         await ensureDailyMetricsTable();
+        await ensureLogSetExerciseNamesReady();
         const pinnedExercises = await getUserPinnedExercises(user.id);
 
     // Fetch completed workout logs
@@ -113,7 +115,7 @@ export async function GET() {
 
         log.sets.forEach((set: any) => {
             if (!set.exercise || !set.isCompleted) return;
-            const exName = set.exercise.name;
+            const exName = resolveLogSetExerciseName(set);
             const mg = set.exercise.muscleGroup || "Other";
             const sWeight = set.weightKg || 0;
             const sReps = set.reps || 0;
