@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { isCoachRole } from "@/lib/roles";
+import { canPublishPlansToProfile, isCoachRole } from "@/lib/roles";
 
 let profileColumnsReady = false;
 
@@ -160,10 +160,24 @@ export async function canCopyUserPlan(
     if (!plan || plan.creatorId !== ownerUserId) return false;
     if (plan.type !== "USER_CREATED") return false;
 
+    const owner = await prisma.user.findUnique({
+        where: { id: ownerUserId },
+        select: { role: true },
+    });
+    if (!owner || !(await canPublishPlansToProfile(ownerUserId, owner.role))) return false;
+
     return plan.isPublic;
 }
 
 export async function getPublicPlansForUser(ownerUserId: string) {
+    const owner = await prisma.user.findUnique({
+        where: { id: ownerUserId },
+        select: { role: true },
+    });
+    if (!owner || !(await canPublishPlansToProfile(ownerUserId, owner.role))) {
+        return [];
+    }
+
     return prisma.plan.findMany({
         where: {
             creatorId: ownerUserId,

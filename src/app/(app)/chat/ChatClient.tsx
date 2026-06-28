@@ -22,6 +22,7 @@ import {
     saveChatDraft,
 } from "@/lib/chatDrafts";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
+import { siteConfig } from "@/lib/site";
 import { uploadMediaFile } from "@/lib/compressImage";
 import { MediaLightbox } from "@/components/shared/MediaLightbox";
 import { ProfileLink } from "@/components/shared/ProfileLink";
@@ -1216,7 +1217,7 @@ export function ChatClient({
                                     Redeem Coach Code
                                 </Link>
                                 <a
-                                    href="mailto:support@fitcoachpro.app"
+                                    href={`mailto:${siteConfig.contactEmail}`}
                                     className="btn-secondary text-xs h-10"
                                 >
                                     Contact Support

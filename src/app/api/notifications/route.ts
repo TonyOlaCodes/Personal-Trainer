@@ -2,7 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { getNotifications, markAllNotificationsRead, markNotificationRead } from "@/lib/notifications";
+import { getNotifications, markAllNotificationsRead, markNotificationRead, deleteNotification } from "@/lib/notifications";
 import { getQuickReplyTemplate, supportsQuickReply } from "@/lib/notificationTypes";
 
 function enrichNotification<T extends { type: string; entityType: string; entityId: string | null }>(notification: T) {
@@ -62,6 +62,21 @@ export async function PATCH(req: Request) {
     } else {
         return NextResponse.json({ error: "Missing notification id" }, { status: 400 });
     }
+
+    return NextResponse.json({ success: true });
+}
+
+export async function DELETE(req: Request) {
+    const { userId } = await auth();
+    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const user = await prisma.user.findUnique({ where: { clerkId: userId }, select: { id: true } });
+    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+
+    const id = new URL(req.url).searchParams.get("id");
+    if (!id) return NextResponse.json({ error: "Missing notification id" }, { status: 400 });
+
+    await deleteNotification(user.id, id);
 
     return NextResponse.json({ success: true });
 }

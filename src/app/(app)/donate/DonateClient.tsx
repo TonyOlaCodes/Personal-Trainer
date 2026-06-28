@@ -3,6 +3,7 @@
 import { Heart, Shield, Zap, Copy, Check, Info } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { siteConfig } from "@/lib/site";
 
 export function DonateClient() {
     const [copied, setCopied] = useState<string | null>(null);
@@ -50,7 +51,7 @@ export function DonateClient() {
                     Support the app
                 </h1>
                 <p className="text-lg text-fg-muted max-w-2xl mx-auto leading-relaxed">
-                    FitCoach Pro is built and maintained independently. Optional contributions help cover hosting, development time, and ongoing improvements.
+                    {siteConfig.name} is built and maintained independently. Optional contributions help cover hosting, development time, and ongoing improvements.
                 </p>
             </div>
 

@@ -565,5 +565,14 @@ export async function markAllNotificationsRead(userId: string) {
     `;
 }
 
+export async function deleteNotification(userId: string, notificationId: string) {
+    await ensureNotificationsTable();
+
+    await prisma.$executeRaw`
+        DELETE FROM "notifications"
+        WHERE "id" = ${notificationId} AND "userId" = ${userId}
+    `;
+}
+
 // Re-export coach pref type for callers
 export type { CoachNotificationPref } from "@/lib/coachNotificationSchedule";

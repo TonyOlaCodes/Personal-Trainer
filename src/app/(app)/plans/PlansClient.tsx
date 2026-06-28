@@ -64,6 +64,7 @@ export function PlansClient({ plans, userRole, activeSession = null }: Props) {
 
     const activePlan = localPlans.find((p) => p.isActive);
     const [localActiveSession, setLocalActiveSession] = useState(activeSession);
+    const canPublishToProfile = !isCoach && localPlans.some((p) => p.isActive);
 
     const setActive = async (planId: string | null) => {
         await fetch("/api/plans/activate", {
@@ -320,7 +321,7 @@ export function PlansClient({ plans, userRole, activeSession = null }: Props) {
                                     </div>
                                 )}
 
-                                {plan.isOwned && plan.type === "USER_CREATED" && (
+                                {canPublishToProfile && plan.isOwned && plan.type === "USER_CREATED" && (
                                     <div className="px-5 pb-5 border-t border-surface-border/20 pt-3 flex items-center justify-between gap-3">
                                         <div>
                                             <p className="text-xs font-black text-fg">Public on profile</p>

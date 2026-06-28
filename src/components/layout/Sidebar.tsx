@@ -21,7 +21,7 @@ import {
     UserPlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useChatUnread, formatUnreadBadge } from "@/components/chat/ChatUnreadProvider";
+import { BrandLogo } from "@/components/shared/BrandLogo";
 
 interface NavItem {
     href: string;
@@ -93,7 +93,7 @@ export function Sidebar({ userRole = "FREE", initialCollapsed = false }: Sidebar
                     </div>
                     {!collapsed && (
                         <span className="font-bold text-base tracking-tight animate-fade-in">
-                            FitCoach<span className="text-gradient"> Pro</span>
+                            <BrandLogo />
                         </span>
                     )}
                 </Link>

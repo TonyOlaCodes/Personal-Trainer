@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import {
     User, Bell, Palette,
     HelpCircle, LogOut, ChevronRight, Check,
-    Camera, Loader2, Save, Target, RotateCcw
+    Camera, Loader2, Save, Target, RotateCcw, Scale
 } from "lucide-react";
 import { useClerk } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
@@ -106,6 +106,7 @@ export function SettingsClient({ user }: Props) {
         ...(isClientRole(user.role) ? [{ id: "goals", label: "My Goals", icon: Target }] : []),
         { id: "appearance", label: "Appearance", icon: Palette },
         { id: "notifications", label: "Notifications", icon: Bell },
+        { id: "legal", label: "Legal", icon: Scale },
     ];
 
     const [notifyOnWorkout, setNotifyOnWorkout] = useState(user.notifyOnWorkout ?? true);
@@ -875,6 +876,37 @@ export function SettingsClient({ user }: Props) {
                                     </div>
                                 </button>
                             ))}
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === "legal" && (
+                    <div className="card p-8 space-y-6 animate-slide-up">
+                        <div>
+                            <h3 className="heading-2 mb-2">Legal</h3>
+                            <p className="subheading">
+                                Review how TOLGcoaching handles your data and the rules for using the platform.
+                            </p>
+                        </div>
+                        <div className="grid sm:grid-cols-2 gap-4">
+                            <Link
+                                href="/privacy"
+                                className="p-5 rounded-2xl border border-surface-border bg-surface-muted/30 hover:border-brand-500/40 hover:bg-surface-muted/50 transition-all group"
+                            >
+                                <p className="font-bold text-fg mb-1 group-hover:text-brand-300 transition-colors">Privacy Policy</p>
+                                <p className="text-sm text-fg-muted leading-relaxed">
+                                    What we collect, how we use it, and your GDPR rights.
+                                </p>
+                            </Link>
+                            <Link
+                                href="/terms"
+                                className="p-5 rounded-2xl border border-surface-border bg-surface-muted/30 hover:border-brand-500/40 hover:bg-surface-muted/50 transition-all group"
+                            >
+                                <p className="font-bold text-fg mb-1 group-hover:text-brand-300 transition-colors">Terms of Service</p>
+                                <p className="text-sm text-fg-muted leading-relaxed">
+                                    Platform rules, fitness disclaimers, and account responsibilities.
+                                </p>
+                            </Link>
                         </div>
                     </div>
                 )}

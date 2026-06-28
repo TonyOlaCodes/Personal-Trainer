@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Zap, ChevronRight, ChevronLeft, SkipForward, Check, Loader2 } from "lucide-react";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { BrandLogo } from "@/components/shared/BrandLogo";
 import {
     type UnitSystem,
     cmToFeetInches,
@@ -232,7 +234,7 @@ export function OnboardingPage() {
                     <div className="w-8 h-8 rounded-xl bg-gradient-brand flex items-center justify-center shadow-glow-sm">
                         <Zap className="w-4 h-4 text-white" />
                     </div>
-                    <span className="font-bold text-lg">FitCoach Pro</span>
+                    <BrandLogo className="text-lg" />
                 </div>
 
                 {/* Progress bar */}
@@ -679,6 +681,18 @@ export function OnboardingPage() {
                             )}
                         </div>
                     </div>
+
+                    <p className="mt-6 text-center text-[11px] text-fg-subtle leading-relaxed">
+                        By continuing, you agree to our{" "}
+                        <Link href="/terms" className="text-brand-400 hover:text-brand-300 font-semibold">
+                            Terms of Service
+                        </Link>{" "}
+                        and{" "}
+                        <Link href="/privacy" className="text-brand-400 hover:text-brand-300 font-semibold">
+                            Privacy Policy
+                        </Link>
+                        .
+                    </p>
                 </div>
             </div>
         </div>

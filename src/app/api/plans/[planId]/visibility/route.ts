@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAuthUser } from "@/lib/apiAuth";
+import { canPublishPlansToProfile } from "@/lib/roles";
 
 const visibilitySchema = z.object({
     isPublic: z.boolean(),
@@ -33,6 +34,13 @@ export async function PATCH(
 
     if (!isOwner && !isAdmin) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    if (!(await canPublishPlansToProfile(user.id, user.role))) {
+        return NextResponse.json(
+            { error: "Only athletes with an active plan can share plans on their profile" },
+            { status: 403 }
+        );
     }
 
     if (plan.type !== "USER_CREATED") {

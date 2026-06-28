@@ -9,6 +9,24 @@ export function isClientRole(role: Role | string): boolean {
     return role === "FREE" || role === "PREMIUM";
 }
 
+/** Coaches manage clients — they don't share training plans on a public athlete profile. */
+export function isEligibleForPublicPlanSharing(role: Role | string): boolean {
+    return isClientRole(role);
+}
+
+export async function userHasActivePlan(userId: string): Promise<boolean> {
+    const active = await prisma.userPlan.findFirst({
+        where: { userId, isActive: true },
+        select: { id: true },
+    });
+    return !!active;
+}
+
+export async function canPublishPlansToProfile(userId: string, role: Role | string): Promise<boolean> {
+    if (!isEligibleForPublicPlanSharing(role)) return false;
+    return userHasActivePlan(userId);
+}
+
 export function defaultHomeForRole(role: Role | string): "/coach" | "/dashboard" {
     return isCoachRole(role) ? "/coach" : "/dashboard";
 }

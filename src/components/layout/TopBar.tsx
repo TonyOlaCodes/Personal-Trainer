@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, Search, Flame, Settings } from "lucide-react";
+import { Bell, Search, Flame, Settings, X } from "lucide-react";
 import { UserButton } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useRole } from "@/lib/RoleContext";
@@ -89,6 +89,7 @@ export function TopBar({ title, subtitle, showToday = false, streak, hideSearch 
     const [unreadCount, setUnreadCount] = useState(0);
     const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
     const [sendingReplyId, setSendingReplyId] = useState<string | null>(null);
+    const [deletingId, setDeletingId] = useState<string | null>(null);
     const notifRef = useRef<HTMLDivElement>(null);
     const isCoach = role === "COACH" || role === "SUPER_ADMIN";
     const onSettings = pathname.startsWith("/settings");
@@ -191,6 +192,31 @@ export function TopBar({ title, subtitle, showToday = false, streak, hideSearch 
         setUnreadCount(0);
     };
 
+    const deleteNotificationItem = async (notification: NotificationItem) => {
+        if (deletingId) return;
+        setDeletingId(notification.id);
+        try {
+            const res = await fetch(`/api/notifications?id=${encodeURIComponent(notification.id)}`, {
+                method: "DELETE",
+            });
+            if (!res.ok) return;
+
+            setNotifications(prev => prev.filter(n => n.id !== notification.id));
+            if (!notification.read) {
+                setUnreadCount(prev => Math.max(0, prev - 1));
+            }
+            setReplyDrafts(prev => {
+                const next = { ...prev };
+                delete next[notification.id];
+                return next;
+            });
+        } catch (error) {
+            console.error("Failed to delete notification", error);
+        } finally {
+            setDeletingId(null);
+        }
+    };
+
     return (
         <header className="h-16 flex items-center justify-between gap-2 px-4 sm:px-6 border-b border-surface-border bg-surface-card/80 glass sticky top-0 z-30 w-full max-w-full min-w-0">
             <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
@@ -274,14 +300,26 @@ export function TopBar({ title, subtitle, showToday = false, streak, hideSearch 
                                             <div
                                                 key={n.id}
                                                 className={cn(
-                                                    "p-4 border-b border-surface-border",
+                                                    "p-4 border-b border-surface-border relative group",
                                                     !n.read && "bg-brand-950/10"
                                                 )}
                                             >
                                                 <button
                                                     type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        deleteNotificationItem(n);
+                                                    }}
+                                                    disabled={deletingId === n.id}
+                                                    className="absolute top-3 right-3 p-1 rounded-lg text-fg-subtle hover:text-fg hover:bg-surface-muted opacity-60 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 transition-all disabled:opacity-40"
+                                                    aria-label="Delete notification"
+                                                >
+                                                    <X className="w-3.5 h-3.5" />
+                                                </button>
+                                                <button
+                                                    type="button"
                                                     onClick={() => handleNotificationNavigate(n)}
-                                                    className="w-full text-left hover:opacity-90 transition-opacity"
+                                                    className="w-full text-left hover:opacity-90 transition-opacity pr-6"
                                                 >
                                                     <div className="flex items-start justify-between mb-1 gap-2 min-w-0">
                                                         <p className={cn("text-sm break-words min-w-0 flex-1", !n.read ? "font-bold text-fg" : "font-medium text-fg-muted")}>
