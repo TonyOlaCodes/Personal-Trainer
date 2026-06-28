@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { getCheckInDueState, getUserCheckInSchedule } from "@/lib/checkInSchedule";
+import { getEffectiveCheckInDueStateForUser } from "@/lib/coachAttentionActions";
+import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
 import { getPlannedWorkoutForDate, activeWorkoutWhere } from "@/lib/planSchedule";
 import { getWeekNumber, toDateKey } from "@/lib/utils";
 import { isInactiveAccount } from "@/lib/userDeactivation";
@@ -76,7 +77,7 @@ export async function getCoachClientFilterFlags(
         let checkInDue = false;
         if (client.checkIns.length === 0) {
             const schedule = await getUserCheckInSchedule(client.id);
-            const dueState = getCheckInDueState(schedule, today);
+            const dueState = await getEffectiveCheckInDueStateForUser(client.id, schedule, today);
             checkInDue = dueState.isDueToday || dueState.isOverdue;
         }
 

@@ -11,12 +11,12 @@ import { getTotalUnreadDirectCount, getUnreadCountsByPeer } from "@/lib/chatUnre
 import { getMissedWorkoutsYesterdayForCoach } from "@/lib/coachMissedWorkoutsYesterday";
 import { loadCoachAttentionInboxOpenOnly } from "@/lib/coachAttentionInbox";
 import {
+    applyCheckInAttentionOverrides,
     buildSetupNeededAlertKey,
     buildUnreadMessageAlertKey,
     getCoachAttentionActions,
-    isCheckInAlertDismissed,
-    isMissedWorkoutExcused,
     getExcusedMissedWorkoutKeysForClient,
+    isMissedWorkoutExcused,
 } from "@/lib/coachAttentionActions";
 import { getPlannedWorkoutForDate, type ActiveUserPlanLike } from "@/lib/planSchedule";
 import { loadPlanScheduleRevisionsByPlanIds } from "@/lib/planScheduleHistory";
@@ -124,6 +124,12 @@ function buildCheckInLabel(
     }
     if (dueState.isDueWeek) {
         return { status: "due_soon", label: "Check-in due this week" };
+    }
+    if (dueState.daysUntilNext != null && dueState.daysUntilNext > 0) {
+        if (dueState.daysUntilNext === 1) {
+            return { status: "scheduled", label: "Next check-in tomorrow" };
+        }
+        return { status: "scheduled", label: `Next check-in in ${dueState.daysUntilNext}d` };
     }
     if (dueState.daysUntilNext != null && dueState.daysUntilNext <= 3) {
         return { status: "due_soon", label: `Check-in in ${dueState.daysUntilNext}d` };
@@ -308,7 +314,9 @@ export async function loadCoachDashboardInsights(input: {
             clientsNeedingAttentionIds.add(client.id);
         }
 
-        const dueState = getCheckInDueState(client.checkInSchedule, today);
+        const dueStateRaw = getCheckInDueState(client.checkInSchedule, today);
+        const clientAttentionRows = [...attentionActions.values()].filter((row) => row.clientId === client.id);
+        const dueState = applyCheckInAttentionOverrides(dueStateRaw, clientAttentionRows, currentIsoWeek, today);
         const hasCheckInThisWeek = Boolean(client.currentWeekCheckInId);
         const { status: checkInStatus, label: checkInLabel } = buildCheckInLabel(dueState, hasCheckInThisWeek);
 
@@ -316,7 +324,6 @@ export async function loadCoachDashboardInsights(input: {
             dueState.isConfigured
             && !hasCheckInThisWeek
             && (dueState.isOverdue || dueState.isDueToday)
-            && !isCheckInAlertDismissed(attentionActions, client.id, currentIsoWeek)
         ) {
             overdueCheckIns++;
             clientsNeedingAttentionIds.add(client.id);
@@ -361,8 +368,7 @@ export async function loadCoachDashboardInsights(input: {
         const checkInNeedsAttention =
             dueState.isConfigured
             && !hasCheckInThisWeek
-            && (dueState.isOverdue || dueState.isDueToday)
-            && !isCheckInAlertDismissed(attentionActions, client.id, currentIsoWeek);
+            && (dueState.isOverdue || dueState.isDueToday);
         const setupNeedsAttention =
             !client.hasCheckInSchedule
             && attentionActions.get(buildSetupNeededAlertKey(client.id))?.action !== "dismissed";

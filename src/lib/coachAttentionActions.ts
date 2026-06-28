@@ -175,34 +175,40 @@ export function applyCheckInAttentionOverrides(
     if (!dismissed || !dueState.isConfigured) return dueState;
     if (!dueState.isOverdue && !dueState.isDueToday && !dueState.isDueWeek) return dueState;
 
+    // When overdue, getCheckInDueState already computed daysUntilNext for the next cycle.
+    if (dueState.isOverdue && dueState.daysUntilNext != null) {
+        return {
+            ...dueState,
+            isDueWeek: false,
+            isDueToday: false,
+            isOverdue: false,
+        };
+    }
+
     const schedule: CheckInSchedule = {
         day: dueState.day,
         frequencyWeeks: dueState.frequencyWeeks,
         startDate: dueState.startDate,
     };
+    const freqWeeks = dueState.frequencyWeeks ?? 1;
+    const probe = new Date(today);
+    probe.setDate(probe.getDate() + freqWeeks * 7);
+    const nextState = getCheckInDueState(schedule, probe);
 
-    for (let offset = 1; offset <= 12; offset++) {
-        const candidate = new Date(today);
-        candidate.setDate(candidate.getDate() + offset * 7);
-        const next = getCheckInDueState(schedule, candidate);
-        if (next.isDueWeek && next.nextDueDate) {
-            return {
-                ...dueState,
-                isDueWeek: false,
-                isDueToday: false,
-                isOverdue: false,
-                daysUntilNext: next.daysUntilNext,
-                nextDueDate: next.nextDueDate,
-                dueDayLabel: next.dueDayLabel,
-            };
-        }
-    }
+    const cleanToday = new Date(today);
+    cleanToday.setHours(0, 0, 0, 0);
+    const nextDue = nextState.nextDueDate ? new Date(nextState.nextDueDate) : probe;
+    nextDue.setHours(0, 0, 0, 0);
+    const daysUntilNext = Math.max(0, Math.ceil((nextDue.getTime() - cleanToday.getTime()) / 86400000));
 
     return {
         ...dueState,
         isDueWeek: false,
         isDueToday: false,
         isOverdue: false,
+        daysUntilNext,
+        nextDueDate: nextState.nextDueDate,
+        dueDayLabel: nextState.dueDayLabel,
     };
 }
 
