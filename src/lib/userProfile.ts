@@ -85,7 +85,7 @@ export async function getPublicAchievements(userId: string): Promise<PublicAchie
     const prSets = await prisma.logSet.findMany({
         where: { isPR: true, workoutLog: { userId, status: "COMPLETED" } },
         include: { exercise: { select: { name: true } } },
-        orderBy: { createdAt: "desc" },
+        orderBy: { workoutLog: { loggedAt: "desc" } },
         take: 50,
     });
 
@@ -97,14 +97,16 @@ export async function getPublicAchievements(userId: string): Promise<PublicAchie
 
     const seenBig3 = new Set<string>();
     for (const set of prSets) {
-        const key = set.exercise.name.trim().toLowerCase();
+        const exerciseName = set.exercise?.name?.trim();
+        if (!exerciseName) continue;
+        const key = exerciseName.toLowerCase();
         for (const [match, title] of Object.entries(big3Labels)) {
             if (key.includes(match) && !seenBig3.has(match)) {
                 seenBig3.add(match);
                 achievements.push({
                     id: `big3-${match.replace(/\s+/g, "-")}`,
                     title,
-                    description: `Personal best on ${set.exercise.name}`,
+                    description: `Personal best on ${exerciseName}`,
                 });
             }
         }
@@ -189,6 +191,7 @@ export async function getPublicPlansForUser(ownerUserId: string) {
             name: true,
             description: true,
             tags: true,
+            isPublic: true,
             createdAt: true,
             _count: { select: { weeks: true } },
         },

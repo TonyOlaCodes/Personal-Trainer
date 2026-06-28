@@ -60,7 +60,6 @@ export function landingMediaSlot(
 
 export const LANDING_TRANSFORMATION = {
     title: "My transformation",
-    progressLabel: "2 Years of Progress",
     beforeKg: 65,
     afterKg: 77,
     caption:

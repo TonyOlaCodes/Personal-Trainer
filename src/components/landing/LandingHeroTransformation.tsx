@@ -5,7 +5,7 @@ import { ArrowRight } from "lucide-react";
 import { LANDING_TRANSFORMATION, landingMediaSlot } from "@/lib/landingMedia";
 
 export function LandingHeroTransformation() {
-    const { beforeKg, afterKg, progressLabel, caption } = LANDING_TRANSFORMATION;
+    const { beforeKg, afterKg, caption } = LANDING_TRANSFORMATION;
 
     return (
         <div className="relative w-full max-w-[620px] mx-auto animate-slide-up animate-delay-200">
@@ -23,9 +23,6 @@ export function LandingHeroTransformation() {
                 <header className="text-center mb-4 sm:mb-7">
                     <p className="text-[9px] sm:text-[11px] font-black uppercase tracking-[0.16em] sm:tracking-[0.22em] text-fg-subtle">
                         My Transformation
-                    </p>
-                    <p className="mt-1 sm:mt-1.5 text-[11px] sm:text-sm font-semibold uppercase tracking-[0.12em] sm:tracking-[0.18em] text-brand-400">
-                        {progressLabel}
                     </p>
                 </header>
 

@@ -135,11 +135,21 @@ export function PublicProfileClient({ userId, currentUserId }: Props) {
     }
 
     if (error || !profile || !viewer) {
+        const isPrivate = error === "This profile is private";
+        const notFound = error === "User not found";
         return (
             <div className="card p-10 text-center max-w-lg mx-auto">
                 <Lock className="w-10 h-10 text-fg-subtle mx-auto mb-4" />
-                <h2 className="text-xl font-black text-fg mb-2">Profile unavailable</h2>
-                <p className="text-sm text-fg-muted">{error ?? "This profile could not be loaded."}</p>
+                <h2 className="text-xl font-black text-fg mb-2">
+                    {isPrivate ? "Private profile" : notFound ? "Profile not found" : "Profile unavailable"}
+                </h2>
+                <p className="text-sm text-fg-muted">
+                    {isPrivate
+                        ? "This athlete has chosen to keep their profile private."
+                        : notFound
+                            ? "This user may have been removed or the link is invalid."
+                            : (error ?? "This profile could not be loaded.")}
+                </p>
                 <button
                     type="button"
                     onClick={() => window.location.reload()}

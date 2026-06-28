@@ -709,7 +709,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
             if (daysUntilNext !== null) return `Next check-in in ${daysUntilNext} days`;
             return `Due ${checkInDueState.dueDayLabel}`;
         }
-        return "Submit Check-in";
+        return "No check-in due";
     };
 
     // Stats based on selection or defaults
@@ -1048,6 +1048,17 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                             </div>
                         ) : null}
                     </div>
+                ) : !checkInDueState.isConfigured ? (
+                    /* No schedule from coach yet */
+                    <div className="relative p-8 rounded-3xl border border-surface-border bg-surface-muted/20 text-center">
+                        <div className="w-16 h-16 rounded-2xl bg-surface-muted flex items-center justify-center mx-auto mb-4">
+                            <Calendar className="w-8 h-8 text-fg-subtle" />
+                        </div>
+                        <p className="text-lg font-black text-fg tracking-tight">No check-in due</p>
+                        <p className="text-sm text-fg-muted max-w-sm mx-auto mt-2 leading-relaxed">
+                            Your coach hasn&apos;t set your check-in day yet. You&apos;ll see when the next one is due here.
+                        </p>
+                    </div>
                 ) : (
                     /* Log CTA */
                     <div 
@@ -1068,9 +1079,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                             </div>
                             <div>
                                 <p className="text-lg font-black text-fg tracking-tight">
-                                    {!checkInDueState.isConfigured 
-                                        ? "Submit Weekly Check-in" 
-                                        : isOverdue 
+                                    {isOverdue 
                                         ? "Check-in overdue" 
                                         : isDueDay 
                                         ? "Check-in is due today" 
@@ -1081,9 +1090,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                                         : "Submit Check-in"}
                                 </p>
                                 <p className="text-sm text-fg-muted max-w-xs mx-auto mt-1 leading-relaxed">
-                                    {!checkInDueState.isConfigured
-                                        ? "Submit your weekly check-in, notes, and progress photos to your coach."
-                                        : isOverdue
+                                    {isOverdue
                                         ? "You missed this week's check-in. Fill it in now so your coach has the full week."
                                         : isDueDay
                                         ? "Your weekly check-in is due. Share your progress, photos, and performance intel."

@@ -14,6 +14,7 @@ export async function GET(
     _req: Request,
     { params }: { params: Promise<{ userId: string }> }
 ) {
+    try {
     const authResult = await requireAuthUser();
     if (authResult.error) return authResult.error;
 
@@ -98,7 +99,7 @@ export async function GET(
                 name: plan.name,
                 description: plan.description,
                 tags: plan.tags,
-                isPublic: plan.isPublic,
+                isPublic: plan.isPublic ?? true,
                 weekCount: plan._count.weeks,
                 createdAt: plan.createdAt.toISOString(),
             })),
@@ -111,4 +112,8 @@ export async function GET(
             canCopyPlans: !isSelf,
         },
     });
+    } catch (error) {
+        console.error("[GET /api/users/[userId]/profile]", error);
+        return NextResponse.json({ error: "Could not load profile" }, { status: 500 });
+    }
 }

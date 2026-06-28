@@ -838,8 +838,8 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                 />
             )}
 
-            {/* Check-in Widget */}
-            {user.role !== "FREE" && (checkInDueState.isConfigured || !!currentCheckin) && (
+            {/* Check-in Widget — always visible for Premium; schedule optional */}
+            {user.role !== "FREE" && (
                 <button
                     type="button"
                     id="dashboard-check-in"
@@ -850,6 +850,8 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                         "card p-4 flex items-center justify-between transition-all hover:shadow-glow-sm",
                         currentCheckin 
                             ? "border-success/20 bg-success/5 shadow-glow-success-sm" 
+                            : !checkInDueState.isConfigured
+                                ? "border-surface-border bg-surface-muted/30"
                             : checkInDueState.isOverdue
                                 ? "border-danger/20 bg-danger/5 shadow-glow-danger-sm"
                                 : checkInDueState.isDueToday
@@ -861,12 +863,16 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                                 "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
                                 currentCheckin 
                                     ? "bg-success/15" 
+                                    : !checkInDueState.isConfigured
+                                        ? "bg-surface-muted"
                                     : checkInDueState.isOverdue
                                         ? "bg-danger/10"
                                         : "bg-warning/10"
                             )}>
                                 {currentCheckin 
                                     ? <Check className="w-5 h-5 text-success" />
+                                    : !checkInDueState.isConfigured
+                                        ? <Calendar className="w-5 h-5 text-fg-subtle" />
                                     : checkInDueState.isOverdue
                                         ? <AlertCircle className="w-5 h-5 text-danger animate-pulse-slow" />
                                         : <Calendar className="w-5 h-5 text-warning animate-pulse-slow" />
@@ -880,7 +886,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                                     {currentCheckin 
                                         ? currentCheckin.status === "REVIEWED" ? "✅ Coach reviewed" : "⏳ Awaiting coach review"
                                         : !checkInDueState.isConfigured
-                                            ? "Tap to submit weekly check-in"
+                                            ? "No check-in due — your coach hasn't set a schedule yet"
                                             : checkInDueState.isOverdue
                                                 ? "Check-in overdue"
                                                 : checkInDueState.isDueToday
