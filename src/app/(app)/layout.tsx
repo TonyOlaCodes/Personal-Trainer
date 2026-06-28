@@ -13,6 +13,7 @@ import { touchUserLastActive } from "@/lib/userPresence";
 import { PresenceHeartbeat } from "@/components/layout/PresenceHeartbeat";
 import { GlobalAnnouncements } from "@/components/shared/GlobalAnnouncements";
 import { ChatUnreadProvider } from "@/components/chat/ChatUnreadProvider";
+import { AppWalkthroughProvider } from "@/components/walkthrough/AppWalkthroughProvider";
 
 export default async function AppLayout({
     children,
@@ -23,13 +24,13 @@ export default async function AppLayout({
     const { userId } = await auth();
     if (!userId) redirect("/sign-in");
 
-    let user: { role: string; onboardingDone: boolean; id: string } | null = null;
+    let user: { role: string; onboardingDone: boolean; id: string; walkthroughDone: boolean } | null = null;
     let isDeactivated = false;
     let layoutError: unknown = null;
     try {
         user = await prisma.user.findUnique({
             where: { clerkId: userId },
-            select: { role: true, onboardingDone: true, id: true },
+            select: { role: true, onboardingDone: true, id: true, walkthroughDone: true },
         });
         isDeactivated = await getUserDeactivationStatusByClerkId(userId);
     } catch (e) {
@@ -64,6 +65,10 @@ export default async function AppLayout({
     return (
         <RoleProvider role={userRole}>
             <ChatUnreadProvider>
+            <AppWalkthroughProvider
+                userRole={userRole}
+                initialWalkthroughDone={user?.walkthroughDone ?? false}
+            >
             <PresenceHeartbeat />
             <GlobalAnnouncements />
             <div className="min-h-screen bg-surface w-full max-w-full">
@@ -79,6 +84,7 @@ export default async function AppLayout({
 
                 <MobileTabBar userRole={userRole} />
             </div>
+            </AppWalkthroughProvider>
             </ChatUnreadProvider>
         </RoleProvider>
     );

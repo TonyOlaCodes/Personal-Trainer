@@ -12,6 +12,7 @@ import Link from "next/link";
 import { cn, getInitials } from "@/lib/utils";
 import { resolveUploadUrl, uploadMediaFile } from "@/lib/compressImage";
 import { isCoachRole, isClientRole } from "@/lib/roles";
+import { notifyWalkthroughReset } from "@/components/walkthrough/AppWalkthroughProvider";
 import { DEFAULT_MISSED_NOTIFY_TIME } from "@/lib/coachNotificationSchedule";
 
 interface Props {
@@ -97,6 +98,7 @@ export function SettingsClient({ user }: Props) {
     const [hiddenGoals, setHiddenGoals] = useState<string[]>(user.hiddenGoals || []);
     const [goalSaving, setGoalSaving] = useState(false);
     const [goalSaved, setGoalSaved] = useState(false);
+    const [walkthroughResetting, setWalkthroughResetting] = useState(false);
 
     const showCoachNotifications = isCoachRole(user.role);
     const showClientNotifications = isClientRole(user.role);
@@ -342,6 +344,24 @@ export function SettingsClient({ user }: Props) {
     };
 
     const supportEmail = process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? "tonyolajide@gmail.com";
+
+    const replayWalkthrough = async () => {
+        setWalkthroughResetting(true);
+        try {
+            const res = await fetch("/api/user/walkthrough", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "reset" }),
+            });
+            if (!res.ok) throw new Error("Reset failed");
+            notifyWalkthroughReset();
+            window.location.href = "/dashboard?walkthrough=1";
+        } catch {
+            alert("Could not reset the product tour. Try again.");
+        } finally {
+            setWalkthroughResetting(false);
+        }
+    };
 
     return (
         <div className="max-w-4xl mx-auto p-6 flex flex-col md:flex-row gap-8 animate-fade-in pb-20">
@@ -908,6 +928,24 @@ export function SettingsClient({ user }: Props) {
                                 </p>
                             </Link>
                         </div>
+                        {isClientRole(user.role) ? (
+                            <div className="rounded-2xl border border-surface-border bg-surface-muted/30 p-5 space-y-3">
+                                <div>
+                                    <p className="font-bold text-fg">Product tour</p>
+                                    <p className="text-sm text-fg-muted leading-relaxed mt-1">
+                                        Replay the guided walkthrough of Dashboard, Plans, Calendar, Check-ins, Progress, and Chat.
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={replayWalkthrough}
+                                    disabled={walkthroughResetting}
+                                    className="btn-secondary btn-sm"
+                                >
+                                    {walkthroughResetting ? "Resetting..." : "Replay walkthrough"}
+                                </button>
+                            </div>
+                        ) : null}
                     </div>
                 )}
 

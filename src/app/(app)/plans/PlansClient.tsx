@@ -11,6 +11,8 @@ import { cn, formatDate } from "@/lib/utils";
 import { PLAN_TEMPLATES } from "@/lib/templates";
 import { isCoachRole } from "@/lib/roles";
 import { ActiveSessionBanner, type ActiveSessionInfo } from "@/components/shared/ActiveSessionBanner";
+import { useWalkthrough } from "@/components/walkthrough/AppWalkthroughProvider";
+import { WalkthroughPlansDemo } from "@/components/walkthrough/WalkthroughDemoPanels";
 
 interface Plan {
     id: string;
@@ -65,6 +67,15 @@ export function PlansClient({ plans, userRole, activeSession = null }: Props) {
     const activePlan = localPlans.find((p) => p.isActive);
     const [localActiveSession, setLocalActiveSession] = useState(activeSession);
     const canPublishToProfile = !isCoach && localPlans.some((p) => p.isActive);
+    const { demoMode } = useWalkthrough();
+
+    if (demoMode) {
+        return (
+            <div className="space-y-6 animate-fade-in pb-10">
+                <WalkthroughPlansDemo />
+            </div>
+        );
+    }
 
     const setActive = async (planId: string | null) => {
         await fetch("/api/plans/activate", {

@@ -29,6 +29,8 @@ import { ProfileLink } from "@/components/shared/ProfileLink";
 import { CoachChatTools } from "@/components/chat/CoachChatTools";
 import { useChatUnread } from "@/components/chat/ChatUnreadProvider";
 import type { CoachPlanRecord } from "@/lib/coachPlans";
+import { useWalkthrough } from "@/components/walkthrough/AppWalkthroughProvider";
+import { WalkthroughChatDemo } from "@/components/walkthrough/WalkthroughDemoPanels";
 
 /* ─── Types ──────────────────────────────────────────── */
 interface ReplyPreview {
@@ -157,6 +159,7 @@ export function ChatClient({
     initialUnread = {},
 }: Props) {
     const isCoachUser = currentUserRole === "COACH" || currentUserRole === "SUPER_ADMIN";
+    const { demoMode } = useWalkthrough();
     const canViewLastOnline = currentUserRole === "COACH" || currentUserRole === "SUPER_ADMIN";
     const { refresh: refreshGlobalUnread } = useChatUnread();
     const [tab, setTab] = useState<"direct" | "general">("general");
@@ -1347,6 +1350,14 @@ export function ChatClient({
 
     /* ─── Main Render ────────────────────────────────── */
     if (!isHydrated) return null;
+
+    if (demoMode) {
+        return (
+            <div className="p-4 sm:p-6 animate-fade-in pb-24 md:pb-10">
+                <WalkthroughChatDemo />
+            </div>
+        );
+    }
 
     return (
         <div

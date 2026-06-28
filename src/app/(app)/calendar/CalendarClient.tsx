@@ -12,6 +12,8 @@ import {
 import Link from "next/link";
 import { ReturnLink } from "@/components/shared/ReturnLink";
 import { cn, toDateKey, parseLogDate } from "@/lib/utils";
+import { useWalkthrough } from "@/components/walkthrough/AppWalkthroughProvider";
+import { WalkthroughCalendarDemo } from "@/components/walkthrough/WalkthroughDemoPanels";
 import { useCurrentDate } from "@/hooks/useCurrentDate";
 import { getPlannedWorkoutForDate, type PlanScheduleRevisionRecord } from "@/lib/planSchedule";
 
@@ -98,6 +100,7 @@ export function CalendarClient({
         else setInternalView(next);
     };
     const [selectedDateKey, setSelectedDateKey] = useState<string>(todayKey);
+    const { demoMode } = useWalkthrough();
 
     useEffect(() => {
         const prevTodayKey = prevTodayKeyRef.current;
@@ -216,6 +219,14 @@ export function CalendarClient({
         }
         return null;
     };
+
+    if (demoMode) {
+        return (
+            <div className="p-4 sm:p-6 animate-fade-in pb-10">
+                <WalkthroughCalendarDemo />
+            </div>
+        );
+    }
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fade-in">

@@ -265,7 +265,7 @@ export function TopBar({ title, subtitle, showToday = false, streak, hideSearch 
                         <Settings className="w-4 h-4" />
                     </Link>
                     
-                    <div className="relative" ref={notifRef}>
+                    <div className="relative" ref={notifRef} id="tour-notifications">
                         <button 
                             className="btn-icon relative" 
                             aria-label="Notifications"

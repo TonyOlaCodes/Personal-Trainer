@@ -139,7 +139,10 @@ export async function POST(req: Request) {
         return NextResponse.json({
             success: true,
             role,
-            redirectTo: defaultHomeForRole(role),
+            redirectTo:
+                accessCode && role === "PREMIUM"
+                    ? "/dashboard?walkthrough=1"
+                    : defaultHomeForRole(role),
         });
     } catch (err) {
         console.error("[Onboarding] Failed to save profile:", err);

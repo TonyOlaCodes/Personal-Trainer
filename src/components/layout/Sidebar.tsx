@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BrandLogo } from "@/components/shared/BrandLogo";
+import { useChatUnread, formatUnreadBadge } from "@/components/chat/ChatUnreadProvider";
 
 interface NavItem {
     href: string;

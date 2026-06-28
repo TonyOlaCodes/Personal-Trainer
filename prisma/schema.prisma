@@ -76,6 +76,7 @@ model User {
   deletedName       String?
   deletedEmail      String?
   onboardingDone    Boolean  @default(false)
+  walkthroughDone   Boolean  @default(false)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 

@@ -3,7 +3,6 @@
 import { Suspense, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Walkthrough } from "@/components/shared/Walkthrough";
 import { DashboardAnnouncementBanners } from "@/components/shared/DashboardAnnouncementBanners";
 import { RecentSessionsExplorer, PREVIEW_LIMIT } from "@/components/shared/RecentSessionsExplorer";
 import { ReturnLink } from "@/components/shared/ReturnLink";
@@ -17,6 +16,13 @@ import { useCurrentPath } from "@/hooks/useNavigation";
 import { useCurrentDate } from "@/hooks/useCurrentDate";
 import { useScrollLock } from "@/hooks/useScrollLock";
 import { formatWeightDistanceFromGoal } from "@/lib/bodyweight";
+import { useWalkthrough } from "@/components/walkthrough/AppWalkthroughProvider";
+import {
+    WalkthroughDashboardActivityDemo,
+    WalkthroughDashboardMetricsDemo,
+    WalkthroughDashboardWorkoutDemo,
+    WalkthroughFinishBanner,
+} from "@/components/walkthrough/WalkthroughDemoPanels";
 
 interface Exercise {
     id: string;
@@ -140,7 +146,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
     const [code, setCode] = useState("");
     const [codeStatus, setCodeStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
     const [codeMsg, setCodeMsg] = useState("");
-    const [showTour, setShowTour] = useState(false);
+    const { demoMode, currentStepId } = useWalkthrough();
     const [weightDate, setWeightDate] = useState(todayDate);
     const [weight, setWeight] = useState(
         bodyweight.selectedDate === todayDate && bodyweight.selectedWeightKg
@@ -218,10 +224,6 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
 
     useEffect(() => {
         const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.get("tour") === "true") {
-            setShowTour(true);
-            window.history.replaceState({}, document.title, window.location.pathname);
-        }
         const sessionId = urlParams.get("sessionId");
         if (sessionId) {
             setSessionsExplorerInitialId(sessionId);
@@ -538,9 +540,8 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
         if (res.ok) {
             setCodeStatus("success");
             setCodeMsg("Access Granted!");
-            // Refresh with tour flag
             setTimeout(() => {
-                window.location.href = "/dashboard?tour=true";
+                window.location.href = "/dashboard?walkthrough=1";
             }, 1000);
         } else {
             setCodeStatus("error");
@@ -548,50 +549,9 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
         }
     };
 
-    const tourSteps = [
-        {
-            targetId: "nav-dashboard",
-            title: "Dashboard",
-            description: "Your daily overview. See your current plan, stats, and today's mission at a glance.",
-            position: "right" as const
-        },
-        {
-            targetId: "nav-plans",
-            title: "Training Plans",
-            description: "Access your training programs. View every exercise, set, and rep assigned by your coach.",
-            position: "right" as const
-        },
-        {
-            targetId: "nav-calendar",
-            title: "Workout Calendar",
-            description: "A bird's eye view of your schedule. See what's coming up and what you've already crushed.",
-            position: "right" as const
-        },
-        {
-            targetId: "nav-progress",
-            title: "Progress Tracking",
-            description: "Analyze your gains. Track body metrics and strength plateaus over time.",
-            position: "right" as const
-        },
-        {
-            targetId: "dashboard-check-in",
-            title: "Weekly Check-ins",
-            description: "Submit your weekly check-ins and progress photos to your coach for feedback.",
-            position: "bottom" as const
-        },
-        {
-            targetId: "nav-chat",
-            title: "Coach Chat",
-            description: "Instant access to your coach. Ask questions or get form checks any time.",
-            position: "right" as const
-        },
-        {
-            targetId: "today-workout",
-            title: "Start Workout",
-            description: "Tap Start Workout to begin today's scheduled session immediately.",
-            position: "bottom" as const
-        }
-    ];
+    const showWorkoutDemo = demoMode && (currentStepId === "dashboard-workout" || currentStepId === "finish-workout");
+    const showMetricsDemo = demoMode && currentStepId === "dashboard-metrics";
+    const showActivityDemo = demoMode && currentStepId === "dashboard-activity";
 
     return (
         <div className="space-y-6 animate-fade-in pb-10">
@@ -617,7 +577,6 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                     router.refresh();
                 }}
             />
-            {showTour && <Walkthrough steps={tourSteps} onComplete={() => setShowTour(false)} />}
             <DashboardAnnouncementBanners />
 
             {/* Greeting */}
@@ -672,7 +631,21 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                     </div>
                 )}
             </div>
-             
+
+            {demoMode ? (
+                <div className="space-y-6">
+                    {showWorkoutDemo ? <WalkthroughDashboardWorkoutDemo /> : null}
+                    {showMetricsDemo ? <WalkthroughDashboardMetricsDemo /> : null}
+                    {showActivityDemo ? <WalkthroughDashboardActivityDemo /> : null}
+                    {currentStepId === "finish-workout" ? <WalkthroughFinishBanner /> : null}
+                    {currentStepId === "dashboard-notifications" ? (
+                        <div className="card p-4 text-sm text-fg-muted leading-relaxed">
+                            Notification alerts appear on the bell icon in the top bar — plan updates, coach messages, and check-in reminders.
+                        </div>
+                    ) : null}
+                </div>
+            ) : (
+            <>
             {/* Daily Metrics Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
                 <div className="flex items-center gap-2">
@@ -1185,6 +1158,8 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                         </div>
                     </div>
                 </div>
+            )}
+            </>
             )}
         </div>
     );
