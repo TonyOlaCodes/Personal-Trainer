@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import {
     User, Bell, Palette,
     HelpCircle, LogOut, ChevronRight, Check,
-    Camera, Loader2, Target, RotateCcw, Scale, ImageIcon, Link2, ArrowLeft,
+    Camera, Loader2, Target, RotateCcw, ImageIcon, Link2, ArrowLeft,
 } from "lucide-react";
 import { useClerk } from "@clerk/nextjs";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -12,7 +12,6 @@ import Link from "next/link";
 import { cn, getInitials } from "@/lib/utils";
 import { resolveUploadUrl, uploadMediaFile } from "@/lib/compressImage";
 import { isCoachRole, isClientRole, isCoachedPremium } from "@/lib/roles";
-import { notifyWalkthroughReset } from "@/components/walkthrough/AppWalkthroughProvider";
 import { DEFAULT_MISSED_NOTIFY_TIME } from "@/lib/coachNotificationSchedule";
 import {
     type SocialLinks,
@@ -110,7 +109,6 @@ export function SettingsClient({ user }: Props) {
     const [goalSaving, setGoalSaving] = useState(false);
     const [goalSaved, setGoalSaved] = useState(false);
     const goalReadyRef = useRef(false);
-    const [walkthroughResetting, setWalkthroughResetting] = useState(false);
 
     const showCoachNotifications = isCoachRole(user.role);
     const showClientNotifications = isCoachedPremium(user.role, user.coachId);
@@ -120,7 +118,6 @@ export function SettingsClient({ user }: Props) {
         ...(isClientRole(user.role) ? [{ id: "goals", label: "My Goals", icon: Target }] : []),
         { id: "appearance", label: "Appearance", icon: Palette },
         { id: "notifications", label: "Notifications", icon: Bell },
-        { id: "legal", label: "Legal", icon: Scale },
     ];
 
     const sectionParam = searchParams.get("section");
@@ -419,24 +416,6 @@ export function SettingsClient({ user }: Props) {
 
     const supportEmail = process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? "tonyolajide@gmail.com";
 
-    const replayWalkthrough = async () => {
-        setWalkthroughResetting(true);
-        try {
-            const res = await fetch("/api/user/walkthrough", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "reset" }),
-            });
-            if (!res.ok) throw new Error("Reset failed");
-            notifyWalkthroughReset();
-            window.location.href = "/dashboard?walkthrough=1";
-        } catch {
-            alert("Could not reset the product tour. Try again.");
-        } finally {
-            setWalkthroughResetting(false);
-        }
-    };
-
     return (
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 animate-fade-in pb-20">
             {!activeSection ? (
@@ -476,6 +455,15 @@ export function SettingsClient({ user }: Props) {
                             <div>
                                 <h4 className="font-bold text-fg">Need help?</h4>
                                 <p className="text-[15px] text-fg-muted leading-snug">Email {supportEmail} or support the app.</p>
+                                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs text-fg-subtle">
+                                    <Link href="/privacy" className="hover:text-brand-400 transition-colors">
+                                        Privacy Policy
+                                    </Link>
+                                    <span aria-hidden="true">·</span>
+                                    <Link href="/terms" className="hover:text-brand-400 transition-colors">
+                                        Terms of Service
+                                    </Link>
+                                </div>
                             </div>
                         </div>
                         <div className="flex flex-wrap gap-2 justify-end">
@@ -1080,57 +1068,6 @@ export function SettingsClient({ user }: Props) {
                         </div>
                     </div>
                 )}
-
-                {activeSection === "legal" && (
-                    <div className="card p-8 space-y-6 animate-slide-up">
-                        <div>
-                            <h3 className="heading-2 mb-2">Legal</h3>
-                            <p className="subheading">
-                                Review how TOLGcoaching handles your data and the rules for using the platform.
-                            </p>
-                        </div>
-                        <div className="grid sm:grid-cols-2 gap-4">
-                            <Link
-                                href="/privacy"
-                                className="p-5 rounded-2xl border border-surface-border bg-surface-muted/30 hover:border-brand-500/40 hover:bg-surface-muted/50 transition-all group"
-                            >
-                                <p className="font-bold text-fg mb-1 group-hover:text-brand-300 transition-colors">Privacy Policy</p>
-                                <p className="text-sm text-fg-muted leading-relaxed">
-                                    What we collect, how we use it, and your GDPR rights.
-                                </p>
-                            </Link>
-                            <Link
-                                href="/terms"
-                                className="p-5 rounded-2xl border border-surface-border bg-surface-muted/30 hover:border-brand-500/40 hover:bg-surface-muted/50 transition-all group"
-                            >
-                                <p className="font-bold text-fg mb-1 group-hover:text-brand-300 transition-colors">Terms of Service</p>
-                                <p className="text-sm text-fg-muted leading-relaxed">
-                                    Platform rules, fitness disclaimers, and account responsibilities.
-                                </p>
-                            </Link>
-                        </div>
-                        {isClientRole(user.role) ? (
-                            <div className="rounded-2xl border border-surface-border bg-surface-muted/30 p-5 space-y-3">
-                                <div>
-                                    <p className="font-bold text-fg">Product tour</p>
-                                    <p className="text-sm text-fg-muted leading-relaxed mt-1">
-                                        Replay the guided walkthrough of Dashboard, Plans, Calendar, Check-ins, Progress, and Chat.
-                                    </p>
-                                </div>
-                                <button
-                                    type="button"
-                                    onClick={replayWalkthrough}
-                                    disabled={walkthroughResetting}
-                                    className="btn-secondary btn-sm"
-                                >
-                                    {walkthroughResetting ? "Resetting..." : "Replay walkthrough"}
-                                </button>
-                            </div>
-                        ) : null}
-                    </div>
-                )}
-
-
 
                     </div>
                 </div>

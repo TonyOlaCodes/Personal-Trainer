@@ -190,7 +190,7 @@ export function CoachInvitesClient({ plans, initialCodes }: Props) {
                 <div className="flex items-center justify-between px-2">
                     <h3 className="heading-3">Invites History</h3>
                     <div className="flex items-center gap-2">
-                        <span className="badge-brand">{codes.filter((c) => getAccessCodeStatus(codeStatusInput(c)).key === "active").length} Pending</span>
+                        <span className="badge-brand">{codes.filter((c) => getAccessCodeStatus(codeStatusInput(c)).key === "active").length} Unredeemed</span>
                     </div>
                 </div>
 

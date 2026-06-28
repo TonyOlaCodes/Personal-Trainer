@@ -86,7 +86,14 @@ interface Props {
 }
 
 type Tab = "users" | "coaches" | "plans" | "codes" | "announcements";
-type CodeFilter = "ALL" | "ACTIVE" | "USED" | "EXPIRED";
+type CodeFilter = "ALL" | "UNREDEEMED" | "REDEEMED" | "EXPIRED";
+
+const CODE_FILTER_OPTIONS: { key: CodeFilter; label: string }[] = [
+    { key: "ALL", label: "All" },
+    { key: "UNREDEEMED", label: "Unredeemed" },
+    { key: "REDEEMED", label: "Redeemed" },
+    { key: "EXPIRED", label: "Expired" },
+];
 type UserSortField = "createdAt" | "role" | "name" | "status";
 type SortDir = "asc" | "desc";
 
@@ -296,8 +303,8 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
     const filteredCodes = codes.filter(c => {
         const status = getAccessCodeStatus(codeStatusInput(c));
         if (codeFilter === "ALL") return true;
-        if (codeFilter === "ACTIVE") return status.key === "active";
-        if (codeFilter === "USED") return status.key === "redeemed";
+        if (codeFilter === "UNREDEEMED") return status.key === "active";
+        if (codeFilter === "REDEEMED") return status.key === "redeemed";
         if (codeFilter === "EXPIRED") return status.key === "expired" || status.key === "inactive";
         return true;
     });
@@ -841,16 +848,16 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
                         <div className="px-5 py-4 border-b border-surface-border flex items-center justify-between">
                             <h3 className="heading-3">Access Codes ({filteredCodes.length})</h3>
                             <div className="flex gap-1 bg-surface-muted p-1 rounded-lg border border-surface-border">
-                                {(["ALL", "ACTIVE", "USED", "EXPIRED"] as CodeFilter[]).map((f) => (
+                                {CODE_FILTER_OPTIONS.map(({ key, label }) => (
                                     <button
-                                        key={f}
-                                        onClick={() => setCodeFilter(f)}
+                                        key={key}
+                                        onClick={() => setCodeFilter(key)}
                                         className={cn(
                                             "px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest transition-all",
-                                            codeFilter === f ? "bg-surface-card text-brand-400 shadow-sm" : "text-fg-subtle hover:text-fg"
+                                            codeFilter === key ? "bg-surface-card text-brand-400 shadow-sm" : "text-fg-subtle hover:text-fg"
                                         )}
                                     >
-                                        {f}
+                                        {label}
                                     </button>
                                 ))}
                             </div>

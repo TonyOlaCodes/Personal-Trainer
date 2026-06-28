@@ -24,8 +24,6 @@ import { deriveOneRMFromBestSet } from "@/lib/exerciseHistory";
 import { MAX_PINNED_EXERCISES, normalizePinnedExercises, orderExerciseNames } from "@/lib/pinnedExercises";
 import { useWorkoutStatsRefresh } from "@/hooks/useWorkoutStatsRefresh";
 import { format, startOfWeek } from "date-fns";
-import { useWalkthrough } from "@/components/walkthrough/AppWalkthroughProvider";
-import { WalkthroughProgressDemo } from "@/components/walkthrough/WalkthroughDemoPanels";
 
 interface Props {
     userRole: string;
@@ -172,7 +170,6 @@ function isWeightChangeTowardGoal(
 
 export function ProgressClient({ userRole, hiddenGoals }: Props) {
     const isPremium = ["PREMIUM", "GENERAL_PREMIUM", "COACH", "SUPER_ADMIN"].includes(userRole);
-    const { demoMode } = useWalkthrough();
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [selectedExercise, setSelectedExercise] = useState<string>("");
@@ -364,14 +361,6 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
     );
 
     if (!isHydrated) return null;
-
-    if (demoMode) {
-        return (
-            <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto animate-fade-in pb-10">
-                <WalkthroughProgressDemo />
-            </div>
-        );
-    }
 
     if (!isPremium) {
         return (

@@ -16,14 +16,7 @@ import { useCurrentPath } from "@/hooks/useNavigation";
 import { useCurrentDate } from "@/hooks/useCurrentDate";
 import { useScrollLock } from "@/hooks/useScrollLock";
 import { formatWeightDistanceFromGoal } from "@/lib/bodyweight";
-import { useWalkthrough } from "@/components/walkthrough/AppWalkthroughProvider";
 import { isCardio } from "@/components/shared/ExerciseAutocomplete";
-import {
-    WalkthroughDashboardActivityDemo,
-    WalkthroughDashboardMetricsDemo,
-    WalkthroughDashboardWorkoutDemo,
-    WalkthroughFinishBanner,
-} from "@/components/walkthrough/WalkthroughDemoPanels";
 
 interface Exercise {
     id: string;
@@ -146,7 +139,6 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
     const [code, setCode] = useState("");
     const [codeStatus, setCodeStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
     const [codeMsg, setCodeMsg] = useState("");
-    const { demoMode, currentStepId } = useWalkthrough();
     const [weightDate, setWeightDate] = useState(todayDate);
     const [weight, setWeight] = useState(
         bodyweight.selectedDate === todayDate && bodyweight.selectedWeightKg
@@ -541,17 +533,13 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
             setCodeStatus("success");
             setCodeMsg("Access Granted!");
             setTimeout(() => {
-                window.location.href = "/dashboard?walkthrough=1";
+                window.location.href = "/dashboard";
             }, 1000);
         } else {
             setCodeStatus("error");
             setCodeMsg(data.error ?? "Invalid code");
         }
     };
-
-    const showWorkoutDemo = demoMode && (currentStepId === "dashboard-workout" || currentStepId === "finish-workout");
-    const showMetricsDemo = demoMode && currentStepId === "dashboard-metrics";
-    const showActivityDemo = demoMode && currentStepId === "dashboard-activity";
 
     return (
         <div className="space-y-6 animate-fade-in pb-10">
@@ -632,20 +620,6 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                 )}
             </div>
 
-            {demoMode ? (
-                <div className="space-y-6">
-                    {showWorkoutDemo ? <WalkthroughDashboardWorkoutDemo /> : null}
-                    {showMetricsDemo ? <WalkthroughDashboardMetricsDemo /> : null}
-                    {showActivityDemo ? <WalkthroughDashboardActivityDemo /> : null}
-                    {currentStepId === "finish-workout" ? <WalkthroughFinishBanner /> : null}
-                    {currentStepId === "dashboard-notifications" ? (
-                        <div className="card p-4 text-sm text-fg-muted leading-relaxed">
-                            Notification alerts appear on the bell icon in the top bar — plan updates, coach messages, and check-in reminders.
-                        </div>
-                    ) : null}
-                </div>
-            ) : (
-            <>
             {/* Daily Metrics Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
                 <div className="flex items-center gap-2">
@@ -1164,8 +1138,6 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                         </div>
                     </div>
                 </div>
-            )}
-            </>
             )}
         </div>
     );

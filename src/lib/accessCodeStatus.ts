@@ -54,7 +54,7 @@ export function getAccessCodeStatus(code: AccessCodeLike): {
     if (code.isActive) {
         return {
             key: "active",
-            label: "Active",
+            label: "Unredeemed",
             badgeClass: "bg-brand-500/10 text-brand-400 border-brand-500/20",
         };
     }

@@ -16,7 +16,6 @@ import { ensurePlanOriginalCreatorColumn } from "@/lib/planCreator";
 import { ensureAccessRequestColumns } from "@/lib/accessRequest";
 import { ensureAchievementsTables } from "@/lib/achievements";
 import { ensureCoachAttentionActionsTable } from "@/lib/coachAttentionActions";
-import { ensureWalkthroughColumn } from "@/lib/walkthrough/ensureWalkthroughColumn";
 import { ensureGeneralPremiumRole } from "@/lib/ensureGeneralPremiumRole";
 import { ensureLogSetExerciseNamesReady } from "@/lib/logSetExerciseName";
 
@@ -50,7 +49,6 @@ export async function ensureAppSchema() {
             ensureAccessRequestColumns(),
             ensureAchievementsTables(),
             ensureCoachAttentionActionsTable(),
-            ensureWalkthroughColumn(),
             ensureGeneralPremiumRole(),
             ensureLogSetExerciseNamesReady(),
         ]);

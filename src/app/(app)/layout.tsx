@@ -14,7 +14,6 @@ import { PresenceHeartbeat } from "@/components/layout/PresenceHeartbeat";
 import { GlobalAnnouncements } from "@/components/shared/GlobalAnnouncements";
 import { ChatUnreadProvider } from "@/components/chat/ChatUnreadProvider";
 import { AppUserProvider } from "@/lib/AppUserContext";
-import { AppWalkthroughProvider } from "@/components/walkthrough/AppWalkthroughProvider";
 
 export default async function AppLayout({
     children,
@@ -30,7 +29,6 @@ export default async function AppLayout({
         coachId: string | null;
         onboardingDone: boolean;
         id: string;
-        walkthroughDone: boolean;
         name: string | null;
         email: string;
         avatarUrl: string | null;
@@ -45,7 +43,6 @@ export default async function AppLayout({
                 coachId: true,
                 onboardingDone: true,
                 id: true,
-                walkthroughDone: true,
                 name: true,
                 email: true,
                 avatarUrl: true,
@@ -93,10 +90,6 @@ export default async function AppLayout({
                 }}
             >
             <ChatUnreadProvider>
-            <AppWalkthroughProvider
-                userRole={userRole}
-                initialWalkthroughDone={user?.walkthroughDone ?? false}
-            >
             <PresenceHeartbeat />
             <GlobalAnnouncements />
             <div className="min-h-screen bg-surface w-full max-w-full">
@@ -112,7 +105,6 @@ export default async function AppLayout({
 
                 <MobileTabBar userRole={userRole} />
             </div>
-            </AppWalkthroughProvider>
             </ChatUnreadProvider>
             </AppUserProvider>
         </RoleProvider>

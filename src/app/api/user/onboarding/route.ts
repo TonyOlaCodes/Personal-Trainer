@@ -149,7 +149,7 @@ export async function POST(req: Request) {
             role,
             redirectTo:
                 accessCode && (role === "PREMIUM" || role === "GENERAL_PREMIUM")
-                    ? "/dashboard?walkthrough=1"
+                    ? "/dashboard"
                     : defaultHomeForRole(role),
         });
     } catch (err) {

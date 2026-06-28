@@ -24,8 +24,6 @@ import { PremiumLockScreen } from "@/components/shared/PremiumLockScreen";
 import { MediaLightbox } from "@/components/shared/MediaLightbox";
 import { CheckInPeriodSummaryPanel } from "@/components/shared/CheckInPeriodSummaryPanel";
 import type { CheckInPeriodSummary } from "@/lib/checkInPeriodSummary";
-import { useWalkthrough } from "@/components/walkthrough/AppWalkthroughProvider";
-import { WalkthroughCheckInsDemo } from "@/components/walkthrough/WalkthroughDemoPanels";
 
 /* ─────────────────────────── Types ─────────────────────────── */
 interface CheckIn {
@@ -579,7 +577,6 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
     const initialStatusFilter =
         statusParam === "PENDING" || statusParam === "REVIEWED" ? statusParam : "ALL";
     const isPremium = ["PREMIUM", "GENERAL_PREMIUM", "COACH", "SUPER_ADMIN"].includes(userRole);
-    const { demoMode } = useWalkthrough();
     const [checkIns, setCheckIns] = useState(initial);
 
     // Form
@@ -673,14 +670,6 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
         loadPeriodSummary();
         return () => { cancelled = true; };
     }, [selectedDate, isCoach, checkIns, isLogging, editMode]);
-
-    if (demoMode) {
-        return (
-            <div className="p-4 sm:p-6 animate-fade-in pb-10">
-                <WalkthroughCheckInsDemo />
-            </div>
-        );
-    }
 
     if (!isPremium && !isCoach) {
         return (
