@@ -11,6 +11,7 @@ import { getCheckInDueState, getUserCheckInSchedule } from "@/lib/checkInSchedul
 import { SafeFallback, rethrowNextInternalErrors } from "@/components/shared/SafeFallback";
 import { withResolvedCheckInMedia } from "@/lib/uploadUrls";
 import { formatErrorDetails } from "@/lib/ensureAppSchema";
+import { canAccessCheckIns } from "@/lib/roles";
 
 export const metadata = { title: "Check-ins" };
 
@@ -53,6 +54,10 @@ export default async function CheckInsPage() {
             }
         });
         if (!user) redirect("/sign-in");
+
+        if (!canAccessCheckIns(user.role, user.coachId)) {
+            redirect("/dashboard");
+        }
 
         const workoutsTarget = getWorkoutsTargetFromUserPlan(
             user.trainingDaysPerWeek,

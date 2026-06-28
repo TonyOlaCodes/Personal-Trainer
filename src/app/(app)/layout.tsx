@@ -8,7 +8,7 @@ import { RoleProvider } from "@/lib/RoleContext";
 import { getUserDeactivationStatusByClerkId } from "@/lib/userDeactivation";
 import { ensureAppSchema, formatErrorDetails } from "@/lib/ensureAppSchema";
 import { SafeFallback } from "@/components/shared/SafeFallback";
-import { deactivateCoachActivePlans, isCoachRole } from "@/lib/roles";
+import { deactivateCoachActivePlans, isCoachRole, canAccessCheckIns } from "@/lib/roles";
 import { touchUserLastActive } from "@/lib/userPresence";
 import { PresenceHeartbeat } from "@/components/layout/PresenceHeartbeat";
 import { GlobalAnnouncements } from "@/components/shared/GlobalAnnouncements";
@@ -27,6 +27,7 @@ export default async function AppLayout({
 
     let user: {
         role: string;
+        coachId: string | null;
         onboardingDone: boolean;
         id: string;
         walkthroughDone: boolean;
@@ -41,6 +42,7 @@ export default async function AppLayout({
             where: { clerkId: userId },
             select: {
                 role: true,
+                coachId: true,
                 onboardingDone: true,
                 id: true,
                 walkthroughDone: true,
@@ -71,7 +73,8 @@ export default async function AppLayout({
 
     const isSidebarCollapsed = cookieStore.get("sidebarCollapsed")?.value === "true";
 
-    const userRole = (user?.role as "FREE" | "PREMIUM" | "COACH" | "SUPER_ADMIN") ?? "FREE";
+    const userRole = user?.role ?? "FREE";
+    const showCheckIns = user ? canAccessCheckIns(user.role, user.coachId) : false;
 
     if (isCoachRole(userRole)) {
         await deactivateCoachActivePlans(user.id);
@@ -99,7 +102,7 @@ export default async function AppLayout({
             <div className="min-h-screen bg-surface w-full max-w-full">
                 {/* Prevent layout shifts by injecting sidebar width before browser renders */}
                 <style dangerouslySetInnerHTML={{ __html: `:root { --sidebar-width: ${isSidebarCollapsed ? '72px' : '260px'}; }` }} />
-                <Sidebar userRole={userRole} initialCollapsed={isSidebarCollapsed} />
+                <Sidebar userRole={userRole} showCheckIns={showCheckIns} initialCollapsed={isSidebarCollapsed} />
 
                 <div className="md:pl-[var(--sidebar-width)] w-full max-w-full min-w-0">
                     <main className="min-h-screen pb-20 md:pb-0 w-full max-w-full min-w-0">
@@ -107,7 +110,7 @@ export default async function AppLayout({
                     </main>
                 </div>
 
-                <MobileTabBar userRole={userRole} />
+                <MobileTabBar userRole={userRole} showCheckIns={showCheckIns} />
             </div>
             </AppWalkthroughProvider>
             </ChatUnreadProvider>

@@ -1,13 +1,16 @@
 import type { Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { isPremiumTrainingRole } from "@/lib/membership";
 
 export function isCoachRole(role: Role | string): boolean {
     return role === "COACH" || role === "SUPER_ADMIN";
 }
 
 export function isClientRole(role: Role | string): boolean {
-    return role === "FREE" || role === "PREMIUM";
+    return role === "FREE" || role === "PREMIUM" || role === "GENERAL_PREMIUM";
 }
+
+export { isPremiumTrainingRole, isGeneralPremium, isCoachedPremium, canAccessCheckIns } from "@/lib/membership";
 
 /** Coaches manage clients — they don't share training plans on a public athlete profile. */
 export function isEligibleForPublicPlanSharing(role: Role | string): boolean {

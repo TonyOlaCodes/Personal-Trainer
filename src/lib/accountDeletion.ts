@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient, Role } from "@prisma/client";
 import { markUserAccountDeleted } from "@/lib/userDeactivation";
+import { releasePremiumAccessCodesForUser } from "@/lib/accessCodes";
 
 const emptyList: string[] = [];
 
@@ -26,10 +27,7 @@ export async function anonymizeDeletedUserAccount(
         await tx.workoutLog.deleteMany({ where: { userId: user.id } });
         await tx.userPlan.deleteMany({ where: { userId: user.id } });
 
-        await tx.accessCode.updateMany({
-            where: { usedById: user.id },
-            data: { isActive: false, status: "expired" },
-        });
+        await releasePremiumAccessCodesForUser(tx, user.id);
         await tx.accessCode.updateMany({
             where: { generatedBy: user.id },
             data: { isActive: false, expiresAt: now },

@@ -2,11 +2,12 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserDeactivationStatusById, setUserDeactivationStatus } from "@/lib/userDeactivation";
+import { releasePremiumAccessCodesForUser } from "@/lib/accessCodes";
 import { z } from "zod";
 
 const schema = z.object({
     userId: z.string(),
-    role: z.enum(["FREE", "PREMIUM", "COACH", "SUPER_ADMIN"]),
+    role: z.enum(["FREE", "PREMIUM", "GENERAL_PREMIUM", "COACH", "SUPER_ADMIN"]),
     coachId: z.string().nullable().optional(),
 });
 
@@ -24,6 +25,12 @@ export async function PATCH(req: Request) {
     if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
     const { userId: targetId, role, coachId } = parsed.data;
+
+    const target = await prisma.user.findUnique({
+        where: { id: targetId },
+        select: { role: true },
+    });
+    if (!target) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
     let assignedCoachId: string | null = null;
     if (role === "PREMIUM" && coachId) {
@@ -66,6 +73,13 @@ export async function PATCH(req: Request) {
             coachId: role === "PREMIUM" ? assignedCoachId : null,
         },
     });
+
+    const wasPremiumMembership = target.role === "PREMIUM" || target.role === "GENERAL_PREMIUM";
+    const isPremiumMembership = role === "PREMIUM" || role === "GENERAL_PREMIUM";
+    if (wasPremiumMembership && !isPremiumMembership) {
+        await releasePremiumAccessCodesForUser(prisma, targetId);
+    }
+
     await setUserDeactivationStatus(targetId, false);
 
     return NextResponse.json({ success: true });

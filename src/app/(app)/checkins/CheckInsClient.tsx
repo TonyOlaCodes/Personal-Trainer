@@ -568,7 +568,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
     const statusParam = searchParams.get("status");
     const initialStatusFilter =
         statusParam === "PENDING" || statusParam === "REVIEWED" ? statusParam : "ALL";
-    const isPremium = ["PREMIUM", "COACH", "SUPER_ADMIN"].includes(userRole);
+    const isPremium = ["PREMIUM", "GENERAL_PREMIUM", "COACH", "SUPER_ADMIN"].includes(userRole);
     const { demoMode } = useWalkthrough();
     const [checkIns, setCheckIns] = useState(initial);
 

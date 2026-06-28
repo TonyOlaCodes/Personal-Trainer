@@ -9,6 +9,8 @@ import { getDailyMetricTargets } from "@/lib/dailyMetrics";
 import { ensureBodyweightTable } from "@/lib/bodyweight";
 import { dedupeCoachPlansByName, normalizePlanIdForPicker } from "@/lib/coachPlans";
 import { getActiveSessionsForClients } from "@/lib/coachChat";
+import { loadCoachDashboardInsights } from "@/lib/coachDashboardInsights";
+import { getWeekNumber, parseLogDate, toDateKey } from "@/lib/utils";
 
 export const metadata = { title: "Coach Dashboard" };
 
@@ -136,6 +138,37 @@ export default async function CoachDashboardPage() {
     const extraDataByClientId = new Map(clientExtraData.map((item) => [item.id, item]));
     const activeSessions = await getActiveSessionsForClients(clientIds);
 
+    const currentIsoWeek = getWeekNumber(parseLogDate(toDateKey(new Date())));
+    const weekCheckIns = clientIds.length > 0
+        ? await prisma.checkIn.findMany({
+            where: { userId: { in: clientIds }, weekNumber: currentIsoWeek },
+            select: { id: true, userId: true },
+        })
+        : [];
+    const weekCheckInByUserId = new Map(weekCheckIns.map((row) => [row.userId, row.id]));
+
+    const insights = await loadCoachDashboardInsights({
+        coachId: coach.id,
+        clients: coach.clients.map((client) => {
+            const extra = extraDataByClientId.get(client.id);
+            const isDeleted = client.isDeleted || client.isDeactivated || client.email.endsWith("@deleted.local");
+            return {
+                id: client.id,
+                name: client.name || "Unnamed Client",
+                isDeleted,
+                isDeactivated: client.isDeactivated,
+                email: client.email,
+                hasCheckInSchedule: extra?.schedule?.day !== null,
+                checkInSchedule: extra?.schedule ?? { day: null, frequencyWeeks: null, startDate: null },
+                currentWeekCheckInId: weekCheckInByUserId.get(client.id) ?? null,
+                activeSession: activeSessions[client.id] ?? null,
+            };
+        }),
+        pendingReviewCount: pendingReviews.length,
+        pendingReviewClientIds: [...new Set(pendingReviews.map((row) => row.user.id))],
+        activeSessions,
+    });
+
     return (
         <>
             <TopBar title="Coach Command Centre" subtitle="Manage your clients" />
@@ -197,6 +230,7 @@ export default async function CoachDashboardPage() {
                         date: ci.createdAt.toISOString(),
                     }))}
                     availablePlans={availablePlans}
+                    insights={insights}
                 />
             </div>
         </>

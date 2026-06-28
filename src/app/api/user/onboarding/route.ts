@@ -140,7 +140,7 @@ export async function POST(req: Request) {
             success: true,
             role,
             redirectTo:
-                accessCode && role === "PREMIUM"
+                accessCode && (role === "PREMIUM" || role === "GENERAL_PREMIUM")
                     ? "/dashboard?walkthrough=1"
                     : defaultHomeForRole(role),
         });

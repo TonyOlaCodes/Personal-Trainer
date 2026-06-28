@@ -839,7 +839,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
             )}
 
             {/* Check-in Widget — always visible for Premium; schedule optional */}
-            {user.role !== "FREE" && (
+            {checkInPanel && (
                 <button
                     type="button"
                     id="dashboard-check-in"

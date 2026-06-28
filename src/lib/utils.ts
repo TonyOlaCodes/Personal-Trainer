@@ -143,7 +143,8 @@ export function generateId(length = 12) {
 /** Role display labels */
 export const roleLabels: Record<string, string> = {
     FREE: "Free",
-    PREMIUM: "Premium",
+    PREMIUM: "Coached Premium",
+    GENERAL_PREMIUM: "General Premium",
     COACH: "Coach",
     SUPER_ADMIN: "Admin",
 };
@@ -152,6 +153,7 @@ export const roleLabels: Record<string, string> = {
 export const roleBadgeClass: Record<string, string> = {
     FREE: "badge-muted",
     PREMIUM: "badge-brand",
+    GENERAL_PREMIUM: "badge-success",
     COACH: "badge-success",
     SUPER_ADMIN: "badge-warning",
 };
@@ -160,6 +162,7 @@ export const roleBadgeClass: Record<string, string> = {
 export const roleNameClass: Record<string, string> = {
     FREE: "text-fg",
     PREMIUM: "text-brand-400",
+    GENERAL_PREMIUM: "text-success",
     COACH: "text-warning",
     SUPER_ADMIN: "text-danger",
 };

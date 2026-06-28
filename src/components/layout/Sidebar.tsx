@@ -29,6 +29,7 @@ interface NavItem {
     icon: React.ElementType;
     roles?: string[];
     hideRoles?: string[];
+    requiresCheckIns?: boolean;
     badge?: string;
     exact?: boolean;
 }
@@ -43,16 +44,17 @@ const navItems: NavItem[] = [
     { href: "/plans", label: "Plans", icon: Dumbbell },
     { href: "/calendar", label: "Calendar", icon: Calendar, hideRoles: ["COACH", "SUPER_ADMIN"] },
     { href: "/progress", label: "Progress", icon: BarChart3, hideRoles: ["COACH", "SUPER_ADMIN"] },
-    { href: "/checkins", label: "Check-ins", icon: ClipboardList },
+    { href: "/checkins", label: "Check-ins", icon: ClipboardList, requiresCheckIns: true },
     { href: "/chat", label: "Chat", icon: MessageSquare },
 ];
 
 interface SidebarProps {
     userRole?: string;
+    showCheckIns?: boolean;
     initialCollapsed?: boolean;
 }
 
-export function Sidebar({ userRole = "FREE", initialCollapsed = false }: SidebarProps) {
+export function Sidebar({ userRole = "FREE", showCheckIns = false, initialCollapsed = false }: SidebarProps) {
     const pathname = usePathname();
     const [collapsed, setCollapsed] = useState(initialCollapsed);
     const { totalUnread } = useChatUnread();
@@ -69,6 +71,7 @@ export function Sidebar({ userRole = "FREE", initialCollapsed = false }: Sidebar
     };
 
     const filteredItems = navItems.filter((item) => {
+        if (item.requiresCheckIns && !showCheckIns) return false;
         if (item.hideRoles && item.hideRoles.includes(userRole)) return false;
         if (!item.roles) return true;
         return item.roles.includes(userRole);

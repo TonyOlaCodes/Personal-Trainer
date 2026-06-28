@@ -2,17 +2,24 @@
 
 import { useState, useEffect, useMemo } from "react";
 import {
-    Users, Activity, Calendar,
-    ChevronRight, TrendingUp, HelpCircle, CheckCircle2,
-    Dumbbell, Loader2
+    Activity, Calendar,
+    ChevronRight,
+    Dumbbell, Loader2, AlertTriangle, MessageCircle,
+    ClipboardCheck, Scale, Trophy, Clock, Target,
+    Flame, Bell, ArrowUpRight, CheckCircle2
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { cn, formatDate, getInitials } from "@/lib/utils";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
-import { getPresenceIndicator } from "@/lib/userPresence";
+import { getPresenceIndicator, formatLastActiveText } from "@/lib/userPresence";
 import { PendingReviewsModal, type PendingReviewItem } from "@/components/shared/PendingReviewsModal";
 import { formatCoachPlanLabel } from "@/lib/coachPlans";
+import {
+    formatActivityTimestamp,
+    type CoachDashboardInsights,
+    type ClientDashboardInsight,
+} from "@/lib/coachDashboardInsights";
 
 const CHECK_IN_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -52,9 +59,98 @@ interface Props {
     recentCheckIns: RecentCheckIn[];
     pendingReviews: PendingReviewItem[];
     availablePlans: { id: string; name: string; type: string }[];
+    insights: CoachDashboardInsights;
 }
 
-export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, availablePlans }: Props) {
+const ACTIVITY_ICONS = {
+    workout: Dumbbell,
+    bodyweight: Scale,
+    checkin: ClipboardCheck,
+    message: MessageCircle,
+    pr: Trophy,
+} as const;
+
+function goalProgressLabel(client: Client): string | null {
+    if (client.targetWeightKg == null) return null;
+    const current = client.currentWeightKg;
+    if (current == null) return `Goal: ${client.targetWeightKg} kg`;
+    return `${current.toFixed(1)} → ${client.targetWeightKg} kg`;
+}
+
+function ClientInsightRow({
+    insight,
+    client,
+}: {
+    insight: ClientDashboardInsight | undefined;
+    client: Client;
+}) {
+    if (!insight) return null;
+
+    const goalLabel = goalProgressLabel(client);
+
+    return (
+        <div className="space-y-2 border-t border-surface-border pt-4">
+            <div className="flex flex-wrap gap-2">
+                {insight.todayWorkout.planned ? (
+                    <span className={cn(
+                        "text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg border",
+                        insight.todayWorkout.completed
+                            ? "bg-success/10 text-success border-success/20"
+                            : "bg-warning/10 text-warning border-warning/20"
+                    )}>
+                        Today: {insight.todayWorkout.name}
+                        {insight.todayWorkout.completed ? " ✓" : " · pending"}
+                    </span>
+                ) : (
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg border bg-surface-muted/40 text-fg-subtle border-surface-border">
+                        Rest day
+                    </span>
+                )}
+                {insight.workoutStreak > 0 && (
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg border bg-brand-500/10 text-brand-400 border-brand-500/20 flex items-center gap-1">
+                        <Flame className="w-3 h-3" />
+                        {insight.workoutStreak}d streak
+                    </span>
+                )}
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+                <div>
+                    <p className="text-[10px] text-fg-subtle uppercase font-bold tracking-widest">Check-in</p>
+                    <p className={cn(
+                        "text-xs font-semibold",
+                        insight.checkInStatus === "overdue" && "text-warning",
+                        insight.checkInStatus === "due_today" && "text-brand-400",
+                        insight.checkInStatus !== "overdue" && insight.checkInStatus !== "due_today" && "text-fg"
+                    )}>
+                        {insight.checkInLabel}
+                    </p>
+                </div>
+                <div>
+                    <p className="text-[10px] text-fg-subtle uppercase font-bold tracking-widest">Adherence</p>
+                    <p className="text-xs font-semibold text-fg">
+                        {insight.compliancePercent != null
+                            ? `${insight.compliancePercent}% this week`
+                            : "—"}
+                    </p>
+                </div>
+            </div>
+            {goalLabel && (
+                <div className="flex items-center gap-1.5 text-xs text-fg-muted">
+                    <Target className="w-3.5 h-3.5 text-brand-400 shrink-0" />
+                    <span className="truncate">{goalLabel}</span>
+                </div>
+            )}
+            {insight.unreadMessages > 0 && (
+                <p className="text-[10px] font-bold text-brand-400 flex items-center gap-1">
+                    <MessageCircle className="w-3 h-3" />
+                    {insight.unreadMessages} unread message{insight.unreadMessages === 1 ? "" : "s"}
+                </p>
+            )}
+        </div>
+    );
+}
+
+export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, availablePlans, insights }: Props) {
     const router = useRouter();
     const [skippedClients, setSkippedClients] = useState<string[]>([]);
     const [savingSetup, setSavingSetup] = useState(false);
@@ -63,13 +159,17 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
     const sortedClients = useMemo(() => {
         return [...clients].sort((a, b) => {
             if (a.isDeleted !== b.isDeleted) return a.isDeleted ? 1 : -1;
+            const aAttention = insights.clientInsights[a.id]?.needsAttention ? 0 : 1;
+            const bAttention = insights.clientInsights[b.id]?.needsAttention ? 0 : 1;
+            if (aAttention !== bAttention) return aAttention - bAttention;
             return (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base" });
         });
-    }, [clients]);
+    }, [clients, insights.clientInsights]);
 
     const pendingCheckIns = pendingReviews.length;
     const activeClients = clients.filter(c => !c.isDeleted);
     const deletedClients = clients.filter(c => c.isDeleted);
+    const { totals } = insights;
 
     // Queue of clients who need onboarding setup and haven't been skipped
     const needsSetupClients = activeClients.filter(c => !c.hasCheckInSchedule && !skippedClients.includes(c.id));
@@ -350,49 +450,162 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                 reviews={pendingReviews}
             />
 
-            {/* Stats row */}
+            {/* Actionable stat cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="stat-card">
-                    <div className="flex justify-between items-start">
-                        <Users className="w-4 h-4 text-brand-400 mb-1" />
-                        <Link href="/coach/invites" className="text-[10px] font-black text-brand-400 hover:text-brand-300 transition-colors uppercase tracking-widest">
-                            Invite +
-                        </Link>
-                    </div>
-                    <p className="stat-value">{activeClients.length}</p>
-                    <p className="stat-label">Active Clients</p>
-                </div>
+                <Link
+                    href="#needs-attention"
+                    className={cn(
+                        "stat-card transition-all hover:border-brand-500/40 hover:bg-brand-500/5",
+                        totals.clientsNeedingAttention > 0 && "border-warning/30"
+                    )}
+                >
+                    <AlertTriangle className={cn(
+                        "w-4 h-4 mb-1",
+                        totals.clientsNeedingAttention > 0 ? "text-warning" : "text-fg-subtle"
+                    )} />
+                    <p className="stat-value">{totals.clientsNeedingAttention}</p>
+                    <p className="stat-label">Need Attention</p>
+                </Link>
                 <button
                     type="button"
                     onClick={() => setShowPendingReviews(true)}
                     className={cn(
                         "stat-card text-left transition-all",
                         pendingCheckIns > 0
-                            ? "hover:border-brand-500/40 hover:bg-brand-500/5 cursor-pointer"
+                            ? "hover:border-brand-500/40 hover:bg-brand-500/5 cursor-pointer border-brand-500/20"
                             : "cursor-pointer hover:bg-surface-muted/30"
                     )}
                 >
-                    <TrendingUp className="w-4 h-4 text-success mb-1" />
+                    <ClipboardCheck className="w-4 h-4 text-brand-400 mb-1" />
                     <p className="stat-value">{pendingCheckIns}</p>
-                    <p className="stat-label">Pending Reviews</p>
+                    <p className="stat-label">Check-ins to Review</p>
                 </button>
-                <div className="stat-card">
-                    <Activity className="w-4 h-4 text-warning mb-1" />
-                    <p className="stat-value">{activeClients.reduce((acc, c) => acc + c.stats.logs, 0)}</p>
-                    <p className="stat-label">Logs (Total)</p>
-                </div>
-                <div className="stat-card">
-                    <Calendar className="w-4 h-4 text-brand-300 mb-1" />
-                    <p className="stat-value">{activeClients.reduce((acc, c) => acc + c.stats.checkins, 0)}</p>
-                    <p className="stat-label">Check-ins (Total)</p>
-                </div>
+                <Link
+                    href="/chat"
+                    className={cn(
+                        "stat-card transition-all hover:border-brand-500/40 hover:bg-brand-500/5",
+                        totals.unreadMessages > 0 && "border-brand-500/20"
+                    )}
+                >
+                    <MessageCircle className="w-4 h-4 text-brand-300 mb-1" />
+                    <p className="stat-value">{totals.unreadMessages}</p>
+                    <p className="stat-label">Unread Messages</p>
+                </Link>
+                <Link
+                    href="#clients"
+                    className={cn(
+                        "stat-card transition-all hover:border-brand-500/40 hover:bg-brand-500/5",
+                        totals.activeWorkoutsNow > 0 && "border-success/20"
+                    )}
+                >
+                    <Activity className="w-4 h-4 text-success mb-1" />
+                    <p className="stat-value">{totals.activeWorkoutsNow}</p>
+                    <p className="stat-label">In Workout Now</p>
+                </Link>
             </div>
+
+            {/* Needs Attention */}
+            <section id="needs-attention" className="space-y-3 scroll-mt-6">
+                <div className="flex items-center justify-between px-2">
+                    <h3 className="heading-3 flex items-center gap-2">
+                        <Bell className="w-5 h-5 text-warning" />
+                        Needs Attention
+                    </h3>
+                    <Link href="/coach/invites" className="text-[10px] font-black text-brand-400 hover:text-brand-300 transition-colors uppercase tracking-widest">
+                        Invite client +
+                    </Link>
+                </div>
+                {insights.attentionItems.length === 0 ? (
+                    <div className="card p-5 flex items-center gap-3 border-success/20 bg-success/5">
+                        <CheckCircle2 className="w-5 h-5 text-success shrink-0" />
+                        <div>
+                            <p className="text-sm font-bold text-fg">All caught up</p>
+                            <p className="text-xs text-fg-muted">No clients need immediate action right now.</p>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {insights.attentionItems.map((item) => (
+                            <Link
+                                key={item.key}
+                                href={item.href}
+                                className={cn(
+                                    "card p-4 flex items-center justify-between gap-3 transition-all hover:border-brand-500/40 group",
+                                    item.urgent && "border-warning/30 bg-warning/5"
+                                )}
+                            >
+                                <div className="min-w-0">
+                                    <p className="text-xs font-bold text-fg group-hover:text-brand-400 transition-colors truncate">
+                                        {item.label}
+                                    </p>
+                                    <p className="text-[10px] text-fg-subtle uppercase tracking-widest mt-0.5">
+                                        Tap to view
+                                    </p>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                    <span className={cn(
+                                        "text-xl font-black tabular-nums",
+                                        item.urgent ? "text-warning" : "text-fg"
+                                    )}>
+                                        {item.count}
+                                    </span>
+                                    <ArrowUpRight className="w-4 h-4 text-fg-subtle group-hover:text-brand-400 transition-colors" />
+                                </div>
+                            </Link>
+                        ))}
+                    </div>
+                )}
+            </section>
+
+            {/* Upcoming */}
+            <section className="space-y-3">
+                <div className="flex items-center justify-between px-2">
+                    <h3 className="heading-3 flex items-center gap-2">
+                        <Clock className="w-5 h-5 text-brand-400" />
+                        Upcoming
+                    </h3>
+                    <Link href="/coach/calendar" className="text-xs text-brand-400 hover:underline">Calendar</Link>
+                </div>
+                <div className="card p-4 sm:p-5">
+                    <p className="text-[10px] font-black text-brand-400 uppercase tracking-widest mb-3">Tomorrow</p>
+                    {insights.upcomingTomorrow.length === 0 ? (
+                        <p className="text-sm text-fg-muted">Nothing scheduled for tomorrow yet.</p>
+                    ) : (
+                        <ul className="space-y-2">
+                            {insights.upcomingTomorrow.map((event) => (
+                                <li key={event.id}>
+                                    <Link
+                                        href={event.href}
+                                        className="flex items-center justify-between gap-3 py-2 px-3 rounded-xl hover:bg-surface-muted/40 transition-colors group"
+                                    >
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            {event.type === "checkin" ? (
+                                                <ClipboardCheck className="w-4 h-4 text-brand-400 shrink-0" />
+                                            ) : (
+                                                <Dumbbell className="w-4 h-4 text-success shrink-0" />
+                                            )}
+                                            <span className="text-sm font-semibold text-fg truncate">
+                                                {event.clientName}
+                                            </span>
+                                            <span className="text-xs text-fg-muted truncate hidden sm:inline">
+                                                {event.label}
+                                            </span>
+                                        </div>
+                                        <ChevronRight className="w-4 h-4 text-fg-subtle group-hover:text-brand-400 shrink-0" />
+                                    </Link>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
+            </section>
 
             <div className="grid lg:grid-cols-3 gap-8">
                 {/* Client Roster */}
-                <div className="lg:col-span-2 space-y-4">
+                <div id="clients" className="lg:col-span-2 space-y-4 scroll-mt-6">
                     <div className="flex items-center justify-between px-2">
                         <h3 className="heading-3">My Clients</h3>
+                        <span className="text-xs text-fg-subtle">{activeClients.length} active</span>
                     </div>
 
                     <div className="grid sm:grid-cols-2 gap-4">
@@ -404,6 +617,12 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                             sortedClients.map((c) => {
                                 const session = c.isDeleted ? null : c.activeSession ?? null;
                                 const presence = c.isDeleted || session ? null : getPresenceIndicator(c.lastActiveAt);
+                                const insight = insights.clientInsights[c.id];
+                                const lastActiveLabel = c.isDeleted
+                                    ? "Inactive account"
+                                    : session
+                                        ? `In workout · ${session.workoutName}`
+                                        : formatLastActiveText(c.lastActiveAt);
                                 return (
                                 <Link
                                     key={c.id}
@@ -412,10 +631,12 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                                         "card p-5 group transition-all",
                                         c.isDeleted
                                             ? "opacity-70 grayscale hover:border-surface-border"
-                                            : "hover:border-brand-600/40"
+                                            : insight?.needsAttention
+                                                ? "border-warning/25 hover:border-warning/40"
+                                                : "hover:border-brand-600/40"
                                     )}
                                 >
-                                    <div className="flex items-center gap-4 mb-4">
+                                    <div className="flex items-center gap-4 mb-1">
                                         <div className="relative shrink-0">
                                             <div className={cn(
                                                 "w-12 h-12 rounded-2xl flex items-center justify-center text-sm font-bold text-white shadow-glow-sm overflow-hidden",
@@ -439,7 +660,7 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                                             ) : null}
                                         </div>
                                         <div className="min-w-0 flex-1">
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-2 flex-wrap">
                                                 <p className="font-bold text-fg group-hover:text-brand-400 transition-colors truncate">{c.name}</p>
                                                 {c.isDeleted && (
                                                     <span className="badge-muted text-[9px] uppercase tracking-widest">Deleted</span>
@@ -449,29 +670,36 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                                                         Setup needed
                                                     </span>
                                                 )}
+                                                {!c.isDeleted && insight?.needsAttention && (
+                                                    <span className="text-[8px] uppercase font-black px-2 py-0.5 rounded-full border border-warning/30 bg-warning/10 text-warning shrink-0">
+                                                        Needs attention
+                                                    </span>
+                                                )}
                                             </div>
-                                            {session ? (
-                                                <p className="text-[10px] text-success font-bold truncate flex items-center gap-1">
-                                                    <Activity className="w-3 h-3 shrink-0" />
-                                                    In workout · {session.workoutName}
-                                                </p>
-                                            ) : presence ? (
-                                                <p className="text-[10px] text-fg-subtle truncate">{presence.label}</p>
-                                            ) : (
-                                                <p className="text-xs text-fg-muted truncate">{c.isDeleted ? "Inactive account" : c.email}</p>
-                                            )}
+                                            <p className={cn(
+                                                "text-[10px] truncate",
+                                                session ? "text-success font-bold flex items-center gap-1" : "text-fg-subtle"
+                                            )}>
+                                                {session && <Activity className="w-3 h-3 shrink-0" />}
+                                                {lastActiveLabel}
+                                            </p>
                                         </div>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-2 border-t border-surface-border pt-4">
-                                        <div>
-                                            <p className="text-[10px] text-fg-subtle uppercase font-bold tracking-widest">Logs</p>
-                                            <p className="text-sm font-semibold text-fg">{c.stats.logs}</p>
+                                    {!c.isDeleted && (
+                                        <ClientInsightRow insight={insight} client={c} />
+                                    )}
+                                    {c.isDeleted && (
+                                        <div className="grid grid-cols-2 gap-2 border-t border-surface-border pt-4 mt-4">
+                                            <div>
+                                                <p className="text-[10px] text-fg-subtle uppercase font-bold tracking-widest">Logs</p>
+                                                <p className="text-sm font-semibold text-fg">{c.stats.logs}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] text-fg-subtle uppercase font-bold tracking-widest">Check-ins</p>
+                                                <p className="text-sm font-semibold text-fg">{c.stats.checkins}</p>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <p className="text-[10px] text-fg-subtle uppercase font-bold tracking-widest">Check-ins</p>
-                                            <p className="text-sm font-semibold text-fg">{c.stats.checkins}</p>
-                                        </div>
-                                    </div>
+                                    )}
                                 </Link>
                                 );
                             })
@@ -484,8 +712,46 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                     )}
                 </div>
 
-                {/* Recent Check-ins Sidebar */}
-                <div className="space-y-4">
+                {/* Sidebar: Activity + Quick Reviews */}
+                <div className="space-y-6">
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between px-2">
+                            <h3 className="heading-3">Recent Activity</h3>
+                        </div>
+                        <div className="card divide-y divide-surface-border overflow-hidden">
+                            {insights.activityFeed.length === 0 ? (
+                                <p className="p-4 text-sm text-fg-muted">No recent client activity in the last 7 days.</p>
+                            ) : (
+                                insights.activityFeed.map((item) => {
+                                    const Icon = ACTIVITY_ICONS[item.type];
+                                    return (
+                                        <Link
+                                            key={item.id}
+                                            href={item.href}
+                                            className="flex items-start gap-3 p-4 hover:bg-surface-muted/30 transition-colors group"
+                                        >
+                                            <div className="w-8 h-8 rounded-xl bg-surface-muted/50 flex items-center justify-center shrink-0">
+                                                <Icon className="w-4 h-4 text-brand-400" />
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <p className="text-sm text-fg leading-snug">
+                                                    <span className="font-bold group-hover:text-brand-400 transition-colors">
+                                                        {item.clientName}
+                                                    </span>
+                                                    {" "}{item.text}
+                                                </p>
+                                                <p className="text-[10px] text-fg-subtle mt-1 uppercase tracking-wider font-bold">
+                                                    {formatActivityTimestamp(item.timestamp)}
+                                                </p>
+                                            </div>
+                                        </Link>
+                                    );
+                                })
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="space-y-4">
                     <div className="flex items-center justify-between px-2">
                         <h3 className="heading-3">Quick Reviews</h3>
                         <Link href="/checkins" className="text-xs text-brand-400 hover:underline">See all</Link>
@@ -530,11 +796,6 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                             </Link>
                         ))}
                     </div>
-
-                    <div className="card p-6 bg-surface-muted/30 border-2 border-dashed border-surface-border text-center grayscale opacity-60">
-                        <HelpCircle className="w-8 h-8 mx-auto mb-3 text-fg-subtle" />
-                        <p className="text-xs font-bold uppercase text-fg-subtle tracking-widest">Pro Analytics</p>
-                        <p className="text-xs text-fg-subtle mt-1">Client compliance graphs coming soon</p>
                     </div>
                 </div>
             </div>

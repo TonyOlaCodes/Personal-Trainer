@@ -1,8 +1,9 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { z } from "zod";
+import { releasePremiumAccessCodesForUser } from "@/lib/accessCodes";
 import { requireCoachCanEditClient } from "@/lib/apiAuth";
+import { z } from "zod";
 
 const schema = z.object({
     clientId: z.string(),
@@ -29,21 +30,17 @@ export async function POST(req: Request) {
     const client = await prisma.user.findUnique({ where: { id: clientId } });
     if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 });
 
-    // Demote: Remove coach association and set role back to FREE
-    // Also invalidate the access code they used so it shows as "Expired/Revoked" in history
-    await prisma.$transaction([
-        prisma.user.update({
+    // Demote client and release their premium access code for reuse
+    await prisma.$transaction(async (tx) => {
+        await tx.user.update({
             where: { id: clientId },
             data: {
                 coachId: null,
-                role: "FREE",
+                role: "GENERAL_PREMIUM",
             },
-        }),
-        prisma.accessCode.updateMany({
-            where: { usedById: clientId },
-            data: { isActive: false },
-        }),
-    ]);
+        });
+        await releasePremiumAccessCodesForUser(tx, clientId);
+    });
 
     return NextResponse.json({ success: true });
 }

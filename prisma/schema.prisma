@@ -13,6 +13,7 @@ datasource db {
 enum Role {
   FREE
   PREMIUM
+  GENERAL_PREMIUM
   COACH
   SUPER_ADMIN
 }
@@ -153,6 +154,9 @@ model User {
   pinnedExercises   String[] @default([])
   bio               String?
   isPrivateProfile  Boolean  @default(false)
+  bannerUrl         String?
+  socialLinks       Json?
+  profilePrivacy    Json?
 
   @@map("users")
 }

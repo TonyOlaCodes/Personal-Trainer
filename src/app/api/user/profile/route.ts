@@ -3,6 +3,15 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { normalizeCalories, normalizeSleepHours, normalizeSteps, updateDailyMetricTargets } from "@/lib/dailyMetrics";
 import { ensureNotificationPreferenceColumns, getCoachNotifyOnClientMessage, setCoachNotifyOnClientMessage } from "@/lib/notifications";
+import {
+    ensureProfileExtendedColumns,
+    parseProfilePrivacy,
+    parseSocialLinks,
+    updateUserProfilePrivacy,
+    updateUserSocialLinks,
+    type ProfilePrivacy,
+    type SocialLinks,
+} from "@/lib/profilePrivacy";
 import { ensureUserProfileColumns } from "@/lib/userProfile";
 import { normalizeNotifyTime } from "@/lib/coachNotificationSchedule";
 import { normalizeStoredUploadUrl, withResolvedAvatar } from "@/lib/uploadUrls";
@@ -33,6 +42,30 @@ const profileSchema = z.object({
     hiddenGoals: z.array(z.string()).optional(),
     bio: z.string().max(280).nullable().optional(),
     isPrivateProfile: z.boolean().optional(),
+    bannerUrl: z.union([storedUploadUrlSchema, z.literal("")]).optional(),
+    profilePrivacy: z
+        .object({
+            bio: z.boolean().optional(),
+            bodyweight: z.boolean().optional(),
+            prs: z.boolean().optional(),
+            workoutStats: z.boolean().optional(),
+            achievements: z.boolean().optional(),
+            progressPhotos: z.boolean().optional(),
+            publicPlans: z.boolean().optional(),
+            activityFeed: z.boolean().optional(),
+            onlineStatus: z.boolean().optional(),
+            allowMessages: z.boolean().optional(),
+            socialLinks: z.boolean().optional(),
+        })
+        .optional(),
+    socialLinks: z
+        .object({
+            instagram: z.string().max(120).optional(),
+            twitter: z.string().max(120).optional(),
+            youtube: z.string().max(120).optional(),
+            website: z.string().max(200).optional(),
+        })
+        .optional(),
     notifyOnWorkout: z.boolean().optional(),
     notifyOnCheckIn: z.boolean().optional(),
     notifyOnMetricUpdate: z.boolean().optional(),
@@ -63,9 +96,16 @@ export async function PATCH(req: Request) {
                     ? null
                     : normalizeStoredUploadUrl(parsed.avatarUrl)
                 : undefined;
+        const normalizedBanner =
+            parsed.bannerUrl !== undefined
+                ? parsed.bannerUrl === ""
+                    ? null
+                    : normalizeStoredUploadUrl(parsed.bannerUrl)
+                : undefined;
 
         await ensureNotificationPreferenceColumns();
         await ensureUserProfileColumns();
+        await ensureProfileExtendedColumns();
 
         const notifyOnClientMessageUpdate = parsed.notifyOnClientMessage;
 
@@ -148,7 +188,52 @@ export async function PATCH(req: Request) {
             });
         }
 
-        return NextResponse.json(withResolvedAvatar(updated));
+        if (normalizedBanner !== undefined) {
+            await prisma.$executeRaw`
+                UPDATE "users"
+                SET "bannerUrl" = ${normalizedBanner},
+                    "updatedAt" = CURRENT_TIMESTAMP
+                WHERE "id" = ${updated.id}
+            `;
+        }
+
+        if (parsed.profilePrivacy !== undefined) {
+            await updateUserProfilePrivacy(updated.id, parsed.profilePrivacy as Partial<ProfilePrivacy>);
+        }
+
+        if (parsed.socialLinks !== undefined) {
+            await updateUserSocialLinks(updated.id, parseSocialLinks(parsed.socialLinks) as SocialLinks);
+        }
+
+        let bannerUrl: string | null | undefined;
+        let profilePrivacy: ProfilePrivacy | undefined;
+        let socialLinksOut: SocialLinks | undefined;
+
+        if (normalizedBanner !== undefined || parsed.profilePrivacy !== undefined || parsed.socialLinks !== undefined) {
+            const rows = await prisma.$queryRaw<
+                Array<{ bannerUrl: string | null; profilePrivacy: unknown; socialLinks: unknown }>
+            >`
+                SELECT "bannerUrl", "profilePrivacy", "socialLinks"
+                FROM "users"
+                WHERE "id" = ${updated.id}
+                LIMIT 1
+            `;
+            const row = rows[0];
+            if (row) {
+                bannerUrl = row.bannerUrl;
+                profilePrivacy = parseProfilePrivacy(row.profilePrivacy);
+                socialLinksOut = parseSocialLinks(row.socialLinks);
+            }
+        }
+
+        return NextResponse.json(
+            withResolvedAvatar({
+                ...updated,
+                ...(bannerUrl !== undefined && { bannerUrl }),
+                ...(profilePrivacy !== undefined && { profilePrivacy }),
+                ...(socialLinksOut !== undefined && { socialLinks: socialLinksOut }),
+            })
+        );
     } catch (err) {
         console.error(err);
         if (err instanceof z.ZodError) {

@@ -13,5 +13,5 @@ export async function ensureWalkthroughColumn() {
 }
 
 export function shouldOfferClientWalkthrough(role: string, walkthroughDone: boolean): boolean {
-    return (role === "FREE" || role === "PREMIUM") && !walkthroughDone;
+    return (role === "FREE" || role === "PREMIUM" || role === "GENERAL_PREMIUM") && !walkthroughDone;
 }

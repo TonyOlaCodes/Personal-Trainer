@@ -107,7 +107,7 @@ export function userMatchesAudience(
         case "FREE":
             return user.role === "FREE";
         case "PREMIUM":
-            return user.role === "PREMIUM";
+            return user.role === "PREMIUM" || user.role === "GENERAL_PREMIUM";
         case "COACH":
             return user.role === "COACH";
         case "ADMIN":
@@ -129,7 +129,12 @@ async function getTargetUserIds(announcement: Pick<AnnouncementRecord, "targetAu
         case "EVERYONE":
             return (await prisma.user.findMany({ where: baseWhere, select: { id: true } })).map((u) => u.id);
         case "FREE":
-        case "PREMIUM":
+        case "PREMIUM": {
+            return (await prisma.user.findMany({
+                where: { ...baseWhere, role: { in: ["PREMIUM", "GENERAL_PREMIUM"] } },
+                select: { id: true },
+            })).map((u) => u.id);
+        }
         case "COACH":
         case "ADMIN": {
             const role = announcement.targetAudience === "ADMIN" ? "SUPER_ADMIN" : announcement.targetAudience;

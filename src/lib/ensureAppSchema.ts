@@ -13,6 +13,7 @@ import { ensureMessageActionColumns } from "@/lib/coachChat";
 import { ensureAnnouncementsTable } from "@/lib/announcements";
 import { ensurePlanScheduleRevisionsTable } from "@/lib/planScheduleHistory";
 import { ensureWalkthroughColumn } from "@/lib/walkthrough/ensureWalkthroughColumn";
+import { ensureGeneralPremiumRole } from "@/lib/ensureGeneralPremiumRole";
 
 let appSchemaReady = false;
 let appSchemaPromise: Promise<void> | null = null;
@@ -41,6 +42,7 @@ export async function ensureAppSchema() {
             ensureAnnouncementsTable(),
             ensurePlanScheduleRevisionsTable(),
             ensureWalkthroughColumn(),
+            ensureGeneralPremiumRole(),
         ]);
         appSchemaReady = true;
     })();

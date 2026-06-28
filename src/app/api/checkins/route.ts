@@ -6,6 +6,7 @@ import { z } from "zod";
 import { createNotification, notifyCoachOfClientCheckIn, userWantsNotification } from "@/lib/notifications";
 import { withResolvedCheckInMedia, normalizeStoredUploadUrl } from "@/lib/uploadUrls";
 import { isInactiveAccount } from "@/lib/userDeactivation";
+import { canAccessCheckIns } from "@/lib/roles";
 
 const checkInSchema = z.object({
     bodyweightKg: z.number().optional(),
@@ -37,8 +38,8 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Coaches cannot submit check-ins" }, { status: 403 });
         }
 
-        if (user.role === "FREE") {
-            return NextResponse.json({ error: "Check-ins require Premium" }, { status: 403 });
+        if (!canAccessCheckIns(user.role, user.coachId)) {
+            return NextResponse.json({ error: "Check-ins require coached premium access" }, { status: 403 });
         }
 
         const body = await req.json();

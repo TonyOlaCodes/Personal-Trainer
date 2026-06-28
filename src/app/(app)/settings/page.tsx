@@ -6,6 +6,11 @@ import { SettingsClient } from "./SettingsClient";
 import { getDailyMetricTargets } from "@/lib/dailyMetrics";
 import { ensureNotificationPreferenceColumns, getCoachNotifyOnClientMessage } from "@/lib/notifications";
 import { ensureUserProfileColumns } from "@/lib/userProfile";
+import {
+    ensureProfileExtendedColumns,
+    getUserProfilePrivacy,
+    getUserSocialLinks,
+} from "@/lib/profilePrivacy";
 import { SafeFallback, rethrowNextInternalErrors } from "@/components/shared/SafeFallback";
 import { formatErrorDetails } from "@/lib/ensureAppSchema";
 
@@ -23,7 +28,7 @@ export default async function SettingsPage() {
                 where: { clerkId: userId },
                 select: {
                     id: true,
-                    name: true, email: true, role: true, onboardingDone: true, avatarUrl: true,
+                    name: true, email: true, role: true, coachId: true, onboardingDone: true, avatarUrl: true,
                     goal: true, trainingDaysPerWeek: true, experienceLevel: true, trainingLocation: true,
                     targetWeightKg: true, weightKg: true,
                     hiddenGoals: true,
@@ -66,16 +71,34 @@ export default async function SettingsPage() {
 
         await ensureNotificationPreferenceColumns();
         await ensureUserProfileColumns();
+        await ensureProfileExtendedColumns();
 
         const dailyMetricTargets = await getDailyMetricTargets(user.id);
         const hiddenGoals = (user as any).hiddenGoals ?? [];
         const notifyOnClientMessage = await getCoachNotifyOnClientMessage(user.id);
 
+        const [profilePrivacy, socialLinks, bannerRows] = await Promise.all([
+            getUserProfilePrivacy(user.id),
+            getUserSocialLinks(user.id),
+            prisma.$queryRaw<Array<{ bannerUrl: string | null }>>`
+                SELECT "bannerUrl" FROM "users" WHERE "id" = ${user.id} LIMIT 1
+            `,
+        ]);
+        const bannerUrl = bannerRows[0]?.bannerUrl ?? null;
+
         return (
             <>
                 <TopBar title="Settings" subtitle="Manage your account preferences" />
                 <SettingsClient
-                    user={{ ...user, hiddenGoals, notifyOnClientMessage, ...dailyMetricTargets }}
+                    user={{
+                        ...user,
+                        hiddenGoals,
+                        notifyOnClientMessage,
+                        bannerUrl,
+                        profilePrivacy,
+                        socialLinks,
+                        ...dailyMetricTargets,
+                    }}
                 />
             </>
         );

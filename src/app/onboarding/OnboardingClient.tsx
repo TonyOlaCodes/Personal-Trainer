@@ -96,6 +96,7 @@ export function OnboardingPage() {
     const [codeStatus, setCodeStatus] = useState<"idle" | "checking" | "valid" | "error">("idle");
     const [codeMessage, setCodeMessage] = useState("");
     const [coachName, setCoachName] = useState("");
+    const [membershipLabel, setMembershipLabel] = useState("");
 
     const progress = (step / TOTAL_STEPS) * 100;
 
@@ -185,8 +186,15 @@ export function OnboardingPage() {
             }
 
             setCodeStatus("valid");
-            setCoachName(data.coachName || "your coach");
-            setCodeMessage("Code looks good.");
+            setMembershipLabel(data.membershipLabel || "");
+            setCoachName(data.coachName || "");
+            setCodeMessage(
+                data.upgradesTo === "GENERAL_PREMIUM"
+                    ? "General Premium access confirmed."
+                    : data.coachName
+                        ? "Coach invite confirmed."
+                        : "Code looks good."
+            );
             setStep(3);
         } catch {
             setCodeStatus("error");
@@ -579,7 +587,7 @@ export function OnboardingPage() {
                                     </p>
                                 ) : (
                                     <p className="text-[10px] text-fg-subtle mt-1.5">
-                                        Have a coach access code? Enter it here to unlock premium features.
+                                        Enter a coach invite or General Premium code to unlock full training features.
                                     </p>
                                 )}
                             </div>
@@ -597,11 +605,15 @@ export function OnboardingPage() {
                                 <p className="subheading">
                                     Your profile is ready. Let&apos;s take you to your dashboard and get you training.
                                 </p>
-                                {coachName && (
+                                {membershipLabel === "General Premium" ? (
+                                    <p className="mt-3 text-sm text-success font-semibold">
+                                        You&apos;re joining as a General Premium member — full training access, train at your own pace.
+                                    </p>
+                                ) : coachName ? (
                                     <p className="mt-3 text-sm text-brand-300 font-semibold">
                                         Your coach is {coachName}.
                                     </p>
-                                )}
+                                ) : null}
                             </div>
                             <div className="text-left card p-4 space-y-2">
                                 <p className="text-sm"><span className="text-fg-muted">Goal:</span> <span className="font-medium">{form.goal.replace("_", " ")}</span></p>

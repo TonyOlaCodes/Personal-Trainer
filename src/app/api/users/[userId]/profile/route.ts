@@ -1,13 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuthUser, canDirectMessage } from "@/lib/apiAuth";
-import { withResolvedAvatar } from "@/lib/uploadUrls";
+import { getUserProfilePrivacy } from "@/lib/profilePrivacy";
 import {
+    buildPublicProfileData,
     canViewUserProfile,
     ensureUserProfileColumns,
-    getPublicAchievements,
-    getPublicPlansForUser,
-    getWorkoutStreak,
 } from "@/lib/userProfile";
 
 export async function GET(
@@ -15,103 +13,60 @@ export async function GET(
     { params }: { params: Promise<{ userId: string }> }
 ) {
     try {
-    const authResult = await requireAuthUser();
-    if (authResult.error) return authResult.error;
+        const authResult = await requireAuthUser();
+        if (authResult.error) return authResult.error;
 
-    const { userId: targetUserId } = await params;
-    const viewer = authResult.user;
+        const { userId: targetUserId } = await params;
+        const viewer = authResult.user;
 
-    await ensureUserProfileColumns();
+        await ensureUserProfileColumns();
 
-    const allowed = await canViewUserProfile(
-        { id: viewer.id, role: viewer.role },
-        targetUserId
-    );
+        const allowed = await canViewUserProfile(
+            { id: viewer.id, role: viewer.role },
+            targetUserId
+        );
 
-    if (!allowed) {
-        return NextResponse.json({ error: "This profile is private" }, { status: 403 });
-    }
+        if (!allowed) {
+            return NextResponse.json({ error: "This profile is private" }, { status: 403 });
+        }
 
-    const target = await prisma.user.findUnique({
-        where: { id: targetUserId },
-        select: {
-            id: true,
-            name: true,
-            avatarUrl: true,
-            role: true,
-            bio: true,
-            experienceLevel: true,
-            isPrivateProfile: true,
-            isDeleted: true,
-            deletedName: true,
-            coachId: true,
-        },
-    });
+        const targetMeta = await prisma.user.findUnique({
+            where: { id: targetUserId },
+            select: { coachId: true, isDeleted: true },
+        });
 
-    if (!target || target.isDeleted) {
-        return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
+        if (!targetMeta || targetMeta.isDeleted) {
+            return NextResponse.json({ error: "User not found" }, { status: 404 });
+        }
 
-    const isSelf = viewer.id === targetUserId;
-    const isAdmin = viewer.role === "SUPER_ADMIN";
-    const isAssignedCoach = target.coachId === viewer.id && viewer.role === "COACH";
+        const [profile, privacy] = await Promise.all([
+            buildPublicProfileData(targetUserId, viewer.id),
+            getUserProfilePrivacy(targetUserId),
+        ]);
 
-    const [streak, achievements, publicPlans, allOwnedPlans] = await Promise.all([
-        getWorkoutStreak(targetUserId),
-        getPublicAchievements(targetUserId),
-        getPublicPlansForUser(targetUserId),
-        (isSelf || isAdmin || isAssignedCoach)
-            ? prisma.plan.findMany({
-                where: { creatorId: targetUserId, type: "USER_CREATED" },
-                select: {
-                    id: true,
-                    name: true,
-                    description: true,
-                    tags: true,
-                    isPublic: true,
-                    createdAt: true,
-                    _count: { select: { weeks: true } },
-                },
-                orderBy: { createdAt: "desc" },
-            })
-            : Promise.resolve([]),
-    ]);
+        if (!profile) {
+            return NextResponse.json({ error: "User not found" }, { status: 404 });
+        }
 
-    const plansSource = (isSelf || isAdmin || isAssignedCoach) ? allOwnedPlans : publicPlans;
+        const isSelf = viewer.id === targetUserId;
+        const isAdmin = viewer.role === "SUPER_ADMIN";
+        const isAssignedCoach = targetMeta.coachId === viewer.id && viewer.role === "COACH";
 
-    const canMessage = !isSelf && (await canDirectMessage(viewer, targetUserId));
+        const canMessage =
+            !isSelf &&
+            privacy.allowMessages &&
+            (await canDirectMessage(viewer, targetUserId));
 
-    return NextResponse.json({
-        profile: {
-            ...withResolvedAvatar({
-                id: target.id,
-                name: target.name ?? "Athlete",
-                avatarUrl: target.avatarUrl,
-                role: target.role,
-                bio: target.bio ?? null,
-                experienceLevel: target.experienceLevel ?? null,
-                isPrivateProfile: target.isPrivateProfile ?? false,
-            }),
-            streak,
-            achievements,
-            plans: plansSource.map((plan) => ({
-                id: plan.id,
-                name: plan.name,
-                description: plan.description,
-                tags: plan.tags,
-                isPublic: plan.isPublic ?? true,
-                weekCount: plan._count.weeks,
-                createdAt: plan.createdAt.toISOString(),
-            })),
-        },
-        viewer: {
-            isSelf,
-            isAdmin,
-            isAssignedCoach,
-            canMessage,
-            canCopyPlans: !isSelf,
-        },
-    });
+        return NextResponse.json({
+            profile,
+            viewer: {
+                isSelf,
+                isAdmin,
+                isAssignedCoach,
+                canMessage,
+                canCopyPlans: !isSelf && privacy.publicPlans,
+            },
+        });
     } catch (error) {
         console.error("[GET /api/users/[userId]/profile]", error);
         return NextResponse.json({ error: "Could not load profile" }, { status: 500 });

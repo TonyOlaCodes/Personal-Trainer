@@ -130,7 +130,7 @@ export function AppWalkthroughProvider({
             return;
         }
 
-        if (userRole === "PREMIUM" && pathname === "/dashboard") {
+        if ((userRole === "PREMIUM" || userRole === "GENERAL_PREMIUM") && pathname === "/dashboard") {
             autoStartedRef.current = true;
             const timer = window.setTimeout(() => startWalkthrough(), 600);
             return () => window.clearTimeout(timer);

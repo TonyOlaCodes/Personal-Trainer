@@ -19,6 +19,13 @@ export async function POST(req: Request) {
         success: true,
         upgradesTo: result.accessCode.upgradesTo,
         planAssigned: !!result.accessCode.planId,
-        coachName: result.accessCode.generator.name || result.accessCode.generator.email || "your coach",
+        coachName: result.accessCode.upgradesTo === "GENERAL_PREMIUM"
+            ? null
+            : result.accessCode.generator.name || result.accessCode.generator.email || "your coach",
+        membershipLabel: result.accessCode.upgradesTo === "GENERAL_PREMIUM"
+            ? "General Premium"
+            : result.accessCode.upgradesTo === "PREMIUM"
+                ? "Coached Premium"
+                : result.accessCode.upgradesTo,
     });
 }

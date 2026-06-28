@@ -32,7 +32,9 @@ export default async function ChatPage() {
         missedWorkout?: boolean;
     }[] = [];
 
-    if (user.role === "PREMIUM") {
+    if (user.role === "GENERAL_PREMIUM") {
+        // General Premium: global chat only — no coach direct messages.
+    } else if (user.role === "PREMIUM") {
         if (user.coachId) {
             const coach = await prisma.user.findUnique({
                 where: { id: user.coachId },

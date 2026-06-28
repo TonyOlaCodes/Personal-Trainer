@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useChatUnread, formatUnreadBadge } from "@/components/chat/ChatUnreadProvider";
+import { useMobileKeyboardOpen } from "@/hooks/useMobileKeyboardOpen";
 
 interface MobileNavItem {
     href: string;
@@ -20,6 +21,7 @@ interface MobileNavItem {
     icon: React.ElementType;
     roles?: string[];
     hideRoles?: string[];
+    requiresCheckIns?: boolean;
 }
 
 const mobileNavItems: MobileNavItem[] = [
@@ -28,21 +30,24 @@ const mobileNavItems: MobileNavItem[] = [
     { href: "/coach/calendar", label: "Calendar", icon: Calendar, roles: ["COACH", "SUPER_ADMIN"] },
     { href: "/plans", label: "Plans", icon: Dumbbell },
     { href: "/calendar", label: "Calendar", icon: Calendar, hideRoles: ["COACH", "SUPER_ADMIN"] },
-    { href: "/checkins", label: "Check-ins", icon: ClipboardList, hideRoles: ["FREE", "PREMIUM"] },
+    { href: "/checkins", label: "Check-ins", icon: ClipboardList, requiresCheckIns: true },
     { href: "/progress", label: "Progress", icon: BarChart3, hideRoles: ["COACH", "SUPER_ADMIN"] },
     { href: "/chat", label: "Chat", icon: MessageSquare },
 ];
 
 interface MobileTabBarProps {
     userRole?: string;
+    showCheckIns?: boolean;
 }
 
-export function MobileTabBar({ userRole = "FREE" }: MobileTabBarProps) {
+export function MobileTabBar({ userRole = "FREE", showCheckIns = false }: MobileTabBarProps) {
     const pathname = usePathname();
     const { totalUnread } = useChatUnread();
     const chatBadge = formatUnreadBadge(totalUnread);
+    const keyboardOpen = useMobileKeyboardOpen();
 
     const filteredItems = mobileNavItems.filter((item) => {
+        if (item.requiresCheckIns && !showCheckIns) return false;
         if (item.hideRoles && item.hideRoles.includes(userRole)) return false;
         if (!item.roles) return true;
         return item.roles.includes(userRole);
@@ -54,7 +59,16 @@ export function MobileTabBar({ userRole = "FREE" }: MobileTabBarProps) {
     if (hideOnWorkoutLog) return null;
 
     return (
-        <nav className="md:hidden fixed bottom-0 inset-x-0 z-50 glass glass-border border-t border-surface-border safe-area-pb">
+        <nav
+            aria-hidden={keyboardOpen}
+            className={cn(
+                "md:hidden fixed bottom-0 inset-x-0 z-50 glass glass-border border-t border-surface-border safe-area-pb",
+                "transition-none will-change-transform",
+                keyboardOpen
+                    ? "translate-y-full pointer-events-none opacity-0"
+                    : "translate-y-0 opacity-100"
+            )}
+        >
             <div className="flex items-center justify-around px-2 py-2 overflow-hidden gap-1 w-full max-w-full">
                 {filteredItems.map((item) => {
                     const active = pathname.startsWith(item.href);

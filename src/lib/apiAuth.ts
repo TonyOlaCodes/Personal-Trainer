@@ -29,7 +29,7 @@ export async function requireAuthUser(req?: Request): Promise<
 }
 
 export function canLogWorkouts(user: User): boolean {
-    return user.role === "FREE" || user.role === "PREMIUM";
+    return user.role === "FREE" || user.role === "PREMIUM" || user.role === "GENERAL_PREMIUM";
 }
 
 export async function workoutAssignedToUser(userId: string, workoutId: string): Promise<boolean> {

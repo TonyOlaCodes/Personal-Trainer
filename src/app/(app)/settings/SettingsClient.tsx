@@ -4,16 +4,23 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import {
     User, Bell, Palette,
     HelpCircle, LogOut, ChevronRight, Check,
-    Camera, Loader2, Target, RotateCcw, Scale
+    Camera, Loader2, Target, RotateCcw, Scale, Shield, ImageIcon, Link2,
 } from "lucide-react";
 import { useClerk } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { cn, getInitials } from "@/lib/utils";
 import { resolveUploadUrl, uploadMediaFile } from "@/lib/compressImage";
-import { isCoachRole, isClientRole } from "@/lib/roles";
+import { isCoachRole, isClientRole, isCoachedPremium } from "@/lib/roles";
 import { notifyWalkthroughReset } from "@/components/walkthrough/AppWalkthroughProvider";
 import { DEFAULT_MISSED_NOTIFY_TIME } from "@/lib/coachNotificationSchedule";
+import {
+    DEFAULT_PROFILE_PRIVACY,
+    PROFILE_PRIVACY_KEYS,
+    PROFILE_PRIVACY_LABELS,
+    type ProfilePrivacy,
+    type SocialLinks,
+} from "@/lib/profilePrivacy";
 
 interface Props {
     user: {
@@ -21,6 +28,7 @@ interface Props {
         name?: string | null;
         email: string;
         role: string;
+        coachId?: string | null;
         onboardingDone: boolean;
         avatarUrl?: string | null;
         goal?: string | null;
@@ -50,6 +58,9 @@ interface Props {
         notifyOnMissedWorkoutTime?: string | null;
         bio?: string | null;
         isPrivateProfile?: boolean;
+        bannerUrl?: string | null;
+        profilePrivacy?: ProfilePrivacy;
+        socialLinks?: SocialLinks;
     };
 }
 
@@ -79,10 +90,17 @@ export function SettingsClient({ user }: Props) {
     const [bio, setBio] = useState(user.bio || "");
     const [isPrivateProfile, setIsPrivateProfile] = useState(user.isPrivateProfile ?? false);
     const [avatarUrl, setAvatarUrl] = useState(user.avatarUrl || "");
+    const [bannerUrl, setBannerUrl] = useState(user.bannerUrl || "");
+    const [profilePrivacy, setProfilePrivacy] = useState<ProfilePrivacy>(
+        user.profilePrivacy ?? DEFAULT_PROFILE_PRIVACY
+    );
+    const [socialLinks, setSocialLinks] = useState<SocialLinks>(user.socialLinks ?? {});
     const [profileSaving, setProfileSaving] = useState(false);
     const [profileSaved, setProfileSaved] = useState(false);
     const [uploading, setUploading] = useState(false);
+    const [bannerUploading, setBannerUploading] = useState(false);
     const fileRef = useRef<HTMLInputElement>(null);
+    const bannerRef = useRef<HTMLInputElement>(null);
     const profileReadyRef = useRef(false);
 
     // Goals form states
@@ -110,7 +128,7 @@ export function SettingsClient({ user }: Props) {
     };
 
     const showCoachNotifications = isCoachRole(user.role);
-    const showClientNotifications = isClientRole(user.role);
+    const showClientNotifications = isCoachedPremium(user.role, user.coachId);
 
     const sections = [
         { id: "profile", label: "Profile", icon: User },
@@ -220,7 +238,15 @@ export function SettingsClient({ user }: Props) {
         return () => window.clearTimeout(timer);
     }, [activeTab, buildNotificationPayload, router]);
 
-    const saveProfileFields = useCallback(async (fields: { name?: string; avatarUrl?: string; bio?: string | null; isPrivateProfile?: boolean }) => {
+    const saveProfileFields = useCallback(async (fields: {
+        name?: string;
+        avatarUrl?: string;
+        bannerUrl?: string;
+        bio?: string | null;
+        isPrivateProfile?: boolean;
+        profilePrivacy?: ProfilePrivacy;
+        socialLinks?: SocialLinks;
+    }) => {
         setProfileSaving(true);
         setProfileSaved(false);
         try {
@@ -255,13 +281,16 @@ export function SettingsClient({ user }: Props) {
             void saveProfileFields({
                 name,
                 avatarUrl: avatarUrl || "",
+                bannerUrl: bannerUrl || "",
                 bio: bio.trim() ? bio.trim() : null,
                 isPrivateProfile,
+                profilePrivacy,
+                socialLinks,
             });
         }, 450);
 
         return () => window.clearTimeout(timer);
-    }, [activeTab, name, avatarUrl, bio, isPrivateProfile, saveProfileFields]);
+    }, [activeTab, name, avatarUrl, bannerUrl, bio, isPrivateProfile, profilePrivacy, socialLinks, saveProfileFields]);
 
     // Access code state
     const [secretCode, setSecretCode] = useState("");
@@ -292,6 +321,34 @@ export function SettingsClient({ user }: Props) {
     const handleRemoveAvatar = () => {
         setAvatarUrl("");
         if (fileRef.current) fileRef.current.value = "";
+    };
+
+    const handleBannerUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || bannerUploading) return;
+        setBannerUploading(true);
+        try {
+            const url = await uploadMediaFile(file);
+            setBannerUrl(url);
+        } catch (error) {
+            alert(error instanceof Error ? error.message : "Upload failed");
+        } finally {
+            setBannerUploading(false);
+            if (bannerRef.current) bannerRef.current.value = "";
+        }
+    };
+
+    const handleRemoveBanner = () => {
+        setBannerUrl("");
+        if (bannerRef.current) bannerRef.current.value = "";
+    };
+
+    const toggleProfilePrivacy = (key: keyof ProfilePrivacy) => {
+        setProfilePrivacy((prev) => ({ ...prev, [key]: !prev[key] }));
+    };
+
+    const updateSocialLink = (key: keyof SocialLinks, value: string) => {
+        setSocialLinks((prev) => ({ ...prev, [key]: value }));
     };
 
     const buildGoalPayload = useCallback(() => ({
@@ -522,6 +579,117 @@ export function SettingsClient({ user }: Props) {
                             <p className="text-[10px] text-fg-subtle px-1">{bio.length}/280</p>
                         </div>
 
+                        <div className="space-y-3">
+                            <label className="text-[10px] font-black text-fg-subtle uppercase tracking-widest px-1 flex items-center gap-2">
+                                <ImageIcon className="w-3.5 h-3.5" />
+                                Profile banner
+                            </label>
+                            <div className="relative rounded-2xl overflow-hidden border border-surface-border bg-surface-muted/40 h-32 sm:h-36">
+                                {bannerUrl ? (
+                                    <img
+                                        src={resolveUploadUrl(bannerUrl)}
+                                        alt="Profile banner"
+                                        className="w-full h-full object-cover"
+                                    />
+                                ) : (
+                                    <div className="w-full h-full bg-gradient-to-br from-brand-500/20 via-surface-muted to-brand-950/30" />
+                                )}
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent pointer-events-none" />
+                                <div className="absolute bottom-3 right-3 flex gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => bannerRef.current?.click()}
+                                        disabled={bannerUploading}
+                                        className="px-3 py-1.5 rounded-xl bg-black/50 backdrop-blur text-[10px] font-black uppercase tracking-widest text-white hover:bg-black/70 transition-colors disabled:opacity-60"
+                                    >
+                                        {bannerUploading ? "Uploading…" : bannerUrl ? "Change" : "Upload"}
+                                    </button>
+                                    {bannerUrl && (
+                                        <button
+                                            type="button"
+                                            onClick={handleRemoveBanner}
+                                            disabled={bannerUploading || profileSaving}
+                                            className="px-3 py-1.5 rounded-xl bg-black/50 backdrop-blur text-[10px] font-black uppercase tracking-widest text-white hover:bg-black/70 transition-colors disabled:opacity-60"
+                                        >
+                                            Remove
+                                        </button>
+                                    )}
+                                </div>
+                                <input type="file" ref={bannerRef} onChange={handleBannerUpload} className="hidden" accept="image/*" />
+                            </div>
+                        </div>
+
+                        <div className="space-y-4">
+                            <label className="text-[10px] font-black text-fg-subtle uppercase tracking-widest px-1 flex items-center gap-2">
+                                <Link2 className="w-3.5 h-3.5" />
+                                Social links
+                            </label>
+                            <div className="grid sm:grid-cols-2 gap-4">
+                                {([
+                                    ["instagram", "Instagram"],
+                                    ["twitter", "X / Twitter"],
+                                    ["youtube", "YouTube"],
+                                    ["website", "Website"],
+                                ] as const).map(([key, label]) => (
+                                    <div key={key} className="space-y-2">
+                                        <label className="text-[10px] font-bold text-fg-muted uppercase tracking-widest px-1">{label}</label>
+                                        <input
+                                            type="text"
+                                            className="input h-11 text-sm"
+                                            placeholder={key === "website" ? "https://yoursite.com" : `@username or URL`}
+                                            value={socialLinks[key] ?? ""}
+                                            onChange={(e) => updateSocialLink(key, e.target.value)}
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="p-5 rounded-2xl border border-surface-border bg-surface-muted/30 space-y-4">
+                            <div className="flex items-center gap-2">
+                                <Shield className="w-4 h-4 text-brand-400" />
+                                <p className="text-sm font-black text-fg">Profile visibility</p>
+                            </div>
+                            <p className="text-xs text-fg-muted">
+                                Choose what appears on your public profile. Hidden sections are omitted entirely.
+                            </p>
+                            <div className="grid sm:grid-cols-2 gap-3">
+                                {PROFILE_PRIVACY_KEYS.map((key) => {
+                                    const meta = PROFILE_PRIVACY_LABELS[key];
+                                    const enabled = profilePrivacy[key];
+                                    return (
+                                        <button
+                                            key={key}
+                                            type="button"
+                                            role="switch"
+                                            aria-checked={enabled}
+                                            onClick={() => toggleProfilePrivacy(key)}
+                                            className={cn(
+                                                "flex items-start justify-between gap-3 p-3 rounded-xl border text-left transition-colors",
+                                                enabled
+                                                    ? "border-brand-400/30 bg-brand-400/5"
+                                                    : "border-surface-border bg-surface-muted/20"
+                                            )}
+                                        >
+                                            <div className="min-w-0">
+                                                <p className="text-xs font-black text-fg">{meta.label}</p>
+                                                <p className="text-[10px] text-fg-muted mt-0.5">{meta.description}</p>
+                                            </div>
+                                            <span className={cn(
+                                                "relative w-9 h-5 rounded-full shrink-0 mt-0.5 transition-colors",
+                                                enabled ? "bg-brand-500" : "bg-surface-muted border border-surface-border"
+                                            )}>
+                                                <span className={cn(
+                                                    "absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform",
+                                                    enabled && "translate-x-4"
+                                                )} />
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
                         <div className="p-5 rounded-2xl border border-surface-border bg-surface-muted/30 space-y-4">
                             <div className="flex items-start justify-between gap-4">
                                 <div>
@@ -551,10 +719,14 @@ export function SettingsClient({ user }: Props) {
                             </Link>
                         </div>
 
-                        {user.role === "FREE" && (
+                        {(user.role === "FREE" || user.role === "GENERAL_PREMIUM") && (
                             <div className="p-5 rounded-2xl bg-surface-muted/40 border border-surface-border space-y-3">
                                 <p className="text-sm font-bold text-fg">Redeem access code</p>
-                                <p className="text-xs text-fg-muted">Enter a code from your coach to unlock Premium features.</p>
+                                <p className="text-xs text-fg-muted">
+                                    {user.role === "GENERAL_PREMIUM"
+                                        ? "Have a coach invite? Redeem it here to link with your coach — your training history stays intact."
+                                        : "Enter a coach invite or General Premium code to unlock full training features."}
+                                </p>
                                 <div className="flex flex-col sm:flex-row gap-2">
                                     <input
                                         type="text"

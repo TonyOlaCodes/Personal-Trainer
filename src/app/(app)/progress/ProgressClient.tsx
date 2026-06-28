@@ -171,7 +171,7 @@ function isWeightChangeTowardGoal(
 }
 
 export function ProgressClient({ userRole, hiddenGoals }: Props) {
-    const isPremium = ["PREMIUM", "COACH", "SUPER_ADMIN"].includes(userRole);
+    const isPremium = ["PREMIUM", "GENERAL_PREMIUM", "COACH", "SUPER_ADMIN"].includes(userRole);
     const { demoMode } = useWalkthrough();
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);

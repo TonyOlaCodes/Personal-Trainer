@@ -15,7 +15,7 @@ import { ensureAppSchema, formatErrorDetails } from "@/lib/ensureAppSchema";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
 import { SafeFallback, rethrowNextInternalErrors } from "@/components/shared/SafeFallback";
 import { cleanupStaleInProgressSessions } from "@/lib/workoutSessionCleanup";
-import { isCoachRole } from "@/lib/roles";
+import { isCoachRole, canAccessCheckIns } from "@/lib/roles";
 
 export const metadata = { title: "Dashboard" };
 
@@ -225,7 +225,7 @@ export default async function DashboardPage() {
         const checkInSchedule = await getUserCheckInSchedule(user.id);
         const checkInDueState = getCheckInDueState(checkInSchedule, new Date());
 
-        const checkInPanel = user.role !== "FREE"
+        const checkInPanel = canAccessCheckIns(user.role, user.coachId)
             ? {
                 checkIns: (await prisma.checkIn.findMany({
                     where: { userId: user.id },
