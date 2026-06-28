@@ -186,6 +186,9 @@ export function ChatClient({
     const [mentionQuery, setMentionQuery] = useState("");
     const [showPinned, setShowPinned] = useState(false);
     const [showConversationThread, setShowConversationThread] = useState(false);
+    const [isMdUp, setIsMdUp] = useState(
+        () => typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches
+    );
     const [conversationActivity, setConversationActivity] = useState<Record<string, string>>({});
     const [conversationPresence, setConversationPresence] = useState<Record<string, string | null>>({});
     const [activeSessions, setActiveSessions] = useState<Record<string, ActiveSession>>({});
@@ -265,6 +268,14 @@ export function ChatClient({
         }, 300);
         return () => window.clearTimeout(timer);
     }, [input, draftContextKey, isHydrated]);
+
+    useEffect(() => {
+        const mq = window.matchMedia("(min-width: 768px)");
+        const update = () => setIsMdUp(mq.matches);
+        update();
+        mq.addEventListener("change", update);
+        return () => mq.removeEventListener("change", update);
+    }, []);
 
     const startReplyTo = useCallback((msg: Message) => {
         setReplyTo(msg);
@@ -1131,6 +1142,10 @@ export function ChatClient({
     );
 
     const showConversationList = tab === "direct" && (!selectedConv || !showConversationThread);
+    const showSidebar = isMdUp || showConversationList;
+    const showThreadPanel = isMdUp || !showConversationList;
+    const showThreadContent =
+        tab === "general" || (tab === "direct" && selectedConv && (isMdUp || showConversationThread));
 
     /* ─── Conversation list (inside main chat panel) ── */
     const renderConversationPanel = () => (
@@ -1373,11 +1388,22 @@ export function ChatClient({
                 />
             )}
 
-            {/* Single chat panel — list and thread share the same area */}
-            <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden w-full">
-                {showConversationList ? (
-                    renderConversationPanel()
-                ) : (
+            {/* Chat panels — split on desktop, single pane on mobile */}
+            <div className="flex-1 flex flex-col md:flex-row min-w-0 min-h-0 overflow-hidden w-full">
+                {showSidebar && (
+                    <div
+                        className={cn(
+                            "flex flex-col min-h-0 overflow-hidden shrink-0 bg-surface-card",
+                            !isMdUp && "flex-1 w-full",
+                            isMdUp && "w-full max-w-sm border-r border-surface-border md:w-80"
+                        )}
+                    >
+                        {renderConversationPanel()}
+                    </div>
+                )}
+                {showThreadPanel && (
+                <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
+                {showThreadContent ? (
                 <>
                 {/* ── Header ── */}
                 <div className="h-14 flex items-center justify-between px-5 border-b border-surface-border bg-surface-card/95 backdrop-blur-md shrink-0 z-10">
@@ -1385,7 +1411,7 @@ export function ChatClient({
                         {tab === "direct" && selectedConv && (
                         <button
                             type="button"
-                            className="flex items-center gap-1 text-brand-400 font-bold hover:text-brand-300 transition-colors bg-brand-400/10 hover:bg-brand-400/20 px-2 py-1.5 rounded-lg shrink-0"
+                            className="md:hidden flex items-center gap-1 text-brand-400 font-bold hover:text-brand-300 transition-colors bg-brand-400/10 hover:bg-brand-400/20 px-2 py-1.5 rounded-lg shrink-0"
                             onClick={() => setShowConversationThread(false)}
                             aria-label="Back to conversations"
                         >
@@ -1994,6 +2020,16 @@ export function ChatClient({
                     </div>
                 )}
                 </>
+                ) : (
+                    <div className="flex-1 flex items-center justify-center p-8 text-center">
+                        <div>
+                            <MessageSquare className="w-12 h-12 text-brand-400/25 mx-auto mb-3" />
+                            <p className="text-sm font-bold text-fg-muted">Select a conversation</p>
+                            <p className="text-[10px] text-fg-subtle mt-1">Choose someone from the list to start chatting</p>
+                        </div>
+                    </div>
+                )}
+                </div>
                 )}
             </div>
         </div>
