@@ -17,6 +17,7 @@ import { useCurrentDate } from "@/hooks/useCurrentDate";
 import { useScrollLock } from "@/hooks/useScrollLock";
 import { formatWeightDistanceFromGoal } from "@/lib/bodyweight";
 import { useWalkthrough } from "@/components/walkthrough/AppWalkthroughProvider";
+import { isCardio } from "@/components/shared/ExerciseAutocomplete";
 import {
     WalkthroughDashboardActivityDemo,
     WalkthroughDashboardMetricsDemo,
@@ -100,11 +101,10 @@ interface Props {
         }>;
         workoutsThisWeek: number;
         workoutsTarget: number;
-        bodyweightWeeklyAverage: {
+        bodyweightSinceLastCheckIn: {
             averageWeightKg: number | null;
             entries: number;
-            previousAverageWeightKg: number | null;
-            previousEntries: number;
+            windowLabel: string;
         };
         checkInSchedule: {
             day: number | null;
@@ -1149,7 +1149,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                                     targetWeightKg={user.targetWeightKg}
                                     workoutsThisWeek={checkInPanel.workoutsThisWeek}
                                     workoutsTarget={checkInPanel.workoutsTarget}
-                                    bodyweightWeeklyAverage={checkInPanel.bodyweightWeeklyAverage}
+                                    bodyweightSinceLastCheckIn={checkInPanel.bodyweightSinceLastCheckIn}
                                     checkInDueState={checkInDueState}
                                     checkInSchedule={checkInPanel.checkInSchedule}
                                     hiddenGoals={user.hiddenGoals ?? []}

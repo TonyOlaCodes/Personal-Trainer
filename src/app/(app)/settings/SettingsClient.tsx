@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import {
     User, Bell, Palette,
     HelpCircle, LogOut, ChevronRight, Check,
-    Camera, Loader2, Save, Target, RotateCcw, Scale
+    Camera, Loader2, Target, RotateCcw, Scale
 } from "lucide-react";
 import { useClerk } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
@@ -98,7 +98,16 @@ export function SettingsClient({ user }: Props) {
     const [hiddenGoals, setHiddenGoals] = useState<string[]>(user.hiddenGoals || []);
     const [goalSaving, setGoalSaving] = useState(false);
     const [goalSaved, setGoalSaved] = useState(false);
+    const goalReadyRef = useRef(false);
     const [walkthroughResetting, setWalkthroughResetting] = useState(false);
+    const settingsContentRef = useRef<HTMLDivElement>(null);
+
+    const selectSettingsTab = (id: string) => {
+        setActiveTab(id);
+        window.requestAnimationFrame(() => {
+            settingsContentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+    };
 
     const showCoachNotifications = isCoachRole(user.role);
     const showClientNotifications = isClientRole(user.role);
@@ -285,40 +294,63 @@ export function SettingsClient({ user }: Props) {
         if (fileRef.current) fileRef.current.value = "";
     };
 
-    const handleGoalSave = async () => {
-        setGoalSaving(true);
-        try {
-            const res = await fetch("/api/user/profile", {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    goal: goal || undefined,
-                    trainingDaysPerWeek: Number(trainingDays) || undefined,
-                    experienceLevel: experience || undefined,
-                    trainingLocation: location || undefined,
-                    targetWeightKg: targetWeight !== "" ? Math.round(Number(targetWeight) * 100) / 100 : undefined,
-                    weightKg: currentWeight !== "" ? Math.round(Number(currentWeight) * 100) / 100 : undefined,
-                    targetCalories: targetCalories !== "" ? Math.round(Number(targetCalories)) : null,
-                    targetSteps: targetSteps !== "" ? Math.round(Number(targetSteps)) : null,
-                    targetSleepHours: targetSleepHours !== "" ? Math.round(Number(targetSleepHours) * 10) / 10 : null,
-                    hiddenGoals: hiddenGoals,
-                })
-            });
-            if (res.ok) {
-                setGoalSaved(true);
-                router.refresh();
-                setTimeout(() => setGoalSaved(false), 2500);
-            } else {
-                const data = await res.json();
-                alert(data.error || "Failed to save goals");
-            }
-        } catch (err) {
-            console.error(err);
-            alert("Connection error occurred while saving goals.");
-        } finally {
-            setGoalSaving(false);
+    const buildGoalPayload = useCallback(() => ({
+        goal: goal || undefined,
+        trainingDaysPerWeek: Number(trainingDays) || undefined,
+        experienceLevel: experience || undefined,
+        trainingLocation: location || undefined,
+        targetWeightKg: targetWeight !== "" ? Math.round(Number(targetWeight) * 100) / 100 : undefined,
+        weightKg: currentWeight !== "" ? Math.round(Number(currentWeight) * 100) / 100 : undefined,
+        targetCalories: targetCalories !== "" ? Math.round(Number(targetCalories)) : null,
+        targetSteps: targetSteps !== "" ? Math.round(Number(targetSteps)) : null,
+        targetSleepHours: targetSleepHours !== "" ? Math.round(Number(targetSleepHours) * 10) / 10 : null,
+        hiddenGoals,
+    }), [
+        goal,
+        trainingDays,
+        experience,
+        location,
+        targetWeight,
+        currentWeight,
+        targetCalories,
+        targetSteps,
+        targetSleepHours,
+        hiddenGoals,
+    ]);
+
+    useEffect(() => {
+        if (activeTab !== "goals") return;
+        if (!goalReadyRef.current) {
+            goalReadyRef.current = true;
+            return;
         }
-    };
+
+        const timer = window.setTimeout(async () => {
+            setGoalSaving(true);
+            setGoalSaved(false);
+            try {
+                const res = await fetch("/api/user/profile", {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(buildGoalPayload()),
+                });
+                if (res.ok) {
+                    setGoalSaved(true);
+                    router.refresh();
+                    window.setTimeout(() => setGoalSaved(false), 2000);
+                } else {
+                    const data = await res.json();
+                    alert(data.error || "Failed to save goals");
+                }
+            } catch {
+                alert("Connection error occurred while saving goals.");
+            } finally {
+                setGoalSaving(false);
+            }
+        }, 450);
+
+        return () => window.clearTimeout(timer);
+    }, [activeTab, buildGoalPayload, router]);
 
     const handleRedeemCode = async () => {
         if (!secretCode.trim()) return;
@@ -364,41 +396,45 @@ export function SettingsClient({ user }: Props) {
     };
 
     return (
-        <div className="max-w-4xl mx-auto p-6 flex flex-col md:flex-row gap-8 animate-fade-in pb-20">
-            {/* Sidebar Tabs */}
-            <div className="w-full md:w-64 space-y-2 shrink-0">
-                {sections.map((s) => (
-                    <button
-                        key={s.id}
-                        onClick={() => setActiveTab(s.id)}
-                        className={cn(
-                            "w-full flex items-center justify-between p-3 rounded-xl transition-all",
-                            activeTab === s.id
-                                ? "bg-surface-elevated text-fg shadow-card border border-surface-border"
-                                : "text-fg-muted hover:bg-surface-muted/50 hover:text-fg"
-                        )}
-                    >
-                        <div className="flex items-center gap-3">
-                            <s.icon className={cn("w-4 h-4", activeTab === s.id ? "text-brand-400" : "text-fg-subtle")} />
-                            <span className="text-sm font-medium">{s.label}</span>
-                        </div>
-                        {activeTab === s.id && <ChevronRight className="w-4 h-4 text-brand-400" />}
-                    </button>
-                ))}
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 flex flex-col md:flex-row md:items-start gap-6 md:gap-8 animate-fade-in pb-20">
+            {/* Section nav — always visible; sticky while scrolling content */}
+            <aside className="w-full md:w-56 lg:w-64 shrink-0 sticky top-16 z-20 md:top-6 bg-surface/95 backdrop-blur-md md:bg-transparent md:backdrop-blur-none -mx-4 px-4 py-2 md:mx-0 md:px-0 md:py-0 border-b border-surface-border md:border-0">
+                <div className="flex md:flex-col gap-1.5 overflow-x-auto no-scrollbar md:overflow-visible pb-1 md:pb-0">
+                    {sections.map((s) => (
+                        <button
+                            key={s.id}
+                            type="button"
+                            onClick={() => selectSettingsTab(s.id)}
+                            className={cn(
+                                "flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl transition-all shrink-0 md:shrink md:w-full",
+                                activeTab === s.id
+                                    ? "bg-surface-elevated text-fg shadow-card border border-surface-border"
+                                    : "text-fg-muted hover:bg-surface-muted/50 hover:text-fg border border-transparent"
+                            )}
+                        >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                                <s.icon className={cn("w-4 h-4 shrink-0", activeTab === s.id ? "text-brand-400" : "text-fg-subtle")} />
+                                <span className="text-sm font-medium whitespace-nowrap">{s.label}</span>
+                            </div>
+                            {activeTab === s.id && <ChevronRight className="hidden md:block w-4 h-4 text-brand-400 shrink-0" />}
+                        </button>
+                    ))}
+                </div>
 
-                <div className="pt-4 mt-4 border-t border-surface-border">
+                <div className="pt-3 mt-3 border-t border-surface-border">
                     <button
+                        type="button"
                         onClick={() => signOut({ redirectUrl: "/" })}
                         className="w-full flex items-center gap-3 p-3 rounded-xl text-danger/60 hover:text-danger hover:bg-danger-muted/10 transition-all font-medium text-sm"
                     >
-                        <LogOut className="w-4 h-4" />
-                        Sign Out
+                        <LogOut className="w-4 h-4 shrink-0" />
+                        <span className="whitespace-nowrap">Sign Out</span>
                     </button>
                 </div>
-            </div>
+            </aside>
 
             {/* Main Content Area */}
-            <div className="flex-1 space-y-6">
+            <div ref={settingsContentRef} className="flex-1 min-w-0 scroll-mt-20 md:scroll-mt-6 space-y-6">
                 {/* ─── Profile ─── */}
                 {activeTab === "profile" && (
                     <div className="card p-8 space-y-8 animate-slide-up bg-gradient-to-br from-surface-card to-brand-950/5">
@@ -544,14 +580,24 @@ export function SettingsClient({ user }: Props) {
                 {/* ─── Goals ─── */}
                 {activeTab === "goals" && (
                     <div className="card p-8 space-y-8 animate-slide-up bg-gradient-to-br from-surface-card to-brand-950/5">
-                        <div className="flex items-center gap-3 pb-2 border-b border-surface-border">
-                            <div className="w-10 h-10 rounded-xl bg-brand-400/10 flex items-center justify-center">
-                                <Target className="w-5 h-5 text-brand-400" />
+                        <div className="flex items-center justify-between gap-3 pb-2 border-b border-surface-border">
+                            <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-10 h-10 rounded-xl bg-brand-400/10 flex items-center justify-center shrink-0">
+                                    <Target className="w-5 h-5 text-brand-400" />
+                                </div>
+                                <div className="min-w-0">
+                                    <h3 className="font-black text-fg tracking-tight">My Goals</h3>
+                                    <p className="text-xs text-fg-muted">Changes save automatically</p>
+                                </div>
                             </div>
-                            <div>
-                                <h3 className="font-black text-fg tracking-tight">My Goals</h3>
-                                <p className="text-xs text-fg-muted">Edit your training goals and preferences below</p>
-                            </div>
+                            {(goalSaving || goalSaved) && (
+                                <span className={cn(
+                                    "text-[10px] font-black uppercase tracking-widest shrink-0",
+                                    goalSaving ? "text-fg-muted" : "text-success"
+                                )}>
+                                    {goalSaving ? "Saving…" : "Saved"}
+                                </span>
+                            )}
                         </div>
 
                         <div className="grid sm:grid-cols-2 gap-6">
@@ -733,19 +779,6 @@ export function SettingsClient({ user }: Props) {
                             </div>
                         )}
 
-                        <div className="pt-4 border-t border-surface-border flex justify-end">
-                            <button
-                                onClick={handleGoalSave}
-                                disabled={goalSaving}
-                                className={cn(
-                                    "btn-primary w-full sm:w-auto px-10 h-12 flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest transition-all",
-                                    goalSaved && "bg-success border-success shadow-glow-success"
-                                )}
-                            >
-                                {goalSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : goalSaved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-                                {goalSaving ? "Saving..." : goalSaved ? "Goals Saved!" : "Save Goals"}
-                            </button>
-                        </div>
                     </div>
                 )}
 

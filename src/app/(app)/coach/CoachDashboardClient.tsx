@@ -12,6 +12,7 @@ import { cn, formatDate, getInitials } from "@/lib/utils";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { getPresenceIndicator } from "@/lib/userPresence";
 import { PendingReviewsModal, type PendingReviewItem } from "@/components/shared/PendingReviewsModal";
+import { formatCoachPlanLabel } from "@/lib/coachPlans";
 
 const CHECK_IN_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 

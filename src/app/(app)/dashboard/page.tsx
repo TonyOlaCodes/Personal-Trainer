@@ -4,11 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { getDayName, getWeekNumber, isSameCalendarDay, parseLogDate, toDateKey } from "@/lib/utils";
 import { startOfWeek, endOfWeek } from "date-fns";
-import { getBodyweightWeeklyAverage } from "@/lib/bodyweight";
+import { getBodyweightSummary } from "@/lib/bodyweight";
+import { getBodyweightAverageSinceLastCheckIn } from "@/lib/checkInPeriodSummary";
 import { getWorkoutsTargetFromUserPlan } from "@/lib/planTrainingTarget";
 import { withResolvedCheckInMedia } from "@/lib/uploadUrls";
 import { DashboardClient } from "./DashboardClient";
-import { getBodyweightSummary } from "@/lib/bodyweight";
 import { getCheckInDueState, getUserCheckInSchedule } from "@/lib/checkInSchedule";
 import { getDailyMetricsSummary } from "@/lib/dailyMetrics";
 import { ensureAppSchema, formatErrorDetails } from "@/lib/ensureAppSchema";
@@ -265,7 +265,11 @@ export default async function DashboardPage() {
                     user.trainingDaysPerWeek,
                     activeUserPlan ? { startedAt: activeUserPlan.startedAt, plan: activePlan } : null
                 ),
-                bodyweightWeeklyAverage: await getBodyweightWeeklyAverage(user.id, todayDate),
+                bodyweightSinceLastCheckIn: await getBodyweightAverageSinceLastCheckIn(
+                    user.id,
+                    todayDate,
+                    user.createdAt
+                ),
                 checkInSchedule,
             }
             : null;

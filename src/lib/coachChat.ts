@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { createNotification, notifyClientOfCoachBroadcast, notifyClientOfCoachMessage, userWantsNotification } from "@/lib/notifications";
+import { createNotification, notifyClientOfCheckInRequest, notifyClientOfCoachBroadcast, notifyClientOfCoachMessage, userWantsNotification } from "@/lib/notifications";
 import { requireCoachCanEditClient } from "@/lib/apiAuth";
 import type { User } from "@prisma/client";
 
@@ -104,7 +104,7 @@ export async function createCoachDirectMessage(input: {
             };
             if (input.actionType === "BROADCAST") {
                 await notifyClientOfCoachBroadcast(notifyInput);
-            } else {
+            } else if (input.actionType !== "CHECKIN_REQUEST") {
                 await notifyClientOfCoachMessage(notifyInput);
             }
         }
@@ -149,13 +149,9 @@ export async function sendCheckInRequestViaChat(coach: User, clientId: string, n
     const content = note?.trim()
         || "Your coach requested a check-in. Please submit your weekly check-in when you're ready.";
 
-    await createNotification({
-        userId: clientId,
-        type: "MISSED_CHECKIN",
-        message: "Your coach requested a check-in",
-        entityType: "CHECKIN",
-        entityId: null,
-        route: "/checkins",
+    await notifyClientOfCheckInRequest({
+        clientUserId: clientId,
+        coachId: coach.id,
     });
 
     return createCoachDirectMessage({

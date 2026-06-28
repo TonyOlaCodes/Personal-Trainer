@@ -13,6 +13,7 @@ import { touchUserLastActive } from "@/lib/userPresence";
 import { PresenceHeartbeat } from "@/components/layout/PresenceHeartbeat";
 import { GlobalAnnouncements } from "@/components/shared/GlobalAnnouncements";
 import { ChatUnreadProvider } from "@/components/chat/ChatUnreadProvider";
+import { AppUserProvider } from "@/lib/AppUserContext";
 import { AppWalkthroughProvider } from "@/components/walkthrough/AppWalkthroughProvider";
 
 export default async function AppLayout({
@@ -24,13 +25,29 @@ export default async function AppLayout({
     const { userId } = await auth();
     if (!userId) redirect("/sign-in");
 
-    let user: { role: string; onboardingDone: boolean; id: string; walkthroughDone: boolean } | null = null;
+    let user: {
+        role: string;
+        onboardingDone: boolean;
+        id: string;
+        walkthroughDone: boolean;
+        name: string | null;
+        email: string;
+        avatarUrl: string | null;
+    } | null = null;
     let isDeactivated = false;
     let layoutError: unknown = null;
     try {
         user = await prisma.user.findUnique({
             where: { clerkId: userId },
-            select: { role: true, onboardingDone: true, id: true, walkthroughDone: true },
+            select: {
+                role: true,
+                onboardingDone: true,
+                id: true,
+                walkthroughDone: true,
+                name: true,
+                email: true,
+                avatarUrl: true,
+            },
         });
         isDeactivated = await getUserDeactivationStatusByClerkId(userId);
     } catch (e) {
@@ -64,6 +81,14 @@ export default async function AppLayout({
 
     return (
         <RoleProvider role={userRole}>
+            <AppUserProvider
+                user={{
+                    id: user.id,
+                    name: user.name,
+                    email: user.email,
+                    avatarUrl: user.avatarUrl,
+                }}
+            >
             <ChatUnreadProvider>
             <AppWalkthroughProvider
                 userRole={userRole}
@@ -86,6 +111,7 @@ export default async function AppLayout({
             </div>
             </AppWalkthroughProvider>
             </ChatUnreadProvider>
+            </AppUserProvider>
         </RoleProvider>
     );
 }

@@ -230,6 +230,50 @@ export async function createNotification(input: {
     `;
 }
 
+/** Coach check-in request — one unread alert per coach; skips separate chat notification. */
+export async function notifyClientOfCheckInRequest(input: {
+    clientUserId: string;
+    coachId: string;
+    message?: string;
+}) {
+    if (!(await userWantsNotification(input.clientUserId, "notifyOnCoachMessage"))) return;
+
+    await ensureNotificationsTable();
+
+    const message = input.message ?? "Your coach requested a check-in";
+    const existing = await prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT "id"
+        FROM "notifications"
+        WHERE "userId" = ${input.clientUserId}
+          AND "type" = 'MISSED_CHECKIN'
+          AND "entityType" = 'CHECKIN'
+          AND "entityId" = ${input.coachId}
+          AND "read" = false
+        ORDER BY "createdAt" DESC
+        LIMIT 1
+    `;
+
+    if (existing[0]) {
+        await prisma.$executeRaw`
+            UPDATE "notifications"
+            SET "message" = ${message},
+                "route" = '/checkins',
+                "createdAt" = CURRENT_TIMESTAMP
+            WHERE "id" = ${existing[0].id}
+        `;
+        return;
+    }
+
+    await createNotification({
+        userId: input.clientUserId,
+        type: "MISSED_CHECKIN",
+        message,
+        entityType: "CHECKIN",
+        entityId: input.coachId,
+        route: "/checkins",
+    });
+}
+
 /** One unread coach-message alert per coach; updates timestamp if more messages arrive. */
 export async function notifyClientOfCoachMessage(input: {
     clientUserId: string;

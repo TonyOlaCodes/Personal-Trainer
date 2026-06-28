@@ -13,6 +13,7 @@ import {
     Flame, ArrowUpRight, ArrowDownRight, X, Utensils, Footprints, Moon,
     Pin, Minus
 } from "lucide-react";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { useScrollLock } from "@/hooks/useScrollLock";
 import { workoutFeelingEmoji } from "@/lib/workoutFeeling";

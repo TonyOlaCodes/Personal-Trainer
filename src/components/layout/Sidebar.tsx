@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { UserButton } from "@clerk/nextjs";
 import {
     LayoutDashboard,
     Dumbbell,
@@ -11,7 +10,6 @@ import {
     BarChart3,
     MessageSquare,
     ClipboardList,
-    Settings,
     Zap,
     ShieldCheck,
     Users,
@@ -23,6 +21,7 @@ import {
 import { cn } from "@/lib/utils";
 import { BrandLogo } from "@/components/shared/BrandLogo";
 import { useChatUnread, formatUnreadBadge } from "@/components/chat/ChatUnreadProvider";
+import { AccountNav } from "@/components/layout/AccountNav";
 
 interface NavItem {
     href: string;
@@ -131,30 +130,9 @@ export function Sidebar({ userRole = "FREE", initialCollapsed = false }: Sidebar
                 })}
             </nav>
 
-            {/* Settings + User */}
-            <div className={cn("py-4 border-t border-surface-border space-y-1", collapsed ? "px-1.5" : "px-3")}>
-                <Link
-                    href="/settings"
-                    className={cn(
-                        pathname === "/settings" ? "sidebar-link-active" : "sidebar-link",
-                        collapsed ? "w-10 h-10 p-0 mx-auto justify-center gap-0" : "gap-3"
-                    )}
-                    title={collapsed ? "Settings" : undefined}
-                >
-                    <Settings className="w-4.5 h-4.5 flex-shrink-0" style={{ width: "1.125rem", height: "1.125rem" }} />
-                    {!collapsed && <span className="animate-fade-in">Settings</span>}
-                </Link>
-                <Link
-                    href="/settings"
-                    className={cn(
-                        "flex items-center rounded-xl text-fg-muted hover:bg-surface-muted hover:text-fg transition-all",
-                        collapsed ? "w-10 h-10 p-0 mx-auto justify-center gap-0" : "px-3 py-2.5 gap-3"
-                    )}
-                    title={collapsed ? "Account" : undefined}
-                >
-                    <UserButton userProfileMode="navigation" userProfileUrl="/settings" />
-                    {!collapsed && <span className="text-xs font-semibold animate-fade-in">Account</span>}
-                </Link>
+            {/* Account */}
+            <div className={cn("py-4 border-t border-surface-border", collapsed ? "px-1.5" : "px-3")}>
+                <AccountNav collapsed={collapsed} />
             </div>
         </aside>
     );

@@ -2,11 +2,10 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Bell, Search, Flame, Settings, X } from "lucide-react";
-import { UserButton } from "@clerk/nextjs";
+import { Bell, Search, Flame, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRole } from "@/lib/RoleContext";
+import { AccountNav } from "@/components/layout/AccountNav";
 import { formatRelative, roleLabels, roleBadgeClass, formatDate, getDayName, cn } from "@/lib/utils";
 import { useCurrentDate } from "@/hooks/useCurrentDate";
 import { useScrollLock } from "@/hooks/useScrollLock";
@@ -82,7 +81,6 @@ interface NotificationItem {
 
 export function TopBar({ title, subtitle, showToday = false, streak, hideSearch = true }: TopBarProps) {
     const router = useRouter();
-    const pathname = usePathname();
     const role = useRole();
     const [showNotifications, setShowNotifications] = useState(false);
     const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -92,7 +90,6 @@ export function TopBar({ title, subtitle, showToday = false, streak, hideSearch 
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const notifRef = useRef<HTMLDivElement>(null);
     const isCoach = role === "COACH" || role === "SUPER_ADMIN";
-    const onSettings = pathname.startsWith("/settings");
 
     useScrollLock(showNotifications);
 
@@ -252,18 +249,6 @@ export function TopBar({ title, subtitle, showToday = false, streak, hideSearch 
                             <Search className="w-4 h-4" />
                         </button>
                     )}
-
-                    <Link
-                        href="/settings"
-                        className={cn(
-                            "btn-icon md:hidden",
-                            onSettings && "text-brand-400 bg-brand-500/10"
-                        )}
-                        aria-label="Settings"
-                        aria-current={onSettings ? "page" : undefined}
-                    >
-                        <Settings className="w-4 h-4" />
-                    </Link>
                     
                     <div className="relative" ref={notifRef} id="tour-notifications">
                         <button 
@@ -371,7 +356,7 @@ export function TopBar({ title, subtitle, showToday = false, streak, hideSearch 
                     </div>
 
                     <div className="md:hidden ml-1">
-                        <UserButton userProfileMode="navigation" userProfileUrl="/settings" />
+                        <AccountNav variant="header" />
                     </div>
                 </div>
             </div>
