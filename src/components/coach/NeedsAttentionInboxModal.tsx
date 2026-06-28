@@ -1,8 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
     AlertTriangle, Bell, Calendar, CheckCircle2, ClipboardCheck,
     Dumbbell, Loader2, MessageSquare, UserCog, X,
@@ -34,24 +33,33 @@ function statusLabel(status: CoachAttentionInboxItem["status"]) {
 }
 
 export function NeedsAttentionInboxModal({ open, onClose, onUpdated }: Props) {
-    const router = useRouter();
+    const scrollRef = useRef<HTMLDivElement>(null);
     const [items, setItems] = useState<CoachAttentionInboxItem[]>([]);
     const [loading, setLoading] = useState(false);
     const [actingId, setActingId] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
 
-    const loadInbox = useCallback(async () => {
-        setLoading(true);
+    const loadInbox = useCallback(async (options?: { silent?: boolean }) => {
+        const scrollEl = scrollRef.current;
+        const scrollTop = scrollEl?.scrollTop ?? 0;
+        const silent = options?.silent ?? false;
+
+        if (!silent) setLoading(true);
         setError(null);
         try {
             const res = await fetch("/api/coach/attention-inbox");
             const data = await res.json();
             if (!res.ok) throw new Error(data.error ?? "Could not load inbox");
             setItems(data.items ?? []);
+            if (silent && scrollEl) {
+                requestAnimationFrame(() => {
+                    scrollEl.scrollTop = scrollTop;
+                });
+            }
         } catch (err) {
             setError(err instanceof Error ? err.message : "Could not load inbox");
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
         }
     }, []);
 
@@ -66,6 +74,22 @@ export function NeedsAttentionInboxModal({ open, onClose, onUpdated }: Props) {
     ) => {
         setActingId(item.id);
         setError(null);
+
+        const nextStatus =
+            operation === "dismiss" ? "dismissed" as const
+            : operation === "excuse" ? "excused" as const
+            : null;
+        let previousItems: CoachAttentionInboxItem[] | null = null;
+
+        if (nextStatus) {
+            setItems((prev) => {
+                previousItems = prev;
+                return prev.map((entry) =>
+                    entry.id === item.id ? { ...entry, status: nextStatus } : entry
+                );
+            });
+        }
+
         try {
             const res = await fetch("/api/coach/attention-inbox", {
                 method: "POST",
@@ -83,10 +107,9 @@ export function NeedsAttentionInboxModal({ open, onClose, onUpdated }: Props) {
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error ?? "Action failed");
-            await loadInbox();
             onUpdated?.();
-            router.refresh();
         } catch (err) {
+            if (previousItems) setItems(previousItems);
             setError(err instanceof Error ? err.message : "Action failed");
         } finally {
             setActingId(null);
@@ -119,7 +142,7 @@ export function NeedsAttentionInboxModal({ open, onClose, onUpdated }: Props) {
                     </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto overscroll-contain min-h-0 p-4 sm:p-5 space-y-4">
+                <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain min-h-0 p-4 sm:p-5 space-y-4">
                     {error && (
                         <div className="rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
                             {error}

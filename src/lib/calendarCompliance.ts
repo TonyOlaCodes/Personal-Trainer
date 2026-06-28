@@ -8,6 +8,8 @@ export interface CalendarComplianceInput {
     planStartedAt: string | null;
     loggedDates: Array<{ date: string }>;
     scheduleRevisions?: ActiveUserPlanLike["scheduleRevisions"];
+    /** `${dateKey}:${workoutId}` keys for coach-excused missed workouts */
+    excusedMissedWorkoutKeys?: string[];
 }
 
 export interface CalendarComplianceResult {
@@ -117,6 +119,7 @@ export function computeWorkoutCompliance(
     }
 
     const loggedSet = new Set(input.loggedDates.map((l) => l.date));
+    const excusedSet = new Set(input.excusedMissedWorkoutKeys ?? []);
     const startKey = toDateKey(rangeStart);
     const endKey = toDateKey(today);
     const todayKey = endKey;
@@ -131,12 +134,13 @@ export function computeWorkoutCompliance(
         if (!planned) continue;
 
         const isLogged = loggedSet.has(dateKey);
-        if (excludeTodayUntilLogged && dateKey === todayKey && !isLogged) {
+        const isExcused = !isLogged && excusedSet.has(`${dateKey}:${planned.id}`);
+        if (excludeTodayUntilLogged && dateKey === todayKey && !isLogged && !isExcused) {
             continue;
         }
 
         due++;
-        if (isLogged) {
+        if (isLogged || isExcused) {
             completed++;
         }
     }

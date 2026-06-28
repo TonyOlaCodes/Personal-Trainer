@@ -281,6 +281,54 @@ export async function notifyClientOfCheckInRequest(input: {
     });
 }
 
+/** Coach missed-workout nudge — one unread alert per coach; skips separate chat notification. */
+export async function notifyClientOfMissedWorkout(input: {
+    clientUserId: string;
+    coachId: string;
+    message?: string;
+    workoutId?: string | null;
+}) {
+    if (!(await userWantsNotification(input.clientUserId, "notifyOnCoachMessage"))) return;
+
+    await ensureNotificationsTable();
+
+    const message =
+        input.message
+        ?? QUICK_REPLY_TEMPLATES[NOTIFICATION_TYPES.CLIENT_MISSED_WORKOUT];
+    const route = `/chat?with=${input.coachId}`;
+
+    const existing = await prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT "id"
+        FROM "notifications"
+        WHERE "userId" = ${input.clientUserId}
+          AND "type" = 'MISSED_WORKOUT'
+          AND "entityId" = ${input.coachId}
+          AND "read" = false
+        ORDER BY "createdAt" DESC
+        LIMIT 1
+    `;
+
+    if (existing[0]) {
+        await prisma.$executeRaw`
+            UPDATE "notifications"
+            SET "message" = ${message},
+                "route" = ${route},
+                "createdAt" = CURRENT_TIMESTAMP
+            WHERE "id" = ${existing[0].id}
+        `;
+        return;
+    }
+
+    await createNotification({
+        userId: input.clientUserId,
+        type: NOTIFICATION_TYPES.MISSED_WORKOUT,
+        message,
+        entityType: "WORKOUT",
+        entityId: input.workoutId ?? input.coachId,
+        route,
+    });
+}
+
 /** One unread coach-message alert per coach; updates timestamp if more messages arrive. */
 export async function notifyClientOfCoachMessage(input: {
     clientUserId: string;

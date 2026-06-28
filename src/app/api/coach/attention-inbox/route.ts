@@ -8,9 +8,7 @@ import {
     type CoachAttentionCategory,
 } from "@/lib/coachAttentionActions";
 import { loadCoachAttentionInbox } from "@/lib/coachAttentionInbox";
-import { createCoachDirectMessage, sendCheckInRequestViaChat } from "@/lib/coachChat";
-import { createNotification } from "@/lib/notifications";
-import { NOTIFICATION_TYPES, QUICK_REPLY_TEMPLATES } from "@/lib/notificationTypes";
+import { createCoachDirectMessage, sendCheckInRequestViaChat, sendMissedWorkoutNotifyViaChat } from "@/lib/coachChat";
 import { triggerAchievementSync } from "@/lib/achievements";
 
 export async function GET() {
@@ -107,21 +105,9 @@ export async function POST(req: Request) {
                     parsed.message ?? "Please complete your weekly check-in when you can."
                 );
             } else if (category === "missed_workout") {
-                const content =
-                    parsed.message
-                    ?? QUICK_REPLY_TEMPLATES[NOTIFICATION_TYPES.CLIENT_MISSED_WORKOUT];
-                await createCoachDirectMessage({
-                    coach,
-                    clientId: parsed.clientId,
-                    content,
-                });
-                await createNotification({
-                    userId: parsed.clientId,
-                    type: NOTIFICATION_TYPES.CLIENT_MISSED_WORKOUT,
-                    message: content,
-                    entityType: "WORKOUT",
-                    entityId: parsed.workoutId ?? null,
-                    route: "/dashboard",
+                await sendMissedWorkoutNotifyViaChat(coach, parsed.clientId, {
+                    message: parsed.message,
+                    workoutId: parsed.workoutId ?? null,
                 });
             } else {
                 return NextResponse.json({ error: "Notify is not supported for this alert type" }, { status: 400 });

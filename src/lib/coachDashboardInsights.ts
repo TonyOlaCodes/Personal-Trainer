@@ -9,12 +9,14 @@ import {
 } from "@/lib/calendarCompliance";
 import { getTotalUnreadDirectCount, getUnreadCountsByPeer } from "@/lib/chatUnread";
 import { getMissedWorkoutsYesterdayForCoach } from "@/lib/coachMissedWorkoutsYesterday";
+import { loadCoachAttentionInboxOpenOnly } from "@/lib/coachAttentionInbox";
 import {
     buildSetupNeededAlertKey,
     buildUnreadMessageAlertKey,
     getCoachAttentionActions,
     isCheckInAlertDismissed,
     isMissedWorkoutExcused,
+    getExcusedMissedWorkoutKeysForClient,
 } from "@/lib/coachAttentionActions";
 import { getPlannedWorkoutForDate, type ActiveUserPlanLike } from "@/lib/planSchedule";
 import { loadPlanScheduleRevisionsByPlanIds } from "@/lib/planScheduleHistory";
@@ -71,6 +73,8 @@ export interface ClientDashboardInsight {
 
 export interface CoachDashboardInsights {
     attentionItems: CoachAttentionItem[];
+    /** First few open inbox rows for dashboard preview (matches action inbox). */
+    attentionInboxPreview: string[];
     upcomingEvents: UpcomingEvent[];
     clientInsights: Record<string, ClientDashboardInsight>;
     totals: {
@@ -339,6 +343,7 @@ export async function loadCoachDashboardInsights(input: {
             planStartedAt: userPlan?.startedAt.toISOString() ?? null,
             loggedDates: (weekDatesByUser.get(client.id) ?? []).map((date) => ({ date })),
             scheduleRevisions: activeUserPlan?.scheduleRevisions,
+            excusedMissedWorkoutKeys: getExcusedMissedWorkoutKeysForClient(attentionActions, client.id),
         };
         const compliance = computeWeeklyCompliance(complianceInput, today, {
             excludeTodayUntilLogged: true,
@@ -348,6 +353,7 @@ export async function loadCoachDashboardInsights(input: {
             ? computeWorkoutAdherence({
                 activeUserPlan,
                 completedLogs: adherenceLogsByUser.get(client.id) ?? [],
+                excusedMissedWorkoutKeys: getExcusedMissedWorkoutKeysForClient(attentionActions, client.id),
                 today,
             }).currentStreak
             : 0;
@@ -487,12 +493,18 @@ export async function loadCoachDashboardInsights(input: {
         },
     ].filter((item) => item.count > 0);
 
+    const openAttentionItems = await loadCoachAttentionInboxOpenOnly(input.coachId);
+    const attentionInboxPreview = openAttentionItems
+        .slice(0, 3)
+        .map((item) => `${item.clientName} · ${item.issueType}`);
+
     return {
         attentionItems,
+        attentionInboxPreview,
         upcomingEvents,
         clientInsights,
         totals: {
-            clientsNeedingAttention: clientsNeedingAttentionIds.size,
+            clientsNeedingAttention: openAttentionItems.length,
             pendingCheckIns: input.pendingReviewCount,
             unreadMessages: unreadTotal,
             activeWorkoutsNow,

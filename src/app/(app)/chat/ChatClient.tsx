@@ -1226,18 +1226,23 @@ export function ChatClient({
         [unreadCounts]
     );
 
-    const showConversationList = tab === "direct" && (!selectedConv || !showConversationThread);
+    const showConversationList =
+        tab === "direct"
+            ? (!selectedConv || !showConversationThread)
+            : !showConversationThread;
     const showSidebar = isMdUp || showConversationList;
     const showThreadPanel = isMdUp || !showConversationList;
     const showThreadContent =
-        tab === "general" || (tab === "direct" && selectedConv && (isMdUp || showConversationThread));
+        tab === "general"
+            ? (isMdUp || showConversationThread)
+            : Boolean(tab === "direct" && selectedConv && (isMdUp || showConversationThread));
 
     /* ─── Conversation list (inside main chat panel) ── */
     const renderConversationPanel = () => (
         <div className="flex-1 flex flex-col bg-surface-card min-h-0 w-full">
             {/* Tab Switcher */}
-            <div className="p-3 border-b border-surface-border flex items-center gap-2">
-                <div className="flex gap-1 bg-surface-muted p-1 rounded-xl flex-1">
+            <div className="p-3 border-b border-surface-border">
+                <div className="flex gap-1 bg-surface-muted p-1 rounded-xl">
                     <button
                         onClick={() => handleTabChange("direct")}
                         className={cn("flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[11px] font-bold transition-all relative",
@@ -1258,9 +1263,6 @@ export function ChatClient({
                         <Globe className="w-3 h-3" /> Community
                     </button>
                 </div>
-                <Link href="/settings" className="btn-icon shrink-0" aria-label="Settings">
-                    <Settings className="w-4 h-4" />
-                </Link>
             </div>
 
             {/* Conversation List */}
@@ -1438,6 +1440,15 @@ export function ChatClient({
                         <Globe className="w-10 h-10 text-brand-400/30 mx-auto mb-3" />
                         <p className="text-sm font-bold text-fg-muted">Community Chat</p>
                         <p className="text-[10px] text-fg-subtle mt-1 mb-4">Public conversations between all members</p>
+                        {!isMdUp && (
+                            <button
+                                type="button"
+                                onClick={() => setShowConversationThread(true)}
+                                className="btn-primary w-full max-w-xs h-11 text-xs font-black uppercase tracking-widest mb-4"
+                            >
+                                Open Community Chat
+                            </button>
+                        )}
                         {isAdmin && (
                             <div className="text-left bg-surface-muted/40 border border-surface-border rounded-xl p-3 space-y-2">
                                 <div className="flex items-center gap-2 text-brand-400">
@@ -1500,7 +1511,7 @@ export function ChatClient({
                 {/* ── Header ── */}
                 <div className="h-14 flex items-center justify-between px-5 border-b border-surface-border bg-surface-card/95 backdrop-blur-md shrink-0 z-10">
                     <div className="flex items-center gap-3 min-w-0 flex-1">
-                        {tab === "direct" && selectedConv && (
+                        {(tab === "direct" && selectedConv) || tab === "general" ? (
                         <button
                             type="button"
                             className="md:hidden flex items-center gap-1 text-brand-400 font-bold hover:text-brand-300 transition-colors bg-brand-400/10 hover:bg-brand-400/20 px-2 py-1.5 rounded-lg shrink-0"
@@ -1509,7 +1520,7 @@ export function ChatClient({
                         >
                             <ChevronDown className="w-5 h-5 rotate-90" />
                         </button>
-                        )}
+                        ) : null}
                         {tab === "general" ? (
                             <>
                                 <Globe className="w-5 h-5 text-brand-400 shrink-0" />

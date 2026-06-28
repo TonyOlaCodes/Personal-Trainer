@@ -629,7 +629,7 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                         View all
                     </button>
                 </div>
-                {insights.attentionItems.length === 0 ? (
+                {totals.clientsNeedingAttention === 0 ? (
                     <div className="card p-5 flex items-center gap-3 border-success/20 bg-success/5">
                         <CheckCircle2 className="w-5 h-5 text-success shrink-0" />
                         <div>
@@ -644,11 +644,11 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                         className="card p-5 w-full text-left hover:border-warning/40 transition-colors border-warning/20 bg-warning/5"
                     >
                         <p className="text-sm font-bold text-fg">
-                            {totals.clientsNeedingAttention} client{totals.clientsNeedingAttention === 1 ? "" : "s"} need follow-up
+                            {totals.clientsNeedingAttention} item{totals.clientsNeedingAttention === 1 ? "" : "s"} need follow-up
                         </p>
                         <p className="text-xs text-fg-muted mt-1">
-                            {insights.attentionItems.map((item) => item.label).slice(0, 3).join(" · ")}
-                            {insights.attentionItems.length > 3 ? " · …" : ""}
+                            {insights.attentionInboxPreview.join(" · ")}
+                            {totals.clientsNeedingAttention > 3 ? " · …" : ""}
                         </p>
                         <p className="text-[10px] font-black uppercase tracking-widest text-brand-400 mt-3">
                             Open action inbox →

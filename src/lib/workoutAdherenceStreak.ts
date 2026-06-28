@@ -3,6 +3,7 @@ import { getLocalTimeParts } from "@/lib/coachNotificationSchedule";
 import { getMondayStart } from "@/lib/calendarCompliance";
 import { getPlannedWorkoutForDate, type ActiveUserPlanLike } from "@/lib/planSchedule";
 import { loadPlanScheduleRevisions } from "@/lib/planScheduleHistory";
+import { getClientAttentionActions, getExcusedMissedWorkoutKeys } from "@/lib/coachAttentionActions";
 import { prisma } from "@/lib/prisma";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
 import { parseLogDate, toDateKey } from "@/lib/utils";
@@ -15,6 +16,8 @@ export interface CompletedWorkoutLog {
 export interface WorkoutAdherenceInput {
     activeUserPlan: ActiveUserPlanLike | null;
     completedLogs: CompletedWorkoutLog[];
+    /** `${dateKey}:${workoutId}` keys for coach-excused missed workouts */
+    excusedMissedWorkoutKeys?: string[];
     today?: Date;
 }
 
@@ -81,7 +84,8 @@ function buildScheduledSlots(
 
 function markSlotCompletion(
     slots: AdherenceSlot[],
-    completedLogs: CompletedWorkoutLog[]
+    completedLogs: CompletedWorkoutLog[],
+    excusedKeys?: Set<string>
 ): number {
     const logSet = new Set(
         completedLogs.map((log) => `${log.dateKey}:${log.workoutId}`)
@@ -89,7 +93,8 @@ function markSlotCompletion(
 
     let hits = 0;
     for (const slot of slots) {
-        slot.completed = logSet.has(`${slot.dateKey}:${slot.workoutId}`);
+        const slotKey = `${slot.dateKey}:${slot.workoutId}`;
+        slot.completed = logSet.has(slotKey) || (excusedKeys?.has(slotKey) ?? false);
         if (slot.completed) hits++;
     }
     return hits;
@@ -133,7 +138,8 @@ function computeMaxStreak(slots: AdherenceSlot[], todayKey: string): number {
 function computePerfectWeeks(
     activeUserPlan: ActiveUserPlanLike,
     completedLogs: CompletedWorkoutLog[],
-    today: Date
+    today: Date,
+    excusedKeys?: Set<string>
 ): number {
     const startedAt = parseLogDate(toDateKey(new Date(activeUserPlan.startedAt)));
     let weekStart = getMondayStart(startedAt);
@@ -147,7 +153,7 @@ function computePerfectWeeks(
 
         const weekSlots = buildScheduledSlots(activeUserPlan, weekStart, effectiveEnd);
         if (weekSlots.length > 0) {
-            markSlotCompletion(weekSlots, completedLogs);
+            markSlotCompletion(weekSlots, completedLogs, excusedKeys);
             const pendingToday = weekSlots.some(
                 (slot) => slot.dateKey === todayKey && !slot.completed
             );
@@ -188,7 +194,8 @@ export function computeWorkoutAdherence(input: WorkoutAdherenceInput): WorkoutAd
     }
 
     const slots = buildScheduledSlots(input.activeUserPlan, startedAt, today);
-    const scheduledHits = markSlotCompletion(slots, input.completedLogs);
+    const excusedKeys = new Set(input.excusedMissedWorkoutKeys ?? []);
+    const scheduledHits = markSlotCompletion(slots, input.completedLogs, excusedKeys);
 
     return {
         currentStreak: computeCurrentStreak(slots, todayKey),
@@ -196,7 +203,8 @@ export function computeWorkoutAdherence(input: WorkoutAdherenceInput): WorkoutAd
         perfectWeeks: computePerfectWeeks(
             input.activeUserPlan,
             input.completedLogs,
-            today
+            today,
+            excusedKeys
         ),
         scheduledHits,
     };
@@ -244,7 +252,7 @@ export async function getWorkoutAdherenceForUser(userId: string): Promise<Workou
         return EMPTY_RESULT;
     }
 
-    const [revisions, logs] = await Promise.all([
+    const [revisions, logs, clientActions] = await Promise.all([
         loadPlanScheduleRevisions(userPlan.plan.id),
         prisma.workoutLog.findMany({
             where: {
@@ -254,7 +262,10 @@ export async function getWorkoutAdherenceForUser(userId: string): Promise<Workou
             },
             select: { workoutId: true, loggedAt: true },
         }),
+        getClientAttentionActions(userId),
     ]);
+
+    const excusedMissedWorkoutKeys = [...getExcusedMissedWorkoutKeys(clientActions)];
 
     return computeWorkoutAdherence({
         activeUserPlan: {
@@ -263,6 +274,7 @@ export async function getWorkoutAdherenceForUser(userId: string): Promise<Workou
             scheduleRevisions: revisions,
         },
         completedLogs: toCompletedLogRows(logs),
+        excusedMissedWorkoutKeys,
     });
 }
 

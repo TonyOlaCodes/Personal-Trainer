@@ -226,3 +226,13 @@ export function getExcusedMissedWorkoutKeys(clientActions: CoachAttentionActionR
     }
     return keys;
 }
+
+export function getExcusedMissedWorkoutKeysForClient(
+    actions: Map<string, CoachAttentionActionRow> | CoachAttentionActionRow[],
+    clientId: string
+): string[] {
+    const rows = actions instanceof Map
+        ? [...actions.values()].filter((row) => row.clientId === clientId)
+        : actions.filter((row) => row.clientId === clientId);
+    return [...getExcusedMissedWorkoutKeys(rows)];
+}

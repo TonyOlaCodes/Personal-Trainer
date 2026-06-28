@@ -16,6 +16,7 @@ import {
     buildSetupNeededAlertKey,
     buildUnreadMessageAlertKey,
     getCoachAttentionActions,
+    getExcusedMissedWorkoutKeysForClient,
     type CoachAttentionActionType,
     type CoachAttentionCategory,
 } from "@/lib/coachAttentionActions";
@@ -295,6 +296,7 @@ export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAtt
             planStartedAt: activePlan?.startedAt.toISOString() ?? null,
             loggedDates: weekLogDates.map((date) => ({ date })),
             scheduleRevisions: activeUserPlan?.scheduleRevisions,
+            excusedMissedWorkoutKeys: getExcusedMissedWorkoutKeysForClient(actions, client.id),
         };
         const compliance = computeWeeklyCompliance(complianceInput, today, {
             excludeTodayUntilLogged: true,

@@ -113,6 +113,7 @@ export function CoachCalendarClient({ clients, selectedClientId, selectedClientN
             planStartedAt: calendar?.planStartedAt ?? null,
             loggedDates: calendar?.loggedDates ?? [],
             scheduleRevisions: calendar?.scheduleRevisions ?? [],
+            excusedMissedWorkoutKeys: calendar?.excusedMissedWorkoutKeys ?? [],
         }),
         [calendar]
     );

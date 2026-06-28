@@ -10,6 +10,7 @@ import {
     User, PencilLine,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ReturnLink } from "@/components/shared/ReturnLink";
 import { cn, toDateKey, parseLogDate } from "@/lib/utils";
 import { useWalkthrough } from "@/components/walkthrough/AppWalkthroughProvider";
@@ -89,6 +90,7 @@ export function CalendarClient({
     focusSelection = false,
 }: Props) {
     const isCoachView = Boolean(coachView);
+    const router = useRouter();
     const planId = coachView?.planId ?? activePlan?.id ?? null;
     const now = useCurrentDate();
     const todayKey = toDateKey(now);
@@ -159,9 +161,16 @@ export function CalendarClient({
         return map;
     }, [inProgressSessions]);
 
+    const [localExcusedKeys, setLocalExcusedKeys] = useState(excusedMissedWorkoutKeys);
+    const [statusUpdating, setStatusUpdating] = useState(false);
+
+    useEffect(() => {
+        setLocalExcusedKeys(excusedMissedWorkoutKeys);
+    }, [excusedMissedWorkoutKeys]);
+
     const excusedKeys = useMemo(
-        () => new Set(excusedMissedWorkoutKeys),
-        [excusedMissedWorkoutKeys]
+        () => new Set(localExcusedKeys),
+        [localExcusedKeys]
     );
 
     const isWorkoutExcused = useCallback((dateKey: string, workoutId: string) => {
@@ -231,6 +240,43 @@ export function CalendarClient({
         && selectedLogs.length === 0
         && isWorkoutExcused(selectedDateKey, selectedPlanned.id)
     );
+
+    const updateWorkoutStatus = useCallback(async (status: "excused" | "missed") => {
+        if (!coachView || !selectedPlanned || statusUpdating) return;
+
+        setStatusUpdating(true);
+        const key = `${selectedDateKey}:${selectedPlanned.id}`;
+
+        try {
+            const res = await fetch("/api/coach/workout-status", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    clientId: coachView.clientId,
+                    dateKey: selectedDateKey,
+                    workoutId: selectedPlanned.id,
+                    status,
+                }),
+            });
+
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error(data.error ?? "Failed to update workout status");
+            }
+
+            setLocalExcusedKeys((prev) => {
+                if (status === "excused") {
+                    return prev.includes(key) ? prev : [...prev, key];
+                }
+                return prev.filter((item) => item !== key);
+            });
+            router.refresh();
+        } catch (err) {
+            console.error("[CalendarClient] workout status update failed", err);
+        } finally {
+            setStatusUpdating(false);
+        }
+    }, [coachView, selectedPlanned, selectedDateKey, statusUpdating, router]);
     
     const calculateVolume = (sets: LogSet[]) => {
         return Math.round(sets.reduce((acc, s) => acc + ((s.reps || 0) * (s.weightKg || 1)), 0)); // weight 1 if bodyweight
@@ -362,7 +408,7 @@ export function CalendarClient({
                                                     "w-1.5 h-1.5 rounded-full mt-1.5 mr-1",
                                                     status === 'completed' ? "bg-success shadow-glow-success animate-pulse" :
                                                     status === 'in-progress' ? "bg-warning shadow-glow-warning animate-pulse" :
-                                                    status === 'excused' ? "bg-success/60 shadow-glow-success" :
+                                                    status === 'excused' ? "bg-brand-400 shadow-glow-brand" :
                                                     status === 'missed' ? "bg-danger shadow-glow-danger" :
                                                     status === 'scheduled' ? "bg-brand-400 shadow-glow-brand" :
                                                     "bg-surface-border"
@@ -394,18 +440,18 @@ export function CalendarClient({
                                                     <div className="space-y-1">
                                                         <div className={cn(
                                                             "h-1 rounded-full overflow-hidden",
-                                                            status === 'excused' ? "bg-success/20" :
+                                                            status === 'excused' ? "bg-brand-400/20" :
                                                             isPast ? "bg-danger/20" : "bg-brand-400/20"
                                                         )}>
                                                             <div className={cn(
                                                                 "w-full h-full",
-                                                                status === 'excused' ? "bg-success/70" :
+                                                                status === 'excused' ? "bg-brand-400" :
                                                                 isPast ? "bg-danger" : "bg-brand-400 animate-pulse"
                                                             )} />
                                                         </div>
                                                         <span className={cn(
                                                             "text-[9px] font-black uppercase tracking-tighter truncate block",
-                                                            status === 'excused' ? "text-success opacity-80" :
+                                                            status === 'excused' ? "text-brand-400" :
                                                             isPast ? "text-danger opacity-60" : "text-brand-400"
                                                         )}>
                                                             {status === 'excused' ? "Excused · " : ""}
@@ -436,6 +482,7 @@ export function CalendarClient({
                         && selectedDateKey < todayKey
                         && selectedLogs.length === 0
                         && !resumeSession
+                        && !selectedIsExcused
                         && "border-danger/40 ring-2 ring-danger/30 streak-fire-glow"
                 )}>
                     <div className="flex items-center justify-between mb-8">
@@ -457,7 +504,7 @@ export function CalendarClient({
                                 "w-2.5 h-2.5 rounded-full",
                                 selectedLogs.length > 0 ? "bg-success" :
                                 resumeSession ? "bg-warning animate-pulse" :
-                                selectedIsExcused ? "bg-success/70" :
+                                selectedIsExcused ? "bg-brand-400" :
                                 (selectedPlanned ? (selectedDateKey < todayKey ? "bg-danger" : "bg-brand-400") : "bg-surface-border")
                             )} />
                         </div>
@@ -551,7 +598,7 @@ export function CalendarClient({
                                     resumeSession
                                         ? "bg-warning-950/20 border-warning-500/20 shadow-glow-warning-sm"
                                         : selectedIsExcused
-                                            ? "bg-success-950/20 border-success-500/20 shadow-glow-success-sm"
+                                            ? "bg-brand-950/20 border-brand-500/30 shadow-glow-brand-sm"
                                         : selectedDateKey < todayKey
                                             ? "bg-danger-950/20 border-danger-500/20"
                                             : "bg-brand-950/20 border-brand-500/20 shadow-glow-brand-sm"
@@ -563,7 +610,7 @@ export function CalendarClient({
                                                 resumeSession
                                                     ? "text-warning"
                                                     : selectedIsExcused
-                                                        ? "text-success"
+                                                        ? "text-brand-400"
                                                     : selectedDateKey < todayKey
                                                         ? "text-danger"
                                                         : "text-brand-400"
@@ -583,7 +630,7 @@ export function CalendarClient({
                                             resumeSession
                                                 ? "text-warning opacity-60"
                                                 : selectedIsExcused
-                                                    ? "text-success opacity-60"
+                                                    ? "text-brand-400 opacity-60"
                                                 : selectedDateKey < todayKey
                                                     ? "text-danger opacity-40"
                                                     : "text-brand-400"
@@ -617,6 +664,30 @@ export function CalendarClient({
                                         ))}
                                     </div>
                                 </div>
+
+                                {isCoachView && coachView && selectedDateKey < todayKey && selectedLogs.length === 0 && !resumeSession && (
+                                    <div className="flex gap-2">
+                                        {selectedIsExcused ? (
+                                            <button
+                                                type="button"
+                                                disabled={statusUpdating}
+                                                onClick={() => void updateWorkoutStatus("missed")}
+                                                className="btn-secondary flex-1 h-11 text-[10px] font-black uppercase tracking-widest disabled:opacity-50"
+                                            >
+                                                {statusUpdating ? "Saving…" : "Mark missed"}
+                                            </button>
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                disabled={statusUpdating}
+                                                onClick={() => void updateWorkoutStatus("excused")}
+                                                className="btn-secondary flex-1 h-11 text-[10px] font-black uppercase tracking-widest border-brand-400/30 text-brand-400 hover:bg-brand-400/10 disabled:opacity-50"
+                                            >
+                                                {statusUpdating ? "Saving…" : "Mark excused"}
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
 
                                 {isCoachView && coachView ? (
                                     <div className="space-y-2">
@@ -713,6 +784,10 @@ export function CalendarClient({
                     <div className="flex items-center gap-1.5">
                         <div className="w-1.5 h-1.5 rounded-full bg-warning" />
                         <span className="text-[8px] font-black uppercase tracking-tighter text-fg-subtle">In Progress</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                        <div className="w-1.5 h-1.5 rounded-full bg-brand-400" />
+                        <span className="text-[8px] font-black uppercase tracking-tighter text-fg-subtle">Excused</span>
                     </div>
                     <div className="flex items-center gap-1.5">
                         <div className="w-1.5 h-1.5 rounded-full bg-brand-400" />

@@ -1,9 +1,10 @@
 import { prisma } from "@/lib/prisma";
-import { createNotification, notifyClientOfCheckInRequest, notifyClientOfCoachBroadcast, notifyClientOfCoachMessage, userWantsNotification } from "@/lib/notifications";
+import { createNotification, notifyClientOfCheckInRequest, notifyClientOfCoachBroadcast, notifyClientOfCoachMessage, notifyClientOfMissedWorkout, userWantsNotification } from "@/lib/notifications";
+import { NOTIFICATION_TYPES, QUICK_REPLY_TEMPLATES } from "@/lib/notificationTypes";
 import { requireCoachCanEditClient } from "@/lib/apiAuth";
 import type { User } from "@prisma/client";
 
-export type ChatActionType = "PLAN_ASSIGNED" | "CHECKIN_REQUEST" | "BROADCAST" | "ACCESS_REQUEST";
+export type ChatActionType = "PLAN_ASSIGNED" | "CHECKIN_REQUEST" | "MISSED_WORKOUT" | "BROADCAST" | "ACCESS_REQUEST";
 
 let messageActionColumnsReady = false;
 
@@ -104,7 +105,7 @@ export async function createCoachDirectMessage(input: {
             };
             if (input.actionType === "BROADCAST") {
                 await notifyClientOfCoachBroadcast(notifyInput);
-            } else if (input.actionType !== "CHECKIN_REQUEST") {
+            } else if (input.actionType !== "CHECKIN_REQUEST" && input.actionType !== "MISSED_WORKOUT") {
                 await notifyClientOfCoachMessage(notifyInput);
             }
         }
@@ -152,6 +153,7 @@ export async function sendCheckInRequestViaChat(coach: User, clientId: string, n
     await notifyClientOfCheckInRequest({
         clientUserId: clientId,
         coachId: coach.id,
+        message: content,
     });
 
     return createCoachDirectMessage({
@@ -159,6 +161,34 @@ export async function sendCheckInRequestViaChat(coach: User, clientId: string, n
         clientId,
         content,
         actionType: "CHECKIN_REQUEST",
+    });
+}
+
+export async function sendMissedWorkoutNotifyViaChat(
+    coach: User,
+    clientId: string,
+    input?: { message?: string; workoutId?: string | null }
+) {
+    const editCheck = await requireCoachCanEditClient(coach, clientId);
+    if (editCheck.error) throw new Error("Forbidden");
+
+    const content =
+        input?.message?.trim()
+        ?? QUICK_REPLY_TEMPLATES[NOTIFICATION_TYPES.CLIENT_MISSED_WORKOUT];
+
+    await notifyClientOfMissedWorkout({
+        clientUserId: clientId,
+        coachId: coach.id,
+        message: content,
+        workoutId: input?.workoutId ?? null,
+    });
+
+    return createCoachDirectMessage({
+        coach,
+        clientId,
+        content,
+        actionType: "MISSED_WORKOUT",
+        actionEntityId: input?.workoutId ?? null,
     });
 }
 
