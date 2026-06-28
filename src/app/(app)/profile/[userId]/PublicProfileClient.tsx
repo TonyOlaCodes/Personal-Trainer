@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -11,6 +11,7 @@ import {
 import { cn, getInitials, roleLabels, getRoleNameClass, formatRelative } from "@/lib/utils";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { getPublicProfileHref } from "@/lib/profileNavigation";
+import { StreakBadge } from "@/components/shared/StreakBadge";
 import type { SocialLinks } from "@/lib/profilePrivacy";
 
 interface PublicPlan {
@@ -57,6 +58,7 @@ interface PublicProfileCoach {
 interface ProfilePayload {
     id: string;
     name: string;
+    username: string;
     avatarUrl?: string | null;
     bannerUrl?: string | null;
     role: string;
@@ -95,7 +97,14 @@ const EXP_LABELS: Record<string, string> = {
 
 interface Props {
     userId: string;
-    currentUserId: string;
+}
+
+function activityIcon(label: string) {
+    if (label.includes(" PR")) return Trophy;
+    if (label.includes("check-in")) return Scale;
+    if (label.includes("Shared")) return Dumbbell;
+    if (label.includes("streak")) return Flame;
+    return Activity;
 }
 
 function SectionCard({
@@ -200,15 +209,6 @@ export function PublicProfileClient({ userId }: Props) {
         }
     };
 
-    const hasStats = useMemo(() => {
-        if (!profile) return false;
-        return (
-            (profile.streak != null && profile.streak > 0) ||
-            (profile.totalWorkouts != null && profile.totalWorkouts > 0) ||
-            profile.bodyweightKg != null
-        );
-    }, [profile]);
-
     if (loading) {
         return (
             <div className="flex items-center justify-center py-24">
@@ -244,14 +244,19 @@ export function PublicProfileClient({ userId }: Props) {
         );
     }
 
-    const secondarySections: Array<{ key: string; node: React.ReactNode }> = [];
+    const showWorkoutStats =
+        (profile.streak != null && profile.streak > 0) ||
+        (profile.totalWorkouts != null && profile.totalWorkouts > 0) ||
+        profile.bodyweightKg != null;
+
+    const detailSections: Array<{ key: string; node: React.ReactNode }> = [];
 
     if (profile.personalRecords.length > 0) {
-        secondarySections.push({
+        detailSections.push({
             key: "prs",
             node: (
                 <SectionCard title="Personal records" icon={Trophy}>
-                    <div className="grid gap-2">
+                    <div className="space-y-2">
                         {profile.personalRecords.map((pr) => (
                             <div
                                 key={`${pr.exerciseName}-${pr.loggedAt}`}
@@ -261,7 +266,7 @@ export function PublicProfileClient({ userId }: Props) {
                                     <p className="text-sm font-black text-fg truncate">{pr.exerciseName}</p>
                                     <p className="text-[10px] text-fg-muted mt-0.5">{formatRelative(pr.loggedAt)}</p>
                                 </div>
-                                <p className="text-sm font-black text-brand-300 shrink-0">
+                                <p className="text-sm font-black text-brand-300 shrink-0 tabular-nums">
                                     {pr.weightKg} kg × {pr.reps}
                                 </p>
                             </div>
@@ -273,7 +278,7 @@ export function PublicProfileClient({ userId }: Props) {
     }
 
     if (profile.favoriteExercises.length > 0) {
-        secondarySections.push({
+        detailSections.push({
             key: "favorites",
             node: (
                 <SectionCard title="Favourite exercises" icon={Star}>
@@ -293,10 +298,10 @@ export function PublicProfileClient({ userId }: Props) {
     }
 
     if (profile.plans.length > 0) {
-        secondarySections.push({
+        detailSections.push({
             key: "plans",
             node: (
-                <SectionCard title="Workout plans" icon={Dumbbell}>
+                <SectionCard title="Workout plans" icon={Dumbbell} className="lg:col-span-2">
                     <div className="space-y-3">
                         {profile.plans.map((plan) => (
                             <div key={plan.id} className="p-4 rounded-2xl bg-surface-muted/40 border border-surface-border space-y-3">
@@ -309,21 +314,30 @@ export function PublicProfileClient({ userId }: Props) {
                                         {plan.weekCount} week{plan.weekCount === 1 ? "" : "s"}
                                     </p>
                                 </div>
-                                {viewer.canCopyPlans && (
-                                    <button
-                                        type="button"
-                                        onClick={() => copyPlan(plan.id)}
-                                        disabled={copyingPlanId === plan.id}
-                                        className="btn-secondary w-full sm:w-auto inline-flex items-center justify-center gap-2"
+                                <div className="flex flex-wrap gap-2">
+                                    <Link
+                                        href={`/plans/create?id=${plan.id}&view=true`}
+                                        className="btn-secondary inline-flex items-center justify-center gap-2"
                                     >
-                                        {copyingPlanId === plan.id ? (
-                                            <Loader2 className="w-4 h-4 animate-spin" />
-                                        ) : (
-                                            <Copy className="w-4 h-4" />
-                                        )}
-                                        Copy plan
-                                    </button>
-                                )}
+                                        <ExternalLink className="w-4 h-4" />
+                                        View plan
+                                    </Link>
+                                    {viewer.canCopyPlans && (
+                                        <button
+                                            type="button"
+                                            onClick={() => copyPlan(plan.id)}
+                                            disabled={copyingPlanId === plan.id}
+                                            className="btn-primary inline-flex items-center justify-center gap-2"
+                                        >
+                                            {copyingPlanId === plan.id ? (
+                                                <Loader2 className="w-4 h-4 animate-spin" />
+                                            ) : (
+                                                <Copy className="w-4 h-4" />
+                                            )}
+                                            Copy plan
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                         ))}
                     </div>
@@ -333,34 +347,20 @@ export function PublicProfileClient({ userId }: Props) {
     }
 
     if (profile.achievements.length > 0) {
-        secondarySections.push({
+        detailSections.push({
             key: "achievements",
             node: (
-                <SectionCard title="Achievements" icon={Trophy}>
-                    <div className="space-y-2">
+                <SectionCard title="Achievements" icon={AwardIcon}>
+                    <div className="flex flex-wrap gap-2">
                         {profile.achievements.map((achievement) => (
-                            <div key={achievement.id} className="p-3 rounded-xl bg-surface-muted/40 border border-surface-border">
-                                <p className="text-sm font-black text-fg">{achievement.title}</p>
-                                <p className="text-xs text-fg-muted mt-0.5">{achievement.description}</p>
-                            </div>
-                        ))}
-                    </div>
-                </SectionCard>
-            ),
-        });
-    }
-
-    if (profile.activityFeed.length > 0) {
-        secondarySections.push({
-            key: "activity",
-            node: (
-                <SectionCard title="Recent activity" icon={Activity}>
-                    <div className="space-y-2">
-                        {profile.activityFeed.map((item) => (
-                            <div key={item.id} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-surface-muted/30 border border-surface-border">
-                                <p className="text-sm font-bold text-fg truncate">{item.label}</p>
-                                <p className="text-[10px] font-bold text-fg-subtle shrink-0">{formatRelative(item.loggedAt)}</p>
-                            </div>
+                            <span
+                                key={achievement.id}
+                                title={achievement.description}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-warning/10 border border-warning/25 text-xs font-bold text-fg"
+                            >
+                                <Trophy className="w-3.5 h-3.5 text-warning shrink-0" />
+                                {achievement.title}
+                            </span>
                         ))}
                     </div>
                 </SectionCard>
@@ -369,7 +369,7 @@ export function PublicProfileClient({ userId }: Props) {
     }
 
     if (profile.progressPhotos.length > 0) {
-        secondarySections.push({
+        detailSections.push({
             key: "photos",
             node: (
                 <SectionCard title="Progress photos" icon={ImageIconFallback}>
@@ -396,8 +396,9 @@ export function PublicProfileClient({ userId }: Props) {
 
     return (
         <div className="space-y-5 animate-fade-in pb-20 max-w-4xl mx-auto">
+            {/* ── Hero ── */}
             <div className="card overflow-hidden">
-                <div className="relative h-32 sm:h-40 bg-gradient-to-br from-brand-500/25 via-surface-muted to-brand-950/40">
+                <div className="relative h-28 sm:h-36 bg-gradient-to-br from-brand-500/25 via-surface-muted to-brand-950/40">
                     {profile.bannerUrl && (
                         <img
                             src={resolveUploadUrl(profile.bannerUrl)}
@@ -405,12 +406,12 @@ export function PublicProfileClient({ userId }: Props) {
                             className="absolute inset-0 w-full h-full object-cover"
                         />
                     )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-surface-card via-surface-card/20 to-transparent" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-surface-card via-surface-card/30 to-transparent" />
                 </div>
 
-                <div className="px-5 sm:px-8 pb-6 -mt-12 sm:-mt-14 relative">
-                    <div className="flex flex-col sm:flex-row sm:items-end gap-4 sm:gap-6">
-                        <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-gradient-brand flex items-center justify-center text-2xl font-black text-white overflow-hidden shrink-0 border-4 border-surface-card shadow-glow-sm mx-auto sm:mx-0">
+                <div className="px-5 sm:px-8 pb-6 -mt-11 sm:-mt-12 relative">
+                    <div className="flex flex-col sm:flex-row sm:items-end gap-4 sm:gap-5">
+                        <div className="w-[4.5rem] h-[4.5rem] sm:w-20 sm:h-20 rounded-2xl bg-gradient-brand flex items-center justify-center text-xl font-black text-white overflow-hidden shrink-0 border-4 border-surface-card shadow-glow-sm mx-auto sm:mx-0">
                             {profile.avatarUrl ? (
                                 <img src={resolveUploadUrl(profile.avatarUrl)} alt={profile.name} className="w-full h-full object-cover" />
                             ) : (
@@ -418,43 +419,44 @@ export function PublicProfileClient({ userId }: Props) {
                             )}
                         </div>
 
-                        <div className="flex-1 min-w-0 text-center sm:text-left space-y-2 pb-1">
-                            <div className="flex flex-col sm:flex-row sm:items-center sm:flex-wrap gap-2 justify-center sm:justify-start">
-                                <h1 className={cn("text-2xl sm:text-3xl font-black tracking-tight", getRoleNameClass(profile.role))}>
-                                    {profile.name}
-                                </h1>
-                                {profile.onlineStatus && (
-                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-muted border border-surface-border text-[10px] font-bold text-fg-muted mx-auto sm:mx-0">
-                                        <span className={cn(
-                                            "w-2 h-2 rounded-full",
-                                            profile.onlineStatus.level === "online" && "bg-success shadow-[0_0_6px] shadow-success/60",
-                                            profile.onlineStatus.level === "recent" && "bg-warning",
-                                            profile.onlineStatus.level === "inactive" && "bg-fg-subtle"
-                                        )} />
-                                        {profile.onlineStatus.label}
-                                    </span>
-                                )}
-                            </div>
-
-                            <p className="text-xs font-black uppercase tracking-widest text-fg-subtle">
+                        <div className="flex-1 min-w-0 text-center sm:text-left space-y-1.5 pb-0.5">
+                            <h1 className={cn("text-2xl sm:text-3xl font-black tracking-tight leading-tight", getRoleNameClass(profile.role))}>
+                                {profile.name}
+                            </h1>
+                            <p className="text-sm font-bold text-fg-subtle">@{profile.username}</p>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">
                                 {roleLabels[profile.role] ?? profile.role}
                                 {profile.experienceLevel && ` · ${EXP_LABELS[profile.experienceLevel] ?? profile.experienceLevel}`}
                             </p>
-
-                            <div className="flex flex-wrap gap-2 justify-center sm:justify-start text-[10px] font-bold uppercase tracking-widest text-fg-muted">
-                                <span className="inline-flex items-center gap-1">
-                                    <Calendar className="w-3 h-3" />
-                                    Joined {profile.joinDate}
-                                </span>
-                                {profile.trainingGoal && (
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-brand-400/10 border border-brand-400/20 text-brand-300">
-                                        <Target className="w-3 h-3" />
-                                        {profile.trainingGoal}
-                                    </span>
-                                )}
-                            </div>
                         </div>
                     </div>
+
+                    <div className="flex flex-wrap gap-x-4 gap-y-1.5 justify-center sm:justify-start mt-4 text-[10px] font-bold uppercase tracking-widest text-fg-muted">
+                        <span className="inline-flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            Joined {profile.joinDate}
+                        </span>
+                        {profile.onlineStatus && (
+                            <span className="inline-flex items-center gap-1.5">
+                                <span className={cn(
+                                    "w-2 h-2 rounded-full",
+                                    profile.onlineStatus.level === "online" && "bg-success shadow-[0_0_6px] shadow-success/60",
+                                    profile.onlineStatus.level === "recent" && "bg-warning",
+                                    profile.onlineStatus.level === "inactive" && "bg-fg-subtle"
+                                )} />
+                                {profile.onlineStatus.label}
+                            </span>
+                        )}
+                    </div>
+
+                    {profile.trainingGoal && (
+                        <div className="mt-3 flex justify-center sm:justify-start">
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-400/10 border border-brand-400/20 text-[10px] font-bold uppercase tracking-widest text-brand-300">
+                                <Target className="w-3 h-3" />
+                                {profile.trainingGoal}
+                            </span>
+                        </div>
+                    )}
 
                     {profile.bio && (
                         <p className="text-sm text-fg-muted leading-relaxed mt-4 max-w-2xl mx-auto sm:mx-0 text-center sm:text-left">
@@ -484,42 +486,58 @@ export function PublicProfileClient({ userId }: Props) {
                 </div>
             </div>
 
-            {hasStats && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {/* ── Workout stats ── */}
+            {showWorkoutStats && (
+                <div className="flex flex-wrap gap-3">
                     {profile.streak != null && profile.streak > 0 && (
-                        <div className="card p-4 flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-warning/10 flex items-center justify-center shrink-0">
-                                <Flame className="w-5 h-5 text-warning" />
-                            </div>
-                            <div>
-                                <p className="text-lg font-black text-fg leading-none">{profile.streak}</p>
-                                <p className="text-[10px] font-bold uppercase tracking-widest text-fg-subtle mt-1">Day streak</p>
-                            </div>
+                        <div className="card p-4 flex items-center gap-3 flex-1 min-w-[140px]">
+                            <StreakBadge streak={profile.streak} size="md" />
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-fg-subtle">Day streak</p>
                         </div>
                     )}
                     {profile.totalWorkouts != null && profile.totalWorkouts > 0 && (
-                        <div className="card p-4 flex items-center gap-3">
+                        <div className="card p-4 flex items-center gap-3 flex-1 min-w-[140px]">
                             <div className="w-10 h-10 rounded-xl bg-brand-400/10 flex items-center justify-center shrink-0">
                                 <Dumbbell className="w-5 h-5 text-brand-400" />
                             </div>
                             <div>
-                                <p className="text-lg font-black text-fg leading-none">{profile.totalWorkouts}</p>
-                                <p className="text-[10px] font-bold uppercase tracking-widest text-fg-subtle mt-1">Workouts</p>
+                                <p className="text-xl font-black text-fg leading-none tabular-nums">{profile.totalWorkouts}</p>
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-fg-subtle mt-1">Workouts completed</p>
                             </div>
                         </div>
                     )}
                     {profile.bodyweightKg != null && (
-                        <div className="card p-4 flex items-center gap-3 col-span-2 sm:col-span-1">
+                        <div className="card p-4 flex items-center gap-3 flex-1 min-w-[140px]">
                             <div className="w-10 h-10 rounded-xl bg-success/10 flex items-center justify-center shrink-0">
                                 <Scale className="w-5 h-5 text-success" />
                             </div>
                             <div>
-                                <p className="text-lg font-black text-fg leading-none">{profile.bodyweightKg} kg</p>
+                                <p className="text-xl font-black text-fg leading-none tabular-nums">{profile.bodyweightKg} kg</p>
                                 <p className="text-[10px] font-bold uppercase tracking-widest text-fg-subtle mt-1">Bodyweight</p>
                             </div>
                         </div>
                     )}
                 </div>
+            )}
+
+            {/* ── Recent activity (prominent) ── */}
+            {profile.activityFeed.length > 0 && (
+                <SectionCard title="Recent activity" icon={Activity}>
+                    <ul className="divide-y divide-surface-border">
+                        {profile.activityFeed.map((item) => {
+                            const Icon = activityIcon(item.label);
+                            return (
+                                <li key={item.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+                                    <div className="w-8 h-8 rounded-xl bg-surface-muted border border-surface-border flex items-center justify-center shrink-0">
+                                        <Icon className="w-4 h-4 text-brand-400" />
+                                    </div>
+                                    <p className="text-sm font-medium text-fg flex-1 min-w-0">{item.label}</p>
+                                    <p className="text-[10px] font-bold text-fg-subtle shrink-0">{formatRelative(item.loggedAt)}</p>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                </SectionCard>
             )}
 
             {profile.mutualCoach && (
@@ -542,10 +560,12 @@ export function PublicProfileClient({ userId }: Props) {
                 </Link>
             )}
 
-            {secondarySections.length > 0 && (
+            {detailSections.length > 0 && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                    {secondarySections.map((section) => (
-                        <div key={section.key}>{section.node}</div>
+                    {detailSections.map((section) => (
+                        <div key={section.key} className={section.key === "plans" ? "lg:col-span-2" : undefined}>
+                            {section.node}
+                        </div>
                     ))}
                 </div>
             )}
@@ -585,6 +605,10 @@ export function PublicProfileClient({ userId }: Props) {
             )}
         </div>
     );
+}
+
+function AwardIcon({ className }: { className?: string }) {
+    return <Trophy className={className} />;
 }
 
 function ImageIconFallback({ className }: { className?: string }) {

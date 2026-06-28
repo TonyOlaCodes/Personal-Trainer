@@ -46,7 +46,7 @@ export const PROFILE_PRIVACY_LABELS: Record<ProfilePrivacyKey, { label: string; 
     achievements: { label: "Achievements", description: "Milestone badges and highlights" },
     progressPhotos: { label: "Progress photos", description: "Check-in progress images" },
     publicPlans: { label: "Public plans", description: "Workout plans others can copy" },
-    activityFeed: { label: "Activity feed", description: "Recent completed workouts" },
+    activityFeed: { label: "Activity feed", description: "Recent workouts, PRs, check-ins, and milestones" },
     onlineStatus: { label: "Online status", description: "When you were last active" },
     allowMessages: { label: "Allow messages", description: "Let eligible users message you" },
     socialLinks: { label: "Social links", description: "Instagram, website, and other links" },

@@ -220,6 +220,7 @@ export interface PublicProfilePlan {
 export interface BuiltPublicProfile {
     id: string;
     name: string;
+    username: string;
     avatarUrl?: string | null;
     bannerUrl?: string | null;
     role: string;
@@ -244,6 +245,118 @@ export interface BuiltPublicProfile {
 
 function formatJoinDate(createdAt: Date): string {
     return createdAt.toLocaleDateString("en-IE", { month: "long", year: "numeric" });
+}
+
+/** Public handle derived from display name — never exposes email. */
+export function formatPublicUsername(name: string, userId: string): string {
+    const slug = name
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "")
+        .slice(0, 24);
+    if (slug.length >= 2) return slug;
+    return `athlete${userId.slice(-6).toLowerCase()}`;
+}
+
+const PUBLIC_ACTIVITY_LIMIT = 3;
+const STREAK_MILESTONE_DAYS = [7, 14, 30, 50, 100];
+
+async function buildPublicActivityFeed(userId: string): Promise<PublicProfileActivityItem[]> {
+    type RawItem = { id: string; label: string; loggedAt: Date };
+
+    const [logs, prSets, checkIns, publicPlans, streak] = await Promise.all([
+        prisma.workoutLog.findMany({
+            where: { userId, status: "COMPLETED" },
+            include: { workout: { select: { name: true } } },
+            orderBy: { loggedAt: "desc" },
+            take: 15,
+        }),
+        prisma.logSet.findMany({
+            where: {
+                isPR: true,
+                isWarmup: false,
+                workoutLog: { userId, status: "COMPLETED" },
+            },
+            include: {
+                exercise: { select: { name: true } },
+                workoutLog: { select: { loggedAt: true } },
+            },
+            orderBy: { workoutLog: { loggedAt: "desc" } },
+            take: 10,
+        }),
+        prisma.checkIn.findMany({
+            where: { userId },
+            orderBy: { createdAt: "desc" },
+            take: 5,
+        }),
+        getPublicPlansForUser(userId),
+        getWorkoutStreak(userId),
+    ]);
+
+    const items: RawItem[] = [];
+
+    for (const log of logs) {
+        const workoutName = log.workout?.name?.trim() || "workout";
+        items.push({
+            id: `workout-${log.id}`,
+            label: `Completed ${workoutName}`,
+            loggedAt: log.loggedAt,
+        });
+    }
+
+    for (const set of prSets) {
+        const exerciseName = set.exercise?.name?.trim();
+        if (!exerciseName) continue;
+        items.push({
+            id: `pr-${set.id}`,
+            label: `Hit a ${exerciseName} PR`,
+            loggedAt: set.workoutLog.loggedAt,
+        });
+    }
+
+    for (const checkIn of checkIns) {
+        items.push({
+            id: `checkin-${checkIn.id}`,
+            label: "Completed a weekly check-in",
+            loggedAt: checkIn.createdAt,
+        });
+    }
+
+    for (const plan of publicPlans.slice(0, 5)) {
+        items.push({
+            id: `plan-${plan.id}`,
+            label: `Shared ${plan.name}`,
+            loggedAt: plan.createdAt,
+        });
+    }
+
+    if (STREAK_MILESTONE_DAYS.includes(streak) && logs[0]) {
+        const latestLogAt = logs[0].loggedAt;
+        const weekAgo = new Date(Date.now() - 7 * 86400000);
+        if (latestLogAt >= weekAgo) {
+            items.push({
+                id: `streak-${streak}`,
+                label: `Reached a ${streak}-day workout streak`,
+                loggedAt: latestLogAt,
+            });
+        }
+    }
+
+    items.sort((a, b) => b.loggedAt.getTime() - a.loggedAt.getTime());
+
+    const seen = new Set<string>();
+    const unique: RawItem[] = [];
+    for (const item of items) {
+        if (seen.has(item.id)) continue;
+        seen.add(item.id);
+        unique.push(item);
+    }
+
+    return unique.slice(0, PUBLIC_ACTIVITY_LIMIT).map((item) => ({
+        id: item.id,
+        label: item.label,
+        loggedAt: item.loggedAt.toISOString(),
+    }));
 }
 
 async function getLatestBodyweightKg(userId: string): Promise<number | null> {
@@ -475,17 +588,7 @@ export async function buildPublicProfileData(
     if (privacy.activityFeed) {
         sectionTasks.push(
             (async () => {
-                const logs = await prisma.workoutLog.findMany({
-                    where: { userId: targetUserId, status: "COMPLETED" },
-                    include: { workout: { select: { name: true } } },
-                    orderBy: { loggedAt: "desc" },
-                    take: 8,
-                });
-                activityFeed = logs.map((log) => ({
-                    id: log.id,
-                    label: log.workout?.name ?? "Workout completed",
-                    loggedAt: log.loggedAt.toISOString(),
-                }));
+                activityFeed = await buildPublicActivityFeed(targetUserId);
             })()
         );
     }
@@ -520,8 +623,11 @@ export async function buildPublicProfileData(
         bannerUrl,
     });
 
+    const displayName = target.name ?? "Athlete";
+
     return {
         ...base,
+        username: formatPublicUsername(displayName, target.id),
         joinDate: formatJoinDate(target.createdAt),
         trainingGoal,
         bio: privacy.bio && target.bio?.trim() ? target.bio.trim() : null,
@@ -533,7 +639,7 @@ export async function buildPublicProfileData(
             : null,
         mutualCoach,
         personalRecords,
-        favoriteExercises: pinned,
+        favoriteExercises: privacy.workoutStats ? pinned : [],
         achievements,
         plans,
         activityFeed,
