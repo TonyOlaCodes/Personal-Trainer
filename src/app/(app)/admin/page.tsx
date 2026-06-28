@@ -28,7 +28,7 @@ export default async function AdminPage() {
     });
     const creativeIds = admins.map(a => a.id);
 
-    const [users, plans, recentCodes, generalPremiumCodes, coaches] = await Promise.all([
+    const [users, plans, recentCodes, coaches] = await Promise.all([
         prisma.user.findMany({
             select: {
                 id: true,
@@ -61,22 +61,12 @@ export default async function AdminPage() {
             take: 100,
         }),
         prisma.accessCode.findMany({
-            where: { upgradesTo: { not: "GENERAL_PREMIUM" } },
             include: {
                 plan: { select: { name: true } },
                 usedBy: { select: { id: true, name: true, email: true } },
             },
             orderBy: { createdAt: "desc" },
-            take: 20,
-        }),
-        prisma.accessCode.findMany({
-            where: { upgradesTo: "GENERAL_PREMIUM" },
-            include: {
-                plan: { select: { name: true } },
-                usedBy: { select: { id: true, name: true, email: true } },
-            },
-            orderBy: { createdAt: "desc" },
-            take: 50,
+            take: 100,
         }),
         prisma.user.findMany({
             where: { role: { in: ["COACH", "SUPER_ADMIN"] } },
@@ -196,29 +186,6 @@ export default async function AdminPage() {
                             ),
                     }))).map(({ updatedAt: _updatedAt, creatorId: _creatorId, ...plan }) => plan)}
                     codes={recentCodes.map((c) => ({
-                        id: c.id,
-                        code: c.code,
-                        planName: c.plan?.name ?? null,
-                        usedBy: c.usedBy
-                            ? (accountStatusMap.get(c.usedBy.id)?.isDeleted
-                                ? accountStatusMap.get(c.usedBy.id)?.deletedName ?? c.usedBy.name ?? c.usedBy.email
-                                : c.usedBy.name ?? c.usedBy.email)
-                            : null,
-                        usedById: c.usedBy?.id ?? null,
-                        usedByStatus: c.usedBy
-                            ? (accountStatusMap.get(c.usedBy.id)?.isDeleted
-                                ? "DELETED"
-                                : accountStatusMap.get(c.usedBy.id)?.isDeactivated
-                                    ? "DEACTIVATED"
-                                    : "ACTIVE")
-                            : null,
-                        upgradesTo: c.upgradesTo,
-                        isActive: c.isActive,
-                        status: c.status,
-                        createdAt: c.createdAt.toISOString(),
-                        expiresAt: c.expiresAt?.toISOString() ?? null,
-                    }))}
-                    generalPremiumCodes={generalPremiumCodes.map((c) => ({
                         id: c.id,
                         code: c.code,
                         planName: c.plan?.name ?? null,

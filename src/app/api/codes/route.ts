@@ -1,7 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { generateCoachAccessCode } from "@/lib/accessCodes";
+import { generateCoachAccessCode, generateGeneralPremiumAccessCode } from "@/lib/accessCodes";
 import { triggerAchievementSync } from "@/lib/achievements";
 import { PLAN_TEMPLATES } from "@/lib/templates";
 import { getUserAccountStatusMap } from "@/lib/userDeactivation";
@@ -97,7 +97,7 @@ export async function DELETE(req: Request) {
 const codeSchema = z.object({
     planId: z.string().nullable().optional(),
     templateId: z.string().nullable().optional(),
-    upgradesTo: z.enum(["PREMIUM", "COACH"]).default("PREMIUM"),
+    upgradesTo: z.enum(["PREMIUM", "COACH", "GENERAL_PREMIUM"]).default("PREMIUM"),
     expiresInHours: z.number().int().positive().optional(),
 });
 
@@ -160,16 +160,14 @@ export async function POST(req: Request) {
     const parsed = codeSchema.safeParse(body);
     if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-    const upgradesTo = parsed.data.upgradesTo as "PREMIUM" | "COACH";
+    const upgradesTo = parsed.data.upgradesTo as "PREMIUM" | "COACH" | "GENERAL_PREMIUM";
 
     if (upgradesTo === "COACH" && user.role !== "SUPER_ADMIN") {
         return NextResponse.json({ error: "Only admins can generate coach codes" }, { status: 403 });
     }
 
-    let expiresAt: Date | null = null;
-    if (parsed.data.expiresInHours) {
-        expiresAt = new Date();
-        expiresAt.setHours(expiresAt.getHours() + parsed.data.expiresInHours);
+    if (upgradesTo === "GENERAL_PREMIUM" && user.role !== "SUPER_ADMIN") {
+        return NextResponse.json({ error: "Only admins can generate premium member codes" }, { status: 403 });
     }
 
     const planId = upgradesTo === "COACH"
@@ -178,11 +176,13 @@ export async function POST(req: Request) {
 
     const code = await prisma.accessCode.create({
         data: {
-            code: await generateCoachAccessCode(prisma, user),
+            code: upgradesTo === "GENERAL_PREMIUM"
+                ? await generateGeneralPremiumAccessCode(prisma)
+                : await generateCoachAccessCode(prisma, user),
             planId,
             generatedBy: user.id,
             upgradesTo,
-            expiresAt,
+            expiresAt: null,
         },
     });
 

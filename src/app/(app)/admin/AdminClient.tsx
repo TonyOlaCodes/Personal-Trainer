@@ -82,11 +82,10 @@ interface Props {
     coaches: AdminCoach[];
     plans: AdminPlan[];
     codes: AdminCode[];
-    generalPremiumCodes: AdminCode[];
     userRole: string;
 }
 
-type Tab = "users" | "coaches" | "plans" | "codes" | "generalPremium" | "announcements";
+type Tab = "users" | "coaches" | "plans" | "codes" | "announcements";
 type CodeFilter = "ALL" | "ACTIVE" | "USED" | "EXPIRED";
 type UserSortField = "createdAt" | "role" | "name" | "status";
 type SortDir = "asc" | "desc";
@@ -171,6 +170,19 @@ function ProfileAvatar({ name, email, avatarUrl }: { name?: string | null; email
     );
 }
 
+function codeTypeLabel(upgradesTo: string) {
+    if (upgradesTo === "COACH") return "Coach";
+    if (upgradesTo === "GENERAL_PREMIUM") return "Premium Member";
+    if (upgradesTo === "PREMIUM") return "Coached Member";
+    return upgradesTo;
+}
+
+function codeTypeBadgeClass(upgradesTo: string) {
+    if (upgradesTo === "COACH") return "bg-warning-500/10 text-warning border border-warning/20";
+    if (upgradesTo === "GENERAL_PREMIUM") return "bg-success/10 text-success border border-success/20";
+    return "bg-brand-500/10 text-brand-400 border border-brand/20";
+}
+
 function codeStatusInput(code: AdminCode) {
     return {
         isActive: code.isActive,
@@ -182,20 +194,13 @@ function codeStatusInput(code: AdminCode) {
     };
 }
 
-export function AdminClient({ users: initialUsers, coaches, plans: initialPlans, codes: initialCodes, generalPremiumCodes: initialGeneralPremiumCodes, userRole }: Props) {
+export function AdminClient({ users: initialUsers, coaches, plans: initialPlans, codes: initialCodes, userRole }: Props) {
     const [tab, setTab] = useState<Tab>("users");
     const [users, setUsers] = useState<AdminUser[]>(initialUsers);
     const [userSortField, setUserSortField] = useState<UserSortField>("createdAt");
     const [userSortDir, setUserSortDir] = useState<SortDir>("desc");
     const [plansList, setPlansList] = useState<AdminPlan[]>(initialPlans);
     const [codes, setCodes] = useState<AdminCode[]>(initialCodes.map(normalizeCode));
-    const [generalPremiumCodes, setGeneralPremiumCodes] = useState<AdminCode[]>(initialGeneralPremiumCodes.map(normalizeCode));
-    const [gpCodeFilter, setGpCodeFilter] = useState<CodeFilter>("ALL");
-    const [generatingGpCode, setGeneratingGpCode] = useState(false);
-    const [newGpCode, setNewGpCode] = useState<string | null>(null);
-    const [gpCopied, setGpCopied] = useState(false);
-    const [selectedGpPlanId, setSelectedGpPlanId] = useState<string>("");
-    const [selectedGpExpiresIn, setSelectedGpExpiresIn] = useState<string>("0");
     const [codeFilter, setCodeFilter] = useState<CodeFilter>("ALL");
     const [generatingCode, setGeneratingCode] = useState(false);
     const [deletingCodeId, setDeletingCodeId] = useState<string | null>(null);
@@ -203,8 +208,7 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
     const [newCode, setNewCode] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
     const [selectedPlanId, setSelectedPlanId] = useState<string>("");
-    const [selectedRole, setSelectedRole] = useState<string>("PREMIUM");
-    const [selectedExpiresIn, setSelectedExpiresIn] = useState<string>("0");
+    const [selectedCodeType, setSelectedCodeType] = useState<"GENERAL_PREMIUM" | "COACH">("GENERAL_PREMIUM");
     const [promotingId, setPromotingId] = useState<string | null>(null);
     const [confirmingUser, setConfirmingUser] = useState<{ id: string, email: string, role: string } | null>(null);
     const [confirmEmail, setConfirmEmail] = useState("");
@@ -231,18 +235,16 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
         const res = await fetch("/api/codes", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ 
-                planId: selectedRole === "COACH" || selectedPlanId.startsWith("template:") ? undefined : selectedPlanId || undefined,
-                templateId: selectedRole === "COACH" ? undefined : selectedPlanId.startsWith("template:") ? selectedPlanId.replace("template:", "") : undefined,
-                upgradesTo: selectedRole,
-                expiresInHours: selectedExpiresIn !== "0" ? parseInt(selectedExpiresIn) : undefined
+            body: JSON.stringify({
+                planId: selectedCodeType === "COACH" || selectedPlanId.startsWith("template:") ? undefined : selectedPlanId || undefined,
+                templateId: selectedCodeType === "COACH" ? undefined : selectedPlanId.startsWith("template:") ? selectedPlanId.replace("template:", "") : undefined,
+                upgradesTo: selectedCodeType,
             }),
         });
         if (res.ok) {
             const data = await res.json();
             setNewCode(data.code);
             setSelectedPlanId("");
-            // Refresh codes
             const refreshRes = await fetch("/api/codes");
             if (refreshRes.ok) {
                 const refreshedCodes = await refreshRes.json() as RawAdminCode[];
@@ -291,7 +293,7 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
         }
     };
 
-    const filteredCodes = codes.filter(c => c.upgradesTo !== "GENERAL_PREMIUM").filter(c => {
+    const filteredCodes = codes.filter(c => {
         const status = getAccessCodeStatus(codeStatusInput(c));
         if (codeFilter === "ALL") return true;
         if (codeFilter === "ACTIVE") return status.key === "active";
@@ -306,71 +308,6 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         }
-    };
-
-    const filteredGeneralPremiumCodes = generalPremiumCodes.filter((c) => {
-        const status = getAccessCodeStatus(codeStatusInput(c));
-        if (gpCodeFilter === "ALL") return true;
-        if (gpCodeFilter === "ACTIVE") return status.key === "active";
-        if (gpCodeFilter === "USED") return status.key === "redeemed";
-        if (gpCodeFilter === "EXPIRED") return status.key === "expired" || status.key === "inactive";
-        return true;
-    });
-
-    const generateGeneralPremiumCode = async () => {
-        setGeneratingGpCode(true);
-        const res = await fetch("/api/admin/general-premium-codes", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                planId: selectedGpPlanId.startsWith("template:") ? undefined : selectedGpPlanId || undefined,
-                templateId: selectedGpPlanId.startsWith("template:") ? selectedGpPlanId.replace("template:", "") : undefined,
-                expiresInHours: selectedGpExpiresIn !== "0" ? parseInt(selectedGpExpiresIn) : undefined,
-            }),
-        });
-        if (res.ok) {
-            const data = await res.json();
-            setNewGpCode(data.code);
-            setSelectedGpPlanId("");
-            const refreshRes = await fetch("/api/admin/general-premium-codes");
-            if (refreshRes.ok) {
-                const refreshed = await refreshRes.json() as RawAdminCode[];
-                setGeneralPremiumCodes(refreshed.map(normalizeCode));
-            }
-        }
-        setGeneratingGpCode(false);
-    };
-
-    const deleteGeneralPremiumCode = async (id: string) => {
-        if (!confirm("Delete this General Premium code?")) return;
-        setDeletingCodeId(id);
-        const res = await fetch("/api/admin/general-premium-codes", {
-            method: "DELETE",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id }),
-        });
-        if (res.ok) {
-            setGeneralPremiumCodes((current) => current.filter((c) => c.id !== id));
-        }
-        setDeletingCodeId(null);
-    };
-
-    const toggleGeneralPremiumCode = async (id: string, isActive: boolean) => {
-        const res = await fetch("/api/admin/general-premium-codes", {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id, isActive }),
-        });
-        if (res.ok) {
-            setGeneralPremiumCodes((current) => current.map((c) => c.id === id ? { ...c, isActive } : c));
-        }
-    };
-
-    const copyGpCode = () => {
-        if (!newGpCode) return;
-        navigator.clipboard.writeText(newGpCode);
-        setGpCopied(true);
-        setTimeout(() => setGpCopied(false), 2000);
     };
 
     const promoteUser = async (userId: string, role: string, email: string) => {
@@ -468,8 +405,7 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
                     { id: "users", label: "Users", icon: Users },
                     { id: "coaches", label: "Coaches", icon: Shield },
                     { id: "plans", label: "Plans", icon: Dumbbell },
-                    { id: "codes", label: "Coach Codes", icon: Ticket },
-                    { id: "generalPremium", label: "Gen. Premium", icon: Ticket },
+                    { id: "codes", label: "Codes", icon: Ticket },
                     { id: "announcements", label: "Announce", icon: Megaphone },
                 ].map((t) => (
                     <button
@@ -845,29 +781,30 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
             {tab === "codes" && (
                 <div className="space-y-4">
                     <div className="card p-5 border-brand-500/10">
-                        <h3 className="heading-3 mb-1">Coach Invite Codes</h3>
-                        <p className="text-xs text-fg-muted mb-4">Assigns Coached Premium and links the athlete to a coach.</p>
-                    {/* Generate code */}
+                        <h3 className="heading-3 mb-1">Access Codes</h3>
+                        <p className="text-xs text-fg-muted mb-4">
+                            Invite new coaches or independent premium members. Codes stay valid until redeemed or deleted.
+                        </p>
                     <div className="card p-5 border-0 bg-surface-muted/20">
-                        <h3 className="heading-3 mb-4">Generate Access Code</h3>
+                        <h3 className="heading-3 mb-4">Generate Code</h3>
                         <div className="flex flex-col md:flex-row gap-3">
                             <select
                                 className="input flex-1"
-                                value={selectedRole}
+                                value={selectedCodeType}
                                 onChange={(e) => {
-                                    const nextRole = e.target.value;
-                                    setSelectedRole(nextRole);
-                                    if (nextRole === "COACH") setSelectedPlanId("");
+                                    const nextType = e.target.value as "GENERAL_PREMIUM" | "COACH";
+                                    setSelectedCodeType(nextType);
+                                    if (nextType === "COACH") setSelectedPlanId("");
                                 }}
                             >
-                                <option value="PREMIUM">Premium Member Code</option>
+                                <option value="GENERAL_PREMIUM">Premium Member Code</option>
                                 {userRole === "SUPER_ADMIN" && <option value="COACH">Coach Code</option>}
                             </select>
                             <select
-                                className={cn("input flex-1", selectedRole === "COACH" && "opacity-50 bg-surface-muted cursor-not-allowed")}
+                                className={cn("input flex-1", selectedCodeType === "COACH" && "opacity-50 bg-surface-muted cursor-not-allowed")}
                                 value={selectedPlanId}
                                 onChange={(e) => setSelectedPlanId(e.target.value)}
-                                disabled={selectedRole === "COACH"}
+                                disabled={selectedCodeType === "COACH"}
                             >
                                 <option value="">No specific plan (Open)</option>
                                 <optgroup label="Saved plans">
@@ -880,16 +817,6 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
                                         <option key={template.id} value={`template:${template.id}`}>{template.name}</option>
                                     ))}
                                 </optgroup>
-                            </select>
-                            <select
-                                className="input flex-1"
-                                value={selectedExpiresIn}
-                                onChange={(e) => setSelectedExpiresIn(e.target.value)}
-                            >
-                                <option value="0">Never Expires</option>
-                                <option value="24">Expires in 24h</option>
-                                <option value="48">Expires in 48h</option>
-                                <option value="72">Expires in 72h</option>
                             </select>
                             <button onClick={generateCode} disabled={generatingCode} className="btn-primary">
                                 <Plus className="w-4 h-4" />
@@ -955,9 +882,9 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
                                                 <p className="font-mono font-black text-sm text-fg tracking-[0.2em]">{c.code}</p>
                                                 <span className={cn(
                                                     "text-[8px] px-1.5 py-0.5 rounded font-black uppercase tracking-widest",
-                                                    c.upgradesTo === "COACH" ? "bg-warning-500/10 text-warning border border-warning/20" : "bg-brand-500/10 text-brand-400 border border-brand/20"
+                                                    codeTypeBadgeClass(c.upgradesTo)
                                                 )}>
-                                                    {c.upgradesTo === "COACH" ? "Coach" : "Member"}
+                                                    {codeTypeLabel(c.upgradesTo)}
                                                 </span>
                                                 {c.usedByStatus && c.usedByStatus !== "ACTIVE" && (
                                                     <span className={cn(
@@ -972,9 +899,6 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
                                             </div>
                                             <p className="text-[10px] text-fg-muted font-bold uppercase tracking-widest mt-1">
                                                 {c.planName ? c.planName : "Open Entry"} · {formatDate(c.createdAt)}
-                                                {c.expiresAt && codeStatus.key === "active" && (
-                                                    <span className="text-warning ml-2">Exp: {formatDate(c.expiresAt)}</span>
-                                                )}
                                             </p>
                                             {c.usedBy && (
                                                 <div className="flex items-center gap-1.5 mt-1">
@@ -1029,80 +953,6 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
 
             {tab === "announcements" && (
                 <AdminAnnouncementsPanel users={users} />
-            )}
-
-            {tab === "generalPremium" && (
-                <div className="space-y-6">
-                    <div className="card p-5 border-success/20 bg-success/5">
-                        <h3 className="heading-3 mb-1">General Premium Codes</h3>
-                        <p className="text-xs text-fg-muted mb-4">
-                            Independent premium access — full training features with no coach assigned. Super Admin only.
-                        </p>
-                        <div className="flex flex-col sm:flex-row gap-3">
-                            <select className="input flex-1" value={selectedGpPlanId} onChange={(e) => setSelectedGpPlanId(e.target.value)}>
-                                <option value="">No starter plan</option>
-                                {Object.entries(PLAN_TEMPLATES).map(([id, template]) => (
-                                    <option key={id} value={`template:${id}`}>{template.name}</option>
-                                ))}
-                            </select>
-                            <select className="input flex-1" value={selectedGpExpiresIn} onChange={(e) => setSelectedGpExpiresIn(e.target.value)}>
-                                <option value="0">Never Expires</option>
-                                <option value="24">Expires in 24h</option>
-                                <option value="48">Expires in 48h</option>
-                                <option value="72">Expires in 72h</option>
-                            </select>
-                            <button onClick={generateGeneralPremiumCode} disabled={generatingGpCode} className="btn-primary">
-                                <Plus className="w-4 h-4" />
-                                {generatingGpCode ? "Wait..." : "Generate"}
-                            </button>
-                        </div>
-                        {newGpCode && (
-                            <div className="mt-4 flex items-center gap-3 p-4 bg-success/10 border border-success/20 rounded-xl">
-                                <p className="font-mono font-bold text-2xl text-success tracking-widest flex-1">{newGpCode}</p>
-                                <button onClick={copyGpCode} className="btn-secondary btn-sm">
-                                    {gpCopied ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
-                                    {gpCopied ? "Copied!" : "Copy"}
-                                </button>
-                            </div>
-                        )}
-                    </div>
-                    <div className="card overflow-hidden">
-                        <div className="px-5 py-4 border-b border-surface-border flex items-center justify-between">
-                            <h3 className="heading-3">General Premium Codes ({filteredGeneralPremiumCodes.length})</h3>
-                            <div className="flex gap-1 bg-surface-muted p-1 rounded-lg border border-surface-border">
-                                {(["ALL", "ACTIVE", "USED", "EXPIRED"] as CodeFilter[]).map((f) => (
-                                    <button key={f} onClick={() => setGpCodeFilter(f)} className={cn("px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest transition-all", gpCodeFilter === f ? "bg-surface-card text-brand-400 shadow-sm" : "text-fg-subtle hover:text-fg")}>{f}</button>
-                                ))}
-                            </div>
-                        </div>
-                        <div className="divide-y divide-surface-border">
-                            {filteredGeneralPremiumCodes.length === 0 ? (
-                                <p className="p-10 text-center text-sm text-fg-muted italic">No General Premium codes yet.</p>
-                            ) : filteredGeneralPremiumCodes.map((c) => {
-                                const codeStatus = getAccessCodeStatus(codeStatusInput(c));
-                                return (
-                                    <div key={c.id} className="flex items-center justify-between px-5 py-4 group hover:bg-surface-muted/30">
-                                        <div>
-                                            <div className="flex items-center gap-2">
-                                                <p className="font-mono font-black text-sm tracking-[0.2em]">{c.code}</p>
-                                                <span className="text-[8px] px-1.5 py-0.5 rounded font-black uppercase tracking-widest bg-success/10 text-success border border-success/20">General Premium</span>
-                                            </div>
-                                            <p className="text-[10px] text-fg-muted mt-1">{c.planName ? c.planName : "Open Entry"} · {formatDate(c.createdAt)}</p>
-                                            {c.usedBy && <p className="text-[10px] text-success font-black uppercase tracking-widest mt-1">Claimed: {c.usedBy}</p>}
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <span className={cn("text-[10px] font-black px-2 py-0.5 rounded uppercase border", codeStatus.badgeClass)}>{codeStatus.label}</span>
-                                            {!c.usedById && (
-                                                <button onClick={() => toggleGeneralPremiumCode(c.id, !c.isActive)} className="btn-secondary btn-sm text-[10px]">{c.isActive ? "Disable" : "Enable"}</button>
-                                            )}
-                                            <button onClick={() => deleteGeneralPremiumCode(c.id)} disabled={deletingCodeId === c.id} className="w-8 h-8 rounded-lg flex items-center justify-center text-fg-subtle hover:text-danger"><Trash2 className="w-4 h-4" /></button>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                </div>
             )}
         </div>
     );

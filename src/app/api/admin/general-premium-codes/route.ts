@@ -129,10 +129,6 @@ export async function POST(req: Request) {
     if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
     let expiresAt: Date | null = null;
-    if (parsed.data.expiresInHours) {
-        expiresAt = new Date();
-        expiresAt.setHours(expiresAt.getHours() + parsed.data.expiresInHours);
-    }
 
     const planId = parsed.data.planId
         ?? (parsed.data.templateId ? await getOrCreateTemplatePlan(parsed.data.templateId, user.id) : null);
