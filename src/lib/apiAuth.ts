@@ -45,6 +45,53 @@ export async function workoutAssignedToUser(userId: string, workoutId: string): 
     return !!link;
 }
 
+/** Who a workout log write applies to — self, or a coach's client when clientId is provided. */
+export async function resolveWorkoutLogSubjectUserId(
+    actor: User,
+    clientId?: string | null
+): Promise<{ subjectUserId: string; error: null } | { subjectUserId: null; error: NextResponse }> {
+    if (!clientId || clientId === actor.id) {
+        if (!canLogWorkouts(actor)) {
+            return {
+                subjectUserId: null,
+                error: NextResponse.json({ error: "Coaches cannot log workouts" }, { status: 403 }),
+            };
+        }
+        return { subjectUserId: actor.id, error: null };
+    }
+
+    if (actor.role === "SUPER_ADMIN") {
+        return { subjectUserId: clientId, error: null };
+    }
+
+    const gate = await requireCoachCanEditClient(actor, clientId);
+    if (gate.error) {
+        return { subjectUserId: null, error: gate.error };
+    }
+
+    return { subjectUserId: clientId, error: null };
+}
+
+export async function resolveWorkoutLogReadUserId(
+    actor: User,
+    requestedUserId?: string | null
+): Promise<{ targetUserId: string; error: null } | { targetUserId: null; error: NextResponse }> {
+    if (!requestedUserId || requestedUserId === actor.id) {
+        return { targetUserId: actor.id, error: null };
+    }
+
+    if (actor.role === "SUPER_ADMIN") {
+        return { targetUserId: requestedUserId, error: null };
+    }
+
+    const gate = await requireCoachCanEditClient(actor, requestedUserId);
+    if (gate.error) {
+        return { targetUserId: null, error: gate.error };
+    }
+
+    return { targetUserId: requestedUserId, error: null };
+}
+
 export async function canAccessClient(
     actor: Pick<User, "id" | "role">,
     clientId: string

@@ -483,11 +483,6 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
                                         </div>
                                         <p className="text-xs text-fg-muted truncate">{u.email}</p>
                                         <p className="text-xs text-fg-subtle">{formatDate(u.createdAt)}</p>
-                                        {u.role === "GENERAL_PREMIUM" && (
-                                            <p className="text-[10px] text-success font-bold uppercase tracking-widest mt-1">
-                                                Independent premium member
-                                            </p>
-                                        )}
                                         {u.role === "PREMIUM" && (
                                             <p className="text-[10px] text-fg-subtle font-bold uppercase tracking-widest mt-1">
                                                 Coach: {u.coachName || "No coach"}
@@ -790,7 +785,7 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
                     <div className="card p-5 border-brand-500/10">
                         <h3 className="heading-3 mb-1">Access Codes</h3>
                         <p className="text-xs text-fg-muted mb-4">
-                            Invite new coaches or independent premium members. Codes stay valid until redeemed or deleted.
+                            Invite new coaches or premium members. Codes stay valid until redeemed or deleted.
                         </p>
                     <div className="card p-5 border-0 bg-surface-muted/20">
                         <h3 className="heading-3 mb-4">Generate Code</h3>

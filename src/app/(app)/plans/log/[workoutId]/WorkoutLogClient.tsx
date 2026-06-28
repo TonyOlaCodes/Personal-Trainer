@@ -161,6 +161,8 @@ interface Props {
     workout: Workout;
     exerciseMedia?: Record<string, ExercisePreviewMedia>;
     logDate?: string;
+    clientId?: string;
+    clientName?: string;
     lastWorkoutLogSets?: Array<{
         exerciseName: string;
         setNumber: number;
@@ -198,12 +200,21 @@ function isDirectVideo(url: string) {
     return /\.(mp4|webm|ogg)(\?.*)?$/i.test(url);
 }
 
-export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWorkoutLogSets = [], initialActiveLog = null }: Props) {
+export function WorkoutLogClient({
+    workout,
+    exerciseMedia = {},
+    logDate,
+    clientId,
+    clientName,
+    lastWorkoutLogSets = [],
+    initialActiveLog = null,
+}: Props) {
     const router = useRouter();
     const searchParams = useSearchParams();
     const returnTo = getReturnToFromSearchParams(searchParams);
     const targetDateStr = logDate ? toDateKey(parseLogDate(logDate)) : toDateKey(new Date());
-    const localStorageKey = `workout_start_time_${workout.id}_${targetDateStr}`;
+    const localStorageKey = `workout_start_time_${workout.id}_${targetDateStr}${clientId ? `_${clientId}` : ""}`;
+    const logSubjectFields = clientId ? { clientId } : {};
 
     const [initialSession] = useState(() => {
         if (initialActiveLog) {
@@ -293,6 +304,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
             setIsCheckingSession(true);
             try {
                 const params = new URLSearchParams({ active: "true", workoutId: workout.id, date: targetDateStr });
+                if (clientId) params.set("clientId", clientId);
                 const res = await fetch(`/api/logs?${params}`);
                 const active = await res.json();
                 const targetDate = logDate ? parseLogDate(logDate) : new Date();
@@ -317,7 +329,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
         return () => {
             cancelled = true;
         };
-    }, [activeLogId, initialActiveLog, isSameDay, localStorageKey, logDate, targetDateStr, workout.exercises, workout.id]);
+    }, [activeLogId, clientId, initialActiveLog, isSameDay, localStorageKey, logDate, targetDateStr, workout.exercises, workout.id]);
 
     // Track when Swap/Add modal is open and adjust startTime when closed to pause timer
     useEffect(() => {
@@ -397,6 +409,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                     status: "IN_PROGRESS",
                     loggedAt: toLoggedAtIso(logDate ?? new Date(now)),
                     sets: flattenedSets,
+                    ...logSubjectFields,
                 }),
             });
 
@@ -458,6 +471,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                     duration: elapsedMinutes,
                     loggedAt: toLoggedAtIso(logDate ?? new Date(finalStartTime)),
                     sets: flattenedSets,
+                    ...logSubjectFields,
                 }),
             });
             if (res.ok) {
@@ -651,6 +665,7 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
                     status: "COMPLETED",
                     loggedAt: toLoggedAtIso(logDate),
                     sets: flattenedSets,
+                    ...logSubjectFields,
                 }),
             });
             
@@ -764,6 +779,13 @@ export function WorkoutLogClient({ workout, exerciseMedia = {}, logDate, lastWor
 
             <div className="flex-1 p-4 pt-20 pb-[calc(6.5rem+env(safe-area-inset-bottom,0px))] overflow-y-auto no-scrollbar md:pl-[calc(var(--sidebar-width)+1rem)] md:pb-28">
                 <div className="max-w-2xl mx-auto space-y-6">
+                    {clientName && (
+                        <div className="card p-3 border-brand-500/30 bg-brand-950/20 text-center">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">Logging for client</p>
+                            <p className="text-sm font-bold text-fg mt-0.5">{clientName}</p>
+                        </div>
+                    )}
+
                     {scheduledDayLabel && (
                         <div className="card p-3 border-brand-500/30 bg-brand-950/20 text-center">
                             <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">Logging for</p>

@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { withResolvedLogSetMedia } from "@/lib/uploadUrls";
 import { resolveLogSetExerciseName } from "@/lib/logSetExerciseName";
 import { getWorkoutNotes } from "@/lib/workoutNotes";
-import { canViewWorkoutLog } from "@/lib/userProfile";
+import { canEditWorkoutLog, canViewWorkoutLog } from "@/lib/userProfile";
 import { triggerAchievementSync } from "@/lib/achievements";
 import { z } from "zod";
 
@@ -93,10 +93,25 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         return NextResponse.json({ error: parsed.error.flatten().formErrors[0] || "Invalid update" }, { status: 400 });
     }
 
-    const existing = await prisma.workoutLog.findFirst({
-        where: { id, userId: user.id },
+    const existing = await prisma.workoutLog.findUnique({
+        where: { id },
+        include: {
+            user: {
+                select: {
+                    id: true,
+                    coachId: true,
+                    isDeleted: true,
+                    isDeactivated: true,
+                    email: true,
+                },
+            },
+        },
     });
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    if (!(await canEditWorkoutLog(user, existing))) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     const data: { status?: "IN_PROGRESS" | "COMPLETED"; feeling?: number } = {};
 
@@ -117,7 +132,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     });
 
     if (data.status === "COMPLETED") {
-        triggerAchievementSync(user.id);
+        triggerAchievementSync(existing.userId);
     }
 
     return NextResponse.json(updated);
@@ -131,10 +146,25 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     const user = await prisma.user.findUnique({ where: { clerkId: userId } });
     if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-    const existing = await prisma.workoutLog.findFirst({
-        where: { id, userId: user.id },
+    const existing = await prisma.workoutLog.findUnique({
+        where: { id },
+        include: {
+            user: {
+                select: {
+                    id: true,
+                    coachId: true,
+                    isDeleted: true,
+                    isDeactivated: true,
+                    email: true,
+                },
+            },
+        },
     });
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    if (!(await canEditWorkoutLog(user, existing))) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     await prisma.workoutLog.delete({ where: { id } });
 

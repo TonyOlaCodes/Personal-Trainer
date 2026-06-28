@@ -11,9 +11,10 @@ interface Props {
     logId: string;
     workoutId: string;
     loggedAt?: string;
+    clientId?: string;
 }
 
-export function SessionActions({ logId, workoutId, loggedAt }: Props) {
+export function SessionActions({ logId, workoutId, loggedAt, clientId }: Props) {
     const router = useRouter();
     const searchParams = useSearchParams();
     const returnTo = getReturnToFromSearchParams(searchParams);
@@ -33,7 +34,10 @@ export function SessionActions({ logId, workoutId, loggedAt }: Props) {
                 const dateQuery = loggedAt
                     ? `?date=${encodeURIComponent(toDateKey(parseLogDate(loggedAt)))}`
                     : "";
-                router.push(appendReturnTo(`/plans/log/${workoutId}${dateQuery}`, returnTo));
+                const clientQuery = clientId
+                    ? `${dateQuery ? "&" : "?"}clientId=${encodeURIComponent(clientId)}`
+                    : "";
+                router.push(appendReturnTo(`/plans/log/${workoutId}${dateQuery}${clientQuery}`, returnTo));
                 router.refresh();
             } else {
                 alert("Failed to reopen session. Try again.");

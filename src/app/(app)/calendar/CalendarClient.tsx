@@ -229,7 +229,7 @@ export function CalendarClient({
         ? inProgressByDate[selectedDateKey]?.find((s) => s.workoutId === selectedPlanned.id) ?? null
         : null;
     const workoutLogHref = selectedPlanned
-        ? `/plans/log/${selectedPlanned.id}?date=${selectedDateKey}`
+        ? `/plans/log/${selectedPlanned.id}?date=${selectedDateKey}${coachView ? `&clientId=${coachView.clientId}` : ""}`
         : "";
     const selectedIsExcused = Boolean(
         selectedPlanned
@@ -397,7 +397,7 @@ export function CalendarClient({
                                                     "w-1.5 h-1.5 rounded-full mt-1.5 mr-1",
                                                     status === 'completed' ? "bg-success shadow-glow-success animate-pulse" :
                                                     status === 'in-progress' ? "bg-warning shadow-glow-warning animate-pulse" :
-                                                    status === 'excused' ? "bg-violet-400 shadow-[0_0_8px_rgba(167,139,250,0.45)]" :
+                                                    status === 'excused' ? "bg-emerald-700 shadow-[0_0_8px_rgba(4,120,87,0.45)]" :
                                                     status === 'missed' ? "bg-danger shadow-glow-danger" :
                                                     status === 'scheduled' ? "bg-brand-400 shadow-glow-brand" :
                                                     "bg-surface-border"
@@ -429,18 +429,18 @@ export function CalendarClient({
                                                     <div className="space-y-1">
                                                         <div className={cn(
                                                             "h-1 rounded-full overflow-hidden",
-                                                            status === 'excused' ? "bg-violet-400/20" :
+                                                            status === 'excused' ? "bg-emerald-900/30" :
                                                             isPast ? "bg-danger/20" : "bg-brand-400/20"
                                                         )}>
                                                             <div className={cn(
                                                                 "w-full h-full",
-                                                                status === 'excused' ? "bg-violet-400" :
+                                                                status === 'excused' ? "bg-emerald-700" :
                                                                 isPast ? "bg-danger" : "bg-brand-400 animate-pulse"
                                                             )} />
                                                         </div>
                                                         <span className={cn(
                                                             "text-[9px] font-black uppercase tracking-tighter truncate block",
-                                                            status === 'excused' ? "text-violet-400" :
+                                                            status === 'excused' ? "text-emerald-700" :
                                                             isPast ? "text-danger opacity-60" : "text-brand-400"
                                                         )}>
                                                             {status === 'excused' ? "Excused · " : ""}
@@ -493,7 +493,7 @@ export function CalendarClient({
                                 "w-2.5 h-2.5 rounded-full",
                                 selectedLogs.length > 0 ? "bg-success" :
                                 resumeSession ? "bg-warning animate-pulse" :
-                                selectedIsExcused ? "bg-violet-400" :
+                                selectedIsExcused ? "bg-emerald-700" :
                                 (selectedPlanned ? (selectedDateKey < todayKey ? "bg-danger" : "bg-brand-400") : "bg-surface-border")
                             )} />
                         </div>
@@ -587,7 +587,7 @@ export function CalendarClient({
                                     resumeSession
                                         ? "bg-warning-950/20 border-warning-500/20 shadow-glow-warning-sm"
                                         : selectedIsExcused
-                                            ? "bg-violet-950/25 border-violet-500/30 shadow-[0_0_12px_rgba(139,92,246,0.15)]"
+                                            ? "bg-emerald-950/35 border-emerald-700/35 shadow-[0_0_12px_rgba(4,120,87,0.12)]"
                                         : selectedDateKey < todayKey
                                             ? "bg-danger-950/20 border-danger-500/20"
                                             : "bg-brand-950/20 border-brand-500/20 shadow-glow-brand-sm"
@@ -599,7 +599,7 @@ export function CalendarClient({
                                                 resumeSession
                                                     ? "text-warning"
                                                     : selectedIsExcused
-                                                        ? "text-violet-400"
+                                                        ? "text-emerald-700"
                                                     : selectedDateKey < todayKey
                                                         ? "text-danger"
                                                         : "text-brand-400"
@@ -619,7 +619,7 @@ export function CalendarClient({
                                             resumeSession
                                                 ? "text-warning opacity-60"
                                                 : selectedIsExcused
-                                                    ? "text-violet-400 opacity-60"
+                                                    ? "text-emerald-700 opacity-60"
                                                 : selectedDateKey < todayKey
                                                     ? "text-danger opacity-40"
                                                     : "text-brand-400"
@@ -670,7 +670,7 @@ export function CalendarClient({
                                                 type="button"
                                                 disabled={statusUpdating}
                                                 onClick={() => void updateWorkoutStatus("excused")}
-                                                className="btn-secondary flex-1 h-11 text-[10px] font-black uppercase tracking-widest border-violet-400/30 text-violet-400 hover:bg-violet-400/10 disabled:opacity-50"
+                                                className="btn-secondary flex-1 h-11 text-[10px] font-black uppercase tracking-widest border-emerald-700/30 text-emerald-700 hover:bg-emerald-900/20 disabled:opacity-50"
                                             >
                                                 {statusUpdating ? "Saving…" : "Mark excused"}
                                             </button>
@@ -680,9 +680,29 @@ export function CalendarClient({
 
                                 {isCoachView && coachView ? (
                                     <div className="space-y-2">
+                                        <ReturnLink
+                                            href={workoutLogHref}
+                                            className={cn(
+                                                "w-full h-12 text-xs font-black uppercase tracking-[0.15em] group hover:scale-[1.02] transition-all flex items-center justify-center",
+                                                resumeSession
+                                                    ? "btn-primary shadow-glow-success bg-success border-success hover:bg-success-600"
+                                                    : "btn-primary shadow-glow-brand"
+                                            )}
+                                        >
+                                            {resumeSession ? (
+                                                <Flame className="w-4 h-4 mr-2 animate-pulse group-hover:scale-110 transition-transform" />
+                                            ) : (
+                                                <PlayCircle className="w-4 h-4 mr-2 group-hover:rotate-12 transition-transform" />
+                                            )}
+                                            {resumeSession
+                                                ? "Resume Session"
+                                                : selectedDateKey < todayKey
+                                                    ? "Log Workout"
+                                                    : "Start Workout"}
+                                        </ReturnLink>
                                         <Link
                                             href={`/coach/client/${coachView.clientId}`}
-                                            className="btn-primary w-full h-12 text-xs font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2 shadow-glow-brand"
+                                            className="btn-secondary w-full h-12 text-xs font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2"
                                         >
                                             <User className="w-4 h-4" />
                                             View Client
@@ -775,7 +795,7 @@ export function CalendarClient({
                         <span className="text-[8px] font-black uppercase tracking-tighter text-fg-subtle">In Progress</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                        <div className="w-1.5 h-1.5 rounded-full bg-violet-400" />
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-700" />
                         <span className="text-[8px] font-black uppercase tracking-tighter text-fg-subtle">Excused</span>
                     </div>
                     <div className="flex items-center gap-1.5">

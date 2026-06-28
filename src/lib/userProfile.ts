@@ -12,6 +12,7 @@ import { withResolvedAvatar } from "@/lib/uploadUrls";
 import { getAchievementSummary, type AchievementDisplayItem } from "@/lib/achievements";
 import { getWorkoutStreak } from "@/lib/workoutAdherenceStreak";
 import { resolveLogSetExerciseName } from "@/lib/logSetExerciseName";
+import { isInactiveAccount } from "@/lib/userDeactivation";
 
 export { getWorkoutStreak };
 
@@ -81,6 +82,21 @@ export async function canViewWorkoutLog(
     if (viewer.role === "COACH" && log.user?.coachId === viewer.id) return true;
 
     return canViewFullProfile(viewer, log.userId);
+}
+
+export async function canEditWorkoutLog(
+    viewer: Pick<{ id: string; role: string }, "id" | "role">,
+    log: {
+        userId: string;
+        user?: { coachId: string | null; isDeleted?: boolean; isDeactivated?: boolean; email?: string } | null;
+    }
+): Promise<boolean> {
+    if (viewer.id === log.userId) return true;
+    if (viewer.role === "SUPER_ADMIN") return true;
+    if (viewer.role === "COACH" && log.user?.coachId === viewer.id) {
+        return log.user ? !isInactiveAccount(log.user) : false;
+    }
+    return false;
 }
 
 /** Public profile plans visible to users with full profile access. */

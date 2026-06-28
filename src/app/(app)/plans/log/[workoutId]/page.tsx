@@ -7,6 +7,9 @@ import { getExerciseMediaByNames } from "@/lib/exerciseMedia";
 import { getLocalDayBounds, parseLogDate, toDateKey } from "@/lib/utils";
 import { withResolvedLogSetMedia } from "@/lib/uploadUrls";
 import { resolveLogSetExerciseName } from "@/lib/logSetExerciseName";
+import { canAccessClient } from "@/lib/apiAuth";
+import { isInactiveAccount } from "@/lib/userDeactivation";
+import { defaultHomeForRole, isCoachRole } from "@/lib/roles";
 
 export const metadata = { title: "Logging session" };
 
@@ -35,20 +38,40 @@ export default async function WorkoutLogPage({
     searchParams,
 }: {
     params: Promise<{ workoutId: string }>;
-    searchParams: Promise<{ date?: string }>;
+    searchParams: Promise<{ date?: string; clientId?: string }>;
 }) {
     await ensureDbSchema();
     const { userId } = await auth();
     if (!userId) redirect("/sign-in");
 
     const { workoutId } = await params;
-    const { date } = await searchParams;
+    const { date, clientId } = await searchParams;
 
-    const user = await prisma.user.findUnique({
+    const actor = await prisma.user.findUnique({
         where: { clerkId: userId },
-        select: { id: true },
+        select: { id: true, role: true },
     });
-    if (!user) redirect("/sign-in");
+    if (!actor) redirect("/sign-in");
+
+    let subjectUserId = actor.id;
+    let clientName: string | undefined;
+
+    if (clientId && clientId !== actor.id) {
+        if (!(await canAccessClient(actor, clientId))) {
+            redirect(defaultHomeForRole(actor.role));
+        }
+        const client = await prisma.user.findUnique({
+            where: { id: clientId },
+            select: { name: true, isDeleted: true, isDeactivated: true, email: true },
+        });
+        if (!client || isInactiveAccount(client)) {
+            redirect(defaultHomeForRole(actor.role));
+        }
+        subjectUserId = clientId;
+        clientName = client.name ?? undefined;
+    } else if (isCoachRole(actor.role)) {
+        redirect(defaultHomeForRole(actor.role));
+    }
 
     const workout = await prisma.workout.findUnique({
         where: { id: workoutId },
@@ -60,9 +83,9 @@ export default async function WorkoutLogPage({
     const dateKey = date ? toDateKey(parseLogDate(date)) : toDateKey(new Date());
     const { start: dayStart, end: dayEnd } = getLocalDayBounds(parseLogDate(dateKey));
 
-    let activeLog = await prisma.workoutLog.findFirst({
+    const activeLog = await prisma.workoutLog.findFirst({
         where: {
-            userId: user.id,
+            userId: subjectUserId,
             workoutId: workout.id,
             status: "IN_PROGRESS",
             loggedAt: { gte: dayStart, lte: dayEnd },
@@ -74,7 +97,7 @@ export default async function WorkoutLogPage({
         where: {
             isCompleted: true,
             workoutLog: {
-                userId: user.id,
+                userId: subjectUserId,
                 status: "COMPLETED",
             },
         },
@@ -152,6 +175,8 @@ export default async function WorkoutLogPage({
                 }}
                 exerciseMedia={exerciseMedia}
                 logDate={date}
+                clientId={clientId && clientId !== actor.id ? clientId : undefined}
+                clientName={clientName}
                 lastWorkoutLogSets={lastWorkoutLogSets}
                 initialActiveLog={initialActiveLog}
                 />

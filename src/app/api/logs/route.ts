@@ -2,7 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma, ensureDbSchema } from "@/lib/prisma";
 import { getLocalDayBounds, parseLogDate } from "@/lib/utils";
-import { canLogWorkouts, requireAuthUser, workoutAssignedToUser } from "@/lib/apiAuth";
+import { requireAuthUser, resolveWorkoutLogReadUserId, resolveWorkoutLogSubjectUserId, workoutAssignedToUser } from "@/lib/apiAuth";
 import { notifyCoachOfClientWorkout } from "@/lib/notifications";
 import { triggerAchievementSync } from "@/lib/achievements";
 import { normalizeStoredUploadUrl } from "@/lib/uploadUrls";
@@ -11,6 +11,7 @@ import { z } from "zod";
 
 const logSchema = z.object({
     workoutId: z.string(),
+    clientId: z.string().optional(),
     duration: z.number().optional(),
     notes: z.string().optional(),
     feeling: z.number().min(1).max(5).optional(),
@@ -38,18 +39,38 @@ export async function POST(req: Request) {
     if (authResult.error) return authResult.error;
     const user = authResult.user;
 
-    if (!canLogWorkouts(user)) {
-        return NextResponse.json({ error: "Coaches cannot log workouts" }, { status: 403 });
-    }
     const body = await req.json();
     const parsed = logSchema.safeParse(body);
     if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-    const { workoutId, duration, notes, feeling, sets, status, loggedAt } = parsed.data;
+    const { workoutId, clientId, duration, notes, feeling, sets, status, loggedAt } = parsed.data;
 
-    if (!(await workoutAssignedToUser(user.id, workoutId))) {
+    const subjectResult = await resolveWorkoutLogSubjectUserId(user, clientId);
+    if (subjectResult.error) return subjectResult.error;
+    const subjectUserId = subjectResult.subjectUserId;
+
+    if (!(await workoutAssignedToUser(subjectUserId, workoutId))) {
         return NextResponse.json({ error: "Workout is not part of your assigned plans" }, { status: 403 });
     }
+
+    const subjectProfile =
+        subjectUserId === user.id
+            ? { coachId: user.coachId, name: user.name, email: user.email }
+            : await prisma.user.findUnique({
+                where: { id: subjectUserId },
+                select: { coachId: true, name: true, email: true },
+            });
+
+    const maybeNotifyCoach = async (workoutLog: { id: string; workout: { name: string } }) => {
+        if (status !== "COMPLETED" || subjectUserId !== user.id) return;
+        if (!subjectProfile?.coachId) return;
+        await notifyCoachOfClientWorkout({
+            coachId: subjectProfile.coachId,
+            clientName: subjectProfile.name ?? subjectProfile.email ?? "Client",
+            workoutName: workoutLog.workout.name,
+            workoutLogId: workoutLog.id,
+        });
+    };
 
     // Detect PRs: only for completed sets that aren't warmups
     const prExerciseIds = new Set<string>();
@@ -59,7 +80,7 @@ export async function POST(req: Request) {
             const prev = await prisma.logSet.findFirst({
                 where: {
                     exerciseId: s.exerciseId,
-                    workoutLog: { userId: user.id },
+                    workoutLog: { userId: subjectUserId },
                     weightKg: { not: null },
                     isWarmup: false,
                     isCompleted: true,
@@ -77,7 +98,7 @@ export async function POST(req: Request) {
 
     const existingInProgress = await prisma.workoutLog.findFirst({
         where: {
-            userId: user.id,
+            userId: subjectUserId,
             workoutId,
             status: "IN_PROGRESS",
             loggedAt: { gte: startOfDay, lte: endOfDay },
@@ -89,7 +110,7 @@ export async function POST(req: Request) {
     if (status === "IN_PROGRESS" && !existingInProgress) {
         await prisma.workoutLog.deleteMany({
             where: {
-                userId: user.id,
+                userId: subjectUserId,
                 workoutId,
                 status: "IN_PROGRESS",
                 loggedAt: {
@@ -104,7 +125,7 @@ export async function POST(req: Request) {
         status === "COMPLETED"
             ? await prisma.workoutLog.findFirst({
                   where: {
-                      userId: user.id,
+                      userId: subjectUserId,
                       workoutId,
                       status: "COMPLETED",
                       loggedAt: { gte: startOfDay, lte: endOfDay },
@@ -200,15 +221,8 @@ export async function POST(req: Request) {
             data: { ...logPayload, sets: { create: setsCreate } },
             include: { sets: true, workout: { select: { name: true } } },
         });
-        if (user.coachId) {
-            await notifyCoachOfClientWorkout({
-                coachId: user.coachId,
-                clientName: user.name ?? user.email,
-                workoutName: workoutLog.workout.name,
-                workoutLogId: workoutLog.id,
-            });
-        }
-        triggerAchievementSync(user.id);
+        await maybeNotifyCoach(workoutLog);
+        triggerAchievementSync(subjectUserId);
         return NextResponse.json(workoutLog, { status: 200 });
     }
 
@@ -219,7 +233,7 @@ export async function POST(req: Request) {
             data: { ...logPayload, sets: { create: setsCreate } },
             include: { sets: true, workout: { select: { name: true } } },
         });
-        triggerAchievementSync(user.id);
+        triggerAchievementSync(subjectUserId);
         return NextResponse.json(workoutLog, { status: 200 });
     }
 
@@ -230,13 +244,13 @@ export async function POST(req: Request) {
             data: { ...logPayload, sets: { create: setsCreate } },
             include: { sets: true, workout: { select: { name: true } } },
         });
-        triggerAchievementSync(user.id);
+        triggerAchievementSync(subjectUserId);
         return NextResponse.json(workoutLog, { status: 200 });
     }
 
     const workoutLog = await prisma.workoutLog.create({
         data: {
-            userId: user.id,
+            userId: subjectUserId,
             workoutId,
             ...logPayload,
             sets: { create: setsCreate },
@@ -247,7 +261,7 @@ export async function POST(req: Request) {
     if (status === "COMPLETED") {
         await prisma.workoutLog.deleteMany({
             where: {
-                userId: user.id,
+                userId: subjectUserId,
                 workoutId,
                 status: "IN_PROGRESS",
                 loggedAt: { gte: startOfDay, lte: endOfDay },
@@ -256,16 +270,9 @@ export async function POST(req: Request) {
         });
     }
 
-    if (status === "COMPLETED" && user.coachId) {
-        await notifyCoachOfClientWorkout({
-            coachId: user.coachId,
-            clientName: user.name ?? user.email,
-            workoutName: workoutLog.workout.name,
-            workoutLogId: workoutLog.id,
-        });
-    }
+    await maybeNotifyCoach(workoutLog);
 
-    triggerAchievementSync(user.id);
+    triggerAchievementSync(subjectUserId);
 
     return NextResponse.json(workoutLog, { status: 201 });
 }
@@ -307,10 +314,14 @@ export async function GET(req: Request) {
         };
 
         if (workoutId && dateParam) {
+            const clientId = url.searchParams.get("clientId");
+            const readTarget = await resolveWorkoutLogReadUserId(user, clientId);
+            if (readTarget.error) return readTarget.error;
+
             const { start, end } = getLocalDayBounds(parseLogDate(dateParam));
             const activeLog = await prisma.workoutLog.findFirst({
                 where: {
-                    userId: user.id,
+                    userId: readTarget.targetUserId,
                     workoutId,
                     status: "IN_PROGRESS",
                     loggedAt: { gte: start, lte: end },

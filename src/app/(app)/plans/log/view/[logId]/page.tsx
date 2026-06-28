@@ -10,7 +10,7 @@ import { SessionActions } from "./SessionActions";
 import { WorkoutFeelingEditor } from "@/components/shared/WorkoutFeelingEditor";
 import { BackButton } from "@/components/shared/BackButton";
 import { defaultHomeForRole } from "@/lib/roles";
-import { canViewWorkoutLog } from "@/lib/userProfile";
+import { canEditWorkoutLog, canViewWorkoutLog } from "@/lib/userProfile";
 import { resolveLogSetExerciseName } from "@/lib/logSetExerciseName";
 
 export default async function LogViewPage({ params }: { params: Promise<{ logId: string }> }) {
@@ -24,7 +24,7 @@ export default async function LogViewPage({ params }: { params: Promise<{ logId:
     const log = await prisma.workoutLog.findUnique({
         where: { id: logId },
         include: {
-            user: { select: { id: true, coachId: true, name: true } },
+            user: { select: { id: true, coachId: true, name: true, email: true, isDeleted: true, isDeactivated: true } },
             workout: true,
             sets: {
                 include: { exercise: true },
@@ -41,6 +41,7 @@ export default async function LogViewPage({ params }: { params: Promise<{ logId:
     }
 
     const isOwner = log.user.id === actor.id;
+    const canEdit = await canEditWorkoutLog(actor, log);
 
     // Group sets by exercise using snapshotted names (not live plan order)
     const exercisesMap = new Map<string, { name: string; muscleGroup: string | null; sets: typeof log.sets; minSet: number }>();
@@ -74,9 +75,14 @@ export default async function LogViewPage({ params }: { params: Promise<{ logId:
                             <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Origin:</span>
                             <span className="text-[10px] font-black uppercase tracking-widest text-brand-400 italic">{log.user.name}</span>
                         </div>
-                        {isOwner && (
+                        {canEdit && (
                             <Suspense fallback={null}>
-                                <SessionActions logId={log.id} workoutId={log.workoutId} loggedAt={log.loggedAt.toISOString()} />
+                                <SessionActions
+                                    logId={log.id}
+                                    workoutId={log.workoutId}
+                                    loggedAt={log.loggedAt.toISOString()}
+                                    clientId={isOwner ? undefined : log.user.id}
+                                />
                             </Suspense>
                         )}
                     </div>
@@ -113,7 +119,7 @@ export default async function LogViewPage({ params }: { params: Promise<{ logId:
                             <WorkoutFeelingEditor
                                 logId={log.id}
                                 initialFeeling={log.feeling}
-                                canEdit={isOwner && log.status === "COMPLETED"}
+                                canEdit={canEdit && log.status === "COMPLETED"}
                                 align="right"
                             />
                         </div>

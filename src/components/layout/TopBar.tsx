@@ -9,7 +9,6 @@ import { useRole } from "@/lib/RoleContext";
 import { AccountNav } from "@/components/layout/AccountNav";
 import { formatRelative, roleLabels, roleBadgeClass, formatDate, getDayName, cn } from "@/lib/utils";
 import { useCurrentDate } from "@/hooks/useCurrentDate";
-import { useScrollLock } from "@/hooks/useScrollLock";
 import { getQuickReplyTemplate, supportsQuickReply, NOTIFICATION_TYPES } from "@/lib/notificationTypes";
 import { GainAccessModal } from "@/components/shared/GainAccessModal";
 
@@ -103,8 +102,6 @@ export function TopBar({ title, subtitle, showToday = false, streak, hideSearch 
     const [showGainAccess, setShowGainAccess] = useState(false);
     const notifRef = useRef<HTMLDivElement>(null);
     const isCoach = role === "COACH" || role === "SUPER_ADMIN";
-
-    useScrollLock(showNotifications);
 
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
@@ -228,7 +225,8 @@ export function TopBar({ title, subtitle, showToday = false, streak, hideSearch 
     };
 
     return (
-        <header className="h-16 flex items-center justify-between gap-2 px-4 sm:px-6 border-b border-surface-border bg-surface-card/80 glass sticky top-0 z-30 w-full max-w-full min-w-0">
+        <>
+        <header className="fixed top-0 left-0 right-0 md:left-[var(--sidebar-width)] h-16 flex items-center justify-between gap-2 px-4 sm:px-6 border-b border-surface-border bg-surface-card/80 glass z-40 w-full max-w-full min-w-0 overflow-visible">
             <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
                 {showToday ? (
                     <LiveTodayHeader />
@@ -281,7 +279,7 @@ export function TopBar({ title, subtitle, showToday = false, streak, hideSearch 
                         </button>
 
                         {showNotifications && (
-                            <div className="fixed left-1/2 top-16 z-50 w-[min(calc(100vw-2rem),24rem)] -translate-x-1/2 bg-surface-elevated border border-surface-border rounded-2xl shadow-modal overflow-hidden animate-slide-up md:absolute md:left-auto md:right-0 md:top-auto md:mt-2 md:translate-x-0 md:w-96">
+                            <div className="absolute right-0 top-full mt-2 z-50 w-[min(calc(100vw-2rem),24rem)] bg-surface-elevated border border-surface-border rounded-2xl shadow-modal overflow-hidden animate-slide-up sm:w-96">
                                 <div className="p-4 border-b border-surface-border bg-surface-card flex items-center justify-between">
                                     <h3 className="text-sm font-bold text-fg">Notifications</h3>
                                     {unreadCount > 0 && (
@@ -384,5 +382,7 @@ export function TopBar({ title, subtitle, showToday = false, streak, hideSearch 
 
             <GainAccessModal open={showGainAccess} onClose={() => setShowGainAccess(false)} />
         </header>
+        <div className="h-16 shrink-0" aria-hidden="true" />
+        </>
     );
 }

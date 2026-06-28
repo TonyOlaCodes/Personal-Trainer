@@ -533,30 +533,40 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
             </div>
 
             {/* Performance Intelligence Card (moved to top of details for better optimized hierarchy) */}
-            <div className="card p-6 border-brand-500/20 bg-gradient-brand/5 shadow-glow-brand-sm">
-                <div className="flex items-center gap-2 mb-6 text-brand-400">
-                    <Zap className="w-4 h-4" />
-                    <h4 className="text-[10px] font-black uppercase tracking-widest italic">Performance Intelligence</h4>
+            <div className="card w-fit max-w-full p-4 border-brand-500/20 bg-gradient-brand/5 shadow-glow-brand-sm">
+                <div className="flex items-center justify-between gap-4 mb-4 text-brand-400">
+                    <div className="flex items-center gap-2">
+                        <Zap className="w-4 h-4" />
+                        <h4 className="text-[10px] font-black uppercase tracking-widest italic">Performance Intelligence</h4>
+                    </div>
+                    <Link
+                        href={`/coach/calendar?clientId=${client.id}`}
+                        className="btn-icon h-8 w-8 text-brand-400 hover:text-brand-300 hover:bg-brand-500/10 border border-brand-500/20"
+                        title="Open client calendar"
+                        aria-label="Open client calendar"
+                    >
+                        <Calendar className="w-4 h-4" />
+                    </Link>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                    <div className="space-y-1">
-                        <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Adherence (30d)</p>
-                        <p className="text-2xl font-black text-fg leading-none italic">{client.adherencePercentage ?? 0}<span className="text-brand-400">%</span></p>
+                <div className="flex flex-wrap items-end gap-x-6 gap-y-3 sm:gap-x-8">
+                    <div className="space-y-0.5">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle whitespace-nowrap">Adherence (30d)</p>
+                        <p className="text-xl font-black text-fg leading-none italic">{client.adherencePercentage ?? 0}<span className="text-brand-400">%</span></p>
                     </div>
-                    <div className="space-y-1">
+                    <div className="space-y-0.5">
                         <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Workouts</p>
-                        <p className="text-2xl font-black text-fg leading-none italic">{workoutHistory.length}</p>
+                        <p className="text-xl font-black text-fg leading-none italic">{workoutHistory.length}</p>
                     </div>
-                    <div className="space-y-1">
-                        <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Avg Duration</p>
-                        <p className="text-2xl font-black text-fg leading-none italic">
+                    <div className="space-y-0.5">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle whitespace-nowrap">Avg Duration</p>
+                        <p className="text-xl font-black text-fg leading-none italic">
                             {avgDuration}<span className="text-xs text-indigo-400 ml-0.5 font-sans not-italic">m</span>
                         </p>
                     </div>
-                    <div className="space-y-1 text-right">
+                    <div className="space-y-0.5">
                         <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Trend</p>
                         <p className={cn(
-                            "text-2xl font-black leading-none italic font-mono",
+                            "text-xl font-black leading-none italic font-mono",
                             client.adherenceTrend === "UP" ? "text-success" : client.adherenceTrend === "DOWN" ? "text-danger" : "text-fg-muted"
                         )}>
                             {client.adherenceTrend === "UP" ? "↗" : client.adherenceTrend === "DOWN" ? "↘" : "→"}
