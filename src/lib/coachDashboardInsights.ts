@@ -39,8 +39,14 @@ export interface UpcomingEvent {
     id: string;
     clientId: string;
     clientName: string;
+    /** Workout name or check-in title */
     label: string;
     type: "checkin" | "workout";
+    /** Human-readable type, e.g. "Workout" or "Check-in" */
+    typeLabel: string;
+    dateKey: string;
+    /** Today, Tomorrow, or formatted date */
+    dateLabel: string;
     href: string;
 }
 
@@ -70,7 +76,7 @@ export interface ClientDashboardInsight {
 export interface CoachDashboardInsights {
     attentionItems: CoachAttentionItem[];
     activityFeed: CoachActivityItem[];
-    upcomingTomorrow: UpcomingEvent[];
+    upcomingEvents: UpcomingEvent[];
     clientInsights: Record<string, ClientDashboardInsight>;
     totals: {
         clientsNeedingAttention: number;
@@ -143,6 +149,21 @@ function buildCheckInLabel(
     return { status: "scheduled", label: `Next: ${dueState.dueDayLabel ?? "scheduled"}` };
 }
 
+function formatUpcomingDateLabel(dateKey: string, todayKey: string): string {
+    if (dateKey === todayKey) return "Today";
+    if (dateKey === shiftDateKey(todayKey, 1)) return "Tomorrow";
+    const [y, m, d] = dateKey.split("-").map(Number);
+    const date = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+    return new Intl.DateTimeFormat("en-GB", {
+        timeZone: APP_TIMEZONE,
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+    }).format(date);
+}
+
+const UPCOMING_LOOKAHEAD_DAYS = 7;
+
 function formatActivityTimestamp(date: Date | string): string {
     const parsed = new Date(date);
     const now = new Date();
@@ -175,9 +196,7 @@ export async function loadCoachDashboardInsights(input: {
     );
     const activeClientIds = activeClients.map((c) => c.id);
     const todayKey = getLocalTimeParts(new Date(), APP_TIMEZONE).dateKey;
-    const tomorrowKey = shiftDateKey(todayKey, 1);
     const today = parseLogDate(todayKey);
-    const tomorrow = parseLogDate(tomorrowKey);
     const weekStart = getMondayStart(today);
     const currentIsoWeek = getWeekNumber(today);
     const sevenDaysAgo = new Date(Date.now() - 7 * 86400000);
@@ -380,7 +399,7 @@ export async function loadCoachDashboardInsights(input: {
     let overdueCheckIns = 0;
     let setupNeeded = 0;
     const clientsNeedingAttentionIds = new Set<string>();
-    const upcomingTomorrow: UpcomingEvent[] = [];
+    const upcomingEvents: UpcomingEvent[] = [];
 
     for (const client of activeClients) {
         const userPlan = planByUserId.get(client.id);
@@ -459,48 +478,64 @@ export async function loadCoachDashboardInsights(input: {
             unreadMessages,
             needsAttention,
         };
+    }
 
-        const plannedTomorrow = getPlannedWorkoutForDate(activeUserPlan, tomorrow, { today });
-        if (plannedTomorrow) {
-            upcomingTomorrow.push({
-                id: `${client.id}-workout-${tomorrowKey}`,
-                clientId: client.id,
-                clientName: client.name,
-                label: plannedTomorrow.name,
-                type: "workout",
-                href: `/coach/client/${client.id}`,
-            });
+    for (const client of activeClients) {
+        const userPlan = planByUserId.get(client.id);
+        let activeUserPlan: ActiveUserPlanLike | null = null;
+        if (userPlan) {
+            activeUserPlan = {
+                startedAt: userPlan.startedAt,
+                plan: userPlan.plan,
+                scheduleRevisions: revisionsByPlanId[userPlan.plan.id] ?? [],
+            };
         }
 
-        const tomorrowDueState = getCheckInDueState(client.checkInSchedule, tomorrow);
-        if (
-            tomorrowDueState.isConfigured
-            && tomorrowDueState.isDueToday
-            && !hasCheckInThisWeek
-        ) {
-            upcomingTomorrow.push({
-                id: `${client.id}-checkin-${tomorrowKey}`,
-                clientId: client.id,
-                clientName: client.name,
-                label: "Weekly Check-in",
-                type: "checkin",
-                href: `/coach/client/${client.id}`,
-            });
-        } else if (
-            dueState.isConfigured
-            && dueState.daysUntilNext === 1
-            && !hasCheckInThisWeek
-        ) {
-            upcomingTomorrow.push({
-                id: `${client.id}-checkin-tomorrow`,
-                clientId: client.id,
-                clientName: client.name,
-                label: "Weekly Check-in",
-                type: "checkin",
-                href: `/coach/client/${client.id}`,
-            });
+        const hasCheckInThisWeek = Boolean(client.currentWeekCheckInId);
+
+        for (let dayOffset = 0; dayOffset <= UPCOMING_LOOKAHEAD_DAYS; dayOffset++) {
+            const dateKey = shiftDateKey(todayKey, dayOffset);
+            const date = parseLogDate(dateKey);
+
+            const plannedWorkout = getPlannedWorkoutForDate(activeUserPlan, date, { today });
+            if (plannedWorkout) {
+                upcomingEvents.push({
+                    id: `${client.id}-workout-${dateKey}`,
+                    clientId: client.id,
+                    clientName: client.name,
+                    type: "workout",
+                    typeLabel: "Workout",
+                    label: plannedWorkout.name,
+                    dateKey,
+                    dateLabel: formatUpcomingDateLabel(dateKey, todayKey),
+                    href: `/coach/client/${client.id}`,
+                });
+            }
+
+            if (!hasCheckInThisWeek && client.checkInSchedule) {
+                const dueOnDate = getCheckInDueState(client.checkInSchedule, date);
+                if (dueOnDate.isConfigured && dueOnDate.isDueToday) {
+                    upcomingEvents.push({
+                        id: `${client.id}-checkin-${dateKey}`,
+                        clientId: client.id,
+                        clientName: client.name,
+                        type: "checkin",
+                        typeLabel: "Check-in",
+                        label: "Weekly check-in",
+                        dateKey,
+                        dateLabel: formatUpcomingDateLabel(dateKey, todayKey),
+                        href: `/coach/client/${client.id}`,
+                    });
+                }
+            }
         }
     }
+
+    upcomingEvents.sort((a, b) => {
+        if (a.dateKey !== b.dateKey) return a.dateKey.localeCompare(b.dateKey);
+        if (a.type !== b.type) return a.type === "checkin" ? -1 : 1;
+        return a.clientName.localeCompare(b.clientName, undefined, { sensitivity: "base" });
+    });
 
     const unreadTotal = Object.values(unreadByPeer).reduce((sum, n) => sum + n, 0);
     const activeWorkoutsNow = Object.values(input.activeSessions).filter(Boolean).length;
@@ -521,14 +556,14 @@ export async function loadCoachDashboardInsights(input: {
             key: "overdue-checkins",
             label: "Overdue check-ins",
             count: overdueCheckIns,
-            href: "/checkins",
+            href: "/checkins?view=overdue",
             urgent: overdueCheckIns > 0,
         },
         {
             key: "pending-reviews",
             label: "Pending check-ins to review",
             count: input.pendingReviewCount,
-            href: "/checkins",
+            href: "/checkins?status=PENDING",
             urgent: input.pendingReviewCount > 0,
         },
         {
@@ -595,14 +630,12 @@ export async function loadCoachDashboardInsights(input: {
         })),
     ]
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-        .slice(0, 12);
-
-    upcomingTomorrow.sort((a, b) => a.clientName.localeCompare(b.clientName));
+        .slice(0, 30);
 
     return {
         attentionItems,
         activityFeed,
-        upcomingTomorrow,
+        upcomingEvents,
         clientInsights,
         totals: {
             clientsNeedingAttention: clientsNeedingAttentionIds.size,

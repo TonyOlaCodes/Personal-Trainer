@@ -323,6 +323,7 @@ export default async function DashboardPage() {
                                 latestSleepHours: dailyMetrics?.latest?.sleepHours ?? null,
                                 targets: dailyMetrics?.targets ?? { targetCalories: null, targetSteps: null, targetSleepHours: null },
                             }}
+                            streak={streak}
                         />
                 </div>
             </>

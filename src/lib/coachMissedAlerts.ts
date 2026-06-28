@@ -5,6 +5,7 @@ import {
     DEFAULT_MISSED_NOTIFY_TIME,
     getLocalTimeParts,
     localDayBoundsUtc,
+    localTimeMatchesNotifySlot,
     shiftDateKey,
     shouldDeliverMissedAlertNow,
 } from "@/lib/coachNotificationSchedule";
@@ -110,6 +111,7 @@ async function processMissedCheckInsForClients(dateKey: string, timezone: string
         },
         select: {
             id: true,
+            email: true,
             isDeleted: true,
             isDeactivated: true,
             checkIns: {
@@ -160,13 +162,14 @@ async function processMissedCheckInsForClients(dateKey: string, timezone: string
 async function processMissedWorkoutsForCoach(
     coachId: string,
     dateKey: string,
-    timezone: string
+    timezone: string,
+    referenceDate: Date
 ) {
     if (!(await userWantsNotification(coachId, "notifyOnMissedWorkout"))) {
         return 0;
     }
 
-    const { start: dayStart, end: dayEnd } = localDayBoundsUtc(dateKey, timezone);
+    const lookbackStart = new Date(referenceDate.getTime() - 14 * 86400000);
 
     const clients = await prisma.user.findMany({
         where: {
@@ -210,9 +213,9 @@ async function processMissedWorkoutsForCoach(
             workoutLogs: {
                 where: {
                     status: "COMPLETED",
-                    loggedAt: { gte: dayStart, lte: dayEnd },
+                    loggedAt: { gte: lookbackStart },
                 },
-                select: { workoutId: true },
+                select: { workoutId: true, loggedAt: true },
             },
         },
     });
@@ -223,7 +226,9 @@ async function processMissedWorkoutsForCoach(
             .filter((id): id is string => Boolean(id))
     )];
     const revisionsByPlanId = await loadPlanScheduleRevisionsByPlanIds(planIds);
-    const today = parseLogDate(getLocalTimeParts(new Date(), timezone).dateKey);
+    const todayKey = getLocalTimeParts(referenceDate, timezone).dateKey;
+    const today = parseLogDate(todayKey);
+    const { start: dayStart } = localDayBoundsUtc(dateKey, timezone);
 
     let sent = 0;
     for (const client of clients) {
@@ -244,7 +249,10 @@ async function processMissedWorkoutsForCoach(
         );
         if (!plannedWorkout) continue;
 
-        const completed = client.workoutLogs.some((log) => log.workoutId === plannedWorkout.id);
+        const completed = client.workoutLogs.some((log) => {
+            if (log.workoutId !== plannedWorkout.id) return false;
+            return getLocalTimeParts(log.loggedAt, timezone).dateKey === dateKey;
+        });
         if (completed) continue;
 
         const dedupeEntityId = `${client.id}:${dateKey}:${plannedWorkout.id}`;
@@ -269,6 +277,16 @@ async function processMissedWorkoutsForCoach(
     }
 
     return sent;
+}
+
+function shouldRunMissedWorkoutAlert(referenceDate: Date, timezone: string, notifyTime: string): boolean {
+    if (!notifyTime) return false;
+    // Primary: within the configured morning window (matches hourly / multi-slot crons).
+    if (localTimeMatchesNotifySlot(referenceDate, timezone, notifyTime, 90)) {
+        return true;
+    }
+    // Fallback: any later cron the same day still delivers if the morning run was missed.
+    return shouldDeliverMissedAlertNow(referenceDate, timezone, notifyTime);
 }
 
 /** Daily cron: deliver queued alerts and run missed scans for the previous due day. */
@@ -309,9 +327,14 @@ export async function processScheduledCoachAlerts(referenceDate = new Date()) {
 
         if (
             schedule.notifyOnMissedWorkoutTime
-            && shouldDeliverMissedAlertNow(referenceDate, schedule.timezone, schedule.notifyOnMissedWorkoutTime)
+            && shouldRunMissedWorkoutAlert(referenceDate, schedule.timezone, schedule.notifyOnMissedWorkoutTime)
         ) {
-            missedWorkouts += await processMissedWorkoutsForCoach(coach.id, scanDateKey, schedule.timezone);
+            missedWorkouts += await processMissedWorkoutsForCoach(
+                coach.id,
+                scanDateKey,
+                schedule.timezone,
+                referenceDate
+            );
         }
     }
 

@@ -5,6 +5,7 @@ import {
     DEFAULT_MISSED_NOTIFY_TIME,
     type CoachNotificationPref,
     deliveryModeForPref,
+    isValidTimezone,
     nextDeliveryUtc,
     normalizeNotifyTime,
     type CoachNotificationSchedule,
@@ -126,6 +127,7 @@ export async function getCoachNotificationSchedule(coachId: string): Promise<Coa
     const user = await prisma.user.findUnique({
         where: { id: coachId },
         select: {
+            notificationTimezone: true,
             notifyOnWorkoutTime: true,
             notifyOnCheckInTime: true,
             notifyOnMetricUpdateTime: true,
@@ -134,8 +136,13 @@ export async function getCoachNotificationSchedule(coachId: string): Promise<Coa
         },
     });
 
+    const timezone =
+        user?.notificationTimezone && isValidTimezone(user.notificationTimezone)
+            ? user.notificationTimezone
+            : APP_TIMEZONE;
+
     return {
-        timezone: APP_TIMEZONE,
+        timezone,
         notifyOnWorkoutTime: normalizeNotifyTime(user?.notifyOnWorkoutTime),
         notifyOnCheckInTime: normalizeNotifyTime(user?.notifyOnCheckInTime),
         notifyOnMetricUpdateTime: normalizeNotifyTime(user?.notifyOnMetricUpdateTime),

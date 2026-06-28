@@ -5,8 +5,8 @@ import {
     Activity, Calendar,
     ChevronRight,
     Dumbbell, Loader2, AlertTriangle, MessageCircle,
-    ClipboardCheck, Scale, Trophy, Clock, Target,
-    Flame, Bell, ArrowUpRight, CheckCircle2
+    ClipboardCheck, Scale, Trophy, Clock,
+    Bell, ArrowUpRight, CheckCircle2, Users,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -14,14 +14,18 @@ import { cn, formatDate, getInitials } from "@/lib/utils";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { getPresenceIndicator, formatLastActiveText } from "@/lib/userPresence";
 import { PendingReviewsModal, type PendingReviewItem } from "@/components/shared/PendingReviewsModal";
+import { StreakBadge } from "@/components/shared/StreakBadge";
 import { formatCoachPlanLabel } from "@/lib/coachPlans";
 import {
     formatActivityTimestamp,
     type CoachDashboardInsights,
     type ClientDashboardInsight,
+    type UpcomingEvent,
 } from "@/lib/coachDashboardInsights";
 
 const CHECK_IN_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const ACTIVITY_PREVIEW_COUNT = 8;
+const UPCOMING_PREVIEW_COUNT = 6;
 
 interface Client {
     id: string;
@@ -30,7 +34,6 @@ interface Client {
     avatarUrl?: string | null;
     lastActiveAt?: string | null;
     activeSession?: { workoutName: string; logId: string; workoutId: string } | null;
-    isDeleted?: boolean;
     hasCheckInSchedule?: boolean;
     checkInSchedule: { day: number | null; frequencyWeeks: number | null; startDate: string | null };
     targetCalories: number | null;
@@ -70,11 +73,118 @@ const ACTIVITY_ICONS = {
     pr: Trophy,
 } as const;
 
-function goalProgressLabel(client: Client): string | null {
-    if (client.targetWeightKg == null) return null;
-    const current = client.currentWeightKg;
-    if (current == null) return `Goal: ${client.targetWeightKg} kg`;
-    return `${current.toFixed(1)} → ${client.targetWeightKg} kg`;
+function roundWeightKg(n: number) {
+    return Math.round(n * 10) / 10;
+}
+
+function buildClientWeightSeries(client: Client): { date: string; weightKg: number }[] {
+    const byDate = new Map<string, number>();
+    for (const row of client.bodyweightHistory) {
+        byDate.set(row.date, row.weightKg);
+    }
+    for (const checkIn of client.recentCheckIns) {
+        if (checkIn.bodyweightKg != null) {
+            const date = checkIn.date.slice(0, 10);
+            byDate.set(date, checkIn.bodyweightKg);
+        }
+    }
+    return [...byDate.entries()]
+        .map(([date, weightKg]) => ({ date, weightKg }))
+        .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function computeSevenDayWeightChange(history: { date: string; weightKg: number }[]): {
+    changeKg: number;
+    startWeight: number;
+    endWeight: number;
+} | null {
+    if (history.length === 0) return null;
+
+    const today = new Date();
+    const cutoff = new Date(today);
+    cutoff.setDate(cutoff.getDate() - 7);
+    const cutoffKey = cutoff.toISOString().slice(0, 10);
+
+    const sorted = [...history].sort((a, b) => a.date.localeCompare(b.date));
+    const latest = sorted[sorted.length - 1];
+    if (latest.date < cutoffKey) return null;
+
+    const inWindow = sorted.filter((row) => row.date >= cutoffKey);
+    let baseline = inWindow[0] ?? latest;
+    if (inWindow.length === 0) {
+        const before = sorted.filter((row) => row.date <= cutoffKey);
+        baseline = before.length > 0 ? before[before.length - 1]! : sorted[0]!;
+    } else if (inWindow.length === 1) {
+        const before = sorted.filter((row) => row.date < inWindow[0]!.date);
+        if (before.length > 0) baseline = before[before.length - 1]!;
+    } else {
+        baseline = inWindow[0]!;
+    }
+
+    const changeKg = roundWeightKg(latest.weightKg - baseline.weightKg);
+    return { changeKg, startWeight: baseline.weightKg, endWeight: latest.weightKg };
+}
+
+function isWeightChangeTowardGoal(
+    changeKg: number,
+    goal: string | null | undefined,
+    targetWeightKg: number | null | undefined,
+    startWeight: number,
+    endWeight: number
+): boolean | null {
+    if (Math.abs(changeKg) < 0.05) return true;
+
+    if (targetWeightKg != null && targetWeightKg > 0) {
+        const startDistance = Math.abs(startWeight - targetWeightKg);
+        const endDistance = Math.abs(endWeight - targetWeightKg);
+        if (endDistance < startDistance - 0.05) return true;
+        if (endDistance > startDistance + 0.05) return false;
+    }
+
+    switch (goal) {
+        case "LOSE_WEIGHT":
+            return changeKg < 0;
+        case "GAIN_MUSCLE":
+        case "STRENGTH":
+            return changeKg > 0;
+        case "RECOMPOSITION":
+            return Math.abs(changeKg) <= 0.5;
+        default:
+            if (targetWeightKg != null && targetWeightKg > 0) {
+                return Math.abs(endWeight - targetWeightKg) <= Math.abs(startWeight - targetWeightKg);
+            }
+            return null;
+    }
+}
+
+function SevenDayWeightBadge({ client }: { client: Client }) {
+    const series = buildClientWeightSeries(client);
+    const delta = computeSevenDayWeightChange(series);
+    if (!delta) return null;
+
+    const towardGoal = isWeightChangeTowardGoal(
+        delta.changeKg,
+        client.goal,
+        client.targetWeightKg,
+        delta.startWeight,
+        delta.endWeight
+    );
+
+    const formatted = `${delta.changeKg > 0 ? "+" : ""}${delta.changeKg.toFixed(1)} kg`;
+
+    return (
+        <span
+            className={cn(
+                "text-[10px] font-black px-2 py-0.5 rounded-md border tabular-nums shrink-0",
+                towardGoal === true && "text-success bg-success/10 border-success/25",
+                towardGoal === false && "text-red-400 bg-red-400/10 border-red-400/25",
+                towardGoal === null && "text-fg-muted bg-surface-muted/50 border-surface-border"
+            )}
+            title="Weight change over the last 7 days"
+        >
+            {formatted}
+        </span>
+    );
 }
 
 function ClientInsightRow({
@@ -85,8 +195,6 @@ function ClientInsightRow({
     client: Client;
 }) {
     if (!insight) return null;
-
-    const goalLabel = goalProgressLabel(client);
 
     return (
         <div className="space-y-2 border-t border-surface-border pt-4">
@@ -107,10 +215,7 @@ function ClientInsightRow({
                     </span>
                 )}
                 {insight.workoutStreak > 0 && (
-                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg border bg-brand-500/10 text-brand-400 border-brand-500/20 flex items-center gap-1">
-                        <Flame className="w-3 h-3" />
-                        {insight.workoutStreak}d streak
-                    </span>
+                    <StreakBadge streak={insight.workoutStreak} size="sm" showLabel />
                 )}
             </div>
             <div className="grid grid-cols-2 gap-2">
@@ -134,12 +239,6 @@ function ClientInsightRow({
                     </p>
                 </div>
             </div>
-            {goalLabel && (
-                <div className="flex items-center gap-1.5 text-xs text-fg-muted">
-                    <Target className="w-3.5 h-3.5 text-brand-400 shrink-0" />
-                    <span className="truncate">{goalLabel}</span>
-                </div>
-            )}
             {insight.unreadMessages > 0 && (
                 <p className="text-[10px] font-bold text-brand-400 flex items-center gap-1">
                     <MessageCircle className="w-3 h-3" />
@@ -155,10 +254,37 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
     const [skippedClients, setSkippedClients] = useState<string[]>([]);
     const [savingSetup, setSavingSetup] = useState(false);
     const [showPendingReviews, setShowPendingReviews] = useState(false);
+    const [showAllActivity, setShowAllActivity] = useState(false);
+    const [showAllUpcoming, setShowAllUpcoming] = useState(false);
+
+    const visibleActivity = useMemo(() => {
+        const feed = insights.activityFeed;
+        if (showAllActivity) return feed;
+        return feed.slice(0, ACTIVITY_PREVIEW_COUNT);
+    }, [insights.activityFeed, showAllActivity]);
+
+    const hasMoreActivity = insights.activityFeed.length > ACTIVITY_PREVIEW_COUNT;
+
+    const visibleUpcoming = useMemo(() => {
+        const events = insights.upcomingEvents;
+        if (showAllUpcoming) return events;
+        return events.slice(0, UPCOMING_PREVIEW_COUNT);
+    }, [insights.upcomingEvents, showAllUpcoming]);
+
+    const hasMoreUpcoming = insights.upcomingEvents.length > UPCOMING_PREVIEW_COUNT;
+
+    const upcomingByDate = useMemo(() => {
+        const groups = new Map<string, UpcomingEvent[]>();
+        for (const event of visibleUpcoming) {
+            const rows = groups.get(event.dateLabel) ?? [];
+            rows.push(event);
+            groups.set(event.dateLabel, rows);
+        }
+        return groups;
+    }, [visibleUpcoming]);
 
     const sortedClients = useMemo(() => {
         return [...clients].sort((a, b) => {
-            if (a.isDeleted !== b.isDeleted) return a.isDeleted ? 1 : -1;
             const aAttention = insights.clientInsights[a.id]?.needsAttention ? 0 : 1;
             const bAttention = insights.clientInsights[b.id]?.needsAttention ? 0 : 1;
             if (aAttention !== bAttention) return aAttention - bAttention;
@@ -167,12 +293,10 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
     }, [clients, insights.clientInsights]);
 
     const pendingCheckIns = pendingReviews.length;
-    const activeClients = clients.filter(c => !c.isDeleted);
-    const deletedClients = clients.filter(c => c.isDeleted);
     const { totals } = insights;
 
     // Queue of clients who need onboarding setup and haven't been skipped
-    const needsSetupClients = activeClients.filter(c => !c.hasCheckInSchedule && !skippedClients.includes(c.id));
+    const needsSetupClients = clients.filter(c => !c.hasCheckInSchedule && !skippedClients.includes(c.id));
     const currentSetupClient = needsSetupClients[0];
 
     // Local form states for wizard
@@ -453,6 +577,14 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
             {/* Actionable stat cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <Link
+                    href="#clients"
+                    className="stat-card transition-all hover:border-brand-500/40 hover:bg-brand-500/5"
+                >
+                    <Users className="w-4 h-4 text-brand-400 mb-1" />
+                    <p className="stat-value">{clients.length}</p>
+                    <p className="stat-label">Active Clients</p>
+                </Link>
+                <Link
                     href="#needs-attention"
                     className={cn(
                         "stat-card transition-all hover:border-brand-500/40 hover:bg-brand-500/5",
@@ -480,17 +612,6 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                     <p className="stat-value">{pendingCheckIns}</p>
                     <p className="stat-label">Check-ins to Review</p>
                 </button>
-                <Link
-                    href="/chat"
-                    className={cn(
-                        "stat-card transition-all hover:border-brand-500/40 hover:bg-brand-500/5",
-                        totals.unreadMessages > 0 && "border-brand-500/20"
-                    )}
-                >
-                    <MessageCircle className="w-4 h-4 text-brand-300 mb-1" />
-                    <p className="stat-value">{totals.unreadMessages}</p>
-                    <p className="stat-label">Unread Messages</p>
-                </Link>
                 <Link
                     href="#clients"
                     className={cn(
@@ -567,35 +688,73 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                     <Link href="/coach/calendar" className="text-xs text-brand-400 hover:underline">Calendar</Link>
                 </div>
                 <div className="card p-4 sm:p-5">
-                    <p className="text-[10px] font-black text-brand-400 uppercase tracking-widest mb-3">Tomorrow</p>
-                    {insights.upcomingTomorrow.length === 0 ? (
-                        <p className="text-sm text-fg-muted">Nothing scheduled for tomorrow yet.</p>
+                    <p className="text-[10px] font-black text-brand-400 uppercase tracking-widest mb-3">
+                        Next 7 days
+                    </p>
+                    {insights.upcomingEvents.length === 0 ? (
+                        <p className="text-sm text-fg-muted">Nothing scheduled in the next 7 days.</p>
                     ) : (
-                        <ul className="space-y-2">
-                            {insights.upcomingTomorrow.map((event) => (
-                                <li key={event.id}>
-                                    <Link
-                                        href={event.href}
-                                        className="flex items-center justify-between gap-3 py-2 px-3 rounded-xl hover:bg-surface-muted/40 transition-colors group"
-                                    >
-                                        <div className="flex items-center gap-3 min-w-0">
-                                            {event.type === "checkin" ? (
-                                                <ClipboardCheck className="w-4 h-4 text-brand-400 shrink-0" />
-                                            ) : (
-                                                <Dumbbell className="w-4 h-4 text-success shrink-0" />
-                                            )}
-                                            <span className="text-sm font-semibold text-fg truncate">
-                                                {event.clientName}
-                                            </span>
-                                            <span className="text-xs text-fg-muted truncate hidden sm:inline">
-                                                {event.label}
-                                            </span>
-                                        </div>
-                                        <ChevronRight className="w-4 h-4 text-fg-subtle group-hover:text-brand-400 shrink-0" />
-                                    </Link>
-                                </li>
+                        <div className="space-y-4">
+                            {[...upcomingByDate.entries()].map(([dateLabel, events]) => (
+                                <div key={dateLabel}>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle mb-2 px-1">
+                                        {dateLabel}
+                                    </p>
+                                    <ul className="space-y-2">
+                                        {events.map((event) => (
+                                            <li key={event.id}>
+                                                <Link
+                                                    href={event.href}
+                                                    className="flex items-center justify-between gap-3 py-2.5 px-3 rounded-xl hover:bg-surface-muted/40 transition-colors group border border-transparent hover:border-surface-border"
+                                                >
+                                                    <div className="flex items-start gap-3 min-w-0">
+                                                        <div className={cn(
+                                                            "w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5",
+                                                            event.type === "checkin"
+                                                                ? "bg-brand-400/10"
+                                                                : "bg-success/10"
+                                                        )}>
+                                                            {event.type === "checkin" ? (
+                                                                <ClipboardCheck className="w-4 h-4 text-brand-400" />
+                                                            ) : (
+                                                                <Dumbbell className="w-4 h-4 text-success" />
+                                                            )}
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <p className="text-sm font-black text-fg truncate group-hover:text-brand-400 transition-colors">
+                                                                {event.clientName}
+                                                            </p>
+                                                            <p className="text-xs text-fg-muted mt-0.5">
+                                                                <span className={cn(
+                                                                    "font-bold",
+                                                                    event.type === "checkin" ? "text-brand-300" : "text-success"
+                                                                )}>
+                                                                    {event.typeLabel}
+                                                                </span>
+                                                                {" · "}
+                                                                {event.label}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    <ChevronRight className="w-4 h-4 text-fg-subtle group-hover:text-brand-400 shrink-0" />
+                                                </Link>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
                             ))}
-                        </ul>
+                        </div>
+                    )}
+                    {hasMoreUpcoming && (
+                        <button
+                            type="button"
+                            onClick={() => setShowAllUpcoming((prev) => !prev)}
+                            className="w-full text-center text-xs font-bold text-brand-400 hover:text-brand-300 transition-colors pt-4 mt-2 border-t border-surface-border"
+                        >
+                            {showAllUpcoming
+                                ? "Show less"
+                                : `View more (${insights.upcomingEvents.length - UPCOMING_PREVIEW_COUNT} more)`}
+                        </button>
                     )}
                 </div>
             </section>
@@ -605,7 +764,7 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                 <div id="clients" className="lg:col-span-2 space-y-4 scroll-mt-6">
                     <div className="flex items-center justify-between px-2">
                         <h3 className="heading-3">My Clients</h3>
-                        <span className="text-xs text-fg-subtle">{activeClients.length} active</span>
+                        <span className="text-xs text-fg-subtle">{clients.length} active</span>
                     </div>
 
                     <div className="grid sm:grid-cols-2 gap-4">
@@ -615,33 +774,26 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                             </div>
                         ) : (
                             sortedClients.map((c) => {
-                                const session = c.isDeleted ? null : c.activeSession ?? null;
-                                const presence = c.isDeleted || session ? null : getPresenceIndicator(c.lastActiveAt);
+                                const session = c.activeSession ?? null;
+                                const presence = session ? null : getPresenceIndicator(c.lastActiveAt);
                                 const insight = insights.clientInsights[c.id];
-                                const lastActiveLabel = c.isDeleted
-                                    ? "Inactive account"
-                                    : session
-                                        ? `In workout · ${session.workoutName}`
-                                        : formatLastActiveText(c.lastActiveAt);
+                                const lastActiveLabel = session
+                                    ? `In workout · ${session.workoutName}`
+                                    : formatLastActiveText(c.lastActiveAt);
                                 return (
                                 <Link
                                     key={c.id}
                                     href={`/coach/client/${c.id}`}
                                     className={cn(
                                         "card p-5 group transition-all",
-                                        c.isDeleted
-                                            ? "opacity-70 grayscale hover:border-surface-border"
-                                            : insight?.needsAttention
-                                                ? "border-warning/25 hover:border-warning/40"
-                                                : "hover:border-brand-600/40"
+                                        insight?.needsAttention
+                                            ? "border-warning/25 hover:border-warning/40"
+                                            : "hover:border-brand-600/40"
                                     )}
                                 >
                                     <div className="flex items-center gap-4 mb-1">
                                         <div className="relative shrink-0">
-                                            <div className={cn(
-                                                "w-12 h-12 rounded-2xl flex items-center justify-center text-sm font-bold text-white shadow-glow-sm overflow-hidden",
-                                                c.isDeleted ? "bg-surface-muted text-fg-subtle" : "bg-gradient-brand"
-                                            )}>
+                                            <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-sm font-bold text-white shadow-glow-sm overflow-hidden bg-gradient-brand">
                                                 {c.avatarUrl ? <img src={resolveUploadUrl(c.avatarUrl)} alt="avatar" className="w-full h-full object-cover rounded-2xl" /> : getInitials(c.name)}
                                             </div>
                                             {session ? (
@@ -662,15 +814,13 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                                         <div className="min-w-0 flex-1">
                                             <div className="flex items-center gap-2 flex-wrap">
                                                 <p className="font-bold text-fg group-hover:text-brand-400 transition-colors truncate">{c.name}</p>
-                                                {c.isDeleted && (
-                                                    <span className="badge-muted text-[9px] uppercase tracking-widest">Deleted</span>
-                                                )}
-                                                {!c.isDeleted && !c.hasCheckInSchedule && (
+                                                <SevenDayWeightBadge client={c} />
+                                                {!c.hasCheckInSchedule && (
                                                     <span className="text-[8px] uppercase font-black px-2 py-0.5 rounded-full border border-warning/30 bg-warning/10 text-warning shrink-0">
                                                         Setup needed
                                                     </span>
                                                 )}
-                                                {!c.isDeleted && insight?.needsAttention && (
+                                                {insight?.needsAttention && (
                                                     <span className="text-[8px] uppercase font-black px-2 py-0.5 rounded-full border border-warning/30 bg-warning/10 text-warning shrink-0">
                                                         Needs attention
                                                     </span>
@@ -685,31 +835,12 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                                             </p>
                                         </div>
                                     </div>
-                                    {!c.isDeleted && (
-                                        <ClientInsightRow insight={insight} client={c} />
-                                    )}
-                                    {c.isDeleted && (
-                                        <div className="grid grid-cols-2 gap-2 border-t border-surface-border pt-4 mt-4">
-                                            <div>
-                                                <p className="text-[10px] text-fg-subtle uppercase font-bold tracking-widest">Logs</p>
-                                                <p className="text-sm font-semibold text-fg">{c.stats.logs}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[10px] text-fg-subtle uppercase font-bold tracking-widest">Check-ins</p>
-                                                <p className="text-sm font-semibold text-fg">{c.stats.checkins}</p>
-                                            </div>
-                                        </div>
-                                    )}
+                                    <ClientInsightRow insight={insight} client={c} />
                                 </Link>
                                 );
                             })
                         )}
                     </div>
-                    {deletedClients.length > 0 && (
-                        <p className="px-2 text-xs text-fg-subtle">
-                            Deleted or deactivated clients are listed at the bottom for reference only; their account data has been removed.
-                        </p>
-                    )}
                 </div>
 
                 {/* Sidebar: Activity + Quick Reviews */}
@@ -722,7 +853,7 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                             {insights.activityFeed.length === 0 ? (
                                 <p className="p-4 text-sm text-fg-muted">No recent client activity in the last 7 days.</p>
                             ) : (
-                                insights.activityFeed.map((item) => {
+                                visibleActivity.map((item) => {
                                     const Icon = ACTIVITY_ICONS[item.type];
                                     return (
                                         <Link
@@ -749,6 +880,17 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                                 })
                             )}
                         </div>
+                        {hasMoreActivity && (
+                            <button
+                                type="button"
+                                onClick={() => setShowAllActivity((prev) => !prev)}
+                                className="w-full text-center text-xs font-bold text-brand-400 hover:text-brand-300 transition-colors py-2"
+                            >
+                                {showAllActivity
+                                    ? "Show less"
+                                    : `View more (${insights.activityFeed.length - ACTIVITY_PREVIEW_COUNT} more)`}
+                            </button>
+                        )}
                     </div>
 
                     <div className="space-y-4">

@@ -12,6 +12,7 @@ import { SafeFallback, rethrowNextInternalErrors } from "@/components/shared/Saf
 import { withResolvedCheckInMedia } from "@/lib/uploadUrls";
 import { formatErrorDetails } from "@/lib/ensureAppSchema";
 import { canAccessCheckIns } from "@/lib/roles";
+import { getOverdueCheckInClientsForCoach } from "@/lib/coachOverdueCheckIns";
 
 export const metadata = { title: "Check-ins" };
 
@@ -92,6 +93,7 @@ export default async function CheckInsPage() {
             ? { averageWeightKg: null, entries: 0, windowLabel: "since last check-in" as const }
             : await getBodyweightAverageSinceLastCheckIn(user.id, todayDate, user.createdAt);
         const checkInSchedule = isCoach ? null : await getUserCheckInSchedule(user.id);
+        const overdueClients = isCoach ? await getOverdueCheckInClientsForCoach(user.id) : [];
         const checkInDueState = checkInSchedule
             ? getCheckInDueState(checkInSchedule, new Date())
             : {
@@ -147,6 +149,7 @@ export default async function CheckInsPage() {
                         checkInDueState={checkInDueState}
                         checkInSchedule={checkInSchedule ?? undefined}
                         hiddenGoals={user.hiddenGoals ?? []}
+                        overdueClients={overdueClients}
                     />
                     </Suspense>
                 </div>

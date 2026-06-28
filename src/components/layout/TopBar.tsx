@@ -2,7 +2,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { Bell, Search, Flame, X } from "lucide-react";
+import { Bell, Search, X } from "lucide-react";
+import { StreakBadge } from "@/components/shared/StreakBadge";
 import { useRouter } from "next/navigation";
 import { useRole } from "@/lib/RoleContext";
 import { AccountNav } from "@/components/layout/AccountNav";
@@ -226,13 +227,7 @@ export function TopBar({ title, subtitle, showToday = false, streak, hideSearch 
                     </div>
                 )}
                 {streak !== undefined && streak > 0 && (
-                    <div 
-                        title="Your training streak — consecutive days with at least one workout logged."
-                        className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-500/10 border border-orange-500/20 text-orange-400 cursor-help group transition-all hover:bg-orange-500/20"
-                    >
-                        <Flame className="w-4 h-4 fill-current transition-transform group-hover:scale-110" />
-                        <span className="text-sm font-black italic tracking-tighter">{streak}</span>
-                    </div>
+                    <StreakBadge streak={streak} size="md" showLabel />
                 )}
             </div>
 

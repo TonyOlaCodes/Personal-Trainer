@@ -22,6 +22,11 @@ export default async function CoachDashboardPage() {
         where: { clerkId: userId },
         include: {
             clients: {
+                where: {
+                    isDeleted: false,
+                    isDeactivated: false,
+                    NOT: { email: { endsWith: "@deleted.local" } },
+                },
                 select: {
                     id: true, name: true, email: true, role: true, avatarUrl: true,
                     isDeleted: true, isDeactivated: true, lastActiveAt: true,
@@ -58,7 +63,14 @@ export default async function CoachDashboardPage() {
 
     const [recentCheckIns, pendingReviews, bodyweightRows, allCoachPlans, activeClientPlans, inviteClientPlans] = await Promise.all([
         prisma.checkIn.findMany({
-            where: { user: { coachId: coach.id } },
+            where: {
+                user: {
+                    coachId: coach.id,
+                    isDeleted: false,
+                    isDeactivated: false,
+                    NOT: { email: { endsWith: "@deleted.local" } },
+                },
+            },
             include: { user: { select: { name: true } } },
             orderBy: { createdAt: "desc" },
             take: 5
@@ -151,12 +163,11 @@ export default async function CoachDashboardPage() {
         coachId: coach.id,
         clients: coach.clients.map((client) => {
             const extra = extraDataByClientId.get(client.id);
-            const isDeleted = client.isDeleted || client.isDeactivated || client.email.endsWith("@deleted.local");
             return {
                 id: client.id,
                 name: client.name || "Unnamed Client",
-                isDeleted,
-                isDeactivated: client.isDeactivated,
+                isDeleted: false,
+                isDeactivated: false,
                 email: client.email,
                 hasCheckInSchedule: extra?.schedule?.day !== null,
                 checkInSchedule: extra?.schedule ?? { day: null, frequencyWeeks: null, startDate: null },
@@ -182,7 +193,6 @@ export default async function CoachDashboardPage() {
                             email: c.email,
                             avatarUrl: c.avatarUrl,
                             lastActiveAt: c.lastActiveAt?.toISOString() ?? null,
-                            isDeleted: c.isDeleted || c.isDeactivated || c.email.endsWith("@deleted.local"),
                             goal: c.goal,
                             currentWeightKg: c.weightKg,
                             targetWeightKg: c.targetWeightKg,

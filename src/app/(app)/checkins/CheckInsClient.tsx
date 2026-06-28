@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import {
     Scale, Send, Check, Camera, Calendar, MessageSquare, CheckCircle2,
     Zap, Moon, UtensilsCrossed, Brain, Activity, ChevronDown, AlertCircle,
@@ -65,6 +66,13 @@ interface Props {
         startDate: string | null;
     };
     hiddenGoals?: string[] | null;
+    overdueClients?: Array<{
+        id: string;
+        name: string;
+        label: string;
+        weekNumber: number;
+        isOverdue: boolean;
+    }>;
 }
 
 /* ─────────────────── Rating bar component ───────────────────── */
@@ -562,10 +570,12 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highl
 /* ═══════════════════════════════════════════════════════════════
    Main Component
    ═══════════════════════════════════════════════════════════════ */
-export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWeightKg, workoutsThisWeek, workoutsTarget, bodyweightSinceLastCheckIn, checkInDueState, checkInSchedule, hiddenGoals }: Props) {
+export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWeightKg, workoutsThisWeek, workoutsTarget, bodyweightSinceLastCheckIn, checkInDueState, checkInSchedule, hiddenGoals, overdueClients = [] }: Props) {
     const searchParams = useSearchParams();
     const highlightedCheckInId = searchParams.get("highlight");
     const statusParam = searchParams.get("status");
+    const viewParam = searchParams.get("view");
+    const coachView = viewParam === "overdue" ? "overdue" : "submissions";
     const initialStatusFilter =
         statusParam === "PENDING" || statusParam === "REVIEWED" ? statusParam : "ALL";
     const isPremium = ["PREMIUM", "GENERAL_PREMIUM", "COACH", "SUPER_ADMIN"].includes(userRole);
@@ -856,10 +866,85 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                 <div className="mb-4">
                     <h2 className="text-xl font-black text-fg">Client Check-ins</h2>
                     <p className="text-xs text-fg-muted mt-0.5">
-                        {checkIns.filter(c => c.status === "PENDING").length} pending · {checkIns.length} total
+                        {overdueClients.length} overdue · {checkIns.filter(c => c.status === "PENDING").length} pending review · {checkIns.length} submitted
                     </p>
                 </div>
 
+                <div className="flex flex-wrap items-center gap-2 pb-2">
+                    <Link
+                        href="/checkins?view=overdue"
+                        className={cn(
+                            "px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all flex items-center gap-1.5 select-none",
+                            coachView === "overdue"
+                                ? "bg-warning/15 border-warning/30 text-warning shadow-sm"
+                                : "bg-surface-muted/30 border-surface-border text-fg-muted hover:text-fg hover:bg-surface-muted/50"
+                        )}
+                    >
+                        <span>Overdue</span>
+                        <span className={cn(
+                            "px-1.5 py-0.5 rounded-md text-[10px] font-bold",
+                            coachView === "overdue" ? "bg-warning/20 text-warning" : "bg-surface-muted text-fg-subtle"
+                        )}>{overdueClients.length}</span>
+                    </Link>
+                    <Link
+                        href="/checkins"
+                        className={cn(
+                            "px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all flex items-center gap-1.5 select-none",
+                            coachView === "submissions"
+                                ? "bg-brand-500/15 border-brand-500/30 text-brand-300 shadow-sm"
+                                : "bg-surface-muted/30 border-surface-border text-fg-muted hover:text-fg hover:bg-surface-muted/50"
+                        )}
+                    >
+                        <span>Submissions</span>
+                        <span className={cn(
+                            "px-1.5 py-0.5 rounded-md text-[10px] font-bold",
+                            coachView === "submissions" ? "bg-brand-500/20 text-brand-200" : "bg-surface-muted text-fg-subtle"
+                        )}>{checkIns.length}</span>
+                    </Link>
+                </div>
+
+                {coachView === "overdue" ? (
+                    overdueClients.length === 0 ? (
+                        <div className="card p-8 text-center border-success/20 bg-success/5">
+                            <CheckCircle2 className="w-8 h-8 text-success mx-auto mb-3" />
+                            <p className="text-sm font-bold text-fg">No overdue check-ins</p>
+                            <p className="text-xs text-fg-muted mt-1">Every client has submitted or is not yet due.</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            {overdueClients.map((client) => (
+                                <Link
+                                    key={client.id}
+                                    href={`/coach/client/${client.id}`}
+                                    className={cn(
+                                        "card p-4 flex items-center justify-between gap-3 transition-all hover:border-brand-500/40 group",
+                                        client.isOverdue && "border-warning/30 bg-warning/5"
+                                    )}
+                                >
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-black text-fg truncate group-hover:text-brand-400 transition-colors">
+                                            {client.name}
+                                        </p>
+                                        <p className={cn(
+                                            "text-xs mt-0.5",
+                                            client.isOverdue ? "text-warning font-semibold" : "text-fg-muted"
+                                        )}>
+                                            {client.label} · Week {client.weekNumber}
+                                        </p>
+                                        <p className="text-[10px] text-fg-subtle mt-1">
+                                            Waiting for client to submit — nothing to review yet
+                                        </p>
+                                    </div>
+                                    <AlertCircle className={cn(
+                                        "w-5 h-5 shrink-0",
+                                        client.isOverdue ? "text-warning" : "text-brand-400"
+                                    )} />
+                                </Link>
+                            ))}
+                        </div>
+                    )
+                ) : (
+                <>
                 <div className="flex flex-wrap items-center gap-2 pb-2">
                     {(["ALL", "PENDING", "REVIEWED"] as const).map((filter) => {
                         const count = filter === "ALL" 
@@ -946,6 +1031,8 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                         type={viewerMedia.toLowerCase().includes(".mp4") || viewerMedia.toLowerCase().includes(".webm") || viewerMedia.toLowerCase().includes(".mov") ? "VIDEO" : "IMAGE"} 
                         onClose={() => setViewerMedia(null)} 
                     />
+                )}
+                </>
                 )}
             </div>
         );

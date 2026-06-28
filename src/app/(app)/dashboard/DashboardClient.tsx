@@ -4,6 +4,7 @@ import { Suspense, useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { DashboardAnnouncementBanners } from "@/components/shared/DashboardAnnouncementBanners";
+import { StreakBadge } from "@/components/shared/StreakBadge";
 import { RecentSessionsExplorer, PREVIEW_LIMIT } from "@/components/shared/RecentSessionsExplorer";
 import { ReturnLink } from "@/components/shared/ReturnLink";
 import { ActiveSessionBanner } from "@/components/shared/ActiveSessionBanner";
@@ -134,9 +135,10 @@ interface Props {
             targetSleepHours: number | null;
         };
     };
+    streak?: number;
 }
 
-export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDay, todayCompleted, activeSession, recentLogs, avgDurationMin, currentCheckin, checkInDueState, checkInPanel, bodyweight, dailyMetrics }: Props) {
+export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDay, todayCompleted, activeSession, recentLogs, avgDurationMin, currentCheckin, checkInDueState, checkInPanel, bodyweight, dailyMetrics, streak = 0 }: Props) {
     const router = useRouter();
     const currentPath = useCurrentPath();
     const now = useCurrentDate();
@@ -578,6 +580,22 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                 }}
             />
             <DashboardAnnouncementBanners />
+
+            {streak > 0 && (
+                <div className="mb-6 flex items-center justify-between gap-4 rounded-2xl border border-orange-500/35 bg-gradient-to-r from-red-950/50 via-orange-950/35 to-amber-950/25 px-5 py-4 streak-fire-glow">
+                    <div className="min-w-0">
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-400">
+                            Training streak
+                        </p>
+                        <p className="text-sm text-orange-200/75 mt-0.5 font-medium">
+                            {streak === 1
+                                ? "One day strong — log again tomorrow to keep the fire burning."
+                                : `${streak} days in a row — keep it going!`}
+                        </p>
+                    </div>
+                    <StreakBadge streak={streak} size="lg" showLabel className="shrink-0" />
+                </div>
+            )}
 
             {/* Greeting */}
             <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
