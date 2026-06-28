@@ -2,7 +2,7 @@
 
 import {
     Calendar, ClipboardList, Clock, Copy, Dumbbell, Flame, FolderOpen,
-    MessageSquare, Scale, Share2, Star, Target, TrendingUp, Trophy, Users, Zap,
+    MessageSquare, Scale, Share2, Star, Target, TrendingUp, Trophy, Users, Zap, Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -38,6 +38,23 @@ function formatProgress(current: number, target: number): string {
     return `${current}/${target}`;
 }
 
+const UNLOCKED_TILE_STYLES: Record<AchievementRarity, string> = {
+    common: "bg-gradient-to-b from-surface-muted/90 to-surface-card border-fg-subtle/25 shadow-sm",
+    rare: "bg-gradient-to-b from-brand-400/15 to-surface-card border-brand-400/50 shadow-[0_0_14px_rgba(56,189,248,0.12)]",
+    epic: "bg-gradient-to-b from-violet-400/15 to-surface-card border-violet-400/50 shadow-[0_0_14px_rgba(167,139,250,0.12)]",
+    legendary: "bg-gradient-to-b from-amber-400/18 to-surface-card border-amber-400/55 shadow-[0_0_16px_rgba(251,191,36,0.14)]",
+};
+
+const UNLOCKED_CARD_STYLES: Record<AchievementRarity, string> = {
+    common: "bg-gradient-to-r from-surface-muted/60 to-surface-card border-fg-subtle/25 shadow-sm",
+    rare: "bg-gradient-to-r from-brand-400/10 to-surface-card border-brand-400/45 shadow-[0_0_12px_rgba(56,189,248,0.1)]",
+    epic: "bg-gradient-to-r from-violet-400/10 to-surface-card border-violet-400/45 shadow-[0_0_12px_rgba(167,139,250,0.1)]",
+    legendary: "bg-gradient-to-r from-amber-400/12 to-surface-card border-amber-400/50 shadow-[0_0_14px_rgba(251,191,36,0.12)]",
+};
+
+const LOCKED_TILE_STYLES = "opacity-55 bg-surface-muted/10 border-dashed border-surface-border/80 saturate-[0.35]";
+const LOCKED_CARD_STYLES = "opacity-55 bg-surface-muted/10 border-dashed border-surface-border/80 saturate-[0.35]";
+
 export function AchievementTile({
     achievement,
 }: {
@@ -50,23 +67,28 @@ export function AchievementTile({
     return (
         <div
             className={cn(
-                "flex flex-col items-center text-center gap-2 rounded-2xl border p-2.5 sm:p-3 min-h-[7.5rem]",
-                locked ? "opacity-70 bg-surface-muted/15" : "bg-surface-card",
-                styles.ring
+                "relative flex flex-col items-center text-center gap-2 rounded-2xl border p-2.5 sm:p-3 min-h-[7.5rem] transition-colors",
+                locked
+                    ? LOCKED_TILE_STYLES
+                    : cn("border-2", UNLOCKED_TILE_STYLES[achievement.rarity])
             )}
         >
+            {!locked && (
+                <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-success/15 border border-success/35 flex items-center justify-center">
+                    <Check className="w-2.5 h-2.5 text-success" strokeWidth={3} />
+                </span>
+            )}
             <div
                 className={cn(
                     "w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center shrink-0 border",
-                    styles.badge,
-                    locked && "opacity-75"
+                    locked ? "bg-surface-muted/40 border-surface-border opacity-80" : cn(styles.badge, "scale-105")
                 )}
             >
-                <Icon className={cn("w-5 h-5", styles.icon, locked && "opacity-80")} />
+                <Icon className={cn("w-5 h-5", locked ? "text-fg-subtle" : styles.icon)} />
             </div>
             <p className={cn(
                 "text-[10px] sm:text-[11px] font-black leading-tight line-clamp-2 w-full",
-                locked ? "text-fg-muted" : "text-fg"
+                locked ? "text-fg-subtle" : cn(styles.label, "text-fg")
             )}>
                 {achievement.title}
             </p>
@@ -94,36 +116,48 @@ export function AchievementCard({
         <div
             className={cn(
                 "relative flex gap-3 rounded-2xl border p-3 sm:p-4 transition-colors",
-                locked ? "opacity-70 bg-surface-muted/15" : "bg-surface-card opacity-100",
-                styles.ring
+                locked
+                    ? LOCKED_CARD_STYLES
+                    : cn("border-2", UNLOCKED_CARD_STYLES[achievement.rarity])
             )}
         >
+            {!locked && (
+                <span className="absolute top-2.5 right-2.5 w-5 h-5 rounded-full bg-success/15 border border-success/35 flex items-center justify-center">
+                    <Check className="w-3 h-3 text-success" strokeWidth={3} />
+                </span>
+            )}
             <div
                 className={cn(
                     "w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center shrink-0 border",
-                    styles.badge,
-                    locked && "opacity-75"
+                    locked ? "bg-surface-muted/40 border-surface-border opacity-80" : cn(styles.badge, "scale-105")
                 )}
             >
-                <Icon className={cn("w-5 h-5", styles.icon, locked && "opacity-80")} />
+                <Icon className={cn("w-5 h-5", locked ? "text-fg-subtle" : styles.icon)} />
             </div>
 
             <div className="min-w-0 flex-1">
-                <div className="flex items-start justify-between gap-2">
-                    <p className={cn("text-sm font-black leading-tight", locked ? "text-fg-muted" : "text-fg")}>
+                <div className="flex items-start justify-between gap-2 pr-5">
+                    <p className={cn(
+                        "text-sm font-black leading-tight",
+                        locked ? "text-fg-subtle" : cn(styles.label, "text-fg")
+                    )}>
                         {achievement.title}
                     </p>
                     {!compact && (
                         <span className={cn(
                             "text-[9px] font-black uppercase tracking-widest shrink-0 px-1.5 py-0.5 rounded-md border",
-                            styles.badge,
-                            locked && "opacity-80"
+                            locked ? "bg-surface-muted/40 text-fg-subtle border-surface-border opacity-80" : styles.badge
                         )}>
                             {achievement.rarity}
                         </span>
                     )}
                 </div>
-                <p className="text-[11px] text-fg-muted mt-1 leading-relaxed">{achievement.description}</p>
+                <p className={cn(
+                    "text-[11px] mt-1 leading-relaxed",
+                    locked ? "text-fg-subtle" : "text-fg-muted"
+                )}>
+                    {achievement.description}
+                </p>
                 {achievement.progress && !achievement.unlocked && (
                     <p className="text-[10px] font-bold text-fg-subtle mt-2 tabular-nums">
                         {formatProgress(achievement.progress.current, achievement.progress.target)}

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { sendPlanViaChat } from "@/lib/coachChat";
+import { triggerAchievementSync } from "@/lib/achievements";
 import { withResolvedAvatar, withResolvedUpload } from "@/lib/uploadUrls";
 
 const schema = z.object({
@@ -23,6 +24,7 @@ export async function POST(req: Request) {
     try {
         const parsed = schema.parse(await req.json());
         const message = await sendPlanViaChat(coach, parsed.clientId, parsed.planId, parsed.note);
+        triggerAchievementSync(coach.id);
 
         return NextResponse.json(withResolvedUpload({
             ...message,

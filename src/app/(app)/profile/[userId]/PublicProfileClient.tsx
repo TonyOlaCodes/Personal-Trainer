@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
     Trophy, MessageSquare, Loader2, Lock, Dumbbell, ChevronRight,
-    Target, Calendar, Scale, Activity, ExternalLink, Instagram,
+    Target, Calendar, Activity, ExternalLink, Instagram,
     Youtube, Users,
 } from "lucide-react";
 import { cn, getInitials, roleLabels, getRoleNameClass, formatDate } from "@/lib/utils";
@@ -80,7 +80,6 @@ interface ProfilePayload {
     trainingGoal: string | null;
     streak: number | null;
     totalWorkouts: number | null;
-    bodyweightKg: number | null;
     onlineStatus: { level: string; label: string } | null;
     mutualCoach: PublicProfileCoach | null;
     coachedBy: PublicProfileCoachedBy | null;
@@ -282,8 +281,7 @@ export function PublicProfileClient({ userId }: Props) {
     const showWorkoutStats =
         !isLimited &&
         ((profile.streak != null && profile.streak > 0) ||
-            (profile.totalWorkouts != null && profile.totalWorkouts > 0) ||
-            (!isCoachProfile && profile.bodyweightKg != null));
+            (profile.totalWorkouts != null && profile.totalWorkouts > 0));
 
     const socialEntries = profile.socialLinks
         ? (Object.entries(profile.socialLinks) as Array<[keyof SocialLinks, string]>)
@@ -525,17 +523,6 @@ export function PublicProfileClient({ userId }: Props) {
                             <div>
                                 <p className="text-xl font-black text-fg leading-none tabular-nums">{profile.totalWorkouts}</p>
                                 <p className="text-[10px] font-bold uppercase tracking-widest text-fg-subtle mt-1">Workouts completed</p>
-                            </div>
-                        </div>
-                    )}
-                    {profile.bodyweightKg != null && !isCoachProfile && (
-                        <div className="card p-4 flex items-center gap-3 flex-1 min-w-[140px]">
-                            <div className="w-10 h-10 rounded-xl bg-success/10 flex items-center justify-center shrink-0">
-                                <Scale className="w-5 h-5 text-success" />
-                            </div>
-                            <div>
-                                <p className="text-xl font-black text-fg leading-none tabular-nums">{profile.bodyweightKg} kg</p>
-                                <p className="text-[10px] font-bold uppercase tracking-widest text-fg-subtle mt-1">Bodyweight</p>
                             </div>
                         </div>
                     )}

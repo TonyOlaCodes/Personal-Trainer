@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { createNotification, userWantsNotification } from "@/lib/notifications";
 import { requireCoachCanEditClient } from "@/lib/apiAuth";
+import { triggerAchievementSync } from "@/lib/achievements";
 
 const planUpdateSchema = z.object({
     clientId: z.string().min(1),
@@ -66,6 +67,8 @@ export async function POST(req: Request) {
                 route: `/plans?highlight=${plan.id}`,
             });
         }
+
+        triggerAchievementSync(coach.id);
 
         return NextResponse.json({ success: true });
     } catch (err: unknown) {

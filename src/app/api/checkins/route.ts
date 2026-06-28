@@ -223,6 +223,10 @@ export async function PATCH(req: Request) {
             });
         }
 
+        if (isCoach) {
+            triggerAchievementSync(user.id);
+        }
+
         return NextResponse.json(withResolvedCheckInMedia(updated));
     } catch (error) {
         console.error("Error in PATCH /api/checkins:", error);

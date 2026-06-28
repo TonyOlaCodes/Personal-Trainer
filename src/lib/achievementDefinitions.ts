@@ -126,6 +126,7 @@ export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
 ];
 
 export const TOTAL_ACHIEVEMENTS = ACHIEVEMENT_DEFINITIONS.length;
+export const TOTAL_CLIENT_ACHIEVEMENTS = TOTAL_ACHIEVEMENTS;
 
 export function evaluateAchievement(def: AchievementDefinition, stats: AchievementStats): boolean {
     if (def.id === "first-workout") return stats.workoutLogsTotal >= 1;

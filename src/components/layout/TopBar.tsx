@@ -229,7 +229,7 @@ export function TopBar({ title, subtitle, showToday = false, streak, hideSearch 
                     </div>
                 )}
                 {streak !== undefined && streak > 0 && (
-                    <StreakBadge streak={streak} size="md" showLabel />
+                    <StreakBadge streak={streak} size="md" />
                 )}
             </div>
 

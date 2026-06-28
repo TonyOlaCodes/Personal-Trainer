@@ -206,7 +206,7 @@ function ClientInsightRow({
                     </span>
                 )}
                 {insight.workoutStreak > 0 && (
-                    <StreakBadge streak={insight.workoutStreak} size="sm" showLabel />
+                    <StreakBadge streak={insight.workoutStreak} size="sm" />
                 )}
             </div>
             <div className="grid grid-cols-2 gap-2">

@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { generateCoachAccessCode } from "@/lib/accessCodes";
+import { triggerAchievementSync } from "@/lib/achievements";
 import { PLAN_TEMPLATES } from "@/lib/templates";
 import { getUserAccountStatusMap } from "@/lib/userDeactivation";
 import { z } from "zod";
@@ -184,6 +185,8 @@ export async function POST(req: Request) {
             expiresAt,
         },
     });
+
+    triggerAchievementSync(user.id);
 
     return NextResponse.json(code, { status: 201 });
 }

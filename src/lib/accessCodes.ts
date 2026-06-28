@@ -139,6 +139,7 @@ export async function redeemAccessCodeForUser(
         upgradedTo: accessCode.upgradesTo,
         planAssigned: !!accessCode.planId,
         isGeneralPremium: accessCode.upgradesTo === "GENERAL_PREMIUM",
+        generatedBy: accessCode.generatedBy,
     } as const;
 }
 

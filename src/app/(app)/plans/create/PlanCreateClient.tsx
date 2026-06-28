@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { PLAN_TEMPLATES } from "@/lib/templates";
 import { ExerciseAutocomplete, isCardio } from "@/components/shared/ExerciseAutocomplete";
 import { formatPlanText, formatWorkoutText } from "@/lib/formatPlanText";
+import { PlanReviewView } from "./PlanReviewView";
 
 interface LocalExercise {
     name: string;
@@ -545,8 +546,23 @@ export function PlanCreateClient() {
         return (
             <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
                 <Loader2 className="w-8 h-8 text-brand-400 animate-spin" />
-                <p className="text-fg-muted animate-pulse">Preparing plan editor...</p>
+                <p className="text-fg-muted animate-pulse">{isViewOnly ? "Loading plan..." : "Preparing plan editor..."}</p>
             </div>
+        );
+    }
+
+    if (isViewOnly) {
+        return (
+            <PlanReviewView
+                name={name}
+                description={desc}
+                creatorName={creatorName}
+                weeks={weeks}
+                canCopyPlan={canCopyPlan}
+                cloningPlan={cloningPlan}
+                onBack={() => router.back()}
+                onCopyPlan={() => void clonePlanToLibrary()}
+            />
         );
     }
 

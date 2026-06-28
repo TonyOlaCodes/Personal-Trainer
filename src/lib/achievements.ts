@@ -6,12 +6,24 @@ import { createNotification, ensureNotificationsTable } from "@/lib/notification
 import { NOTIFICATION_TYPES } from "@/lib/notificationTypes";
 import {
     ACHIEVEMENT_DEFINITIONS,
-    TOTAL_ACHIEVEMENTS,
+    TOTAL_CLIENT_ACHIEVEMENTS,
     evaluateAchievement,
     getAchievementProgress,
     type AchievementDefinition,
     type AchievementStats,
 } from "@/lib/achievementDefinitions";
+import {
+    COACH_ACHIEVEMENT_DEFINITIONS,
+    TOTAL_COACH_ACHIEVEMENTS,
+    evaluateCoachAchievement,
+    getCoachAchievementProgress,
+    type CoachAchievementDefinition,
+    type CoachAchievementStats,
+} from "@/lib/coachAchievementDefinitions";
+import { ensureCoachAttentionActionsTable } from "@/lib/coachAttentionActions";
+import { ensureMessageActionColumns } from "@/lib/coachChat";
+import { ensureWorkoutNotesTable } from "@/lib/workoutNotes";
+import { isCoachRole } from "@/lib/roles";
 import { getWorkoutAdherenceForUser } from "@/lib/workoutAdherenceStreak";
 
 export interface UserAchievementRow {
@@ -35,6 +47,28 @@ export interface AchievementSummary {
     totalAchievements: number;
     preview: AchievementDisplayItem[];
     achievements: AchievementDisplayItem[];
+}
+
+export function isCoachAchievementId(id: string): boolean {
+    return id.startsWith("coach-");
+}
+
+export function getAchievementCatalogForRole(role: string): Array<AchievementDefinition | CoachAchievementDefinition> {
+    if (isCoachRole(role)) return COACH_ACHIEVEMENT_DEFINITIONS;
+    return ACHIEVEMENT_DEFINITIONS;
+}
+
+export function getTotalAchievementsForRole(role: string): number {
+    if (isCoachRole(role)) return TOTAL_COACH_ACHIEVEMENTS;
+    return TOTAL_CLIENT_ACHIEVEMENTS;
+}
+
+async function getUserRole(userId: string): Promise<string> {
+    const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { role: true },
+    });
+    return user?.role ?? "FREE";
 }
 
 let achievementsReady = false;
@@ -210,6 +244,103 @@ export async function getAchievementStats(userId: string): Promise<AchievementSt
     };
 }
 
+export async function getCoachAchievementStats(coachId: string): Promise<CoachAchievementStats> {
+    await ensureAchievementsTables();
+    await ensureMessageActionColumns();
+    await ensureWorkoutNotesTable();
+    await ensureCoachAttentionActionsTable();
+
+    const user = await prisma.user.findUnique({
+        where: { id: coachId },
+        select: { createdAt: true },
+    });
+
+    const coachAccountAgeDays = user
+        ? Math.floor((Date.now() - user.createdAt.getTime()) / 86400000)
+        : 0;
+
+    const clientWhere = {
+        coachId,
+        isDeleted: false,
+        isDeactivated: false,
+    };
+
+    const [
+        activeClients,
+        checkInsReviewed,
+        plansCreated,
+        plansAssigned,
+        workoutNotes,
+        accessCodesGenerated,
+        accessCodesRedeemed,
+        clientMessages,
+        videoCheckInReviews,
+        attentionRows,
+    ] = await Promise.all([
+        prisma.user.count({ where: clientWhere }),
+        prisma.checkIn.count({
+            where: {
+                user: { coachId },
+                status: "REVIEWED",
+                respondedAt: { not: null },
+            },
+        }),
+        prisma.plan.count({ where: { creatorId: coachId } }),
+        prisma.userPlan.count({
+            where: {
+                user: { coachId },
+            },
+        }),
+        prisma.workoutNote.count({ where: { coachId } }),
+        prisma.accessCode.count({ where: { generatedBy: coachId } }),
+        prisma.accessCode.count({
+            where: {
+                generatedBy: coachId,
+                usedById: { not: null },
+            },
+        }),
+        prisma.user.findMany({
+            where: clientWhere,
+            select: { id: true },
+        }).then((clients) =>
+            clients.length === 0
+                ? 0
+                : prisma.message.count({
+                    where: {
+                        senderId: coachId,
+                        isGeneral: false,
+                        receiverId: { in: clients.map((client) => client.id) },
+                    },
+                })
+        ),
+        prisma.checkIn.count({
+            where: {
+                user: { coachId },
+                coachVideoUrl: { not: null },
+            },
+        }),
+        prisma.$queryRaw<Array<{ count: bigint }>>`
+            SELECT COUNT(*)::bigint AS count
+            FROM "coach_attention_actions"
+            WHERE "coachId" = ${coachId}
+        `,
+    ]);
+
+    return {
+        activeClients,
+        checkInsReviewed,
+        plansCreated,
+        plansAssigned,
+        workoutNotes,
+        accessCodesGenerated,
+        accessCodesRedeemed,
+        clientMessages,
+        attentionActions: Number(attentionRows[0]?.count ?? 0),
+        videoCheckInReviews,
+        coachAccountAgeDays,
+    };
+}
+
 async function getUnlockedMap(userId: string): Promise<Map<string, Date>> {
     await ensureAchievementsTables();
     const rows = await prisma.$queryRaw<UserAchievementRow[]>`
@@ -220,7 +351,7 @@ async function getUnlockedMap(userId: string): Promise<Map<string, Date>> {
     return new Map(rows.map((r) => [r.achievementId, r.unlockedAt]));
 }
 
-function buildDisplayList(
+function buildClientDisplayList(
     stats: AchievementStats,
     unlocked: Map<string, Date>
 ): AchievementDisplayItem[] {
@@ -236,6 +367,26 @@ function buildDisplayList(
             unlocked: isUnlocked,
             unlockedAt: unlockedAt?.toISOString() ?? null,
             progress: getAchievementProgress(def, stats),
+        };
+    });
+}
+
+function buildCoachDisplayList(
+    stats: CoachAchievementStats,
+    unlocked: Map<string, Date>
+): AchievementDisplayItem[] {
+    return COACH_ACHIEVEMENT_DEFINITIONS.map((def) => {
+        const unlockedAt = unlocked.get(def.id);
+        const isUnlocked = Boolean(unlockedAt) || evaluateCoachAchievement(def, stats);
+        return {
+            id: def.id,
+            title: def.title,
+            description: def.description,
+            rarity: def.rarity,
+            icon: def.icon,
+            unlocked: isUnlocked,
+            unlockedAt: unlockedAt?.toISOString() ?? null,
+            progress: getCoachAchievementProgress(def, stats),
         };
     });
 }
@@ -269,77 +420,109 @@ export async function syncUserAchievements(userId: string): Promise<string[]> {
 async function doSyncUserAchievements(userId: string): Promise<string[]> {
     await ensureAchievementsTables();
 
-    const [stats, unlocked] = await Promise.all([
-        getAchievementStats(userId),
-        getUnlockedMap(userId),
-    ]);
-
+    const role = await getUserRole(userId);
+    const unlocked = await getUnlockedMap(userId);
     const newlyUnlocked: string[] = [];
+
+    if (isCoachRole(role)) {
+        const stats = await getCoachAchievementStats(userId);
+
+        for (const def of COACH_ACHIEVEMENT_DEFINITIONS) {
+            if (unlocked.has(def.id)) continue;
+            if (!evaluateCoachAchievement(def, stats)) continue;
+
+            const inserted = await insertAchievementUnlock(userId, def.id, unlocked);
+            if (!inserted) continue;
+
+            newlyUnlocked.push(def.id);
+            await notifyAchievementUnlock(userId, def.id, def.title);
+        }
+
+        return newlyUnlocked;
+    }
+
+    const stats = await getAchievementStats(userId);
 
     for (const def of ACHIEVEMENT_DEFINITIONS) {
         if (unlocked.has(def.id)) continue;
         if (!evaluateAchievement(def, stats)) continue;
 
-        const id = randomUUID();
-        let inserted = false;
-        try {
-            const rows = await prisma.$queryRaw<Array<{ id: string }>>`
-                INSERT INTO "user_achievements" ("id", "userId", "achievementId")
-                VALUES (${id}, ${userId}, ${def.id})
-                ON CONFLICT ("userId", "achievementId") DO NOTHING
-                RETURNING "id"
-            `;
-            inserted = rows.length > 0;
-        } catch (err) {
-            console.error("[achievements] insert failed", def.id, err);
-            continue;
-        }
-
+        const inserted = await insertAchievementUnlock(userId, def.id, unlocked);
         if (!inserted) continue;
 
-        unlocked.set(def.id, new Date());
         newlyUnlocked.push(def.id);
-
-        await ensureNotificationsTable();
-        const existingNotification = await prisma.$queryRaw<Array<{ id: string }>>`
-            SELECT "id"
-            FROM "notifications"
-            WHERE "userId" = ${userId}
-              AND "type" = ${NOTIFICATION_TYPES.ACHIEVEMENT_UNLOCKED}
-              AND "entityId" = ${def.id}
-            LIMIT 1
-        `;
-        if (existingNotification.length > 0) continue;
-
-        await createNotification({
-            userId,
-            type: NOTIFICATION_TYPES.ACHIEVEMENT_UNLOCKED,
-            message: `🏆 Achievement Unlocked — ${def.title}`,
-            entityType: "ACHIEVEMENT",
-            entityId: def.id,
-            route: `/profile/${userId}?achievements=1`,
-        });
+        await notifyAchievementUnlock(userId, def.id, def.title);
     }
 
     return newlyUnlocked;
 }
 
+async function insertAchievementUnlock(
+    userId: string,
+    achievementId: string,
+    unlocked: Map<string, Date>
+): Promise<boolean> {
+    const id = randomUUID();
+    try {
+        const rows = await prisma.$queryRaw<Array<{ id: string }>>`
+            INSERT INTO "user_achievements" ("id", "userId", "achievementId")
+            VALUES (${id}, ${userId}, ${achievementId})
+            ON CONFLICT ("userId", "achievementId") DO NOTHING
+            RETURNING "id"
+        `;
+        if (rows.length === 0) return false;
+        unlocked.set(achievementId, new Date());
+        return true;
+    } catch (err) {
+        console.error("[achievements] insert failed", achievementId, err);
+        return false;
+    }
+}
+
+async function notifyAchievementUnlock(userId: string, achievementId: string, title: string) {
+    await ensureNotificationsTable();
+    const existingNotification = await prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT "id"
+        FROM "notifications"
+        WHERE "userId" = ${userId}
+          AND "type" = ${NOTIFICATION_TYPES.ACHIEVEMENT_UNLOCKED}
+          AND "entityId" = ${achievementId}
+        LIMIT 1
+    `;
+    if (existingNotification.length > 0) return;
+
+    await createNotification({
+        userId,
+        type: NOTIFICATION_TYPES.ACHIEVEMENT_UNLOCKED,
+        message: `🏆 Achievement Unlocked — ${title}`,
+        entityType: "ACHIEVEMENT",
+        entityId: achievementId,
+        route: `/profile/${userId}?achievements=1`,
+    });
+}
+
 export async function getUserAchievementsDisplay(userId: string): Promise<AchievementDisplayItem[]> {
     await syncUserAchievements(userId);
-    const [stats, unlocked] = await Promise.all([
-        getAchievementStats(userId),
-        getUnlockedMap(userId),
-    ]);
-    return buildDisplayList(stats, unlocked);
+    const role = await getUserRole(userId);
+    const unlocked = await getUnlockedMap(userId);
+
+    if (isCoachRole(role)) {
+        const stats = await getCoachAchievementStats(userId);
+        return buildCoachDisplayList(stats, unlocked);
+    }
+
+    const stats = await getAchievementStats(userId);
+    return buildClientDisplayList(stats, unlocked);
 }
 
 export async function getAchievementSummary(userId: string): Promise<AchievementSummary> {
+    const role = await getUserRole(userId);
     const achievements = await getUserAchievementsDisplay(userId);
     const totalUnlocked = achievements.filter((a) => a.unlocked).length;
 
     return {
         totalUnlocked,
-        totalAchievements: TOTAL_ACHIEVEMENTS,
+        totalAchievements: getTotalAchievementsForRole(role),
         preview: getRecentAchievementPreview(achievements, 3),
         achievements,
     };

@@ -122,6 +122,9 @@ export async function POST(req: Request) {
             if ("error" in result) {
                 return NextResponse.json({ error: result.error }, { status: result.status });
             }
+            if ("success" in result && result.success && "generatedBy" in result && result.generatedBy) {
+                triggerAchievementSync(result.generatedBy);
+            }
         }
 
         if (savedUserId) {

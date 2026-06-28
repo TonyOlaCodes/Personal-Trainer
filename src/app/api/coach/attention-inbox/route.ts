@@ -11,6 +11,7 @@ import { loadCoachAttentionInbox } from "@/lib/coachAttentionInbox";
 import { createCoachDirectMessage, sendCheckInRequestViaChat } from "@/lib/coachChat";
 import { createNotification } from "@/lib/notifications";
 import { NOTIFICATION_TYPES, QUICK_REPLY_TEMPLATES } from "@/lib/notificationTypes";
+import { triggerAchievementSync } from "@/lib/achievements";
 
 export async function GET() {
     const { userId } = await auth();
@@ -73,6 +74,7 @@ export async function POST(req: Request) {
                 dateKey: parsed.dateKey ?? null,
                 workoutId: parsed.workoutId ?? null,
             });
+            triggerAchievementSync(coach.id);
             return NextResponse.json({ ok: true });
         }
 
@@ -90,6 +92,7 @@ export async function POST(req: Request) {
                 dateKey: parsed.dateKey ?? null,
                 workoutId: parsed.workoutId ?? null,
             });
+            triggerAchievementSync(coach.id);
             return NextResponse.json({ ok: true });
         }
 

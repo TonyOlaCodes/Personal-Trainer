@@ -7,16 +7,26 @@ import { PlanCreateClient } from "./PlanCreateClient";
 
 export const metadata = { title: "Create Plan" };
 
-export default async function CreatePlanPage() {
+export default async function CreatePlanPage({
+    searchParams,
+}: {
+    searchParams: Promise<{ view?: string }>;
+}) {
     const { userId } = await auth();
     if (!userId) redirect("/sign-in");
 
     const user = await prisma.user.findUnique({ where: { clerkId: userId } });
     if (!user) redirect("/sign-in");
 
+    const params = await searchParams;
+    const isReview = params.view === "true";
+
     return (
         <>
-            <TopBar title="New Workout Plan" subtitle="Build a custom programme or follow a template" />
+            <TopBar
+                title={isReview ? "Review Plan" : "New Workout Plan"}
+                subtitle={isReview ? "Browse sessions by day" : "Build a custom programme or follow a template"}
+            />
             <Suspense
                 fallback={
                     <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">

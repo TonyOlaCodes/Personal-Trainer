@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { createNotification, userWantsNotification } from "@/lib/notifications";
 import { createWorkoutNote, getWorkoutNotes } from "@/lib/workoutNotes";
+import { triggerAchievementSync } from "@/lib/achievements";
 
 const postSchema = z.object({
     workoutLogId: z.string(),
@@ -59,6 +60,7 @@ export async function POST(req: Request) {
     }
 
     await createWorkoutNote(log.id, coach.id, parsed.data.text);
+    triggerAchievementSync(coach.id);
     if (await userWantsNotification(log.user.id, "notifyOnWorkoutFeedback")) {
         await createNotification({
             userId: log.user.id,

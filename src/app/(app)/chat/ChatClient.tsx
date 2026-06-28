@@ -31,7 +31,6 @@ import { useChatUnread } from "@/components/chat/ChatUnreadProvider";
 import type { CoachPlanRecord } from "@/lib/coachPlans";
 import { useWalkthrough } from "@/components/walkthrough/AppWalkthroughProvider";
 import { WalkthroughChatDemo } from "@/components/walkthrough/WalkthroughDemoPanels";
-import { useScrollLock } from "@/hooks/useScrollLock";
 
 /* ─── Types ──────────────────────────────────────────── */
 interface ReplyPreview {
@@ -113,7 +112,6 @@ const COACH_FILTER_OPTIONS: { id: CoachListFilter; label: string }[] = [
 
 const SWIPE_REPLY_THRESHOLD = 55;
 const SWIPE_REPLY_MAX = 72;
-const LONG_PRESS_MS = 450;
 
 function computeReplySwipeOffset(dx: number, isMine: boolean) {
     const towardReply = isMine ? -dx : dx;
@@ -259,8 +257,6 @@ export function ChatClient({
         offsetX: number;
         animating?: boolean;
     } | null>(null);
-    const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const longPressOpenedRef = useRef(false);
 
     const draftContextKey = useMemo(
         () => (isHydrated ? getChatDraftKey(tab, selectedConv?.userId ?? null) : null),
@@ -309,28 +305,6 @@ export function ChatClient({
         setReactionPickerId(null);
     }, []);
 
-    const openMobileMessageActions = useCallback((messageId: string) => {
-        setActiveMessageId(messageId);
-        setMenuOpenId(null);
-        setReactionPickerId(null);
-    }, []);
-
-    const cancelLongPress = useCallback(() => {
-        if (longPressTimerRef.current) {
-            clearTimeout(longPressTimerRef.current);
-            longPressTimerRef.current = null;
-        }
-    }, []);
-
-    useEffect(() => () => cancelLongPress(), [cancelLongPress]);
-
-    const mobileActionMessage = useMemo(
-        () => (activeMessageId ? messages.find((m) => m.id === activeMessageId) ?? null : null),
-        [activeMessageId, messages]
-    );
-
-    useScrollLock(isSmDown && Boolean(mobileActionMessage));
-
     const startReplyTo = useCallback((msg: Message) => {
         setReplyTo(msg);
         closeMessageActions();
@@ -347,18 +321,6 @@ export function ChatClient({
     const handleMessageTouchStart = (messageId: string, isMine: boolean) => (e: React.TouchEvent) => {
         if (!window.matchMedia("(max-width: 639px)").matches) return;
 
-        longPressOpenedRef.current = false;
-        cancelLongPress();
-        longPressTimerRef.current = window.setTimeout(() => {
-            longPressOpenedRef.current = true;
-            swipeTouchRef.current.tracking = false;
-            setSwipeReplyVisual(null);
-            openMobileMessageActions(messageId);
-            if (typeof navigator !== "undefined" && "vibrate" in navigator) {
-                navigator.vibrate(10);
-            }
-        }, LONG_PRESS_MS);
-
         swipeTouchRef.current = {
             messageId,
             isMine,
@@ -372,12 +334,6 @@ export function ChatClient({
 
     const handleMessageTouchMove = (e: React.TouchEvent) => {
         const swipe = swipeTouchRef.current;
-        if (swipe.tracking && swipe.messageId && longPressTimerRef.current) {
-            const dx = Math.abs(e.touches[0].clientX - swipe.startX);
-            const dy = Math.abs(e.touches[0].clientY - swipe.startY);
-            if (dx > 8 || dy > 8) cancelLongPress();
-        }
-
         if (!swipe.tracking || !swipe.messageId) return;
 
         const dx = e.touches[0].clientX - swipe.startX;
@@ -402,14 +358,6 @@ export function ChatClient({
     };
 
     const handleMessageTouchEnd = (msg: Message, isMine: boolean) => (e: React.TouchEvent) => {
-        cancelLongPress();
-        if (longPressOpenedRef.current) {
-            longPressOpenedRef.current = false;
-            swipeTouchRef.current.tracking = false;
-            setSwipeReplyVisual(null);
-            return;
-        }
-
         const swipe = swipeTouchRef.current;
         if (!swipe.tracking || swipe.messageId !== msg.id) {
             setSwipeReplyVisual(null);
@@ -437,8 +385,6 @@ export function ChatClient({
     };
 
     const handleMessageTouchCancel = () => {
-        cancelLongPress();
-        longPressOpenedRef.current = false;
         const messageId = swipeTouchRef.current.messageId;
         swipeTouchRef.current.tracking = false;
         if (messageId) resetSwipeReplyVisual(messageId);
@@ -1534,117 +1480,6 @@ export function ChatClient({
                 />
             )}
 
-            {isSmDown && mobileActionMessage && (() => {
-                const msg = mobileActionMessage;
-                const isMine = msg.sender.id === currentUserId;
-                const canEditMsg = isMine && msg.type === "TEXT" && !editExpired[msg.id];
-                const previewText =
-                    msg.type === "TEXT"
-                        ? (msg.content?.trim() || "Message")
-                        : msg.type === "IMAGE"
-                            ? "Photo"
-                            : msg.type === "VIDEO"
-                                ? "Video"
-                                : "Message";
-
-                return (
-                    <>
-                        <button
-                            type="button"
-                            aria-label="Close message actions"
-                            className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-[2px] sm:hidden border-0 p-0 cursor-default"
-                            onClick={closeMessageActions}
-                        />
-                        <div
-                            role="dialog"
-                            aria-modal="true"
-                            aria-label="Message actions"
-                            className="fixed inset-x-0 bottom-20 z-[81] px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:hidden max-h-[min(72dvh,calc(100dvh-7rem))] overflow-y-auto overscroll-contain"
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                            <div className="bg-surface-elevated border border-surface-border rounded-2xl shadow-modal overflow-hidden animate-slide-up">
-                                <div className="px-4 py-3 border-b border-surface-border bg-surface-muted/30">
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle mb-1">
-                                        {isMine ? "Your message" : msg.sender.name ?? "Message"}
-                                    </p>
-                                    <p className="text-sm text-fg line-clamp-3 break-words">{previewText}</p>
-                                </div>
-
-                                <div className="px-4 py-3 border-b border-surface-border">
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle mb-2 text-center">
-                                        React
-                                    </p>
-                                    <div className="flex flex-wrap justify-center gap-2">
-                                        {REACTION_EMOJIS.map((emoji) => (
-                                            <button
-                                                key={emoji}
-                                                type="button"
-                                                onClick={() => void toggleReaction(msg.id, emoji)}
-                                                className="w-11 h-11 flex items-center justify-center rounded-xl bg-surface-muted hover:bg-surface-card border border-surface-border text-xl transition-colors"
-                                            >
-                                                {emoji}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                <div className="divide-y divide-surface-border">
-                                    <button
-                                        type="button"
-                                        onClick={() => startReplyTo(msg)}
-                                        className="w-full flex items-center gap-3 px-4 py-3.5 text-sm font-bold text-fg hover:bg-surface-muted transition-colors"
-                                    >
-                                        <Reply className="w-4 h-4 text-brand-400" />
-                                        Reply
-                                    </button>
-                                    {canPin && (
-                                        <button
-                                            type="button"
-                                            onClick={() => void togglePin(msg.id)}
-                                            className="w-full flex items-center gap-3 px-4 py-3.5 text-sm font-bold text-fg hover:bg-surface-muted transition-colors"
-                                        >
-                                            <Pin className="w-4 h-4 text-brand-400" />
-                                            {msg.isPinned ? "Unpin" : "Pin"}
-                                        </button>
-                                    )}
-                                    {isMine && canEditMsg && (
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setEditingId(msg.id);
-                                                setEditText(msg.content ?? "");
-                                                closeMessageActions();
-                                            }}
-                                            className="w-full flex items-center gap-3 px-4 py-3.5 text-sm font-bold text-fg hover:bg-surface-muted transition-colors"
-                                        >
-                                            <Pencil className="w-4 h-4 text-brand-400" />
-                                            Edit
-                                        </button>
-                                    )}
-                                    {(isMine || isAdmin) && (
-                                        <button
-                                            type="button"
-                                            onClick={() => void deleteMessage(msg.id)}
-                                            className="w-full flex items-center gap-3 px-4 py-3.5 text-sm font-bold text-danger hover:bg-danger/5 transition-colors"
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                            Delete
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={closeMessageActions}
-                                className="w-full mt-2 py-3.5 rounded-2xl bg-surface-card border border-surface-border text-sm font-black text-fg hover:bg-surface-muted transition-colors"
-                            >
-                                Cancel
-                            </button>
-                        </div>
-                    </>
-                );
-            })()}
-
             {/* Chat panels — split on desktop, single pane on mobile */}
             <div className="flex-1 flex flex-col md:flex-row min-w-0 min-h-0 overflow-hidden w-full">
                 {showSidebar && (
@@ -1830,8 +1665,73 @@ export function ChatClient({
                             const renderMessageActions = () => {
                                 if (isEditing) return null;
 
-                                const visible = activeMessageId === msg.id || menuOpenId === msg.id || reactionPickerId === msg.id;
                                 const popoverAlign = isMine ? "right-0 left-auto" : "left-0 right-auto";
+
+                                if (isSmDown) {
+                                    const visibleMobile = activeMessageId === msg.id || reactionPickerId === msg.id;
+                                    if (!visibleMobile) return null;
+
+                                    return (
+                                        <div
+                                            data-chat-action
+                                            className={cn(
+                                                "absolute z-20 flex flex-col items-center gap-1 sm:hidden",
+                                                isMine ? "top-1/2 -translate-y-1/2 right-full mr-1.5" : "top-1/2 -translate-y-1/2 left-full ml-1.5",
+                                            )}
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            <div className="relative">
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setActiveMessageId(msg.id);
+                                                        setReactionPickerId(reactionPickerId === msg.id ? null : msg.id);
+                                                    }}
+                                                    className="btn-icon w-8 h-8 rounded-lg bg-surface-elevated border border-surface-border shadow-sm"
+                                                    title="React"
+                                                >
+                                                    <SmilePlus className="w-4 h-4" />
+                                                </button>
+                                                {reactionPickerId === msg.id && (
+                                                    <div
+                                                        className={cn(
+                                                            "absolute bottom-full mb-1 z-50 grid grid-cols-3 gap-1 bg-surface-elevated border border-surface-border rounded-xl p-1.5 shadow-modal w-max animate-scale-in",
+                                                            popoverAlign,
+                                                        )}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    >
+                                                        {REACTION_EMOJIS.map((emoji) => (
+                                                            <button
+                                                                key={emoji}
+                                                                type="button"
+                                                                onClick={() => void toggleReaction(msg.id, emoji)}
+                                                                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-muted transition-colors text-base"
+                                                            >
+                                                                {emoji}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            {(isMine || isAdmin) && (
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        void deleteMessage(msg.id);
+                                                    }}
+                                                    className="btn-icon w-8 h-8 rounded-lg bg-surface-elevated border border-surface-border shadow-sm text-danger"
+                                                    title="Delete"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    );
+                                }
+
+                                const visible = activeMessageId === msg.id || menuOpenId === msg.id || reactionPickerId === msg.id;
                                 const actionVisibility = visible
                                     ? "opacity-100 pointer-events-auto"
                                     : "opacity-0 pointer-events-none sm:group-hover:opacity-100 sm:group-hover:pointer-events-auto";
@@ -1972,7 +1872,6 @@ export function ChatClient({
                                         onTouchCancel={handleMessageTouchCancel}
                                         onClick={(e) => {
                                             if (!isSmDown) return;
-                                            if (longPressOpenedRef.current) return;
                                             const target = e.target as HTMLElement;
                                             if (target.closest("[data-chat-action], button, a, input, video, img")) return;
                                             e.stopPropagation();

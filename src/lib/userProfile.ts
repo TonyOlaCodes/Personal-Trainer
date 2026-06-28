@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/prisma";
-import { ensureBodyweightTable } from "@/lib/bodyweight";
 import { getUserPinnedExercises } from "@/lib/pinnedExercises";
 import {
     ensureProfileExtendedColumns,
@@ -200,7 +199,6 @@ export interface BuiltPublicProfile {
     bio: string | null;
     streak: number | null;
     totalWorkouts: number | null;
-    bodyweightKg: number | null;
     onlineStatus: { level: string; label: string } | null;
     mutualCoach: PublicProfileCoach | null;
     coachedBy: PublicProfileCoachedBy | null;
@@ -243,24 +241,6 @@ async function buildPublicActivityFeed(userId: string): Promise<PublicProfileAct
         workoutName: log.workout?.name?.trim() || "Workout",
         loggedAt: log.loggedAt.toISOString(),
     }));
-}
-
-async function getLatestBodyweightKg(userId: string): Promise<number | null> {
-    await ensureBodyweightTable();
-    const rows = await prisma.$queryRaw<Array<{ weightKg: number }>>`
-        SELECT "weightKg"
-        FROM "bodyweight_logs"
-        WHERE "userId" = ${userId}
-        ORDER BY "loggedDate" DESC
-        LIMIT 1
-    `;
-    if (rows[0]?.weightKg != null) return Math.round(rows[0].weightKg * 100) / 100;
-
-    const user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { weightKg: true },
-    });
-    return user?.weightKg != null ? Math.round(user.weightKg * 100) / 100 : null;
 }
 
 async function getPersonalRecordsForProfile(userId: string, pinned: string[]): Promise<PublicProfilePersonalRecord[]> {
@@ -425,7 +405,6 @@ export async function buildPublicProfileData(
             bio: null,
             streak: null,
             totalWorkouts: null,
-            bodyweightKg: null,
             onlineStatus: presence
                 ? { level: presence.level, label: presence.label }
                 : null,
@@ -446,7 +425,6 @@ export async function buildPublicProfileData(
 
     let streak: number | null = null;
     let totalWorkouts: number | null = null;
-    let bodyweightKg: number | null = null;
     let achievementSummary: PublicAchievementSummary = {
         totalUnlocked: 0,
         totalAchievements: 0,
@@ -461,7 +439,6 @@ export async function buildPublicProfileData(
     const [
         streakValue,
         total,
-        bodyweight,
         achievementSummaryValue,
         personalRecordsValue,
         rawPlans,
@@ -471,7 +448,6 @@ export async function buildPublicProfileData(
     ] = await Promise.all([
         getWorkoutStreak(targetUserId),
         prisma.workoutLog.count({ where: { userId: targetUserId, status: "COMPLETED" } }),
-        isCoachProfile ? Promise.resolve(null) : getLatestBodyweightKg(targetUserId),
         getAchievementSummary(targetUserId),
         getPersonalRecordsForProfile(targetUserId, pinned),
         getPublicPlansForUser(targetUserId),
@@ -482,7 +458,6 @@ export async function buildPublicProfileData(
 
     streak = streakValue;
     totalWorkouts = total;
-    bodyweightKg = isCoachProfile ? null : bodyweight;
     achievementSummary = {
         totalUnlocked: achievementSummaryValue.totalUnlocked,
         totalAchievements: achievementSummaryValue.totalAchievements,
@@ -510,7 +485,6 @@ export async function buildPublicProfileData(
         bio: target.bio?.trim() ? target.bio.trim() : null,
         streak,
         totalWorkouts,
-        bodyweightKg,
         onlineStatus: presence
             ? { level: presence.level, label: presence.label }
             : null,
