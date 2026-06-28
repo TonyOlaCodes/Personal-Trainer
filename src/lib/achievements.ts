@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { ensureBodyweightTable } from "@/lib/bodyweight";
 import { ensureDailyMetricsTable } from "@/lib/dailyMetrics";
-import { createNotification } from "@/lib/notifications";
+import { createNotification, ensureNotificationsTable } from "@/lib/notifications";
 import { NOTIFICATION_TYPES } from "@/lib/notificationTypes";
 import {
     ACHIEVEMENT_DEFINITIONS,
@@ -12,6 +12,7 @@ import {
     type AchievementDefinition,
     type AchievementStats,
 } from "@/lib/achievementDefinitions";
+import { getWorkoutAdherenceForUser } from "@/lib/workoutAdherenceStreak";
 
 export interface UserAchievementRow {
     achievementId: string;
@@ -37,6 +38,7 @@ export interface AchievementSummary {
 }
 
 let achievementsReady = false;
+const syncInFlight = new Map<string, Promise<string[]>>();
 
 export async function ensureAchievementsTables() {
     if (achievementsReady) return;
@@ -64,26 +66,6 @@ export async function ensureAchievementsTables() {
     `;
 
     achievementsReady = true;
-}
-
-function computeMaxConsecutiveDays(dayTimes: number[]): number {
-    if (dayTimes.length === 0) return 0;
-
-    const unique = [...new Set(dayTimes)].sort((a, b) => b - a);
-    let max = 1;
-    let run = 1;
-
-    for (let i = 1; i < unique.length; i++) {
-        const diffDays = Math.round((unique[i - 1] - unique[i]) / 86400000);
-        if (diffDays === 1) {
-            run++;
-            max = Math.max(max, run);
-        } else {
-            run = 1;
-        }
-    }
-
-    return max;
 }
 
 async function countBodyweightLogs(userId: string): Promise<number> {
@@ -152,9 +134,6 @@ export async function getAchievementStats(userId: string): Promise<AchievementSt
         plansCopiedFromUser,
         profileVisitsMade,
         dailyMetricsLogs,
-        completedWorkoutDays,
-        checkInDays,
-        bodyweightDays,
     ] = await Promise.all([
         prisma.workoutLog.count({ where: { userId } }),
         prisma.workoutLog.count({ where: { userId, status: "COMPLETED" } }),
@@ -203,45 +182,9 @@ export async function getAchievementStats(userId: string): Promise<AchievementSt
         }),
         countProfileVisitsMade(userId),
         countDailyMetricLogs(userId),
-        prisma.workoutLog.findMany({
-            where: { userId, status: "COMPLETED" },
-            select: { loggedAt: true },
-            orderBy: { loggedAt: "desc" },
-            take: 500,
-        }),
-        prisma.checkIn.findMany({
-            where: { userId },
-            select: { createdAt: true },
-            orderBy: { createdAt: "desc" },
-            take: 500,
-        }),
-        prisma.$queryRaw<Array<{ loggedDate: Date }>>`
-            SELECT "loggedDate" FROM "bodyweight_logs" WHERE "userId" = ${userId}
-            ORDER BY "loggedDate" DESC LIMIT 500
-        `,
     ]);
 
-    const workoutDayTimes = completedWorkoutDays.map((l) => {
-        const d = new Date(l.loggedAt);
-        d.setHours(0, 0, 0, 0);
-        return d.getTime();
-    });
-
-    const maxStreak = computeMaxConsecutiveDays(workoutDayTimes);
-
-    const activeDaySet = new Set<number>();
-    for (const t of workoutDayTimes) activeDaySet.add(t);
-    for (const c of checkInDays) {
-        const d = new Date(c.createdAt);
-        d.setHours(0, 0, 0, 0);
-        activeDaySet.add(d.getTime());
-    }
-    for (const b of bodyweightDays) {
-        const d = new Date(b.loggedDate);
-        d.setHours(0, 0, 0, 0);
-        activeDaySet.add(d.getTime());
-    }
-    const maxActiveDayStreak = computeMaxConsecutiveDays([...activeDaySet]);
+    const adherence = await getWorkoutAdherenceForUser(userId);
 
     return {
         workoutLogsTotal,
@@ -249,8 +192,9 @@ export async function getAchievementStats(userId: string): Promise<AchievementSt
         checkIns,
         prCount,
         bodyweightLogs,
-        currentStreak: maxStreak,
-        maxStreak,
+        maxAdherenceStreak: adherence.maxStreak,
+        perfectWeeks: adherence.perfectWeeks,
+        scheduledHits: adherence.scheduledHits,
         publicPlans,
         plansCreated,
         plansCopied,
@@ -261,7 +205,6 @@ export async function getAchievementStats(userId: string): Promise<AchievementSt
         completedSets,
         totalTrainingMinutes: trainingAgg._sum.duration ?? 0,
         hasEstimated1RM: Boolean(hasEstimated1RM),
-        maxActiveDayStreak,
         onboardingDone: user?.onboardingDone ?? false,
         dailyMetricsLogs,
     };
@@ -297,7 +240,33 @@ function buildDisplayList(
     });
 }
 
+/** Most recently unlocked achievements for profile preview. */
+export function getRecentAchievementPreview(
+    achievements: AchievementDisplayItem[],
+    limit = 3
+): AchievementDisplayItem[] {
+    return achievements
+        .filter((item) => item.unlocked)
+        .sort((a, b) => {
+            const aTime = a.unlockedAt ? new Date(a.unlockedAt).getTime() : 0;
+            const bTime = b.unlockedAt ? new Date(b.unlockedAt).getTime() : 0;
+            return bTime - aTime;
+        })
+        .slice(0, limit);
+}
+
 export async function syncUserAchievements(userId: string): Promise<string[]> {
+    const inFlight = syncInFlight.get(userId);
+    if (inFlight) return inFlight;
+
+    const run = doSyncUserAchievements(userId).finally(() => {
+        syncInFlight.delete(userId);
+    });
+    syncInFlight.set(userId, run);
+    return run;
+}
+
+async function doSyncUserAchievements(userId: string): Promise<string[]> {
     await ensureAchievementsTables();
 
     const [stats, unlocked] = await Promise.all([
@@ -312,19 +281,35 @@ export async function syncUserAchievements(userId: string): Promise<string[]> {
         if (!evaluateAchievement(def, stats)) continue;
 
         const id = randomUUID();
+        let inserted = false;
         try {
-            await prisma.$executeRaw`
+            const rows = await prisma.$queryRaw<Array<{ id: string }>>`
                 INSERT INTO "user_achievements" ("id", "userId", "achievementId")
                 VALUES (${id}, ${userId}, ${def.id})
                 ON CONFLICT ("userId", "achievementId") DO NOTHING
+                RETURNING "id"
             `;
+            inserted = rows.length > 0;
         } catch (err) {
             console.error("[achievements] insert failed", def.id, err);
             continue;
         }
 
+        if (!inserted) continue;
+
         unlocked.set(def.id, new Date());
         newlyUnlocked.push(def.id);
+
+        await ensureNotificationsTable();
+        const existingNotification = await prisma.$queryRaw<Array<{ id: string }>>`
+            SELECT "id"
+            FROM "notifications"
+            WHERE "userId" = ${userId}
+              AND "type" = ${NOTIFICATION_TYPES.ACHIEVEMENT_UNLOCKED}
+              AND "entityId" = ${def.id}
+            LIMIT 1
+        `;
+        if (existingNotification.length > 0) continue;
 
         await createNotification({
             userId,
@@ -355,7 +340,7 @@ export async function getAchievementSummary(userId: string): Promise<Achievement
     return {
         totalUnlocked,
         totalAchievements: TOTAL_ACHIEVEMENTS,
-        preview: achievements.slice(0, 5),
+        preview: getRecentAchievementPreview(achievements, 3),
         achievements,
     };
 }

@@ -9,13 +9,15 @@ import { getBodyweightAverageSinceLastCheckIn } from "@/lib/checkInPeriodSummary
 import { getWorkoutsTargetFromUserPlan } from "@/lib/planTrainingTarget";
 import { withResolvedCheckInMedia } from "@/lib/uploadUrls";
 import { DashboardClient } from "./DashboardClient";
-import { getCheckInDueState, getUserCheckInSchedule } from "@/lib/checkInSchedule";
+import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
+import { getEffectiveCheckInDueStateForUser } from "@/lib/coachAttentionActions";
 import { getDailyMetricsSummary } from "@/lib/dailyMetrics";
 import { ensureAppSchema, formatErrorDetails } from "@/lib/ensureAppSchema";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
 import { SafeFallback, rethrowNextInternalErrors } from "@/components/shared/SafeFallback";
 import { cleanupStaleInProgressSessions } from "@/lib/workoutSessionCleanup";
 import { isCoachRole, canAccessCheckIns } from "@/lib/roles";
+import { getWorkoutStreak } from "@/lib/workoutAdherenceStreak";
 
 export const metadata = { title: "Dashboard" };
 
@@ -184,23 +186,7 @@ export default async function DashboardPage() {
 
         const avgDurationMin = durationCount > 0 ? Math.round(totalDuration / durationCount) : 0;
 
-        // Streak: consecutive days with a completed log (up to today)
-        const allLogDates = [...new Set(
-            user.workoutLogs
-                .filter((l: any) => l.status === "COMPLETED")
-                .map((l: any) => new Date(l.loggedAt).toDateString())
-        )].map(d => new Date(d).getTime()).sort((a, b) => b - a);
-
-        let streak = 0;
-        const checkDay = parseLogDate(todayDate);
-        for (const dayTime of allLogDates) {
-            if (dayTime === checkDay.getTime()) {
-                streak++;
-                checkDay.setDate(checkDay.getDate() - 1);
-            } else if (dayTime < checkDay.getTime()) {
-                break;
-            }
-        }
+        const streak = await getWorkoutStreak(user.id);
 
         let nextTrainingDay: { id: string; name: string; date: string; dayLabel: string } | null = null;
         for (let offset = 1; offset <= 42; offset++) {
@@ -223,7 +209,7 @@ export default async function DashboardPage() {
             getDailyMetricsSummary(user.id, todayDate),
         ]);
         const checkInSchedule = await getUserCheckInSchedule(user.id);
-        const checkInDueState = getCheckInDueState(checkInSchedule, new Date());
+        const checkInDueState = await getEffectiveCheckInDueStateForUser(user.id, checkInSchedule, new Date());
 
         const checkInPanel = canAccessCheckIns(user.role, user.coachId)
             ? {

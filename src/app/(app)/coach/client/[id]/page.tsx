@@ -3,7 +3,8 @@ import { redirect, notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { ClientDetailView } from "./ClientDetailView";
-import { getCheckInDueState, getUserCheckInSchedule } from "@/lib/checkInSchedule";
+import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
+import { getEffectiveCheckInDueStateForUser } from "@/lib/coachAttentionActions";
 import { getWeekNumber } from "@/lib/utils";
 import { getDailyMetricTargets } from "@/lib/dailyMetrics";
 import { format } from "date-fns";
@@ -150,7 +151,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             : await getActiveSessionsForClients([target.id]);
         const activeSession = activeSessions[target.id] ?? null;
 
-        const checkInDueState = getCheckInDueState(checkInSchedule, new Date());
+        const checkInDueState = await getEffectiveCheckInDueStateForUser(target.id, checkInSchedule, new Date());
         const awaitingCheckIn =
             checkInDueState.isConfigured &&
             !hasCheckInThisWeek &&

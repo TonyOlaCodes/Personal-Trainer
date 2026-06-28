@@ -110,7 +110,7 @@ export default async function AppLayout({
                     </main>
                 </div>
 
-                <MobileTabBar userRole={userRole} showCheckIns={showCheckIns} />
+                <MobileTabBar userRole={userRole} />
             </div>
             </AppWalkthroughProvider>
             </ChatUnreadProvider>

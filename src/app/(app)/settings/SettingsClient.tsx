@@ -4,10 +4,10 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import {
     User, Bell, Palette,
     HelpCircle, LogOut, ChevronRight, Check,
-    Camera, Loader2, Target, RotateCcw, Scale, ImageIcon, Link2,
+    Camera, Loader2, Target, RotateCcw, Scale, ImageIcon, Link2, ArrowLeft,
 } from "lucide-react";
 import { useClerk } from "@clerk/nextjs";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { cn, getInitials } from "@/lib/utils";
 import { resolveUploadUrl, uploadMediaFile } from "@/lib/compressImage";
@@ -79,7 +79,7 @@ const LOC_LABELS: Record<string, string> = {
 export function SettingsClient({ user }: Props) {
     const { signOut } = useClerk();
     const router = useRouter();
-    const [activeTab, setActiveTab] = useState("profile");
+    const searchParams = useSearchParams();
 
     // Profile form states
     const [name, setName] = useState(user.name || "");
@@ -111,14 +111,6 @@ export function SettingsClient({ user }: Props) {
     const [goalSaved, setGoalSaved] = useState(false);
     const goalReadyRef = useRef(false);
     const [walkthroughResetting, setWalkthroughResetting] = useState(false);
-    const settingsContentRef = useRef<HTMLDivElement>(null);
-
-    const selectSettingsTab = (id: string) => {
-        setActiveTab(id);
-        window.requestAnimationFrame(() => {
-            settingsContentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-        });
-    };
 
     const showCoachNotifications = isCoachRole(user.role);
     const showClientNotifications = isCoachedPremium(user.role, user.coachId);
@@ -130,6 +122,12 @@ export function SettingsClient({ user }: Props) {
         { id: "notifications", label: "Notifications", icon: Bell },
         { id: "legal", label: "Legal", icon: Scale },
     ];
+
+    const sectionParam = searchParams.get("section");
+    const sectionIds = sections.map((section) => section.id);
+    const activeSection =
+        sectionParam && sectionIds.includes(sectionParam) ? sectionParam : null;
+    const activeSectionMeta = sections.find((section) => section.id === activeSection);
 
     const [notifyOnWorkout, setNotifyOnWorkout] = useState(user.notifyOnWorkout ?? true);
     const [notifyOnCheckIn, setNotifyOnCheckIn] = useState(user.notifyOnCheckIn ?? true);
@@ -198,7 +196,7 @@ export function SettingsClient({ user }: Props) {
     ]);
 
     useEffect(() => {
-        if (activeTab !== "notifications") return;
+        if (activeSection !== "notifications") return;
         if (!notifReadyRef.current) {
             notifReadyRef.current = true;
             return;
@@ -229,7 +227,7 @@ export function SettingsClient({ user }: Props) {
         }, 450);
 
         return () => window.clearTimeout(timer);
-    }, [activeTab, buildNotificationPayload, router]);
+    }, [activeSection, buildNotificationPayload, router]);
 
     const saveProfileFields = useCallback(async (fields: {
         name?: string;
@@ -263,7 +261,7 @@ export function SettingsClient({ user }: Props) {
     }, [router]);
 
     useEffect(() => {
-        if (activeTab !== "profile") return;
+        if (activeSection !== "profile") return;
         if (!profileReadyRef.current) {
             profileReadyRef.current = true;
             return;
@@ -281,7 +279,7 @@ export function SettingsClient({ user }: Props) {
         }, 450);
 
         return () => window.clearTimeout(timer);
-    }, [activeTab, name, avatarUrl, bannerUrl, bio, isPrivateProfile, socialLinks, saveProfileFields]);
+    }, [activeSection, name, avatarUrl, bannerUrl, bio, isPrivateProfile, socialLinks, saveProfileFields]);
 
     // Access code state
     const [secretCode, setSecretCode] = useState("");
@@ -363,7 +361,7 @@ export function SettingsClient({ user }: Props) {
     ]);
 
     useEffect(() => {
-        if (activeTab !== "goals") return;
+        if (activeSection !== "goals") return;
         if (!goalReadyRef.current) {
             goalReadyRef.current = true;
             return;
@@ -394,7 +392,7 @@ export function SettingsClient({ user }: Props) {
         }, 450);
 
         return () => window.clearTimeout(timer);
-    }, [activeTab, buildGoalPayload, router]);
+    }, [activeSection, buildGoalPayload, router]);
 
     const handleRedeemCode = async () => {
         if (!secretCode.trim()) return;
@@ -440,47 +438,82 @@ export function SettingsClient({ user }: Props) {
     };
 
     return (
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 flex flex-col md:flex-row md:items-start gap-6 md:gap-8 animate-fade-in pb-20">
-            {/* Section nav — always visible; sticky while scrolling content */}
-            <aside className="w-full md:w-56 lg:w-64 shrink-0 sticky top-16 z-20 md:top-6 bg-surface/95 backdrop-blur-md md:bg-transparent md:backdrop-blur-none -mx-4 px-4 py-2 md:mx-0 md:px-0 md:py-0 border-b border-surface-border md:border-0">
-                <div className="flex md:flex-col gap-1.5 overflow-x-auto no-scrollbar md:overflow-visible pb-1 md:pb-0">
-                    {sections.map((s) => (
-                        <button
-                            key={s.id}
-                            type="button"
-                            onClick={() => selectSettingsTab(s.id)}
-                            className={cn(
-                                "flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl transition-all shrink-0 md:shrink md:w-full",
-                                activeTab === s.id
-                                    ? "bg-surface-elevated text-fg shadow-card border border-surface-border"
-                                    : "text-fg-muted hover:bg-surface-muted/50 hover:text-fg border border-transparent"
-                            )}
-                        >
-                            <div className="flex items-center gap-2.5 min-w-0">
-                                <s.icon className={cn("w-4 h-4 shrink-0", activeTab === s.id ? "text-brand-400" : "text-fg-subtle")} />
-                                <span className="text-sm font-medium whitespace-nowrap">{s.label}</span>
-                            </div>
-                            {activeTab === s.id && <ChevronRight className="hidden md:block w-4 h-4 text-brand-400 shrink-0" />}
-                        </button>
-                    ))}
-                </div>
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 animate-fade-in pb-20">
+            {!activeSection ? (
+                <div className="space-y-6">
+                    <div className="space-y-2">
+                        {sections.map((section) => (
+                            <Link
+                                key={section.id}
+                                href={`/settings?section=${section.id}`}
+                                className="card p-4 flex items-center justify-between gap-3 hover:border-brand-500/30 transition-colors"
+                            >
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <div className="w-10 h-10 rounded-xl bg-surface-muted border border-surface-border flex items-center justify-center shrink-0">
+                                        <section.icon className="w-4 h-4 text-brand-400" />
+                                    </div>
+                                    <span className="text-sm font-bold text-fg">{section.label}</span>
+                                </div>
+                                <ChevronRight className="w-4 h-4 text-fg-subtle shrink-0" />
+                            </Link>
+                        ))}
+                    </div>
 
-                <div className="pt-3 mt-3 border-t border-surface-border">
                     <button
                         type="button"
                         onClick={() => signOut({ redirectUrl: "/" })}
-                        className="w-full flex items-center gap-3 p-3 rounded-xl text-danger/60 hover:text-danger hover:bg-danger-muted/10 transition-all font-medium text-sm"
+                        className="w-full card p-4 flex items-center gap-3 text-danger/70 hover:text-danger hover:border-danger/30 transition-colors font-medium text-sm"
                     >
                         <LogOut className="w-4 h-4 shrink-0" />
-                        <span className="whitespace-nowrap">Sign Out</span>
+                        Sign Out
                     </button>
-                </div>
-            </aside>
 
-            {/* Main Content Area */}
-            <div ref={settingsContentRef} className="flex-1 min-w-0 scroll-mt-20 md:scroll-mt-6 space-y-6">
-                {/* ─── Profile ─── */}
-                {activeTab === "profile" && (
+                    <div className="card p-6 border-brand-800/20 bg-brand-950/20 flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-2xl bg-brand-900/40 flex items-center justify-center">
+                                <HelpCircle className="w-6 h-6 text-brand-400" />
+                            </div>
+                            <div>
+                                <h4 className="font-bold text-fg">Need help?</h4>
+                                <p className="text-[15px] text-fg-muted leading-snug">Email {supportEmail} or support the app.</p>
+                            </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2 justify-end">
+                            <Link href="/donate" className="btn-ghost whitespace-nowrap font-bold uppercase tracking-wide">
+                                Support the app
+                            </Link>
+                            <button
+                                type="button"
+                                onClick={() => { window.location.href = `mailto:${supportEmail}`; }}
+                                className="btn-secondary whitespace-nowrap"
+                            >
+                                Contact Support
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            ) : (
+                <div className="space-y-6">
+                    <button
+                        type="button"
+                        onClick={() => router.push("/settings")}
+                        className="inline-flex items-center gap-2 text-sm font-bold text-fg-muted hover:text-fg transition-colors"
+                    >
+                        <ArrowLeft className="w-4 h-4" />
+                        Back to settings
+                    </button>
+
+                    {activeSectionMeta && (
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-brand-400/10 border border-brand-400/20 flex items-center justify-center shrink-0">
+                                <activeSectionMeta.icon className="w-4 h-4 text-brand-400" />
+                            </div>
+                            <h2 className="text-xl font-black text-fg">{activeSectionMeta.label}</h2>
+                        </div>
+                    )}
+
+                    <div className="space-y-6">
+                {activeSection === "profile" && (
                     <div className="card p-8 space-y-8 animate-slide-up bg-gradient-to-br from-surface-card to-brand-950/5">
                         <div className="flex items-start justify-between gap-3">
                             <div className="flex flex-col sm:flex-row items-center gap-6 flex-1 min-w-0">
@@ -693,7 +726,7 @@ export function SettingsClient({ user }: Props) {
                 )}
 
                 {/* ─── Goals ─── */}
-                {activeTab === "goals" && (
+                {activeSection === "goals" && (
                     <div className="card p-8 space-y-8 animate-slide-up bg-gradient-to-br from-surface-card to-brand-950/5">
                         <div className="flex items-center justify-between gap-3 pb-2 border-b border-surface-border">
                             <div className="flex items-center gap-3 min-w-0">
@@ -897,7 +930,7 @@ export function SettingsClient({ user }: Props) {
                     </div>
                 )}
 
-                {activeTab === "notifications" && (
+                {activeSection === "notifications" && (
                     <div className="card p-6 space-y-6 animate-slide-up">
                         <div className="flex items-start justify-between gap-3">
                             <div>
@@ -1014,7 +1047,7 @@ export function SettingsClient({ user }: Props) {
                     </div>
                 )}
 
-                {activeTab === "appearance" && (
+                {activeSection === "appearance" && (
                     <div className="card p-8 space-y-8 animate-slide-up">
                         <div>
                             <h3 className="text-xl font-bold text-fg mb-1">Theme Presets</h3>
@@ -1048,7 +1081,7 @@ export function SettingsClient({ user }: Props) {
                     </div>
                 )}
 
-                {activeTab === "legal" && (
+                {activeSection === "legal" && (
                     <div className="card p-8 space-y-6 animate-slide-up">
                         <div>
                             <h3 className="heading-2 mb-2">Legal</h3>
@@ -1099,31 +1132,9 @@ export function SettingsClient({ user }: Props) {
 
 
 
-                {/* Support Card */}
-                <div className="card p-6 border-brand-800/20 bg-brand-950/20 flex flex-col sm:flex-row items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-2xl bg-brand-900/40 flex items-center justify-center">
-                            <HelpCircle className="w-6 h-6 text-brand-400" />
-                        </div>
-                        <div>
-                            <h4 className="font-bold text-fg">Need help?</h4>
-                            <p className="text-[15px] text-fg-muted leading-snug">Email {supportEmail} or support the app.</p>
-                        </div>
-                    </div>
-                    <div className="flex flex-wrap gap-2 justify-end">
-                        <Link href="/donate" className="btn-ghost whitespace-nowrap font-bold uppercase tracking-wide">
-                            Support the app
-                        </Link>
-                        <button
-                            type="button"
-                            onClick={() => { window.location.href = `mailto:${supportEmail}`; }}
-                            className="btn-secondary whitespace-nowrap"
-                        >
-                            Contact Support
-                        </button>
                     </div>
                 </div>
-            </div>
+            )}
         </div>
     );
 }

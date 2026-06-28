@@ -7,7 +7,7 @@ import {
     ensureUserProfileColumns,
     getProfileViewMode,
 } from "@/lib/userProfile";
-import { recordProfileView, triggerAchievementSync } from "@/lib/achievements";
+import { recordProfileView } from "@/lib/achievements";
 
 export async function GET(
     _req: Request,
@@ -43,7 +43,6 @@ export async function GET(
         if (viewer.id !== targetUserId && viewMode !== "none") {
             await recordProfileView(viewer.id, targetUserId);
         }
-        triggerAchievementSync(targetUserId);
 
         const profile = await buildPublicProfileData(targetUserId, viewer.id, viewMode);
 

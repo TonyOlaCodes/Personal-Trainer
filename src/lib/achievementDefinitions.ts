@@ -36,8 +36,9 @@ export interface AchievementStats {
     checkIns: number;
     prCount: number;
     bodyweightLogs: number;
-    currentStreak: number;
-    maxStreak: number;
+    maxAdherenceStreak: number;
+    perfectWeeks: number;
+    scheduledHits: number;
     publicPlans: number;
     plansCreated: number;
     plansCopied: number;
@@ -48,7 +49,6 @@ export interface AchievementStats {
     completedSets: number;
     totalTrainingMinutes: number;
     hasEstimated1RM: boolean;
-    maxActiveDayStreak: number;
     onboardingDone: boolean;
     dailyMetricsLogs: number;
 }
@@ -61,7 +61,7 @@ export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
     { id: "first-check-in", title: "First Check-in", description: "Submit your first weekly check-in", rarity: "common", icon: "clipboard", target: 1, progressKey: "checkIns" },
     { id: "first-pr", title: "First PR", description: "Set your first personal record", rarity: "common", icon: "zap", target: 1, progressKey: "prCount" },
     { id: "first-bodyweight-log", title: "First Bodyweight Log", description: "Log your bodyweight for the first time", rarity: "common", icon: "scale", target: 1, progressKey: "bodyweightLogs" },
-    { id: "first-workout-streak", title: "First Workout Streak", description: "Train on back-to-back days", rarity: "common", icon: "flame", target: 2, progressKey: "maxStreak" },
+    { id: "first-workout-streak", title: "Didn't Miss a Workout", description: "Complete a scheduled workout on its planned day", rarity: "common", icon: "flame", target: 1, progressKey: "scheduledHits" },
     { id: "first-shared-plan", title: "First Shared Plan", description: "Make a workout plan public", rarity: "common", icon: "share", target: 1, progressKey: "publicPlans" },
 
     // Workouts
@@ -72,14 +72,13 @@ export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
     { id: "workouts-250", title: "250 Workouts Completed", description: "Complete 250 training sessions", rarity: "epic", icon: "dumbbell", target: 250, progressKey: "workoutsCompleted" },
     { id: "workouts-500", title: "500 Workouts Completed", description: "Complete 500 training sessions", rarity: "legendary", icon: "dumbbell", target: 500, progressKey: "workoutsCompleted" },
 
-    // Streaks
-    { id: "streak-3", title: "3 Day Streak", description: "Train 3 days in a row", rarity: "common", icon: "flame", target: 3, progressKey: "maxStreak" },
-    { id: "streak-7", title: "7 Day Streak", description: "Train 7 days in a row", rarity: "common", icon: "flame", target: 7, progressKey: "maxStreak" },
-    { id: "streak-14", title: "14 Day Streak", description: "Train 14 days in a row", rarity: "rare", icon: "flame", target: 14, progressKey: "maxStreak" },
-    { id: "streak-30", title: "30 Day Streak", description: "Train 30 days in a row", rarity: "rare", icon: "flame", target: 30, progressKey: "maxStreak" },
-    { id: "streak-50", title: "50 Day Streak", description: "Train 50 days in a row", rarity: "epic", icon: "flame", target: 50, progressKey: "maxStreak" },
-    { id: "streak-100", title: "100 Day Streak", description: "Train 100 days in a row", rarity: "epic", icon: "flame", target: 100, progressKey: "maxStreak" },
-    { id: "streak-365", title: "365 Day Streak", description: "Train every day for a full year", rarity: "legendary", icon: "flame", target: 365, progressKey: "maxStreak" },
+    { id: "streak-3", title: "3 Workout Adherence Streak", description: "Complete 3 scheduled workouts in a row without missing one", rarity: "common", icon: "flame", target: 3, progressKey: "maxAdherenceStreak" },
+    { id: "streak-7", title: "7 Workout Adherence Streak", description: "Complete 7 scheduled workouts in a row without missing one", rarity: "common", icon: "flame", target: 7, progressKey: "maxAdherenceStreak" },
+    { id: "streak-14", title: "14 Workout Adherence Streak", description: "Complete 14 scheduled workouts in a row without missing one", rarity: "rare", icon: "flame", target: 14, progressKey: "maxAdherenceStreak" },
+    { id: "streak-30", title: "30 Workout Adherence Streak", description: "Complete 30 scheduled workouts in a row without missing one", rarity: "rare", icon: "flame", target: 30, progressKey: "maxAdherenceStreak" },
+    { id: "streak-50", title: "50 Workout Adherence Streak", description: "Complete 50 scheduled workouts in a row without missing one", rarity: "epic", icon: "flame", target: 50, progressKey: "maxAdherenceStreak" },
+    { id: "streak-100", title: "100 Workout Adherence Streak", description: "Complete 100 scheduled workouts in a row without missing one", rarity: "epic", icon: "flame", target: 100, progressKey: "maxAdherenceStreak" },
+    { id: "streak-365", title: "365 Workout Adherence Streak", description: "Complete 365 scheduled workouts in a row without missing one", rarity: "legendary", icon: "flame", target: 365, progressKey: "maxAdherenceStreak" },
 
     // Check-ins
     { id: "checkins-5", title: "5 Check-ins", description: "Submit 5 weekly check-ins", rarity: "common", icon: "clipboard", target: 5, progressKey: "checkIns" },
@@ -98,7 +97,7 @@ export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
     { id: "prs-10", title: "10 Personal Records", description: "Hit 10 personal records", rarity: "common", icon: "zap", target: 10, progressKey: "prCount" },
     { id: "prs-25", title: "25 Personal Records", description: "Hit 25 personal records", rarity: "rare", icon: "zap", target: 25, progressKey: "prCount" },
     { id: "prs-50", title: "50 Personal Records", description: "Hit 50 personal records", rarity: "epic", icon: "zap", target: 50, progressKey: "prCount" },
-    { id: "active-week", title: "Logged Every Day for a Week", description: "Log activity 7 days in a row", rarity: "rare", icon: "calendar", target: 7, progressKey: "maxActiveDayStreak" },
+    { id: "active-week", title: "Perfect Training Week", description: "Complete every scheduled workout in a calendar week", rarity: "rare", icon: "calendar", target: 1, progressKey: "perfectWeeks" },
 
     // Plans
     { id: "created-first-plan", title: "Created First Plan", description: "Build your first workout plan", rarity: "common", icon: "folder", target: 1, progressKey: "plansCreated" },

@@ -35,6 +35,7 @@ export default async function CalendarPage() {
                     loggedDates={calendar.loggedDates}
                     inProgressSessions={calendar.inProgressSessions}
                     scheduleRevisions={calendar.scheduleRevisions}
+                    excusedMissedWorkoutKeys={calendar.excusedMissedWorkoutKeys}
                 />
             </div>
         </>

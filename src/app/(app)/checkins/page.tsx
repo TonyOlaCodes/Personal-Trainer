@@ -7,7 +7,8 @@ import { CheckInsClient } from "./CheckInsClient";
 import { startOfWeek, endOfWeek } from "date-fns";
 import { getBodyweightAverageSinceLastCheckIn } from "@/lib/checkInPeriodSummary";
 import { getWorkoutsTargetFromUserPlan } from "@/lib/planTrainingTarget";
-import { getCheckInDueState, getUserCheckInSchedule } from "@/lib/checkInSchedule";
+import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
+import { getEffectiveCheckInDueStateForUser } from "@/lib/coachAttentionActions";
 import { SafeFallback, rethrowNextInternalErrors } from "@/components/shared/SafeFallback";
 import { withResolvedCheckInMedia } from "@/lib/uploadUrls";
 import { formatErrorDetails } from "@/lib/ensureAppSchema";
@@ -95,7 +96,7 @@ export default async function CheckInsPage() {
         const checkInSchedule = isCoach ? null : await getUserCheckInSchedule(user.id);
         const overdueClients = isCoach ? await getOverdueCheckInClientsForCoach(user.id) : [];
         const checkInDueState = checkInSchedule
-            ? getCheckInDueState(checkInSchedule, new Date())
+            ? await getEffectiveCheckInDueStateForUser(user.id, checkInSchedule, new Date())
             : {
                 day: null,
                 frequencyWeeks: null,

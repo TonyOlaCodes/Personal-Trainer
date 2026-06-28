@@ -61,6 +61,7 @@ interface PlanPayload {
     description?: string | null;
     weeks?: PlanWeekPayload[];
     creator?: { name: string } | null;
+    canCopy?: boolean;
     error?: string;
 }
 
@@ -91,6 +92,8 @@ export function PlanCreateClient() {
     const [draggedExerciseIdx, setDraggedExerciseIdx] = useState<number | null>(null);
     const [dragEnabledIdx, setDragEnabledIdx] = useState<number | null>(null);
     const [copyNotice, setCopyNotice] = useState<string | null>(null);
+    const [canCopyPlan, setCanCopyPlan] = useState(false);
+    const [cloningPlan, setCloningPlan] = useState(false);
 
     const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
     const cloneWeeks = (source: LocalWeek[]): LocalWeek[] => source.map((week) => ({
@@ -122,6 +125,7 @@ export function PlanCreateClient() {
                     if (res.ok) {
                         setName(data.name);
                         setDesc(data.description || "");
+                        setCanCopyPlan(Boolean(data.canCopy));
                         if (data.creator?.name) {
                             setCreatorName(data.creator.name);
                         }
@@ -148,6 +152,7 @@ export function PlanCreateClient() {
                         setLinearityStartWeekIdx(0);
                     } else {
                         setWeeks([]);
+                        setCanCopyPlan(false);
                         setError(data.error || "Failed to load plan details.");
                     }
                 } catch (e) {
@@ -219,6 +224,24 @@ export function PlanCreateClient() {
             formatPlanText({ name, description: desc, weeks }),
             "Full plan copied!"
         );
+    };
+
+    const clonePlanToLibrary = async () => {
+        if (!editId || cloningPlan) return;
+        setCloningPlan(true);
+        try {
+            const res = await fetch(`/api/plans/${editId}/copy`, { method: "POST" });
+            const data = await res.json();
+            if (!res.ok) {
+                alert(data.error ?? "Could not copy plan");
+                return;
+            }
+            router.push(data.route ?? "/plans");
+        } catch {
+            alert("Connection error");
+        } finally {
+            setCloningPlan(false);
+        }
     };
 
     const copyCurrentDay = () => {
@@ -511,7 +534,7 @@ export function PlanCreateClient() {
                 <div className="w-12 h-12 bg-danger-muted/10 flex items-center justify-center rounded-2xl mb-2">
                     <Trash2 className="w-6 h-6 text-danger/60" />
                 </div>
-                <h3 className="heading-3">Access Problem</h3>
+                <h3 className="heading-3">{isViewOnly ? "Plan unavailable" : "Access Problem"}</h3>
                 <p className="text-sm text-fg-muted max-w-xs">{error}</p>
                 <button onClick={() => router.back()} className="btn-secondary mt-2">Go Back</button>
             </div>
@@ -548,15 +571,33 @@ export function PlanCreateClient() {
                                 {copyNotice ?? saveNotice}
                             </span>
                         )}
-                        <button
-                            type="button"
-                            onClick={copyFullPlan}
-                            className="btn-secondary h-10 px-3 sm:px-4 gap-2"
-                            title="Copy all weeks, days, sets and reps"
-                        >
-                            <Copy className="w-4 h-4" />
-                            <span className="hidden sm:inline">Copy plan</span>
-                        </button>
+                        {isViewOnly && canCopyPlan && (
+                            <button
+                                type="button"
+                                onClick={() => void clonePlanToLibrary()}
+                                disabled={cloningPlan}
+                                className="btn-primary h-10 px-3 sm:px-4 gap-2"
+                                title="Add a copy of this plan to your library"
+                            >
+                                {cloningPlan ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                    <CopyPlus className="w-4 h-4" />
+                                )}
+                                <span className="hidden sm:inline">{cloningPlan ? "Copying..." : "Copy plan"}</span>
+                            </button>
+                        )}
+                        {!isViewOnly && (
+                            <button
+                                type="button"
+                                onClick={copyFullPlan}
+                                className="btn-secondary h-10 px-3 sm:px-4 gap-2"
+                                title="Copy all weeks, days, sets and reps"
+                            >
+                                <Copy className="w-4 h-4" />
+                                <span className="hidden sm:inline">Copy plan</span>
+                            </button>
+                        )}
                 {!isViewOnly && (
                     <>
                         <button 

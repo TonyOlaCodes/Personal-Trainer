@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { APP_TIMEZONE } from "@/lib/appTimezone";
 import { getCheckInDueState, getUserCheckInSchedule } from "@/lib/checkInSchedule";
+import { applyCheckInAttentionOverrides, getClientAttentionActions } from "@/lib/coachAttentionActions";
 import { getLocalTimeParts } from "@/lib/coachNotificationSchedule";
 import { getWeekNumber } from "@/lib/utils";
 import { isInactiveAccount } from "@/lib/userDeactivation";
@@ -47,7 +48,9 @@ export async function getOverdueCheckInClientsForCoach(coachId: string): Promise
         if (client.checkIns.length > 0) continue;
 
         const schedule = await getUserCheckInSchedule(client.id);
-        const dueState = getCheckInDueState(schedule, now);
+        const dueStateRaw = getCheckInDueState(schedule, now);
+        const clientActions = await getClientAttentionActions(client.id);
+        const dueState = applyCheckInAttentionOverrides(dueStateRaw, clientActions, weekNumber, now);
         if (!dueState.isConfigured) continue;
         if (!dueState.isOverdue && !dueState.isDueToday) continue;
 

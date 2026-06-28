@@ -43,7 +43,7 @@ export function StreakBadge({
 
     return (
         <div
-            title={`${streak} day training streak`}
+            title={`${streak} scheduled workout${streak === 1 ? "" : "s"} in a row without missing one`}
             className={cn(
                 "inline-flex items-center rounded-full border cursor-default select-none",
                 "bg-gradient-to-r from-red-600/20 via-orange-500/20 to-amber-500/15",
@@ -65,7 +65,7 @@ export function StreakBadge({
             </span>
             {showLabel && (
                 <span className={cn(s.label, "font-black uppercase tracking-widest text-orange-400/90")}>
-                    day{streak === 1 ? "" : "s"}
+                    workout{streak === 1 ? "" : "s"}
                 </span>
             )}
         </div>

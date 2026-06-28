@@ -9,11 +9,19 @@ import {
 } from "@/lib/calendarCompliance";
 import { getTotalUnreadDirectCount, getUnreadCountsByPeer } from "@/lib/chatUnread";
 import { getMissedWorkoutsYesterdayForCoach } from "@/lib/coachMissedWorkoutsYesterday";
+import {
+    buildSetupNeededAlertKey,
+    buildUnreadMessageAlertKey,
+    getCoachAttentionActions,
+    isCheckInAlertDismissed,
+    isMissedWorkoutExcused,
+} from "@/lib/coachAttentionActions";
 import { getPlannedWorkoutForDate, type ActiveUserPlanLike } from "@/lib/planSchedule";
 import { loadPlanScheduleRevisionsByPlanIds } from "@/lib/planScheduleHistory";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
 import { isInactiveAccount } from "@/lib/userDeactivation";
 import { getWeekNumber, parseLogDate, toDateKey } from "@/lib/utils";
+import { computeWorkoutAdherence } from "@/lib/workoutAdherenceStreak";
 
 export interface CoachAttentionItem {
     key: string;
@@ -88,23 +96,6 @@ interface ActiveClientRow {
     activeSession: { workoutName: string } | null;
 }
 
-function computeStreakFromDateKeys(dateKeys: string[], todayKey: string): number {
-    const unique = [...new Set(dateKeys)].sort((a, b) => b.localeCompare(a));
-    if (unique.length === 0) return 0;
-
-    let streak = 0;
-    let cursor = parseLogDate(todayKey);
-    if (!unique.includes(todayKey)) {
-        cursor.setDate(cursor.getDate() - 1);
-    }
-
-    while (unique.includes(toDateKey(cursor))) {
-        streak++;
-        cursor.setDate(cursor.getDate() - 1);
-    }
-    return streak;
-}
-
 function buildCheckInLabel(
     dueState: ReturnType<typeof getCheckInDueState>,
     hasCheckInThisWeek: boolean
@@ -166,15 +157,15 @@ export async function loadCoachDashboardInsights(input: {
     const today = parseLogDate(todayKey);
     const weekStart = getMondayStart(today);
     const currentIsoWeek = getWeekNumber(today);
-    const streakLookback = new Date(Date.now() - 90 * 86400000);
 
     const [
         userPlans,
         todayCompletedLogs,
         weekLogDates,
-        streakLogs,
+        adherenceLogs,
         unreadByPeer,
         missedWorkoutsYesterday,
+        attentionActions,
     ] = await Promise.all([
         activeClientIds.length > 0
             ? prisma.userPlan.findMany({
@@ -234,19 +225,22 @@ export async function loadCoachDashboardInsights(input: {
                 where: {
                     userId: { in: activeClientIds },
                     status: "COMPLETED",
-                    loggedAt: { gte: streakLookback },
                 },
-                select: { userId: true, loggedAt: true },
+                select: { userId: true, workoutId: true, loggedAt: true },
             })
             : Promise.resolve([]),
         getUnreadCountsByPeer(input.coachId, activeClientIds),
         getMissedWorkoutsYesterdayForCoach(input.coachId),
+        getCoachAttentionActions(input.coachId),
     ]);
 
     const planIds = [...new Set(userPlans.map((row) => row.plan.id))];
     const revisionsByPlanId = await loadPlanScheduleRevisionsByPlanIds(planIds);
 
     const planByUserId = new Map(userPlans.map((row) => [row.userId, row]));
+    const planStartedAtByUser = new Map(
+        userPlans.map((row) => [row.userId, row.startedAt.getTime()])
+    );
     const todayCompletedByUser = new Map<string, Set<string>>();
     for (const log of todayCompletedLogs) {
         const set = todayCompletedByUser.get(log.userId) ?? new Set<string>();
@@ -261,15 +255,24 @@ export async function loadCoachDashboardInsights(input: {
         weekDatesByUser.set(log.userId, rows);
     }
 
-    const streakDatesByUser = new Map<string, string[]>();
-    for (const log of streakLogs) {
-        const rows = streakDatesByUser.get(log.userId) ?? [];
-        rows.push(toDateKey(log.loggedAt));
-        streakDatesByUser.set(log.userId, rows);
+    const adherenceLogsByUser = new Map<string, Array<{ workoutId: string; dateKey: string }>>();
+    for (const log of adherenceLogs) {
+        const startedAt = planStartedAtByUser.get(log.userId);
+        if (startedAt != null && log.loggedAt.getTime() < startedAt) continue;
+
+        const rows = adherenceLogsByUser.get(log.userId) ?? [];
+        rows.push({
+            workoutId: log.workoutId,
+            dateKey: getLocalTimeParts(log.loggedAt, APP_TIMEZONE).dateKey,
+        });
+        adherenceLogsByUser.set(log.userId, rows);
     }
 
     const clientInsights: Record<string, ClientDashboardInsight> = {};
-    const missedWorkoutsYesterdayCount = missedWorkoutsYesterday.length;
+    const openMissedWorkoutsYesterday = missedWorkoutsYesterday.filter(
+        (row) => !isMissedWorkoutExcused(attentionActions, row.clientId, row.dateKey, row.workoutId)
+    );
+    const missedWorkoutsYesterdayCount = openMissedWorkoutsYesterday.length;
     let overdueCheckIns = 0;
     let setupNeeded = 0;
     const clientsNeedingAttentionIds = new Set<string>();
@@ -309,18 +312,25 @@ export async function loadCoachDashboardInsights(input: {
             dueState.isConfigured
             && !hasCheckInThisWeek
             && (dueState.isOverdue || dueState.isDueToday)
+            && !isCheckInAlertDismissed(attentionActions, client.id, currentIsoWeek)
         ) {
             overdueCheckIns++;
             clientsNeedingAttentionIds.add(client.id);
         }
 
-        if (!client.hasCheckInSchedule) {
+        if (
+            !client.hasCheckInSchedule
+            && attentionActions.get(buildSetupNeededAlertKey(client.id))?.action !== "dismissed"
+        ) {
             setupNeeded++;
             clientsNeedingAttentionIds.add(client.id);
         }
 
         const unreadMessages = unreadByPeer[client.id] ?? 0;
-        if (unreadMessages > 0) {
+        if (
+            unreadMessages > 0
+            && attentionActions.get(buildUnreadMessageAlertKey(client.id))?.action !== "dismissed"
+        ) {
             clientsNeedingAttentionIds.add(client.id);
         }
 
@@ -334,13 +344,31 @@ export async function loadCoachDashboardInsights(input: {
             excludeTodayUntilLogged: true,
         });
 
-        const workoutStreak = computeStreakFromDateKeys(streakDatesByUser.get(client.id) ?? [], todayKey);
+        const workoutStreak = activeUserPlan
+            ? computeWorkoutAdherence({
+                activeUserPlan,
+                completedLogs: adherenceLogsByUser.get(client.id) ?? [],
+                today,
+            }).currentStreak
+            : 0;
+
+        const checkInNeedsAttention =
+            dueState.isConfigured
+            && !hasCheckInThisWeek
+            && (dueState.isOverdue || dueState.isDueToday)
+            && !isCheckInAlertDismissed(attentionActions, client.id, currentIsoWeek);
+        const setupNeedsAttention =
+            !client.hasCheckInSchedule
+            && attentionActions.get(buildSetupNeededAlertKey(client.id))?.action !== "dismissed";
+        const unreadNeedsAttention =
+            unreadMessages > 0
+            && attentionActions.get(buildUnreadMessageAlertKey(client.id))?.action !== "dismissed";
 
         const needsAttention =
             (plannedToday && !completedToday && !input.activeSessions[client.id])
-            || (dueState.isConfigured && !hasCheckInThisWeek && (dueState.isOverdue || dueState.isDueToday))
-            || !client.hasCheckInSchedule
-            || unreadMessages > 0;
+            || checkInNeedsAttention
+            || setupNeedsAttention
+            || unreadNeedsAttention;
 
         clientInsights[client.id] = {
             todayWorkout,
@@ -410,7 +438,11 @@ export async function loadCoachDashboardInsights(input: {
         return a.clientName.localeCompare(b.clientName, undefined, { sensitivity: "base" });
     });
 
-    const unreadTotal = Object.values(unreadByPeer).reduce((sum, n) => sum + n, 0);
+    const unreadTotal = Object.entries(unreadByPeer).reduce((sum, [clientId, count]) => {
+        if (count <= 0) return sum;
+        if (attentionActions.get(buildUnreadMessageAlertKey(clientId))?.action === "dismissed") return sum;
+        return sum + count;
+    }, 0);
     const activeWorkoutsNow = Object.values(input.activeSessions).filter(Boolean).length;
 
     for (const clientId of input.pendingReviewClientIds) {

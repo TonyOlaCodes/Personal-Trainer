@@ -4,15 +4,15 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-    Trophy, MessageSquare, Copy, Loader2, Lock, Dumbbell, ChevronRight,
+    Trophy, MessageSquare, Loader2, Lock, Dumbbell, ChevronRight,
     Target, Calendar, Scale, Activity, ExternalLink, Instagram,
-    Globe, Youtube,
+    Youtube, Users,
 } from "lucide-react";
 import { cn, getInitials, roleLabels, getRoleNameClass, formatDate } from "@/lib/utils";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { getPublicProfileHref } from "@/lib/profileNavigation";
 import { StreakBadge } from "@/components/shared/StreakBadge";
-import { AchievementCard } from "@/components/shared/AchievementsPanel";
+import { AchievementsList } from "@/components/shared/AchievementsPanel";
 import { AchievementsModal } from "@/components/shared/AchievementsModal";
 import type { AchievementDisplayItem } from "@/lib/achievements";
 import type { SocialLinks } from "@/lib/profilePrivacy";
@@ -47,12 +47,6 @@ interface PublicProfileActivityItem {
     loggedAt: string;
 }
 
-interface PublicProfileProgressPhoto {
-    id: string;
-    url: string;
-    loggedAt: string;
-}
-
 interface PublicProfileCoach {
     id: string;
     name: string;
@@ -61,6 +55,12 @@ interface PublicProfileCoach {
 }
 
 interface PublicProfileCoachedBy {
+    id: string;
+    name: string;
+    avatarUrl?: string | null;
+}
+
+interface PublicProfileCoachClient {
     id: string;
     name: string;
     avatarUrl?: string | null;
@@ -88,8 +88,8 @@ interface ProfilePayload {
     achievementSummary: PublicAchievementSummary;
     plans: PublicPlan[];
     activityFeed: PublicProfileActivityItem[];
-    progressPhotos: PublicProfileProgressPhoto[];
     socialLinks: SocialLinks | null;
+    coachClients: PublicProfileCoachClient[];
 }
 
 interface ViewerPayload {
@@ -174,7 +174,6 @@ export function PublicProfileClient({ userId }: Props) {
     const [error, setError] = useState<string | null>(null);
     const [profile, setProfile] = useState<ProfilePayload | null>(null);
     const [viewer, setViewer] = useState<ViewerPayload | null>(null);
-    const [copyingPlanId, setCopyingPlanId] = useState<string | null>(null);
     const [showAchievements, setShowAchievements] = useState(false);
     const [allAchievements, setAllAchievements] = useState<AchievementDisplayItem[] | null>(null);
     const [achievementsLoading, setAchievementsLoading] = useState(false);
@@ -246,23 +245,6 @@ export function PublicProfileClient({ userId }: Props) {
         }
     }, [searchParams, openAchievements]);
 
-    const copyPlan = async (planId: string) => {
-        setCopyingPlanId(planId);
-        try {
-            const res = await fetch(`/api/plans/${planId}/copy`, { method: "POST" });
-            const data = await res.json();
-            if (!res.ok) {
-                alert(data.error ?? "Could not copy plan");
-                return;
-            }
-            router.push(data.route ?? "/plans");
-        } catch {
-            alert("Connection error");
-        } finally {
-            setCopyingPlanId(null);
-        }
-    };
-
     if (loading) {
         return (
             <div className="flex items-center justify-center py-24">
@@ -296,11 +278,12 @@ export function PublicProfileClient({ userId }: Props) {
     }
 
     const isLimited = viewer.isLimitedView;
+    const isCoachProfile = profile.role === "COACH" || profile.role === "SUPER_ADMIN";
     const showWorkoutStats =
         !isLimited &&
         ((profile.streak != null && profile.streak > 0) ||
             (profile.totalWorkouts != null && profile.totalWorkouts > 0) ||
-            profile.bodyweightKg != null);
+            (!isCoachProfile && profile.bodyweightKg != null));
 
     const socialEntries = profile.socialLinks
         ? (Object.entries(profile.socialLinks) as Array<[keyof SocialLinks, string]>)
@@ -329,51 +312,13 @@ export function PublicProfileClient({ userId }: Props) {
                                         </span>
                                     </p>
                                 </div>
-                                <div className="flex flex-wrap gap-2">
-                                    <Link
-                                        href={`/plans/create?id=${plan.id}&view=true`}
-                                        className="btn-secondary inline-flex items-center justify-center gap-2"
-                                    >
-                                        <ExternalLink className="w-4 h-4" />
-                                        View plan
-                                    </Link>
-                                    {viewer.canCopyPlans && (
-                                        <button
-                                            type="button"
-                                            onClick={() => copyPlan(plan.id)}
-                                            disabled={copyingPlanId === plan.id}
-                                            className="btn-primary inline-flex items-center justify-center gap-2"
-                                        >
-                                            {copyingPlanId === plan.id ? (
-                                                <Loader2 className="w-4 h-4 animate-spin" />
-                                            ) : (
-                                                <Copy className="w-4 h-4" />
-                                            )}
-                                            Copy plan
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </SectionCard>
-            ),
-        });
-    }
-
-    if (!isLimited && profile.progressPhotos.length > 0) {
-        detailSections.push({
-            key: "photos",
-            node: (
-                <SectionCard title="Progress photos" icon={ImageIconFallback}>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                        {profile.progressPhotos.map((photo) => (
-                            <div key={photo.id} className="aspect-[3/4] rounded-xl overflow-hidden border border-surface-border bg-surface-muted">
-                                <img
-                                    src={resolveUploadUrl(photo.url)}
-                                    alt="Progress"
-                                    className="w-full h-full object-cover"
-                                />
+                                <Link
+                                    href={`/plans/create?id=${plan.id}&view=true`}
+                                    className="btn-secondary inline-flex items-center justify-center gap-2"
+                                >
+                                    <ExternalLink className="w-4 h-4" />
+                                    View plan
+                                </Link>
                             </div>
                         ))}
                     </div>
@@ -458,6 +403,28 @@ export function PublicProfileClient({ userId }: Props) {
                         </div>
                     )}
 
+                    {!isLimited && socialEntries.length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-2 justify-center sm:justify-start">
+                            {socialEntries.map(([key, value]) => {
+                                const href = formatSocialHref(key, value);
+                                const Icon = key === "instagram" ? Instagram : key === "youtube" ? Youtube : ExternalLink;
+                                const label = key === "twitter" ? "X" : key.charAt(0).toUpperCase() + key.slice(1);
+                                return (
+                                    <a
+                                        key={key}
+                                        href={href}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-muted/40 border border-surface-border text-[10px] font-bold uppercase tracking-widest text-fg hover:border-brand-400/30 transition-colors"
+                                    >
+                                        <Icon className="w-3.5 h-3.5 text-brand-400" />
+                                        {label}
+                                    </a>
+                                );
+                            })}
+                        </div>
+                    )}
+
                     {!isLimited && profile.bio && (
                         <p className="text-sm text-fg-muted leading-relaxed mt-4 max-w-2xl mx-auto sm:mx-0 text-center sm:text-left">
                             {profile.bio}
@@ -509,12 +476,45 @@ export function PublicProfileClient({ userId }: Props) {
 
             {profile.coachedBy && <CoachedByCard coach={profile.coachedBy} />}
 
+            {!isLimited && isCoachProfile && (
+                <SectionCard title="Clients" icon={Users}>
+                    {profile.coachClients.length === 0 ? (
+                        <p className="text-sm text-fg-muted">No clients yet.</p>
+                    ) : (
+                        <ul className="divide-y divide-surface-border">
+                            {profile.coachClients.map((client) => (
+                                <li key={client.id}>
+                                    <Link
+                                        href={getPublicProfileHref(client.id)}
+                                        className="flex items-center gap-3 py-3 first:pt-0 last:pb-0 hover:opacity-80 transition-opacity"
+                                    >
+                                        <div className="w-10 h-10 rounded-xl bg-gradient-brand flex items-center justify-center text-xs font-black text-white overflow-hidden shrink-0">
+                                            {client.avatarUrl ? (
+                                                <img
+                                                    src={resolveUploadUrl(client.avatarUrl)}
+                                                    alt={client.name}
+                                                    className="w-full h-full object-cover"
+                                                />
+                                            ) : (
+                                                getInitials(client.name)
+                                            )}
+                                        </div>
+                                        <p className="flex-1 min-w-0 text-sm font-black text-fg truncate">{client.name}</p>
+                                        <ChevronRight className="w-4 h-4 text-fg-subtle shrink-0" />
+                                    </Link>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </SectionCard>
+            )}
+
             {!isLimited && showWorkoutStats && (
                 <div className="flex flex-wrap gap-3">
                     {profile.streak != null && profile.streak > 0 && (
                         <div className="card p-4 flex items-center gap-3 flex-1 min-w-[140px]">
                             <StreakBadge streak={profile.streak} size="md" />
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-fg-subtle">Day streak</p>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-fg-subtle">Adherence streak</p>
                         </div>
                     )}
                     {profile.totalWorkouts != null && profile.totalWorkouts > 0 && (
@@ -528,7 +528,7 @@ export function PublicProfileClient({ userId }: Props) {
                             </div>
                         </div>
                     )}
-                    {profile.bodyweightKg != null && (
+                    {profile.bodyweightKg != null && !isCoachProfile && (
                         <div className="card p-4 flex items-center gap-3 flex-1 min-w-[140px]">
                             <div className="w-10 h-10 rounded-xl bg-success/10 flex items-center justify-center shrink-0">
                                 <Scale className="w-5 h-5 text-success" />
@@ -580,18 +580,27 @@ export function PublicProfileClient({ userId }: Props) {
                             View all
                         </button>
                     </div>
-                    <div className="space-y-2">
-                        {profile.achievementSummary.preview.map((achievement) => (
-                            <AchievementCard key={achievement.id} achievement={achievement} compact />
-                        ))}
+                    <div className="space-y-3">
+                        {profile.achievementSummary.preview.length > 0 ? (
+                            <AchievementsList
+                                achievements={profile.achievementSummary.preview}
+                                layout="grid"
+                            />
+                        ) : (
+                            <p className="text-xs text-fg-muted text-center py-2">
+                                No achievements unlocked yet.
+                            </p>
+                        )}
                     </div>
-                    <button
-                        type="button"
-                        onClick={() => void openAchievements()}
-                        className="btn-secondary w-full h-10 mt-3 text-xs font-bold"
-                    >
-                        View all achievements
-                    </button>
+                    {profile.achievementSummary.totalUnlocked > profile.achievementSummary.preview.length && (
+                        <button
+                            type="button"
+                            onClick={() => void openAchievements()}
+                            className="btn-secondary w-full h-10 mt-3 text-xs font-bold"
+                        >
+                            View all achievements
+                        </button>
+                    )}
                 </SectionCard>
             )}
 
@@ -625,30 +634,6 @@ export function PublicProfileClient({ userId }: Props) {
                 </div>
             )}
 
-            {!isLimited && socialEntries.length > 0 && (
-                <SectionCard title="Social" icon={Globe}>
-                    <div className="flex flex-wrap gap-2">
-                        {socialEntries.map(([key, value]) => {
-                            const href = formatSocialHref(key, value);
-                            const Icon = key === "instagram" ? Instagram : key === "youtube" ? Youtube : ExternalLink;
-                            const label = key === "twitter" ? "X" : key.charAt(0).toUpperCase() + key.slice(1);
-                            return (
-                                <a
-                                    key={key}
-                                    href={href}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-surface-muted/40 border border-surface-border text-xs font-bold text-fg hover:border-brand-400/30 transition-colors"
-                                >
-                                    <Icon className="w-3.5 h-3.5 text-brand-400" />
-                                    {label}
-                                </a>
-                            );
-                        })}
-                    </div>
-                </SectionCard>
-            )}
-
             {viewer.isSelf && (
                 <Link href="/settings" className="card p-4 flex items-center justify-between hover:border-brand-500/30 transition-colors">
                     <div>
@@ -669,15 +654,5 @@ export function PublicProfileClient({ userId }: Props) {
                 loading={achievementsLoading && !allAchievements}
             />
         </div>
-    );
-}
-
-function ImageIconFallback({ className }: { className?: string }) {
-    return (
-        <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <rect x="3" y="3" width="18" height="18" rx="2" />
-            <circle cx="8.5" cy="8.5" r="1.5" />
-            <path d="m21 15-5-5L5 21" />
-        </svg>
     );
 }

@@ -9,6 +9,7 @@ import {
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
 import { DataSafetyError, deleteDuplicatePlansByName, deletePlanIfNoHistory } from "@/lib/dataSafety";
 import { isInactiveAccount } from "@/lib/userDeactivation";
+import { canCopyUserPlan, canViewUserPlanFromProfile } from "@/lib/userProfile";
 
 interface PlanExercisePayload {
     name: string;
@@ -85,11 +86,21 @@ export async function GET(
         });
 
         if (!isCoachOfAssignee && !isAssignee) {
-            return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+            const canViewFromProfile = await canViewUserPlanFromProfile(
+                { id: user.id, role: user.role },
+                planId
+            );
+            if (!canViewFromProfile) {
+                return NextResponse.json({ error: "You don't have permission to view this plan" }, { status: 403 });
+            }
         }
     }
 
-    return NextResponse.json(plan);
+    const canCopy = plan.creatorId
+        ? await canCopyUserPlan({ id: user.id, role: user.role }, planId, plan.creatorId)
+        : false;
+
+    return NextResponse.json({ ...plan, canCopy });
 }
 
 export async function PATCH(

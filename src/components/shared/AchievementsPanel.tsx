@@ -38,6 +38,47 @@ function formatProgress(current: number, target: number): string {
     return `${current}/${target}`;
 }
 
+export function AchievementTile({
+    achievement,
+}: {
+    achievement: AchievementDisplayItem;
+}) {
+    const styles = RARITY_STYLES[achievement.rarity];
+    const Icon = ICON_MAP[achievement.icon] ?? Trophy;
+    const locked = !achievement.unlocked;
+
+    return (
+        <div
+            className={cn(
+                "flex flex-col items-center text-center gap-2 rounded-2xl border p-2.5 sm:p-3 min-h-[7.5rem]",
+                locked ? "opacity-70 bg-surface-muted/15" : "bg-surface-card",
+                styles.ring
+            )}
+        >
+            <div
+                className={cn(
+                    "w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center shrink-0 border",
+                    styles.badge,
+                    locked && "opacity-75"
+                )}
+            >
+                <Icon className={cn("w-5 h-5", styles.icon, locked && "opacity-80")} />
+            </div>
+            <p className={cn(
+                "text-[10px] sm:text-[11px] font-black leading-tight line-clamp-2 w-full",
+                locked ? "text-fg-muted" : "text-fg"
+            )}>
+                {achievement.title}
+            </p>
+            {achievement.progress && !achievement.unlocked && (
+                <p className="text-[9px] font-bold text-fg-subtle tabular-nums">
+                    {formatProgress(achievement.progress.current, achievement.progress.target)}
+                </p>
+            )}
+        </div>
+    );
+}
+
 export function AchievementCard({
     achievement,
     compact = false,
@@ -53,17 +94,18 @@ export function AchievementCard({
         <div
             className={cn(
                 "relative flex gap-3 rounded-2xl border p-3 sm:p-4 transition-colors",
-                locked ? "opacity-55 bg-surface-muted/20 border-surface-border" : "bg-surface-card",
-                !locked && styles.ring
+                locked ? "opacity-70 bg-surface-muted/15" : "bg-surface-card opacity-100",
+                styles.ring
             )}
         >
             <div
                 className={cn(
                     "w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center shrink-0 border",
-                    locked ? "bg-surface-muted border-surface-border" : styles.badge
+                    styles.badge,
+                    locked && "opacity-75"
                 )}
             >
-                <Icon className={cn("w-5 h-5", locked ? "text-fg-subtle" : styles.icon)} />
+                <Icon className={cn("w-5 h-5", styles.icon, locked && "opacity-80")} />
             </div>
 
             <div className="min-w-0 flex-1">
@@ -74,7 +116,8 @@ export function AchievementCard({
                     {!compact && (
                         <span className={cn(
                             "text-[9px] font-black uppercase tracking-widest shrink-0 px-1.5 py-0.5 rounded-md border",
-                            locked ? "bg-surface-muted text-fg-subtle border-surface-border" : styles.badge
+                            styles.badge,
+                            locked && "opacity-80"
                         )}>
                             {achievement.rarity}
                         </span>
@@ -94,10 +137,22 @@ export function AchievementCard({
 export function AchievementsList({
     achievements,
     compact = false,
+    layout = "list",
 }: {
     achievements: AchievementDisplayItem[];
     compact?: boolean;
+    layout?: "list" | "grid";
 }) {
+    if (layout === "grid") {
+        return (
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                {achievements.map((achievement) => (
+                    <AchievementTile key={achievement.id} achievement={achievement} />
+                ))}
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-2">
             {achievements.map((achievement) => (

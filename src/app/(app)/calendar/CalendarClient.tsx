@@ -57,6 +57,7 @@ interface Props {
     loggedDates: LoggedDate[];
     inProgressSessions: InProgressSession[];
     scheduleRevisions?: PlanScheduleRevisionRecord[];
+    excusedMissedWorkoutKeys?: string[];
     coachView?: {
         clientId: string;
         clientName: string;
@@ -80,6 +81,7 @@ export function CalendarClient({
     loggedDates,
     inProgressSessions,
     scheduleRevisions = [],
+    excusedMissedWorkoutKeys = [],
     coachView,
     view: controlledView,
     onViewChange,
@@ -157,6 +159,15 @@ export function CalendarClient({
         return map;
     }, [inProgressSessions]);
 
+    const excusedKeys = useMemo(
+        () => new Set(excusedMissedWorkoutKeys),
+        [excusedMissedWorkoutKeys]
+    );
+
+    const isWorkoutExcused = useCallback((dateKey: string, workoutId: string) => {
+        return excusedKeys.has(`${dateKey}:${workoutId}`);
+    }, [excusedKeys]);
+
     const activeUserPlan = useMemo(
         () => (activePlan && planStartedAt
             ? {
@@ -214,6 +225,12 @@ export function CalendarClient({
     const workoutLogHref = selectedPlanned
         ? `/plans/log/${selectedPlanned.id}?date=${selectedDateKey}`
         : "";
+    const selectedIsExcused = Boolean(
+        selectedPlanned
+        && selectedDateKey < todayKey
+        && selectedLogs.length === 0
+        && isWorkoutExcused(selectedDateKey, selectedPlanned.id)
+    );
     
     const calculateVolume = (sets: LogSet[]) => {
         return Math.round(sets.reduce((acc, s) => acc + ((s.reps || 0) * (s.weightKg || 1)), 0)); // weight 1 if bodyweight
@@ -309,11 +326,12 @@ export function CalendarClient({
                             const selected = dateKey === selectedDateKey;
 
                             // Status logic
-                            let status: 'completed' | 'in-progress' | 'missed' | 'scheduled' | 'rest' = 'rest';
+                            let status: 'completed' | 'in-progress' | 'missed' | 'excused' | 'scheduled' | 'rest' = 'rest';
                             if (dayLogs && dayLogs.length > 0) status = 'completed';
                             else if (dayInProgress) status = 'in-progress';
                             else if (planned) {
-                                if (isPast) status = 'missed';
+                                if (isPast && isWorkoutExcused(dateKey, planned.id)) status = 'excused';
+                                else if (isPast) status = 'missed';
                                 else status = 'scheduled';
                             }
 
@@ -344,6 +362,7 @@ export function CalendarClient({
                                                     "w-1.5 h-1.5 rounded-full mt-1.5 mr-1",
                                                     status === 'completed' ? "bg-success shadow-glow-success animate-pulse" :
                                                     status === 'in-progress' ? "bg-warning shadow-glow-warning animate-pulse" :
+                                                    status === 'excused' ? "bg-success/60 shadow-glow-success" :
                                                     status === 'missed' ? "bg-danger shadow-glow-danger" :
                                                     status === 'scheduled' ? "bg-brand-400 shadow-glow-brand" :
                                                     "bg-surface-border"
@@ -375,14 +394,21 @@ export function CalendarClient({
                                                     <div className="space-y-1">
                                                         <div className={cn(
                                                             "h-1 rounded-full overflow-hidden",
+                                                            status === 'excused' ? "bg-success/20" :
                                                             isPast ? "bg-danger/20" : "bg-brand-400/20"
                                                         )}>
-                                                            <div className={cn("w-full h-full", isPast ? "bg-danger" : "bg-brand-400 animate-pulse")} />
+                                                            <div className={cn(
+                                                                "w-full h-full",
+                                                                status === 'excused' ? "bg-success/70" :
+                                                                isPast ? "bg-danger" : "bg-brand-400 animate-pulse"
+                                                            )} />
                                                         </div>
                                                         <span className={cn(
                                                             "text-[9px] font-black uppercase tracking-tighter truncate block",
+                                                            status === 'excused' ? "text-success opacity-80" :
                                                             isPast ? "text-danger opacity-60" : "text-brand-400"
                                                         )}>
+                                                            {status === 'excused' ? "Excused · " : ""}
                                                             {planned.name.replace(/workout/gi, '').trim()}
                                                         </span>
                                                     </div>
@@ -431,6 +457,7 @@ export function CalendarClient({
                                 "w-2.5 h-2.5 rounded-full",
                                 selectedLogs.length > 0 ? "bg-success" :
                                 resumeSession ? "bg-warning animate-pulse" :
+                                selectedIsExcused ? "bg-success/70" :
                                 (selectedPlanned ? (selectedDateKey < todayKey ? "bg-danger" : "bg-brand-400") : "bg-surface-border")
                             )} />
                         </div>
@@ -523,6 +550,8 @@ export function CalendarClient({
                                     "p-4 rounded-2xl border",
                                     resumeSession
                                         ? "bg-warning-950/20 border-warning-500/20 shadow-glow-warning-sm"
+                                        : selectedIsExcused
+                                            ? "bg-success-950/20 border-success-500/20 shadow-glow-success-sm"
                                         : selectedDateKey < todayKey
                                             ? "bg-danger-950/20 border-danger-500/20"
                                             : "bg-brand-950/20 border-brand-500/20 shadow-glow-brand-sm"
@@ -533,12 +562,16 @@ export function CalendarClient({
                                                 "text-[10px] font-black uppercase tracking-widest mb-1",
                                                 resumeSession
                                                     ? "text-warning"
+                                                    : selectedIsExcused
+                                                        ? "text-success"
                                                     : selectedDateKey < todayKey
                                                         ? "text-danger"
                                                         : "text-brand-400"
                                             )}>
                                                 {resumeSession
                                                     ? "Session In Progress"
+                                                    : selectedIsExcused
+                                                        ? "Excused by coach"
                                                     : selectedDateKey < todayKey
                                                         ? "Missed Session"
                                                         : "Upcoming Session"}
@@ -549,6 +582,8 @@ export function CalendarClient({
                                             "w-5 h-5",
                                             resumeSession
                                                 ? "text-warning opacity-60"
+                                                : selectedIsExcused
+                                                    ? "text-success opacity-60"
                                                 : selectedDateKey < todayKey
                                                     ? "text-danger opacity-40"
                                                     : "text-brand-400"

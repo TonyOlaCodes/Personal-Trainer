@@ -585,12 +585,12 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                 <div className="mb-6 flex items-center justify-between gap-4 rounded-2xl border border-orange-500/35 bg-gradient-to-r from-red-950/50 via-orange-950/35 to-amber-950/25 px-5 py-4 streak-fire-glow">
                     <div className="min-w-0">
                         <p className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-400">
-                            Training streak
+                            Plan adherence streak
                         </p>
                         <p className="text-sm text-orange-200/75 mt-0.5 font-medium">
                             {streak === 1
-                                ? "One day strong — log again tomorrow to keep the fire burning."
-                                : `${streak} days in a row — keep it going!`}
+                                ? "One scheduled workout down — complete the next one on plan to keep it going."
+                                : `${streak} scheduled workouts in a row without missing one — keep it up!`}
                         </p>
                     </div>
                     <StreakBadge streak={streak} size="lg" showLabel className="shrink-0" />

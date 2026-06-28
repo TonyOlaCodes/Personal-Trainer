@@ -6,7 +6,7 @@ import {
     ChevronRight,
     Dumbbell, Loader2, AlertTriangle, MessageCircle,
     ClipboardCheck, Clock,
-    Bell, ArrowUpRight, CheckCircle2, Users,
+    Bell, ArrowUpRight, CheckCircle2, Users, UserPlus,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -14,6 +14,7 @@ import { cn, formatDate, getInitials } from "@/lib/utils";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { getPresenceIndicator, formatLastActiveText } from "@/lib/userPresence";
 import { PendingReviewsModal, type PendingReviewItem } from "@/components/shared/PendingReviewsModal";
+import { NeedsAttentionInboxModal } from "@/components/coach/NeedsAttentionInboxModal";
 import { StreakBadge } from "@/components/shared/StreakBadge";
 import { formatCoachPlanLabel } from "@/lib/coachPlans";
 import {
@@ -244,6 +245,7 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
     const [skippedClients, setSkippedClients] = useState<string[]>([]);
     const [savingSetup, setSavingSetup] = useState(false);
     const [showPendingReviews, setShowPendingReviews] = useState(false);
+    const [showAttentionInbox, setShowAttentionInbox] = useState(false);
     const [showAllUpcoming, setShowAllUpcoming] = useState(false);
 
     const visibleUpcoming = useMemo(() => {
@@ -554,6 +556,11 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                 onClose={() => setShowPendingReviews(false)}
                 reviews={pendingReviews}
             />
+            <NeedsAttentionInboxModal
+                open={showAttentionInbox}
+                onClose={() => setShowAttentionInbox(false)}
+                onUpdated={() => router.refresh()}
+            />
 
             {/* Actionable stat cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -565,10 +572,11 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                     <p className="stat-value">{clients.length}</p>
                     <p className="stat-label">Active Clients</p>
                 </Link>
-                <Link
-                    href="#needs-attention"
+                <button
+                    type="button"
+                    onClick={() => setShowAttentionInbox(true)}
                     className={cn(
-                        "stat-card transition-all hover:border-brand-500/40 hover:bg-brand-500/5",
+                        "stat-card text-left transition-all hover:border-brand-500/40 hover:bg-brand-500/5",
                         totals.clientsNeedingAttention > 0 && "border-warning/30"
                     )}
                 >
@@ -577,8 +585,8 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                         totals.clientsNeedingAttention > 0 ? "text-warning" : "text-fg-subtle"
                     )} />
                     <p className="stat-value">{totals.clientsNeedingAttention}</p>
-                    <p className="stat-label">Need Attention</p>
-                </Link>
+                    <p className="stat-label">Needs Attention</p>
+                </button>
                 <button
                     type="button"
                     onClick={() => setShowPendingReviews(true)}
@@ -608,14 +616,18 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
 
             {/* Needs Attention */}
             <section id="needs-attention" className="space-y-3 scroll-mt-6">
-                <div className="flex items-center justify-between px-2">
+                <div className="flex items-center justify-between px-2 gap-3">
                     <h3 className="heading-3 flex items-center gap-2">
                         <Bell className="w-5 h-5 text-warning" />
                         Needs Attention
                     </h3>
-                    <Link href="/coach/invites" className="text-[10px] font-black text-brand-400 hover:text-brand-300 transition-colors uppercase tracking-widest">
-                        Invite client +
-                    </Link>
+                    <button
+                        type="button"
+                        onClick={() => setShowAttentionInbox(true)}
+                        className="text-[10px] font-black text-brand-400 hover:text-brand-300 transition-colors uppercase tracking-widest"
+                    >
+                        View all
+                    </button>
                 </div>
                 {insights.attentionItems.length === 0 ? (
                     <div className="card p-5 flex items-center gap-3 border-success/20 bg-success/5">
@@ -626,36 +638,22 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                         </div>
                     </div>
                 ) : (
-                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {insights.attentionItems.map((item) => (
-                            <Link
-                                key={item.key}
-                                href={item.href}
-                                className={cn(
-                                    "card p-4 flex items-center justify-between gap-3 transition-all hover:border-brand-500/40 group",
-                                    item.urgent && "border-warning/30 bg-warning/5"
-                                )}
-                            >
-                                <div className="min-w-0">
-                                    <p className="text-xs font-bold text-fg group-hover:text-brand-400 transition-colors truncate">
-                                        {item.label}
-                                    </p>
-                                    <p className="text-[10px] text-fg-subtle uppercase tracking-widest mt-0.5">
-                                        Tap to view
-                                    </p>
-                                </div>
-                                <div className="flex items-center gap-2 shrink-0">
-                                    <span className={cn(
-                                        "text-xl font-black tabular-nums",
-                                        item.urgent ? "text-warning" : "text-fg"
-                                    )}>
-                                        {item.count}
-                                    </span>
-                                    <ArrowUpRight className="w-4 h-4 text-fg-subtle group-hover:text-brand-400 transition-colors" />
-                                </div>
-                            </Link>
-                        ))}
-                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setShowAttentionInbox(true)}
+                        className="card p-5 w-full text-left hover:border-warning/40 transition-colors border-warning/20 bg-warning/5"
+                    >
+                        <p className="text-sm font-bold text-fg">
+                            {totals.clientsNeedingAttention} client{totals.clientsNeedingAttention === 1 ? "" : "s"} need follow-up
+                        </p>
+                        <p className="text-xs text-fg-muted mt-1">
+                            {insights.attentionItems.map((item) => item.label).slice(0, 3).join(" · ")}
+                            {insights.attentionItems.length > 3 ? " · …" : ""}
+                        </p>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-brand-400 mt-3">
+                            Open action inbox →
+                        </p>
+                    </button>
                 )}
             </section>
 
@@ -743,15 +741,28 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
             <div className="grid lg:grid-cols-3 gap-8">
                 {/* Client Roster */}
                 <div id="clients" className="lg:col-span-2 space-y-4 scroll-mt-6">
-                    <div className="flex items-center justify-between px-2">
-                        <h3 className="heading-3">My Clients</h3>
-                        <span className="text-xs text-fg-subtle">{clients.length} active</span>
+                    <div className="flex items-center justify-between gap-3 px-2">
+                        <div className="min-w-0">
+                            <h3 className="heading-3">My Clients</h3>
+                            <span className="text-xs text-fg-subtle">{clients.length} active</span>
+                        </div>
+                        <Link
+                            href="/coach/invites"
+                            className="btn-primary btn-sm inline-flex items-center gap-1.5 shrink-0 text-[10px] font-black uppercase tracking-widest"
+                        >
+                            <UserPlus className="w-3.5 h-3.5" />
+                            Invite client
+                        </Link>
                     </div>
 
                     <div className="grid sm:grid-cols-2 gap-4">
                         {sortedClients.length === 0 ? (
-                            <div className="col-span-2 card p-10 text-center">
+                            <div className="col-span-2 card p-10 text-center space-y-4">
                                 <p className="text-fg-muted">You have no clients assigned yet.</p>
+                                <Link href="/coach/invites" className="btn-primary btn-sm inline-flex items-center gap-1.5">
+                                    <UserPlus className="w-3.5 h-3.5" />
+                                    Invite client
+                                </Link>
                             </div>
                         ) : (
                             sortedClients.map((c) => {

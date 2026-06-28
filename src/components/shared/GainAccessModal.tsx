@@ -82,10 +82,16 @@ export function GainAccessModal({ open, onClose }: Props) {
         }
     };
 
+    const showCompose =
+        !loading
+        && status?.eligible
+        && !status.liaison
+        && !sent;
+
     return (
-        <ModalOverlay open={open} onClose={onClose} className="pb-20 md:pb-4">
+        <ModalOverlay open={open} onClose={onClose} className="pb-[calc(5rem+env(safe-area-inset-bottom,0px))] md:pb-4">
             <div
-                className="bg-surface-card w-full sm:max-w-md max-h-[min(85dvh,calc(100dvh-5.5rem))] sm:max-h-[85vh] rounded-t-[2rem] sm:rounded-3xl border border-surface-border shadow-glow-brand-lg overflow-hidden animate-slide-up flex flex-col"
+                className="bg-surface-card w-full sm:max-w-md max-h-[min(72svh,calc(100svh-7rem))] sm:max-h-[85vh] rounded-t-[2rem] sm:rounded-3xl border border-surface-border shadow-glow-brand-lg overflow-hidden animate-slide-up flex flex-col self-end sm:self-auto"
                 onClick={(e) => e.stopPropagation()}
             >
                 <div className="flex items-center justify-between gap-4 px-5 py-4 border-b border-surface-border shrink-0">
@@ -151,30 +157,35 @@ export function GainAccessModal({ open, onClose }: Props) {
                             <textarea
                                 value={message}
                                 onChange={(e) => setMessage(e.target.value)}
-                                rows={6}
-                                className="input w-full resize-none text-sm leading-relaxed min-h-[140px]"
+                                rows={4}
+                                className="input w-full resize-none text-sm leading-relaxed min-h-[96px] max-h-[28svh]"
                                 placeholder="Write your access request..."
                             />
-                            {error && <p className="text-xs text-danger font-semibold">{error}</p>}
-                            <button
-                                type="button"
-                                onClick={() => void handleSend()}
-                                disabled={submitting || !message.trim()}
-                                className={cn(
-                                    "btn-primary w-full h-11 inline-flex items-center justify-center gap-2",
-                                    submitting && "opacity-70"
-                                )}
-                            >
-                                {submitting ? (
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                    <MessageSquare className="w-4 h-4" />
-                                )}
-                                {submitting ? "Sending..." : "Send to admins"}
-                            </button>
                         </>
                     )}
                 </div>
+
+                {showCompose && (
+                    <div className="px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] border-t border-surface-border shrink-0 bg-surface-card space-y-3">
+                        {error && <p className="text-xs text-danger font-semibold">{error}</p>}
+                        <button
+                            type="button"
+                            onClick={() => void handleSend()}
+                            disabled={submitting || !message.trim()}
+                            className={cn(
+                                "btn-primary w-full h-11 inline-flex items-center justify-center gap-2",
+                                submitting && "opacity-70"
+                            )}
+                        >
+                            {submitting ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                                <MessageSquare className="w-4 h-4" />
+                            )}
+                            {submitting ? "Sending..." : "Send to admins"}
+                        </button>
+                    </div>
+                )}
             </div>
         </ModalOverlay>
     );

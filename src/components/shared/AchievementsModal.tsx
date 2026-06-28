@@ -27,7 +27,7 @@ export function AchievementsModal({
     return (
         <ModalOverlay open={open} onClose={onClose} className="pb-20 md:pb-4">
             <div
-                className="bg-surface-card w-full sm:max-w-lg max-h-[min(85dvh,calc(100dvh-5.5rem))] sm:max-h-[85vh] rounded-t-[2rem] sm:rounded-3xl border border-surface-border shadow-glow-brand-lg overflow-hidden animate-slide-up flex flex-col"
+                className="bg-surface-card w-full sm:max-w-2xl max-h-[min(85dvh,calc(100dvh-5.5rem))] sm:max-h-[85vh] rounded-t-[2rem] sm:rounded-3xl border border-surface-border shadow-glow-brand-lg overflow-hidden animate-slide-up flex flex-col"
                 onClick={(e) => e.stopPropagation()}
             >
                 <div className="flex items-center justify-between gap-4 px-5 py-4 border-b border-surface-border shrink-0">
@@ -51,7 +51,7 @@ export function AchievementsModal({
                             <Loader2 className="w-7 h-7 animate-spin text-brand-400" />
                         </div>
                     ) : (
-                        <AchievementsList achievements={achievements} />
+                        <AchievementsList achievements={achievements} layout="grid" />
                     )}
                 </div>
             </div>

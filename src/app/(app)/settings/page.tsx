@@ -1,5 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { SettingsClient } from "./SettingsClient";
@@ -87,16 +88,18 @@ export default async function SettingsPage() {
         return (
             <>
                 <TopBar title="Settings" subtitle="Manage your account preferences" />
-                <SettingsClient
-                    user={{
-                        ...user,
-                        hiddenGoals,
-                        notifyOnClientMessage,
-                        bannerUrl,
-                        socialLinks,
-                        ...dailyMetricTargets,
-                    }}
-                />
+                <Suspense fallback={null}>
+                    <SettingsClient
+                        user={{
+                            ...user,
+                            hiddenGoals,
+                            notifyOnClientMessage,
+                            bannerUrl,
+                            socialLinks,
+                            ...dailyMetricTargets,
+                        }}
+                    />
+                </Suspense>
             </>
         );
     } catch (e) {

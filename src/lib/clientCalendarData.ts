@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
 import { loadPlanScheduleRevisions, type PlanScheduleRevisionRecord } from "@/lib/planScheduleHistory";
+import { getClientAttentionActions, getExcusedMissedWorkoutKeys } from "@/lib/coachAttentionActions";
 import { toDateKey } from "@/lib/utils";
 import { cleanupStaleInProgressSessions } from "@/lib/workoutSessionCleanup";
 
@@ -41,6 +42,8 @@ export interface ClientCalendarPayload {
         workoutName: string;
     }>;
     scheduleRevisions: PlanScheduleRevisionRecord[];
+    /** `${dateKey}:${workoutId}` keys for missed workouts excused by the coach */
+    excusedMissedWorkoutKeys: string[];
 }
 
 export async function loadClientCalendarData(userId: string): Promise<ClientCalendarPayload> {
@@ -88,9 +91,11 @@ export async function loadClientCalendarData(userId: string): Promise<ClientCale
     ]);
 
     const activePlan = userPlan?.plan ?? null;
-    const scheduleRevisions = activePlan
-        ? await loadPlanScheduleRevisions(activePlan.id)
-        : [];
+    const [scheduleRevisions, clientActions] = await Promise.all([
+        activePlan ? loadPlanScheduleRevisions(activePlan.id) : Promise.resolve([]),
+        getClientAttentionActions(userId),
+    ]);
+    const excusedMissedWorkoutKeys = [...getExcusedMissedWorkoutKeys(clientActions)];
 
     return {
         activePlan: activePlan
@@ -135,5 +140,6 @@ export async function loadClientCalendarData(userId: string): Promise<ClientCale
             workoutName: l.workout.name,
         })),
         scheduleRevisions,
+        excusedMissedWorkoutKeys,
     };
 }
