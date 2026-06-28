@@ -10,6 +10,7 @@ import {
     saveBodyweightEntry,
 } from "@/lib/bodyweight";
 import { notifyCoachOfClientBodyweight } from "@/lib/notifications";
+import { triggerAchievementSync } from "@/lib/achievements";
 
 const saveSchema = z.object({
     date: z.string(),
@@ -63,6 +64,7 @@ export async function POST(req: Request) {
             });
         }
 
+        triggerAchievementSync(user.id);
         return NextResponse.json(summary);
     } catch (err) {
         console.error("[Bodyweight] Failed to save:", err);

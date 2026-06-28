@@ -8,7 +8,6 @@ import { ensureNotificationPreferenceColumns, getCoachNotifyOnClientMessage } fr
 import { ensureUserProfileColumns } from "@/lib/userProfile";
 import {
     ensureProfileExtendedColumns,
-    getUserProfilePrivacy,
     getUserSocialLinks,
 } from "@/lib/profilePrivacy";
 import { SafeFallback, rethrowNextInternalErrors } from "@/components/shared/SafeFallback";
@@ -77,8 +76,7 @@ export default async function SettingsPage() {
         const hiddenGoals = (user as any).hiddenGoals ?? [];
         const notifyOnClientMessage = await getCoachNotifyOnClientMessage(user.id);
 
-        const [profilePrivacy, socialLinks, bannerRows] = await Promise.all([
-            getUserProfilePrivacy(user.id),
+        const [socialLinks, bannerRows] = await Promise.all([
             getUserSocialLinks(user.id),
             prisma.$queryRaw<Array<{ bannerUrl: string | null }>>`
                 SELECT "bannerUrl" FROM "users" WHERE "id" = ${user.id} LIMIT 1
@@ -95,7 +93,6 @@ export default async function SettingsPage() {
                         hiddenGoals,
                         notifyOnClientMessage,
                         bannerUrl,
-                        profilePrivacy,
                         socialLinks,
                         ...dailyMetricTargets,
                     }}

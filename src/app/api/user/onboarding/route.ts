@@ -6,6 +6,7 @@ import { anonymizeDeletedUserAccount } from "@/lib/accountDeletion";
 import { normalizeCalories, normalizeSleepHours, normalizeSteps, updateDailyMetricTargets } from "@/lib/dailyMetrics";
 import { getUserDeactivationStatusByClerkId } from "@/lib/userDeactivation";
 import { defaultHomeForRole } from "@/lib/roles";
+import { triggerAchievementSync } from "@/lib/achievements";
 import { ensureUnitSystemColumn } from "@/lib/units";
 import { z } from "zod";
 
@@ -135,6 +136,10 @@ export async function POST(req: Request) {
             ? await prisma.user.findUnique({ where: { id: savedUserId }, select: { role: true } })
             : null;
         const role = finalUser?.role ?? "FREE";
+
+        if (savedUserId) {
+            triggerAchievementSync(savedUserId);
+        }
 
         return NextResponse.json({
             success: true,

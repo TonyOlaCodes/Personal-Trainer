@@ -13,9 +13,6 @@ export async function GET(req: Request) {
     if (authResult.error) return authResult.error;
 
     const user = authResult.user;
-    if (user.role === "FREE") {
-        return NextResponse.json({ typing: false });
-    }
 
     const withUserId = new URL(req.url).searchParams.get("with");
     if (!withUserId) {
@@ -35,9 +32,6 @@ export async function POST(req: Request) {
     if (authResult.error) return authResult.error;
 
     const user = authResult.user;
-    if (user.role === "FREE") {
-        return NextResponse.json({ error: "Direct chat requires Premium access" }, { status: 403 });
-    }
 
     const parsed = typingSchema.safeParse(await req.json());
     if (!parsed.success) {

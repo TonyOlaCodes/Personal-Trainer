@@ -4,6 +4,8 @@ import { requireAuthUser } from "@/lib/apiAuth";
 import { canCopyUserPlan } from "@/lib/userProfile";
 import { clonePlanForUser } from "@/lib/planClone";
 import { isCoachRole } from "@/lib/roles";
+import { resolvePlanOriginalCreatorId } from "@/lib/planCreator";
+import { triggerAchievementSyncForUsers } from "@/lib/achievements";
 
 export async function POST(
     _req: Request,
@@ -17,7 +19,7 @@ export async function POST(
 
     const plan = await prisma.plan.findUnique({
         where: { id: planId },
-        select: { id: true, creatorId: true, name: true },
+        select: { id: true, creatorId: true, name: true, originalCreatorId: true },
     });
 
     if (!plan?.creatorId) {
@@ -44,6 +46,9 @@ export async function POST(
             data: { userId: viewer.id, planId: cloned.id },
         });
     }
+
+    const originalOwnerId = resolvePlanOriginalCreatorId(plan);
+    triggerAchievementSyncForUsers(viewer.id, originalOwnerId);
 
     return NextResponse.json({
         id: cloned.id,

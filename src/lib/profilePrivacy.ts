@@ -30,7 +30,7 @@ export const DEFAULT_PROFILE_PRIVACY: ProfilePrivacy = {
     prs: true,
     workoutStats: true,
     achievements: true,
-    progressPhotos: false,
+    progressPhotos: true,
     publicPlans: true,
     activityFeed: true,
     onlineStatus: true,

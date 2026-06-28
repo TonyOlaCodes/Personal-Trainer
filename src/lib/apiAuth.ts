@@ -3,7 +3,9 @@ import { NextResponse } from "next/server";
 import type { User } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getUserDeactivationStatusByClerkId, isInactiveAccount } from "@/lib/userDeactivation";
-import { isCoachRole, parseTeamCoachId } from "@/lib/roles";
+import { isClientRole, isCoachRole, parseTeamCoachId } from "@/lib/roles";
+import { canViewFullProfile, canViewUserProfile } from "@/lib/userProfile";
+import { ensureAccessRequestColumns } from "@/lib/accessRequest";
 
 export { defaultHomeForRole, isCoachRole, isClientRole, parseTeamCoachId } from "@/lib/roles";
 
@@ -89,17 +91,53 @@ export async function canDirectMessage(
     otherUserId: string
 ): Promise<boolean> {
     if (actor.id === otherUserId) return false;
-    if (actor.role === "SUPER_ADMIN") return true;
+
+    if (actor.role === "SUPER_ADMIN") {
+        await ensureAccessRequestColumns();
+        const other = await prisma.user.findUnique({
+            where: { id: otherUserId },
+            select: { role: true, accessLiaisonId: true },
+        });
+        if (other?.role === "FREE" && other.accessLiaisonId && other.accessLiaisonId !== actor.id) {
+            return false;
+        }
+        return true;
+    }
 
     const other = await prisma.user.findUnique({
         where: { id: otherUserId },
-        select: { id: true, coachId: true, role: true },
+        select: {
+            id: true,
+            coachId: true,
+            role: true,
+            isDeleted: true,
+            isDeactivated: true,
+            email: true,
+        },
     });
-    if (!other) return false;
+    if (!other || isInactiveAccount(other)) return false;
 
+    // Assigned coach ↔ client (always allowed)
     if (actor.coachId === other.id) return true;
     if (other.coachId === actor.id) return true;
-    return false;
+
+    if (actor.role === "FREE" && other.role === "SUPER_ADMIN") {
+        await ensureAccessRequestColumns();
+        const actorRow = await prisma.user.findUnique({
+            where: { id: actor.id },
+            select: { accessLiaisonId: true },
+        });
+        if (actorRow?.accessLiaisonId) {
+            return other.id === actorRow.accessLiaisonId;
+        }
+        return true;
+    }
+
+    // Social messaging from public profiles (free and other client roles)
+    if (!isClientRole(actor.role) || !isClientRole(other.role)) return false;
+    if (!(await canViewUserProfile({ id: actor.id, role: actor.role }, otherUserId))) return false;
+
+    return canViewFullProfile({ id: actor.id, role: actor.role }, otherUserId);
 }
 
 export async function canAccessTeamChat(

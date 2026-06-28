@@ -3,7 +3,7 @@ import { createNotification, notifyClientOfCheckInRequest, notifyClientOfCoachBr
 import { requireCoachCanEditClient } from "@/lib/apiAuth";
 import type { User } from "@prisma/client";
 
-export type ChatActionType = "PLAN_ASSIGNED" | "CHECKIN_REQUEST" | "BROADCAST";
+export type ChatActionType = "PLAN_ASSIGNED" | "CHECKIN_REQUEST" | "BROADCAST" | "ACCESS_REQUEST";
 
 let messageActionColumnsReady = false;
 

@@ -13,6 +13,8 @@ import { ensureMessageActionColumns } from "@/lib/coachChat";
 import { ensureAnnouncementsTable } from "@/lib/announcements";
 import { ensurePlanScheduleRevisionsTable } from "@/lib/planScheduleHistory";
 import { ensurePlanOriginalCreatorColumn } from "@/lib/planCreator";
+import { ensureAccessRequestColumns } from "@/lib/accessRequest";
+import { ensureAchievementsTables } from "@/lib/achievements";
 import { ensureWalkthroughColumn } from "@/lib/walkthrough/ensureWalkthroughColumn";
 import { ensureGeneralPremiumRole } from "@/lib/ensureGeneralPremiumRole";
 
@@ -43,6 +45,8 @@ export async function ensureAppSchema() {
             ensureAnnouncementsTable(),
             ensurePlanScheduleRevisionsTable(),
             ensurePlanOriginalCreatorColumn(),
+            ensureAccessRequestColumns(),
+            ensureAchievementsTables(),
             ensureWalkthroughColumn(),
             ensureGeneralPremiumRole(),
         ]);

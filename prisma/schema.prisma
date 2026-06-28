@@ -133,9 +133,13 @@ model User {
   preferredSplit    String?
 
   // Relations
+  accessLiaisonId     String?
+  accessRequestSentAt DateTime?
   coachId           String?
   coach             User?    @relation("CoachClients", fields: [coachId], references: [id])
+  accessLiaison     User?    @relation("AccessLiaison", fields: [accessLiaisonId], references: [id])
   clients           User[]   @relation("CoachClients")
+  accessLiaisonFor  User[]   @relation("AccessLiaison")
 
   plans             UserPlan[]
   workoutLogs       WorkoutLog[]

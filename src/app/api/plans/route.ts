@@ -5,6 +5,7 @@ import { z } from "zod";
 import { randomBytes } from "crypto";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
 import { isCoachRole } from "@/lib/roles";
+import { triggerAchievementSync } from "@/lib/achievements";
 
 const planSchema = z.object({
     name: z.string().min(1),
@@ -136,6 +137,8 @@ export async function POST(req: Request) {
             },
         });
     }
+
+    triggerAchievementSync(user.id);
 
     return NextResponse.json(plan, { status: 201 });
     } catch (error) {

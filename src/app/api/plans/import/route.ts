@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { isCoachRole } from "@/lib/roles";
 import { clonePlanForUser } from "@/lib/planClone";
+import { resolvePlanOriginalCreatorId } from "@/lib/planCreator";
+import { triggerAchievementSyncForUsers } from "@/lib/achievements";
 
 export async function POST(req: Request) {
     const { userId } = await auth();
@@ -16,8 +18,11 @@ export async function POST(req: Request) {
 
     const originalPlan = await prisma.plan.findUnique({
         where: { shareCode: code.toUpperCase().trim() },
-        include: {
-            creator: true,
+        select: {
+            id: true,
+            creatorId: true,
+            originalCreatorId: true,
+            creator: { select: { name: true } },
             originalCreator: { select: { name: true } },
         },
     });
@@ -39,6 +44,9 @@ export async function POST(req: Request) {
         originalPlan.originalCreator?.name
         ?? originalPlan.creator?.name
         ?? "Anonymous Athlete";
+
+    const originalOwnerId = resolvePlanOriginalCreatorId(originalPlan);
+    triggerAchievementSyncForUsers(user.id, originalOwnerId);
 
     return NextResponse.json({
         author: authorName,

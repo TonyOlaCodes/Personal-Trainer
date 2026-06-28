@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { withResolvedLogSetMedia } from "@/lib/uploadUrls";
 import { getWorkoutNotes } from "@/lib/workoutNotes";
+import { canViewWorkoutLog } from "@/lib/userProfile";
+import { triggerAchievementSync } from "@/lib/achievements";
 import { z } from "zod";
 
 const patchLogSchema = z.object({
@@ -35,7 +37,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
         if (!log) return NextResponse.json({ error: "Session not found" }, { status: 404 });
 
-        const canView = log.userId === user.id || user.role === "SUPER_ADMIN" || log.user.coachId === user.id;
+        const canView = await canViewWorkoutLog(user, { ...log, user: log.user });
         if (!canView) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
         const coachNotes = await getWorkoutNotes(log.id);
@@ -109,6 +111,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         where: { id },
         data,
     });
+
+    if (data.status === "COMPLETED") {
+        triggerAchievementSync(user.id);
+    }
 
     return NextResponse.json(updated);
 }

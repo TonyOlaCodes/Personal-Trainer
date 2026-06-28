@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { Bell, Search, X } from "lucide-react";
+import { Bell, Search, X, Trophy } from "lucide-react";
 import { StreakBadge } from "@/components/shared/StreakBadge";
 import { useRouter } from "next/navigation";
 import { useRole } from "@/lib/RoleContext";
@@ -11,6 +11,7 @@ import { formatRelative, roleLabels, roleBadgeClass, formatDate, getDayName, cn 
 import { useCurrentDate } from "@/hooks/useCurrentDate";
 import { useScrollLock } from "@/hooks/useScrollLock";
 import { getQuickReplyTemplate, supportsQuickReply, NOTIFICATION_TYPES } from "@/lib/notificationTypes";
+import { GainAccessModal } from "@/components/shared/GainAccessModal";
 
 
 interface TopBarProps {
@@ -89,6 +90,7 @@ export function TopBar({ title, subtitle, showToday = false, streak, hideSearch 
     const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
     const [sendingReplyId, setSendingReplyId] = useState<string | null>(null);
     const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [showGainAccess, setShowGainAccess] = useState(false);
     const notifRef = useRef<HTMLDivElement>(null);
     const isCoach = role === "COACH" || role === "SUPER_ADMIN";
 
@@ -232,10 +234,19 @@ export function TopBar({ title, subtitle, showToday = false, streak, hideSearch 
             </div>
 
             <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                <div className="hidden sm:block">
+                <div className="flex items-center gap-2">
                     <span className={roleBadgeClass[role] ?? "badge-muted"}>
                         {roleLabels[role] ?? role}
                     </span>
+                    {role === "FREE" && (
+                        <button
+                            type="button"
+                            onClick={() => setShowGainAccess(true)}
+                            className="text-[10px] font-black uppercase tracking-widest text-brand-400 hover:text-brand-300 transition-colors whitespace-nowrap"
+                        >
+                            Gain access
+                        </button>
+                    )}
                 </div>
 
                 <div className="flex items-center gap-1 sm:pl-3 sm:border-l sm:border-surface-border">
@@ -309,6 +320,11 @@ export function TopBar({ title, subtitle, showToday = false, streak, hideSearch 
                                                                 <CoachBroadcastNotificationText message={n.message} />
                                                             ) : n.type === NOTIFICATION_TYPES.GLOBAL_ANNOUNCEMENT ? (
                                                                 <AnnouncementNotificationText message={n.message} />
+                                                            ) : n.type === NOTIFICATION_TYPES.ACHIEVEMENT_UNLOCKED ? (
+                                                                <span className="inline-flex items-start gap-1.5">
+                                                                    <Trophy className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                                                                    <span>{n.message}</span>
+                                                                </span>
                                                             ) : (
                                                                 n.message
                                                             )}
@@ -355,6 +371,8 @@ export function TopBar({ title, subtitle, showToday = false, streak, hideSearch 
                     </div>
                 </div>
             </div>
+
+            <GainAccessModal open={showGainAccess} onClose={() => setShowGainAccess(false)} />
         </header>
     );
 }

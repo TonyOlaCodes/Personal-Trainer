@@ -1,17 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
-    Flame, Trophy, MessageSquare, Copy, Loader2, Lock, Dumbbell, ChevronRight,
-    Target, Calendar, Scale, Activity, Star, ExternalLink, Instagram,
+    Trophy, MessageSquare, Copy, Loader2, Lock, Dumbbell, ChevronRight,
+    Target, Calendar, Scale, Activity, ExternalLink, Instagram,
     Globe, Youtube,
 } from "lucide-react";
-import { cn, getInitials, roleLabels, getRoleNameClass, formatRelative } from "@/lib/utils";
+import { cn, getInitials, roleLabels, getRoleNameClass, formatDate } from "@/lib/utils";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { getPublicProfileHref } from "@/lib/profileNavigation";
 import { StreakBadge } from "@/components/shared/StreakBadge";
+import { AchievementCard } from "@/components/shared/AchievementsPanel";
+import { AchievementsModal } from "@/components/shared/AchievementsModal";
+import type { AchievementDisplayItem } from "@/lib/achievements";
 import type { SocialLinks } from "@/lib/profilePrivacy";
 
 interface PublicPlan {
@@ -24,10 +27,10 @@ interface PublicPlan {
     creatorName: string;
 }
 
-interface PublicAchievement {
-    id: string;
-    title: string;
-    description: string;
+interface PublicAchievementSummary {
+    totalUnlocked: number;
+    totalAchievements: number;
+    preview: AchievementDisplayItem[];
 }
 
 interface PublicProfilePersonalRecord {
@@ -39,7 +42,8 @@ interface PublicProfilePersonalRecord {
 
 interface PublicProfileActivityItem {
     id: string;
-    label: string;
+    workoutLogId: string;
+    workoutName: string;
     loggedAt: string;
 }
 
@@ -54,6 +58,12 @@ interface PublicProfileCoach {
     name: string;
     avatarUrl?: string | null;
     label: string;
+}
+
+interface PublicProfileCoachedBy {
+    id: string;
+    name: string;
+    avatarUrl?: string | null;
 }
 
 interface ProfilePayload {
@@ -73,9 +83,9 @@ interface ProfilePayload {
     bodyweightKg: number | null;
     onlineStatus: { level: string; label: string } | null;
     mutualCoach: PublicProfileCoach | null;
+    coachedBy: PublicProfileCoachedBy | null;
     personalRecords: PublicProfilePersonalRecord[];
-    favoriteExercises: string[];
-    achievements: PublicAchievement[];
+    achievementSummary: PublicAchievementSummary;
     plans: PublicPlan[];
     activityFeed: PublicProfileActivityItem[];
     progressPhotos: PublicProfileProgressPhoto[];
@@ -86,6 +96,7 @@ interface ViewerPayload {
     isSelf: boolean;
     isAdmin: boolean;
     isAssignedCoach: boolean;
+    isLimitedView: boolean;
     canMessage: boolean;
     canCopyPlans: boolean;
 }
@@ -98,14 +109,6 @@ const EXP_LABELS: Record<string, string> = {
 
 interface Props {
     userId: string;
-}
-
-function activityIcon(label: string) {
-    if (label.includes(" PR")) return Trophy;
-    if (label.includes("check-in")) return Scale;
-    if (label.includes("Shared")) return Dumbbell;
-    if (label.includes("streak")) return Flame;
-    return Activity;
 }
 
 function SectionCard({
@@ -142,13 +145,39 @@ function formatSocialHref(key: keyof SocialLinks, value: string): string {
     return `https://${trimmed.replace(/^\/\//, "")}`;
 }
 
+function CoachedByCard({ coach }: { coach: PublicProfileCoachedBy }) {
+    return (
+        <Link
+            href={getPublicProfileHref(coach.id)}
+            className="card p-4 flex items-center gap-4 hover:border-brand-500/30 transition-colors"
+        >
+            <div className="w-12 h-12 rounded-2xl bg-gradient-brand flex items-center justify-center text-sm font-black text-white overflow-hidden shrink-0">
+                {coach.avatarUrl ? (
+                    <img src={resolveUploadUrl(coach.avatarUrl)} alt={coach.name} className="w-full h-full object-cover" />
+                ) : (
+                    getInitials(coach.name)
+                )}
+            </div>
+            <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Coached by</p>
+                <p className="text-sm font-black text-fg truncate">{coach.name}</p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-fg-subtle shrink-0" />
+        </Link>
+    );
+}
+
 export function PublicProfileClient({ userId }: Props) {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [profile, setProfile] = useState<ProfilePayload | null>(null);
     const [viewer, setViewer] = useState<ViewerPayload | null>(null);
     const [copyingPlanId, setCopyingPlanId] = useState<string | null>(null);
+    const [showAchievements, setShowAchievements] = useState(false);
+    const [allAchievements, setAllAchievements] = useState<AchievementDisplayItem[] | null>(null);
+    const [achievementsLoading, setAchievementsLoading] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -193,6 +222,30 @@ export function PublicProfileClient({ userId }: Props) {
         return () => { cancelled = true; };
     }, [userId]);
 
+    const openAchievements = useCallback(async () => {
+        setShowAchievements(true);
+        if (allAchievements) return;
+
+        setAchievementsLoading(true);
+        try {
+            const res = await fetch(`/api/users/${userId}/achievements`);
+            const data = await res.json();
+            if (res.ok) {
+                setAllAchievements(data.achievements);
+            }
+        } catch {
+            // Modal still shows preview from profile
+        } finally {
+            setAchievementsLoading(false);
+        }
+    }, [allAchievements, userId]);
+
+    useEffect(() => {
+        if (searchParams.get("achievements") === "1") {
+            void openAchievements();
+        }
+    }, [searchParams, openAchievements]);
+
     const copyPlan = async (planId: string) => {
         setCopyingPlanId(planId);
         try {
@@ -219,20 +272,17 @@ export function PublicProfileClient({ userId }: Props) {
     }
 
     if (error || !profile || !viewer) {
-        const isPrivate = error === "This profile is private";
         const notFound = error === "User not found";
         return (
             <div className="card p-10 text-center max-w-lg mx-auto">
                 <Lock className="w-10 h-10 text-fg-subtle mx-auto mb-4" />
                 <h2 className="text-xl font-black text-fg mb-2">
-                    {isPrivate ? "Private profile" : notFound ? "Profile not found" : "Profile unavailable"}
+                    {notFound ? "Profile not found" : "Profile unavailable"}
                 </h2>
                 <p className="text-sm text-fg-muted">
-                    {isPrivate
-                        ? "This athlete has chosen to keep their profile private."
-                        : notFound
-                            ? "This user may have been removed or the link is invalid."
-                            : (error ?? "This profile could not be loaded.")}
+                    {notFound
+                        ? "This user may have been removed or the link is invalid."
+                        : (error ?? "This profile could not be loaded.")}
                 </p>
                 <button
                     type="button"
@@ -245,60 +295,21 @@ export function PublicProfileClient({ userId }: Props) {
         );
     }
 
+    const isLimited = viewer.isLimitedView;
     const showWorkoutStats =
-        (profile.streak != null && profile.streak > 0) ||
-        (profile.totalWorkouts != null && profile.totalWorkouts > 0) ||
-        profile.bodyweightKg != null;
+        !isLimited &&
+        ((profile.streak != null && profile.streak > 0) ||
+            (profile.totalWorkouts != null && profile.totalWorkouts > 0) ||
+            profile.bodyweightKg != null);
+
+    const socialEntries = profile.socialLinks
+        ? (Object.entries(profile.socialLinks) as Array<[keyof SocialLinks, string]>)
+            .filter(([, value]) => value?.trim())
+        : [];
 
     const detailSections: Array<{ key: string; node: React.ReactNode }> = [];
 
-    if (profile.personalRecords.length > 0) {
-        detailSections.push({
-            key: "prs",
-            node: (
-                <SectionCard title="Personal records" icon={Trophy}>
-                    <div className="space-y-2">
-                        {profile.personalRecords.map((pr) => (
-                            <div
-                                key={`${pr.exerciseName}-${pr.loggedAt}`}
-                                className="flex items-center justify-between gap-3 p-3 rounded-xl bg-surface-muted/40 border border-surface-border"
-                            >
-                                <div className="min-w-0">
-                                    <p className="text-sm font-black text-fg truncate">{pr.exerciseName}</p>
-                                    <p className="text-[10px] text-fg-muted mt-0.5">{formatRelative(pr.loggedAt)}</p>
-                                </div>
-                                <p className="text-sm font-black text-brand-300 shrink-0 tabular-nums">
-                                    {pr.weightKg} kg × {pr.reps}
-                                </p>
-                            </div>
-                        ))}
-                    </div>
-                </SectionCard>
-            ),
-        });
-    }
-
-    if (profile.favoriteExercises.length > 0) {
-        detailSections.push({
-            key: "favorites",
-            node: (
-                <SectionCard title="Favourite exercises" icon={Star}>
-                    <div className="flex flex-wrap gap-2">
-                        {profile.favoriteExercises.map((ex) => (
-                            <span
-                                key={ex}
-                                className="px-3 py-1.5 rounded-full bg-brand-400/10 border border-brand-400/20 text-xs font-bold text-brand-300"
-                            >
-                                {ex}
-                            </span>
-                        ))}
-                    </div>
-                </SectionCard>
-            ),
-        });
-    }
-
-    if (profile.plans.length > 0) {
+    if (!isLimited && profile.plans.length > 0) {
         detailSections.push({
             key: "plans",
             node: (
@@ -350,29 +361,7 @@ export function PublicProfileClient({ userId }: Props) {
         });
     }
 
-    if (profile.achievements.length > 0) {
-        detailSections.push({
-            key: "achievements",
-            node: (
-                <SectionCard title="Achievements" icon={AwardIcon}>
-                    <div className="flex flex-wrap gap-2">
-                        {profile.achievements.map((achievement) => (
-                            <span
-                                key={achievement.id}
-                                title={achievement.description}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-warning/10 border border-warning/25 text-xs font-bold text-fg"
-                            >
-                                <Trophy className="w-3.5 h-3.5 text-warning shrink-0" />
-                                {achievement.title}
-                            </span>
-                        ))}
-                    </div>
-                </SectionCard>
-            ),
-        });
-    }
-
-    if (profile.progressPhotos.length > 0) {
+    if (!isLimited && profile.progressPhotos.length > 0) {
         detailSections.push({
             key: "photos",
             node: (
@@ -393,27 +382,24 @@ export function PublicProfileClient({ userId }: Props) {
         });
     }
 
-    const socialEntries = profile.socialLinks
-        ? (Object.entries(profile.socialLinks) as Array<[keyof SocialLinks, string]>)
-            .filter(([, value]) => value?.trim())
-        : [];
-
     return (
         <div className="space-y-5 animate-fade-in pb-20 max-w-4xl mx-auto">
             {/* ── Hero ── */}
             <div className="card overflow-hidden">
-                <div className="relative h-28 sm:h-36 bg-gradient-to-br from-brand-500/25 via-surface-muted to-brand-950/40">
-                    {profile.bannerUrl && (
-                        <img
-                            src={resolveUploadUrl(profile.bannerUrl)}
-                            alt=""
-                            className="absolute inset-0 w-full h-full object-cover"
-                        />
-                    )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-surface-card via-surface-card/30 to-transparent" />
-                </div>
+                {!isLimited && (
+                    <div className="relative h-28 sm:h-36 bg-gradient-to-br from-brand-500/25 via-surface-muted to-brand-950/40">
+                        {profile.bannerUrl && (
+                            <img
+                                src={resolveUploadUrl(profile.bannerUrl)}
+                                alt=""
+                                className="absolute inset-0 w-full h-full object-cover"
+                            />
+                        )}
+                        <div className="absolute inset-0 bg-gradient-to-t from-surface-card via-surface-card/30 to-transparent" />
+                    </div>
+                )}
 
-                <div className="px-5 sm:px-8 pb-6 -mt-11 sm:-mt-12 relative">
+                <div className={cn("px-5 sm:px-8 pb-6 relative", isLimited ? "pt-8" : "-mt-11 sm:-mt-12")}>
                     <div className="flex flex-col sm:flex-row sm:items-end gap-4 sm:gap-5">
                         <div className="w-[4.5rem] h-[4.5rem] sm:w-20 sm:h-20 rounded-2xl bg-gradient-brand flex items-center justify-center text-xl font-black text-white overflow-hidden shrink-0 border-4 border-surface-card shadow-glow-sm mx-auto sm:mx-0">
                             {profile.avatarUrl ? (
@@ -428,18 +414,22 @@ export function PublicProfileClient({ userId }: Props) {
                                 {profile.name}
                             </h1>
                             <p className="text-sm font-bold text-fg-subtle">@{profile.username}</p>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">
-                                {roleLabels[profile.role] ?? profile.role}
-                                {profile.experienceLevel && ` · ${EXP_LABELS[profile.experienceLevel] ?? profile.experienceLevel}`}
-                            </p>
+                            {!isLimited && (
+                                <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">
+                                    {roleLabels[profile.role] ?? profile.role}
+                                    {profile.experienceLevel && ` · ${EXP_LABELS[profile.experienceLevel] ?? profile.experienceLevel}`}
+                                </p>
+                            )}
                         </div>
                     </div>
 
                     <div className="flex flex-wrap gap-x-4 gap-y-1.5 justify-center sm:justify-start mt-4 text-[10px] font-bold uppercase tracking-widest text-fg-muted">
-                        <span className="inline-flex items-center gap-1">
-                            <Calendar className="w-3 h-3" />
-                            Joined {profile.joinDate}
-                        </span>
+                        {!isLimited && (
+                            <span className="inline-flex items-center gap-1">
+                                <Calendar className="w-3 h-3" />
+                                Joined {profile.joinDate}
+                            </span>
+                        )}
                         {profile.onlineStatus && (
                             <span className="inline-flex items-center gap-1.5">
                                 <span className={cn(
@@ -453,7 +443,13 @@ export function PublicProfileClient({ userId }: Props) {
                         )}
                     </div>
 
-                    {profile.trainingGoal && (
+                    {isLimited && (
+                        <p className="text-sm text-fg-muted text-center sm:text-left mt-4 leading-relaxed">
+                            This account is private. Only basic profile info is visible.
+                        </p>
+                    )}
+
+                    {!isLimited && profile.trainingGoal && (
                         <div className="mt-3 flex justify-center sm:justify-start">
                             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-400/10 border border-brand-400/20 text-[10px] font-bold uppercase tracking-widest text-brand-300">
                                 <Target className="w-3 h-3" />
@@ -462,10 +458,31 @@ export function PublicProfileClient({ userId }: Props) {
                         </div>
                     )}
 
-                    {profile.bio && (
+                    {!isLimited && profile.bio && (
                         <p className="text-sm text-fg-muted leading-relaxed mt-4 max-w-2xl mx-auto sm:mx-0 text-center sm:text-left">
                             {profile.bio}
                         </p>
+                    )}
+
+                    {!isLimited && profile.personalRecords.length > 0 && (
+                        <div className="mt-5 space-y-2">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle text-center sm:text-left">
+                                Favourite lifts
+                            </p>
+                            <div className="flex flex-col gap-2">
+                                {profile.personalRecords.map((pr) => (
+                                    <div
+                                        key={`${pr.exerciseName}-${pr.loggedAt}`}
+                                        className="flex items-center justify-between gap-3 p-3 rounded-xl bg-surface-muted/40 border border-surface-border"
+                                    >
+                                        <p className="text-sm font-black text-fg truncate">{pr.exerciseName}</p>
+                                        <p className="text-sm font-black text-brand-300 shrink-0 tabular-nums">
+                                            {pr.weightKg} kg
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
                     )}
 
                     <div className="flex flex-wrap gap-2 justify-center sm:justify-start mt-4">
@@ -483,15 +500,16 @@ export function PublicProfileClient({ userId }: Props) {
                         {profile.isPrivateProfile && (viewer.isSelf || viewer.isAdmin || viewer.isAssignedCoach) && (
                             <span className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-surface-muted border border-surface-border text-xs font-bold text-fg-muted">
                                 <Lock className="w-3.5 h-3.5" />
-                                Private profile
+                                Private account
                             </span>
                         )}
                     </div>
                 </div>
             </div>
 
-            {/* ── Workout stats ── */}
-            {showWorkoutStats && (
+            {profile.coachedBy && <CoachedByCard coach={profile.coachedBy} />}
+
+            {!isLimited && showWorkoutStats && (
                 <div className="flex flex-wrap gap-3">
                     {profile.streak != null && profile.streak > 0 && (
                         <div className="card p-4 flex items-center gap-3 flex-1 min-w-[140px]">
@@ -524,27 +542,60 @@ export function PublicProfileClient({ userId }: Props) {
                 </div>
             )}
 
-            {/* ── Recent activity (prominent) ── */}
-            {profile.activityFeed.length > 0 && (
+            {!isLimited && profile.activityFeed.length > 0 && (
                 <SectionCard title="Recent activity" icon={Activity}>
                     <ul className="divide-y divide-surface-border">
-                        {profile.activityFeed.map((item) => {
-                            const Icon = activityIcon(item.label);
-                            return (
-                                <li key={item.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+                        {profile.activityFeed.map((item) => (
+                            <li key={item.id}>
+                                <Link
+                                    href={`/plans/log/view/${item.workoutLogId}`}
+                                    className="flex items-center gap-3 py-3 first:pt-0 last:pb-0 hover:opacity-80 transition-opacity"
+                                >
                                     <div className="w-8 h-8 rounded-xl bg-surface-muted border border-surface-border flex items-center justify-center shrink-0">
-                                        <Icon className="w-4 h-4 text-brand-400" />
+                                        <Dumbbell className="w-4 h-4 text-brand-400" />
                                     </div>
-                                    <p className="text-sm font-medium text-fg flex-1 min-w-0">{item.label}</p>
-                                    <p className="text-[10px] font-bold text-fg-subtle shrink-0">{formatRelative(item.loggedAt)}</p>
-                                </li>
-                            );
-                        })}
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium text-fg truncate">{item.workoutName}</p>
+                                        <p className="text-[10px] font-bold text-fg-subtle mt-0.5">{formatDate(item.loggedAt)}</p>
+                                    </div>
+                                    <ChevronRight className="w-4 h-4 text-fg-subtle shrink-0" />
+                                </Link>
+                            </li>
+                        ))}
                     </ul>
                 </SectionCard>
             )}
 
-            {profile.mutualCoach && (
+            {!isLimited && profile.achievementSummary.totalAchievements > 0 && (
+                <SectionCard title="Achievements" icon={Trophy}>
+                    <div className="flex items-center justify-between gap-3 mb-3">
+                        <p className="text-sm font-black text-fg tabular-nums">
+                            {profile.achievementSummary.totalUnlocked} / {profile.achievementSummary.totalAchievements} Achievements
+                        </p>
+                        <button
+                            type="button"
+                            onClick={() => void openAchievements()}
+                            className="text-[10px] font-black uppercase tracking-widest text-brand-400 hover:text-brand-300 transition-colors"
+                        >
+                            View all
+                        </button>
+                    </div>
+                    <div className="space-y-2">
+                        {profile.achievementSummary.preview.map((achievement) => (
+                            <AchievementCard key={achievement.id} achievement={achievement} compact />
+                        ))}
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => void openAchievements()}
+                        className="btn-secondary w-full h-10 mt-3 text-xs font-bold"
+                    >
+                        View all achievements
+                    </button>
+                </SectionCard>
+            )}
+
+            {!isLimited && profile.mutualCoach && (
                 <Link
                     href={getPublicProfileHref(profile.mutualCoach.id)}
                     className="card p-4 flex items-center gap-4 hover:border-brand-500/30 transition-colors"
@@ -564,7 +615,7 @@ export function PublicProfileClient({ userId }: Props) {
                 </Link>
             )}
 
-            {detailSections.length > 0 && (
+            {!isLimited && detailSections.length > 0 && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                     {detailSections.map((section) => (
                         <div key={section.key} className={section.key === "plans" ? "lg:col-span-2" : undefined}>
@@ -574,7 +625,7 @@ export function PublicProfileClient({ userId }: Props) {
                 </div>
             )}
 
-            {socialEntries.length > 0 && (
+            {!isLimited && socialEntries.length > 0 && (
                 <SectionCard title="Social" icon={Globe}>
                     <div className="flex flex-wrap gap-2">
                         {socialEntries.map(([key, value]) => {
@@ -601,18 +652,24 @@ export function PublicProfileClient({ userId }: Props) {
             {viewer.isSelf && (
                 <Link href="/settings" className="card p-4 flex items-center justify-between hover:border-brand-500/30 transition-colors">
                     <div>
-                        <p className="text-sm font-black text-fg">Privacy & visibility</p>
-                        <p className="text-xs text-fg-muted mt-0.5">Control what others see on your profile</p>
+                        <p className="text-sm font-black text-fg">Account privacy</p>
+                        <p className="text-xs text-fg-muted mt-0.5">Make your profile public or private</p>
                     </div>
                     <ChevronRight className="w-4 h-4 text-fg-subtle" />
                 </Link>
             )}
+
+            <AchievementsModal
+                open={showAchievements}
+                onClose={() => setShowAchievements(false)}
+                achievements={allAchievements ?? profile.achievementSummary.preview}
+                totalUnlocked={profile.achievementSummary.totalUnlocked}
+                totalAchievements={profile.achievementSummary.totalAchievements}
+                profileName={profile.name}
+                loading={achievementsLoading && !allAchievements}
+            />
         </div>
     );
-}
-
-function AwardIcon({ className }: { className?: string }) {
-    return <Trophy className={className} />;
 }
 
 function ImageIconFallback({ className }: { className?: string }) {

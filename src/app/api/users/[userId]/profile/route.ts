@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuthUser, canDirectMessage } from "@/lib/apiAuth";
-import { getUserProfilePrivacy } from "@/lib/profilePrivacy";
 import {
     buildPublicProfileData,
-    canViewUserProfile,
+    canViewFullProfile,
     ensureUserProfileColumns,
+    getProfileViewMode,
 } from "@/lib/userProfile";
+import { recordProfileView, triggerAchievementSync } from "@/lib/achievements";
 
 export async function GET(
     _req: Request,
@@ -21,13 +22,13 @@ export async function GET(
 
         await ensureUserProfileColumns();
 
-        const allowed = await canViewUserProfile(
+        const viewMode = await getProfileViewMode(
             { id: viewer.id, role: viewer.role },
             targetUserId
         );
 
-        if (!allowed) {
-            return NextResponse.json({ error: "This profile is private" }, { status: 403 });
+        if (viewMode === "none") {
+            return NextResponse.json({ error: "User not found" }, { status: 404 });
         }
 
         const targetMeta = await prisma.user.findUnique({
@@ -39,10 +40,12 @@ export async function GET(
             return NextResponse.json({ error: "User not found" }, { status: 404 });
         }
 
-        const [profile, privacy] = await Promise.all([
-            buildPublicProfileData(targetUserId, viewer.id),
-            getUserProfilePrivacy(targetUserId),
-        ]);
+        if (viewer.id !== targetUserId && viewMode !== "none") {
+            await recordProfileView(viewer.id, targetUserId);
+        }
+        triggerAchievementSync(targetUserId);
+
+        const profile = await buildPublicProfileData(targetUserId, viewer.id, viewMode);
 
         if (!profile) {
             return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -51,10 +54,15 @@ export async function GET(
         const isSelf = viewer.id === targetUserId;
         const isAdmin = viewer.role === "SUPER_ADMIN";
         const isAssignedCoach = targetMeta.coachId === viewer.id && viewer.role === "COACH";
+        const isLimitedView = viewMode === "limited";
+        const canViewFull = await canViewFullProfile(
+            { id: viewer.id, role: viewer.role },
+            targetUserId
+        );
 
         const canMessage =
             !isSelf &&
-            privacy.allowMessages &&
+            !isLimitedView &&
             (await canDirectMessage(viewer, targetUserId));
 
         return NextResponse.json({
@@ -63,8 +71,9 @@ export async function GET(
                 isSelf,
                 isAdmin,
                 isAssignedCoach,
+                isLimitedView,
                 canMessage,
-                canCopyPlans: !isSelf && privacy.publicPlans,
+                canCopyPlans: !isSelf && canViewFull,
             },
         });
     } catch (error) {

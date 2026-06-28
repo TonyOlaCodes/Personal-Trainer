@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { CheckInStatus, Prisma } from "@prisma/client";
 import { z } from "zod";
 import { createNotification, notifyCoachOfClientCheckIn, userWantsNotification } from "@/lib/notifications";
+import { triggerAchievementSync } from "@/lib/achievements";
 import { withResolvedCheckInMedia, normalizeStoredUploadUrl } from "@/lib/uploadUrls";
 import { isInactiveAccount } from "@/lib/userDeactivation";
 import { canAccessCheckIns } from "@/lib/roles";
@@ -67,6 +68,7 @@ export async function POST(req: Request) {
             });
         }
 
+        triggerAchievementSync(user.id);
         return NextResponse.json(withResolvedCheckInMedia(checkIn), { status: 201 });
     } catch (error) {
         console.error("Error in POST /api/checkins:", error);

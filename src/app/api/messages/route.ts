@@ -11,10 +11,10 @@ import {
     requireAuthUser,
 } from "@/lib/apiAuth";
 import { isInactiveAccount } from "@/lib/userDeactivation";
-import { getDirectMessageActivity } from "@/lib/chatActivity";
+import { getDirectMessageActivity, getDirectMessagePeerIds } from "@/lib/chatActivity";
 import { getUnreadCountsByPeer, getTotalUnreadDirectCount } from "@/lib/chatUnread";
 import { notifyCoachOfClientMessage } from "@/lib/notifications";
-import { isCoachRole } from "@/lib/roles";
+import { isClientRole, isCoachRole } from "@/lib/roles";
 import { getLastActiveMap, touchUserLastActive } from "@/lib/userPresence";
 import { getActiveSessionsForClients } from "@/lib/coachChat";
 import { withResolvedUpload, withResolvedAvatar, normalizeStoredUploadUrl } from "@/lib/uploadUrls";
@@ -23,6 +23,8 @@ import {
     markMessagesDelivered,
     markMessagesSeen,
 } from "@/lib/messageReadReceipts";
+import { tryAssignAccessLiaison } from "@/lib/accessRequest";
+import { triggerAchievementSync } from "@/lib/achievements";
 
 // GET messages
 export async function GET(req: Request) {
@@ -40,10 +42,6 @@ export async function GET(req: Request) {
     const before = url.searchParams.get("before");
 
     if (activityOnly) {
-        if (user.role === "FREE") {
-            return NextResponse.json({ activity: {} });
-        }
-
         let peerIds: string[] = [];
         if (user.role === "PREMIUM" && user.coachId) {
             peerIds = [user.coachId];
@@ -59,6 +57,11 @@ export async function GET(req: Request) {
                 select: { id: true },
             });
             peerIds = users.map((peer) => peer.id);
+        } else if (isClientRole(user.role)) {
+            peerIds = await getDirectMessagePeerIds(user.id);
+            if (user.role === "PREMIUM" && user.coachId && !peerIds.includes(user.coachId)) {
+                peerIds = [user.coachId, ...peerIds];
+            }
         }
 
         const activity = await getDirectMessageActivity(user.id, peerIds);
@@ -91,9 +94,6 @@ export async function GET(req: Request) {
     if (isGeneral) {
         where = { isGeneral: true };
     } else if (withUserId) {
-        if (user.role === "FREE") {
-            return NextResponse.json({ error: "Direct coach chat requires Premium access" }, { status: 403 });
-        }
         if (withUserId.startsWith("team_")) {
             const teamCoachId = parseTeamCoachId(withUserId);
             if (!teamCoachId || !(await canAccessTeamChat(user, teamCoachId))) {
@@ -213,9 +213,6 @@ export async function POST(req: Request) {
         if (!receiverId) {
             return NextResponse.json({ error: "receiverId required for direct messages" }, { status: 400 });
         }
-        if (user.role === "FREE") {
-            return NextResponse.json({ error: "Direct coach chat requires Premium access" }, { status: 403 });
-        }
         if (receiverId.startsWith("team_")) {
             const teamCoachId = parseTeamCoachId(receiverId);
             if (!teamCoachId || !(await canAccessTeamChat(user, teamCoachId))) {
@@ -297,6 +294,12 @@ export async function POST(req: Request) {
             });
         }
     }
+
+    if (!isGeneral && receiverId && user.role === "SUPER_ADMIN") {
+        await tryAssignAccessLiaison(receiverId, user.id);
+    }
+
+    triggerAchievementSync(user.id);
 
     return NextResponse.json(mappedMessage, { status: 201 });
 }

@@ -5,7 +5,7 @@ import {
     Activity, Calendar,
     ChevronRight,
     Dumbbell, Loader2, AlertTriangle, MessageCircle,
-    ClipboardCheck, Scale, Trophy, Clock,
+    ClipboardCheck, Clock,
     Bell, ArrowUpRight, CheckCircle2, Users,
 } from "lucide-react";
 import Link from "next/link";
@@ -17,14 +17,12 @@ import { PendingReviewsModal, type PendingReviewItem } from "@/components/shared
 import { StreakBadge } from "@/components/shared/StreakBadge";
 import { formatCoachPlanLabel } from "@/lib/coachPlans";
 import {
-    formatActivityTimestamp,
     type CoachDashboardInsights,
     type ClientDashboardInsight,
     type UpcomingEvent,
 } from "@/lib/coachDashboardInsights";
 
 const CHECK_IN_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const ACTIVITY_PREVIEW_COUNT = 8;
 const UPCOMING_PREVIEW_COUNT = 6;
 
 interface Client {
@@ -64,14 +62,6 @@ interface Props {
     availablePlans: { id: string; name: string; type: string }[];
     insights: CoachDashboardInsights;
 }
-
-const ACTIVITY_ICONS = {
-    workout: Dumbbell,
-    bodyweight: Scale,
-    checkin: ClipboardCheck,
-    message: MessageCircle,
-    pr: Trophy,
-} as const;
 
 function roundWeightKg(n: number) {
     return Math.round(n * 10) / 10;
@@ -254,16 +244,7 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
     const [skippedClients, setSkippedClients] = useState<string[]>([]);
     const [savingSetup, setSavingSetup] = useState(false);
     const [showPendingReviews, setShowPendingReviews] = useState(false);
-    const [showAllActivity, setShowAllActivity] = useState(false);
     const [showAllUpcoming, setShowAllUpcoming] = useState(false);
-
-    const visibleActivity = useMemo(() => {
-        const feed = insights.activityFeed;
-        if (showAllActivity) return feed;
-        return feed.slice(0, ACTIVITY_PREVIEW_COUNT);
-    }, [insights.activityFeed, showAllActivity]);
-
-    const hasMoreActivity = insights.activityFeed.length > ACTIVITY_PREVIEW_COUNT;
 
     const visibleUpcoming = useMemo(() => {
         const events = insights.upcomingEvents;
@@ -843,56 +824,8 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                     </div>
                 </div>
 
-                {/* Sidebar: Activity + Quick Reviews */}
+                {/* Sidebar: Quick Reviews */}
                 <div className="space-y-6">
-                    <div className="space-y-4">
-                        <div className="flex items-center justify-between px-2">
-                            <h3 className="heading-3">Recent Activity</h3>
-                        </div>
-                        <div className="card divide-y divide-surface-border overflow-hidden">
-                            {insights.activityFeed.length === 0 ? (
-                                <p className="p-4 text-sm text-fg-muted">No recent client activity in the last 7 days.</p>
-                            ) : (
-                                visibleActivity.map((item) => {
-                                    const Icon = ACTIVITY_ICONS[item.type];
-                                    return (
-                                        <Link
-                                            key={item.id}
-                                            href={item.href}
-                                            className="flex items-start gap-3 p-4 hover:bg-surface-muted/30 transition-colors group"
-                                        >
-                                            <div className="w-8 h-8 rounded-xl bg-surface-muted/50 flex items-center justify-center shrink-0">
-                                                <Icon className="w-4 h-4 text-brand-400" />
-                                            </div>
-                                            <div className="min-w-0 flex-1">
-                                                <p className="text-sm text-fg leading-snug">
-                                                    <span className="font-bold group-hover:text-brand-400 transition-colors">
-                                                        {item.clientName}
-                                                    </span>
-                                                    {" "}{item.text}
-                                                </p>
-                                                <p className="text-[10px] text-fg-subtle mt-1 uppercase tracking-wider font-bold">
-                                                    {formatActivityTimestamp(item.timestamp)}
-                                                </p>
-                                            </div>
-                                        </Link>
-                                    );
-                                })
-                            )}
-                        </div>
-                        {hasMoreActivity && (
-                            <button
-                                type="button"
-                                onClick={() => setShowAllActivity((prev) => !prev)}
-                                className="w-full text-center text-xs font-bold text-brand-400 hover:text-brand-300 transition-colors py-2"
-                            >
-                                {showAllActivity
-                                    ? "Show less"
-                                    : `View more (${insights.activityFeed.length - ACTIVITY_PREVIEW_COUNT} more)`}
-                            </button>
-                        )}
-                    </div>
-
                     <div className="space-y-4">
                     <div className="flex items-center justify-between px-2">
                         <h3 className="heading-3">Quick Reviews</h3>

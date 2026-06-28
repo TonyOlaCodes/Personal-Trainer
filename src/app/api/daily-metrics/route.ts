@@ -10,6 +10,7 @@ import {
     normalizeSteps,
     saveDailyMetricsEntry,
 } from "@/lib/dailyMetrics";
+import { triggerAchievementSync } from "@/lib/achievements";
 
 const saveSchema = z.object({
     date: z.string(),
@@ -53,6 +54,7 @@ export async function POST(req: Request) {
             sleepHours: normalizeSleepHours(parsed.sleepHours),
         });
 
+        triggerAchievementSync(user.id);
         return NextResponse.json(summary);
     } catch (err) {
         console.error("[DailyMetrics] Failed to save:", err);

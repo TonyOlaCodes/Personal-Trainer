@@ -9,6 +9,7 @@ import {
     type ReactNode,
 } from "react";
 import { useRole } from "@/lib/RoleContext";
+import { isClientRole, isCoachRole } from "@/lib/roles";
 
 interface ChatUnreadContextValue {
     totalUnread: number;
@@ -24,7 +25,7 @@ const ChatUnreadContext = createContext<ChatUnreadContextValue>({
 
 export function ChatUnreadProvider({ children }: { children: ReactNode }) {
     const role = useRole();
-    const enabled = role !== "FREE";
+    const enabled = isClientRole(role) || isCoachRole(role);
     const [totalUnread, setTotalUnread] = useState(0);
     const [peerUnread, setPeerUnread] = useState<Record<string, number>>({});
 

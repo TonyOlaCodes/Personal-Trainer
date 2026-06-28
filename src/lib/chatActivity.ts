@@ -1,5 +1,27 @@
 import { prisma } from "@/lib/prisma";
 
+/** Unique user ids the viewer has exchanged direct messages with. */
+export async function getDirectMessagePeerIds(userId: string): Promise<string[]> {
+    const rows = await prisma.message.findMany({
+        where: {
+            isGeneral: false,
+            OR: [{ senderId: userId }, { receiverId: userId }],
+        },
+        select: { senderId: true, receiverId: true },
+        orderBy: { createdAt: "desc" },
+        take: 500,
+    });
+
+    const peerIds = new Set<string>();
+    for (const row of rows) {
+        const peerId = row.senderId === userId ? row.receiverId : row.senderId;
+        if (peerId && !peerId.startsWith("team_")) {
+            peerIds.add(peerId);
+        }
+    }
+    return [...peerIds];
+}
+
 export async function getDirectMessageActivity(userId: string, peerIds: string[]) {
     if (peerIds.length === 0) return {} as Record<string, string>;
 

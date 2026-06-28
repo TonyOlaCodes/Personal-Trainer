@@ -4,6 +4,7 @@ import { prisma, ensureDbSchema } from "@/lib/prisma";
 import { getLocalDayBounds, parseLogDate } from "@/lib/utils";
 import { canLogWorkouts, requireAuthUser, workoutAssignedToUser } from "@/lib/apiAuth";
 import { notifyCoachOfClientWorkout } from "@/lib/notifications";
+import { triggerAchievementSync } from "@/lib/achievements";
 import { normalizeStoredUploadUrl } from "@/lib/uploadUrls";
 import { z } from "zod";
 
@@ -199,6 +200,7 @@ export async function POST(req: Request) {
                 workoutLogId: workoutLog.id,
             });
         }
+        triggerAchievementSync(user.id);
         return NextResponse.json(workoutLog, { status: 200 });
     }
 
@@ -209,6 +211,7 @@ export async function POST(req: Request) {
             data: { ...logPayload, sets: { create: setsCreate } },
             include: { sets: true, workout: { select: { name: true } } },
         });
+        triggerAchievementSync(user.id);
         return NextResponse.json(workoutLog, { status: 200 });
     }
 
@@ -219,6 +222,7 @@ export async function POST(req: Request) {
             data: { ...logPayload, sets: { create: setsCreate } },
             include: { sets: true, workout: { select: { name: true } } },
         });
+        triggerAchievementSync(user.id);
         return NextResponse.json(workoutLog, { status: 200 });
     }
 
@@ -252,6 +256,8 @@ export async function POST(req: Request) {
             workoutLogId: workoutLog.id,
         });
     }
+
+    triggerAchievementSync(user.id);
 
     return NextResponse.json(workoutLog, { status: 201 });
 }

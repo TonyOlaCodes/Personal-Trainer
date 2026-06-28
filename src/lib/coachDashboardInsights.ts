@@ -1,4 +1,3 @@
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { APP_TIMEZONE } from "@/lib/appTimezone";
 import { getCheckInDueState, type CheckInSchedule } from "@/lib/checkInSchedule";
@@ -15,18 +14,6 @@ import { loadPlanScheduleRevisionsByPlanIds } from "@/lib/planScheduleHistory";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
 import { isInactiveAccount } from "@/lib/userDeactivation";
 import { getWeekNumber, parseLogDate, toDateKey } from "@/lib/utils";
-
-export type CoachActivityType = "workout" | "bodyweight" | "checkin" | "message" | "pr";
-
-export interface CoachActivityItem {
-    id: string;
-    type: CoachActivityType;
-    clientId: string;
-    clientName: string;
-    text: string;
-    timestamp: string;
-    href: string;
-}
 
 export interface CoachAttentionItem {
     key: string;
@@ -76,7 +63,6 @@ export interface ClientDashboardInsight {
 
 export interface CoachDashboardInsights {
     attentionItems: CoachAttentionItem[];
-    activityFeed: CoachActivityItem[];
     upcomingEvents: UpcomingEvent[];
     clientInsights: Record<string, ClientDashboardInsight>;
     totals: {
@@ -165,26 +151,6 @@ function formatUpcomingDateLabel(dateKey: string, todayKey: string): string {
 
 const UPCOMING_LOOKAHEAD_DAYS = 7;
 
-function formatActivityTimestamp(date: Date | string): string {
-    const parsed = new Date(date);
-    const now = new Date();
-    const diff = now.getTime() - parsed.getTime();
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
-
-    if (minutes < 1) return "Just now";
-    if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
-    if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
-    if (days === 1) return "Yesterday";
-    if (days < 7) return `${days} days ago`;
-    return new Intl.DateTimeFormat("en-GB", {
-        timeZone: APP_TIMEZONE,
-        day: "numeric",
-        month: "short",
-    }).format(parsed);
-}
-
 export async function loadCoachDashboardInsights(input: {
     coachId: string;
     clients: ActiveClientRow[];
@@ -200,7 +166,6 @@ export async function loadCoachDashboardInsights(input: {
     const today = parseLogDate(todayKey);
     const weekStart = getMondayStart(today);
     const currentIsoWeek = getWeekNumber(today);
-    const sevenDaysAgo = new Date(Date.now() - 7 * 86400000);
     const streakLookback = new Date(Date.now() - 90 * 86400000);
 
     const [
@@ -208,11 +173,6 @@ export async function loadCoachDashboardInsights(input: {
         todayCompletedLogs,
         weekLogDates,
         streakLogs,
-        activityWorkouts,
-        activityCheckIns,
-        activityMessages,
-        activityPrs,
-        activityBodyweight,
         unreadByPeer,
         missedWorkoutsYesterday,
     ] = await Promise.all([
@@ -278,95 +238,6 @@ export async function loadCoachDashboardInsights(input: {
                 },
                 select: { userId: true, loggedAt: true },
             })
-            : Promise.resolve([]),
-        activeClientIds.length > 0
-            ? prisma.workoutLog.findMany({
-                where: {
-                    userId: { in: activeClientIds },
-                    status: "COMPLETED",
-                    loggedAt: { gte: sevenDaysAgo },
-                },
-                select: {
-                    id: true,
-                    userId: true,
-                    loggedAt: true,
-                    workout: { select: { name: true } },
-                    user: { select: { name: true } },
-                },
-                orderBy: { loggedAt: "desc" },
-                take: 20,
-            })
-            : Promise.resolve([]),
-        activeClientIds.length > 0
-            ? prisma.checkIn.findMany({
-                where: {
-                    userId: { in: activeClientIds },
-                    createdAt: { gte: sevenDaysAgo },
-                },
-                select: {
-                    id: true,
-                    userId: true,
-                    weekNumber: true,
-                    createdAt: true,
-                    user: { select: { name: true } },
-                },
-                orderBy: { createdAt: "desc" },
-                take: 20,
-            })
-            : Promise.resolve([]),
-        activeClientIds.length > 0
-            ? prisma.message.findMany({
-                where: {
-                    senderId: { in: activeClientIds },
-                    receiverId: input.coachId,
-                    isGeneral: false,
-                    createdAt: { gte: sevenDaysAgo },
-                },
-                select: {
-                    id: true,
-                    senderId: true,
-                    createdAt: true,
-                    sender: { select: { name: true } },
-                },
-                orderBy: { createdAt: "desc" },
-                take: 20,
-            })
-            : Promise.resolve([]),
-        activeClientIds.length > 0
-            ? prisma.logSet.findMany({
-                where: {
-                    isPR: true,
-                    workoutLog: {
-                        userId: { in: activeClientIds },
-                        status: "COMPLETED",
-                        loggedAt: { gte: sevenDaysAgo },
-                    },
-                },
-                select: {
-                    id: true,
-                    workoutLog: {
-                        select: {
-                            userId: true,
-                            loggedAt: true,
-                            user: { select: { name: true } },
-                        },
-                    },
-                    exercise: { select: { name: true } },
-                },
-                orderBy: { workoutLog: { loggedAt: "desc" } },
-                take: 15,
-            })
-            : Promise.resolve([]),
-        activeClientIds.length > 0
-            ? prisma.$queryRaw<Array<{ userId: string; weightKg: number; updatedAt: Date; name: string | null }>>`
-                SELECT bl."userId", bl."weightKg", bl."updatedAt", u."name"
-                FROM "bodyweight_logs" bl
-                JOIN "users" u ON u."id" = bl."userId"
-                WHERE bl."userId" IN (${Prisma.join(activeClientIds)})
-                  AND bl."updatedAt" >= ${sevenDaysAgo}
-                ORDER BY bl."updatedAt" DESC
-                LIMIT 20
-            `
             : Promise.resolve([]),
         getUnreadCountsByPeer(input.coachId, activeClientIds),
         getMissedWorkoutsYesterdayForCoach(input.coachId),
@@ -584,59 +455,8 @@ export async function loadCoachDashboardInsights(input: {
         },
     ].filter((item) => item.count > 0);
 
-    const activityFeed: CoachActivityItem[] = [
-        ...activityWorkouts.map((log) => ({
-            id: `workout-${log.id}`,
-            type: "workout" as const,
-            clientId: log.userId,
-            clientName: log.user.name || "Client",
-            text: `completed ${log.workout.name}`,
-            timestamp: log.loggedAt.toISOString(),
-            href: `/coach/client/${log.userId}`,
-        })),
-        ...activityCheckIns.map((checkIn) => ({
-            id: `checkin-${checkIn.id}`,
-            type: "checkin" as const,
-            clientId: checkIn.userId,
-            clientName: checkIn.user.name || "Client",
-            text: `submitted Week ${checkIn.weekNumber} Check-in`,
-            timestamp: checkIn.createdAt.toISOString(),
-            href: `/checkins?highlight=${checkIn.id}`,
-        })),
-        ...activityMessages.map((message) => ({
-            id: `message-${message.id}`,
-            type: "message" as const,
-            clientId: message.senderId,
-            clientName: message.sender.name || "Client",
-            text: "sent a message",
-            timestamp: message.createdAt.toISOString(),
-            href: `/chat`,
-        })),
-        ...activityPrs.map((set) => ({
-            id: `pr-${set.id}`,
-            type: "pr" as const,
-            clientId: set.workoutLog.userId,
-            clientName: set.workoutLog.user.name || "Client",
-            text: `achieved a ${set.exercise.name} PR`,
-            timestamp: set.workoutLog.loggedAt.toISOString(),
-            href: `/coach/client/${set.workoutLog.userId}`,
-        })),
-        ...activityBodyweight.map((row) => ({
-            id: `bw-${row.userId}-${row.updatedAt.toISOString()}`,
-            type: "bodyweight" as const,
-            clientId: row.userId,
-            clientName: row.name || "Client",
-            text: `logged bodyweight (${row.weightKg.toFixed(1)} kg)`,
-            timestamp: row.updatedAt.toISOString(),
-            href: `/coach/client/${row.userId}`,
-        })),
-    ]
-        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-        .slice(0, 30);
-
     return {
         attentionItems,
-        activityFeed,
         upcomingEvents,
         clientInsights,
         totals: {
@@ -654,5 +474,3 @@ export async function loadCoachDashboardInsights(input: {
 export async function getCoachUnreadMessageTotal(coachId: string, clientIds: string[]) {
     return getTotalUnreadDirectCount(coachId, clientIds);
 }
-
-export { formatActivityTimestamp };

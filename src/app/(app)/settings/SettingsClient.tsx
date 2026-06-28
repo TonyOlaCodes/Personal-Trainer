@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import {
     User, Bell, Palette,
     HelpCircle, LogOut, ChevronRight, Check,
-    Camera, Loader2, Target, RotateCcw, Scale, Shield, ImageIcon, Link2,
+    Camera, Loader2, Target, RotateCcw, Scale, ImageIcon, Link2,
 } from "lucide-react";
 import { useClerk } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
@@ -15,10 +15,6 @@ import { isCoachRole, isClientRole, isCoachedPremium } from "@/lib/roles";
 import { notifyWalkthroughReset } from "@/components/walkthrough/AppWalkthroughProvider";
 import { DEFAULT_MISSED_NOTIFY_TIME } from "@/lib/coachNotificationSchedule";
 import {
-    DEFAULT_PROFILE_PRIVACY,
-    PROFILE_PRIVACY_KEYS,
-    PROFILE_PRIVACY_LABELS,
-    type ProfilePrivacy,
     type SocialLinks,
 } from "@/lib/profilePrivacy";
 import { getPublicProfileHref } from "@/lib/profileNavigation";
@@ -60,7 +56,6 @@ interface Props {
         bio?: string | null;
         isPrivateProfile?: boolean;
         bannerUrl?: string | null;
-        profilePrivacy?: ProfilePrivacy;
         socialLinks?: SocialLinks;
     };
 }
@@ -92,9 +87,6 @@ export function SettingsClient({ user }: Props) {
     const [isPrivateProfile, setIsPrivateProfile] = useState(user.isPrivateProfile ?? false);
     const [avatarUrl, setAvatarUrl] = useState(user.avatarUrl || "");
     const [bannerUrl, setBannerUrl] = useState(user.bannerUrl || "");
-    const [profilePrivacy, setProfilePrivacy] = useState<ProfilePrivacy>(
-        user.profilePrivacy ?? DEFAULT_PROFILE_PRIVACY
-    );
     const [socialLinks, setSocialLinks] = useState<SocialLinks>(user.socialLinks ?? {});
     const [profileSaving, setProfileSaving] = useState(false);
     const [profileSaved, setProfileSaved] = useState(false);
@@ -245,7 +237,6 @@ export function SettingsClient({ user }: Props) {
         bannerUrl?: string;
         bio?: string | null;
         isPrivateProfile?: boolean;
-        profilePrivacy?: ProfilePrivacy;
         socialLinks?: SocialLinks;
     }) => {
         setProfileSaving(true);
@@ -285,13 +276,12 @@ export function SettingsClient({ user }: Props) {
                 bannerUrl: bannerUrl || "",
                 bio: bio.trim() ? bio.trim() : null,
                 isPrivateProfile,
-                profilePrivacy,
                 socialLinks,
             });
         }, 450);
 
         return () => window.clearTimeout(timer);
-    }, [activeTab, name, avatarUrl, bannerUrl, bio, isPrivateProfile, profilePrivacy, socialLinks, saveProfileFields]);
+    }, [activeTab, name, avatarUrl, bannerUrl, bio, isPrivateProfile, socialLinks, saveProfileFields]);
 
     // Access code state
     const [secretCode, setSecretCode] = useState("");
@@ -342,10 +332,6 @@ export function SettingsClient({ user }: Props) {
     const handleRemoveBanner = () => {
         setBannerUrl("");
         if (bannerRef.current) bannerRef.current.value = "";
-    };
-
-    const toggleProfilePrivacy = (key: keyof ProfilePrivacy) => {
-        setProfilePrivacy((prev) => ({ ...prev, [key]: !prev[key] }));
     };
 
     const updateSocialLink = (key: keyof SocialLinks, value: string) => {
@@ -647,56 +633,12 @@ export function SettingsClient({ user }: Props) {
                         </div>
 
                         <div className="p-5 rounded-2xl border border-surface-border bg-surface-muted/30 space-y-4">
-                            <div className="flex items-center gap-2">
-                                <Shield className="w-4 h-4 text-brand-400" />
-                                <p className="text-sm font-black text-fg">Profile visibility</p>
-                            </div>
-                            <p className="text-xs text-fg-muted">
-                                Choose what appears on your public profile. Hidden sections are omitted entirely.
-                            </p>
-                            <div className="grid sm:grid-cols-2 gap-3">
-                                {PROFILE_PRIVACY_KEYS.map((key) => {
-                                    const meta = PROFILE_PRIVACY_LABELS[key];
-                                    const enabled = profilePrivacy[key];
-                                    return (
-                                        <button
-                                            key={key}
-                                            type="button"
-                                            role="switch"
-                                            aria-checked={enabled}
-                                            onClick={() => toggleProfilePrivacy(key)}
-                                            className={cn(
-                                                "flex items-start justify-between gap-3 p-3 rounded-xl border text-left transition-colors",
-                                                enabled
-                                                    ? "border-brand-400/30 bg-brand-400/5"
-                                                    : "border-surface-border bg-surface-muted/20"
-                                            )}
-                                        >
-                                            <div className="min-w-0">
-                                                <p className="text-xs font-black text-fg">{meta.label}</p>
-                                                <p className="text-[10px] text-fg-muted mt-0.5">{meta.description}</p>
-                                            </div>
-                                            <span className={cn(
-                                                "relative w-9 h-5 rounded-full shrink-0 mt-0.5 transition-colors",
-                                                enabled ? "bg-brand-500" : "bg-surface-muted border border-surface-border"
-                                            )}>
-                                                <span className={cn(
-                                                    "absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform",
-                                                    enabled && "translate-x-4"
-                                                )} />
-                                            </span>
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
-
-                        <div className="p-5 rounded-2xl border border-surface-border bg-surface-muted/30 space-y-4">
                             <div className="flex items-start justify-between gap-4">
                                 <div>
-                                    <p className="text-sm font-black text-fg">Private profile</p>
-                                    <p className="text-xs text-fg-muted mt-1">
-                                        Hide your profile and public plans from other users. Your assigned coach and admins can still view them.
+                                    <p className="text-sm font-black text-fg">Private account</p>
+                                    <p className="text-xs text-fg-muted mt-1 leading-relaxed">
+                                        When private, others only see your photo, name, username, coach, and online status.
+                                        Your assigned coach and admins can still view your full profile.
                                     </p>
                                 </div>
                                 <button

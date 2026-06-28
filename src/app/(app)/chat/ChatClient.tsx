@@ -58,7 +58,7 @@ interface Message {
     isPinned: boolean;
     status: "SENT" | "DELIVERED" | "SEEN";
     mentions: string[];
-    actionType?: "PLAN_ASSIGNED" | "CHECKIN_REQUEST" | "BROADCAST" | null;
+    actionType?: "PLAN_ASSIGNED" | "CHECKIN_REQUEST" | "BROADCAST" | "ACCESS_REQUEST" | null;
     actionEntityId?: string | null;
     createdAt: string;
     updatedAt?: string | null;
@@ -198,6 +198,7 @@ export function ChatClient({
     const [conversationPresence, setConversationPresence] = useState<Record<string, string | null>>({});
     const [activeSessions, setActiveSessions] = useState<Record<string, ActiveSession>>({});
     const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>(initialUnread);
+    const [extraConversations, setExtraConversations] = useState<Conversation[]>([]);
     const [coachSearch, setCoachSearch] = useState("");
     const [coachFilters, setCoachFilters] = useState<CoachListFilter[]>([]);
     const [loadingOlder, setLoadingOlder] = useState(false);
@@ -205,12 +206,22 @@ export function ChatClient({
 
     const isFetchingRef = useRef(false);
 
+    const allConversations = useMemo(() => {
+        const byId = new Map(conversations.map((conversation) => [conversation.userId, conversation]));
+        for (const conversation of extraConversations) {
+            if (!byId.has(conversation.userId)) {
+                byId.set(conversation.userId, conversation);
+            }
+        }
+        return [...byId.values()];
+    }, [conversations, extraConversations]);
+
     const resolveLastActive = useCallback((userId: string) => {
         if (conversationPresence[userId] !== undefined) {
             return conversationPresence[userId];
         }
-        return conversations.find((conversation) => conversation.userId === userId)?.lastActiveAt ?? null;
-    }, [conversationPresence, conversations]);
+        return allConversations.find((conversation) => conversation.userId === userId)?.lastActiveAt ?? null;
+    }, [conversationPresence, allConversations]);
 
     const selectedActiveSession = useMemo(() => {
         if (!selectedConv) return null;
@@ -510,6 +521,38 @@ export function ChatClient({
         setIsHydrated(true);
     }, [conversations, canUseDirectChat, persistChatSelection]);
 
+    useEffect(() => {
+        if (!isHydrated || !canUseDirectChat) return;
+
+        const requested = new URLSearchParams(window.location.search).get("with");
+        if (!requested || requested.startsWith("team_")) return;
+        if (allConversations.some((conversation) => conversation.userId === requested)) return;
+
+        let cancelled = false;
+        void (async () => {
+            const res = await fetch(`/api/users/${requested}/profile`);
+            if (!res.ok || cancelled) return;
+            const data = await res.json();
+            if (!data.viewer?.canMessage || cancelled) return;
+
+            const conv: Conversation = {
+                userId: data.profile.id,
+                name: data.profile.name ?? "Athlete",
+                role: data.profile.role,
+                avatarUrl: data.profile.avatarUrl ?? null,
+            };
+            setExtraConversations([conv]);
+            setTab("direct");
+            setSelectedConv(conv);
+            setShowConversationThread(true);
+            persistChatSelection("direct", conv);
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [isHydrated, canUseDirectChat, allConversations, persistChatSelection]);
+
     const handleTabChange = (newTab: "direct" | "general") => {
         setTab(newTab);
         setReplyTo(null);
@@ -528,7 +571,7 @@ export function ChatClient({
         }
 
         const savedConversationId = localStorage.getItem(LAST_CHAT_CONVERSATION_KEY);
-        const conversation = resolveDirectConversation(conversations, savedConversationId, selectedConv, conversationActivity);
+        const conversation = resolveDirectConversation(allConversations, savedConversationId, selectedConv, conversationActivity);
         setSelectedConv(conversation);
         setShowConversationThread(Boolean(conversation));
         if (conversation) persistChatSelection("direct", conversation);
@@ -819,12 +862,12 @@ export function ChatClient({
 
     const sortedConversations = useMemo(() => {
         return sortConversationsByActivity(
-            conversations.map((conversation) => ({
+            allConversations.map((conversation) => ({
                 ...conversation,
                 lastMessageAt: conversationActivity[conversation.userId] ?? conversation.lastMessageAt ?? null,
             }))
         );
-    }, [conversations, conversationActivity]);
+    }, [allConversations, conversationActivity]);
 
     const toggleCoachFilter = (filter: CoachListFilter) => {
         setCoachFilters((prev) =>
@@ -1190,6 +1233,32 @@ export function ChatClient({
             );
         }
 
+        if (msg.actionType === "ACCESS_REQUEST") {
+            return (
+                <div
+                    className={cn(
+                        "mt-2 flex items-center gap-3 p-3 rounded-xl border",
+                        isMine
+                            ? "bg-white/10 border-white/20"
+                            : "bg-brand-500/5 border-brand-500/20"
+                    )}
+                >
+                    <div className={cn(
+                        "w-9 h-9 rounded-lg flex items-center justify-center shrink-0",
+                        isMine ? "bg-white/15" : "bg-brand-500/15"
+                    )}>
+                        <Shield className={cn("w-4 h-4", isMine ? "text-white" : "text-brand-400")} />
+                    </div>
+                    <div className="min-w-0">
+                        <p className={cn("text-xs font-black", isMine ? "text-white" : "text-fg")}>Full access request</p>
+                        <p className={cn("text-[10px] font-medium", isMine ? "text-white/70" : "text-brand-400")}>
+                            {isMine ? "Sent to admins" : "Reply to become their contact"}
+                        </p>
+                    </div>
+                </div>
+            );
+        }
+
         return null;
     };
 
@@ -1289,7 +1358,7 @@ export function ChatClient({
                             <p className="text-sm font-bold text-fg">Direct coach chat is Premium</p>
                             <p className="text-xs text-fg-muted">Redeem an access code from your coach in Settings to unlock 1-on-1 messaging. Community chat is still available.</p>
                         </div>
-                    ) : currentUserRole === "PREMIUM" && conversations.length === 0 ? (
+                    ) : currentUserRole === "PREMIUM" && allConversations.length === 0 ? (
                         <div className="p-6 text-center space-y-4">
                             <div className="w-12 h-12 rounded-2xl bg-brand-500/10 flex items-center justify-center mx-auto">
                                 <MessageSquare className="w-6 h-6 text-brand-400" />
@@ -1297,7 +1366,7 @@ export function ChatClient({
                             <div className="space-y-2">
                                 <p className="text-sm font-bold text-fg">No coach assigned yet</p>
                                 <p className="text-xs text-fg-muted leading-relaxed">
-                                    Your Premium account is active, but you haven&apos;t been linked to a coach yet. Nothing is broken — once your coach assigns you, direct messaging will appear here.
+                                    Your Premium account is active, but you haven&apos;t been linked to a coach yet. Message other athletes from their profile, or redeem a coach code in Settings.
                                 </p>
                             </div>
                             <div className="flex flex-col gap-2">
@@ -1311,6 +1380,13 @@ export function ChatClient({
                                     Contact Support
                                 </a>
                             </div>
+                        </div>
+                    ) : (currentUserRole === "FREE" || currentUserRole === "GENERAL_PREMIUM") && allConversations.length === 0 ? (
+                        <div className="p-6 text-center space-y-3">
+                            <p className="text-sm font-bold text-fg">No direct messages yet</p>
+                            <p className="text-xs text-fg-muted leading-relaxed">
+                                Visit someone&apos;s public profile and tap Message to start a conversation. Community chat is always available in the Global tab.
+                            </p>
                         </div>
                     ) : filteredConversations.length === 0 ? (
                         <p className="text-xs text-fg-muted text-center p-6">

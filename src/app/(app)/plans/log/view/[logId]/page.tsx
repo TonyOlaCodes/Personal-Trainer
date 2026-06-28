@@ -10,6 +10,7 @@ import { SessionActions } from "./SessionActions";
 import { WorkoutFeelingEditor } from "@/components/shared/WorkoutFeelingEditor";
 import { BackButton } from "@/components/shared/BackButton";
 import { defaultHomeForRole } from "@/lib/roles";
+import { canViewWorkoutLog } from "@/lib/userProfile";
 
 export default async function LogViewPage({ params }: { params: Promise<{ logId: string }> }) {
     const { logId } = await params;
@@ -33,14 +34,12 @@ export default async function LogViewPage({ params }: { params: Promise<{ logId:
 
     if (!log) notFound();
 
-    // Auth check: Owner, Coach of Owner, or Admin
-    const isOwner = log.user.id === actor.id;
-    const isCoachOfOwner = log.user.coachId === actor.id;
-    const isAdmin = ["SUPER_ADMIN"].includes(actor.role);
-
-    if (!isOwner && !isCoachOfOwner && !isAdmin) {
+    const canView = await canViewWorkoutLog(actor, log);
+    if (!canView) {
         redirect(defaultHomeForRole(actor.role));
     }
+
+    const isOwner = log.user.id === actor.id;
 
     // Group sets by exercise
     const exercisesMap = new Map();

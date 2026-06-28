@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAuthUser } from "@/lib/apiAuth";
 import { canPublishPlansToProfile } from "@/lib/roles";
+import { triggerAchievementSync } from "@/lib/achievements";
 
 const visibilitySchema = z.object({
     isPublic: z.boolean(),
@@ -52,6 +53,8 @@ export async function PATCH(
         data: { isPublic: body.isPublic },
         select: { id: true, isPublic: true },
     });
+
+    triggerAchievementSync(user.id);
 
     return NextResponse.json(updated);
 }
