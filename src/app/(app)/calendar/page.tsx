@@ -2,7 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
-import { CalendarClient } from "./CalendarClient";
+import { PersonalCalendarClient } from "./PersonalCalendarClient";
 import { loadClientCalendarData } from "@/lib/clientCalendarData";
 import { isCoachRole } from "@/lib/roles";
 
@@ -29,14 +29,7 @@ export default async function CalendarPage() {
         <>
             <TopBar title="Calendar" subtitle="Your training schedule" />
             <div className="p-4 sm:p-6 lg:p-10 max-w-7xl mx-auto pb-20">
-                <CalendarClient
-                    activePlan={calendar.activePlan}
-                    planStartedAt={calendar.planStartedAt}
-                    loggedDates={calendar.loggedDates}
-                    inProgressSessions={calendar.inProgressSessions}
-                    scheduleRevisions={calendar.scheduleRevisions}
-                    excusedMissedWorkoutKeys={calendar.excusedMissedWorkoutKeys}
-                />
+                <PersonalCalendarClient calendar={calendar} />
             </div>
         </>
     );

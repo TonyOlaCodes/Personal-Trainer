@@ -16,13 +16,19 @@ import {
     buildUnreadMessageAlertKey,
     getCoachAttentionActions,
     getExcusedMissedWorkoutKeysForClient,
+    isDismissedAlertCurrentlyHidden,
     isMissedWorkoutExcused,
 } from "@/lib/coachAttentionActions";
 import { getPlannedWorkoutForDate, type ActiveUserPlanLike } from "@/lib/planSchedule";
 import { loadPlanScheduleRevisionsByPlanIds } from "@/lib/planScheduleHistory";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
 import { isInactiveAccount } from "@/lib/userDeactivation";
-import { getWeekNumber, parseLogDate, toDateKey } from "@/lib/utils";
+import { formatCheckInDueDate } from "@/lib/checkInLabels";
+import {
+    getCoachAppToday,
+    isCoachClientCheckInAttentionNeeded,
+} from "@/lib/coachOverdueCheckIns";
+import { parseLogDate, toDateKey } from "@/lib/utils";
 import { computeWorkoutAdherence } from "@/lib/workoutAdherenceStreak";
 
 export interface CoachAttentionItem {
@@ -94,6 +100,7 @@ interface ActiveClientRow {
     isDeleted: boolean;
     isDeactivated: boolean;
     email: string;
+    lastActiveAt: Date | null;
     hasCheckInSchedule: boolean;
     checkInSchedule: CheckInSchedule;
     currentWeekCheckInId: string | null;
@@ -104,37 +111,54 @@ function buildCheckInLabel(
     dueState: ReturnType<typeof getCheckInDueState>,
     hasCheckInThisWeek: boolean
 ): { status: ClientCheckInStatus; label: string } {
+    const periodDate = formatCheckInDueDate(dueState.currentPeriodDueDate);
+    const nextDate = formatCheckInDueDate(dueState.nextDueDate);
+
     if (!dueState.isConfigured) {
         return { status: "not_configured", label: "No check-in schedule" };
     }
     if (hasCheckInThisWeek) {
-        if (dueState.daysUntilNext === 1) {
-            return { status: "scheduled", label: "Next check-in tomorrow" };
+        if (dueState.daysUntilNext === 1 && nextDate) {
+            return { status: "scheduled", label: `Next check-in tomorrow · ${nextDate}` };
         }
-        if (dueState.daysUntilNext != null && dueState.daysUntilNext <= 7) {
-            return { status: "scheduled", label: `Next check-in in ${dueState.daysUntilNext}d` };
+        if (dueState.daysUntilNext != null && dueState.daysUntilNext <= 7 && nextDate) {
+            return { status: "scheduled", label: `Next check-in · ${nextDate}` };
         }
-        return { status: "scheduled", label: `Next: ${dueState.dueDayLabel ?? "scheduled"}` };
+        if (nextDate) return { status: "scheduled", label: `Next check-in · ${nextDate}` };
+        return { status: "scheduled", label: "Next check-in scheduled" };
     }
     if (dueState.isOverdue) {
-        return { status: "overdue", label: "Check-in overdue" };
+        return {
+            status: "overdue",
+            label: periodDate ? `Overdue · due ${periodDate}` : "Check-in overdue",
+        };
     }
     if (dueState.isDueToday) {
-        return { status: "due_today", label: "Check-in due today" };
+        return {
+            status: "due_today",
+            label: periodDate ? `Due today · ${periodDate}` : "Check-in due today",
+        };
     }
     if (dueState.isDueWeek) {
-        return { status: "due_soon", label: "Check-in due this week" };
+        return {
+            status: "due_soon",
+            label: periodDate ? `Due this week · ${periodDate}` : "Check-in due this week",
+        };
     }
     if (dueState.daysUntilNext != null && dueState.daysUntilNext > 0) {
-        if (dueState.daysUntilNext === 1) {
-            return { status: "scheduled", label: "Next check-in tomorrow" };
+        if (dueState.daysUntilNext === 1 && nextDate) {
+            return { status: "scheduled", label: `Next check-in tomorrow · ${nextDate}` };
+        }
+        if (nextDate) {
+            return { status: "scheduled", label: `Next check-in · ${nextDate}` };
         }
         return { status: "scheduled", label: `Next check-in in ${dueState.daysUntilNext}d` };
     }
-    if (dueState.daysUntilNext != null && dueState.daysUntilNext <= 3) {
-        return { status: "due_soon", label: `Check-in in ${dueState.daysUntilNext}d` };
+    if (dueState.daysUntilNext != null && dueState.daysUntilNext <= 3 && nextDate) {
+        return { status: "due_soon", label: `Check-in · ${nextDate}` };
     }
-    return { status: "scheduled", label: `Next: ${dueState.dueDayLabel ?? "scheduled"}` };
+    if (nextDate) return { status: "scheduled", label: `Next check-in · ${nextDate}` };
+    return { status: "scheduled", label: "Next check-in scheduled" };
 }
 
 function formatUpcomingDateLabel(dateKey: string, todayKey: string): string {
@@ -163,10 +187,8 @@ export async function loadCoachDashboardInsights(input: {
         (c) => !c.isDeleted && !c.isDeactivated && !c.email.endsWith("@deleted.local")
     );
     const activeClientIds = activeClients.map((c) => c.id);
-    const todayKey = getLocalTimeParts(new Date(), APP_TIMEZONE).dateKey;
-    const today = parseLogDate(todayKey);
+    const { today, todayKey, weekNumber: currentIsoWeek } = getCoachAppToday();
     const weekStart = getMondayStart(today);
-    const currentIsoWeek = getWeekNumber(today);
 
     const [
         userPlans,
@@ -316,22 +338,28 @@ export async function loadCoachDashboardInsights(input: {
 
         const dueStateRaw = getCheckInDueState(client.checkInSchedule, today);
         const clientAttentionRows = [...attentionActions.values()].filter((row) => row.clientId === client.id);
-        const dueState = applyCheckInAttentionOverrides(dueStateRaw, clientAttentionRows, currentIsoWeek, today);
+        const dueState = applyCheckInAttentionOverrides(
+            dueStateRaw,
+            clientAttentionRows,
+            client.id,
+            currentIsoWeek,
+            today,
+            client.lastActiveAt
+        );
         const hasCheckInThisWeek = Boolean(client.currentWeekCheckInId);
         const { status: checkInStatus, label: checkInLabel } = buildCheckInLabel(dueState, hasCheckInThisWeek);
 
-        if (
-            dueState.isConfigured
-            && !hasCheckInThisWeek
-            && (dueState.isOverdue || dueState.isDueToday)
-        ) {
+        if (isCoachClientCheckInAttentionNeeded(dueState, hasCheckInThisWeek)) {
             overdueCheckIns++;
             clientsNeedingAttentionIds.add(client.id);
         }
 
         if (
             !client.hasCheckInSchedule
-            && attentionActions.get(buildSetupNeededAlertKey(client.id))?.action !== "dismissed"
+            && !isDismissedAlertCurrentlyHidden(
+                attentionActions.get(buildSetupNeededAlertKey(client.id)),
+                client.lastActiveAt
+            )
         ) {
             setupNeeded++;
             clientsNeedingAttentionIds.add(client.id);
@@ -340,7 +368,10 @@ export async function loadCoachDashboardInsights(input: {
         const unreadMessages = unreadByPeer[client.id] ?? 0;
         if (
             unreadMessages > 0
-            && attentionActions.get(buildUnreadMessageAlertKey(client.id))?.action !== "dismissed"
+            && !isDismissedAlertCurrentlyHidden(
+                attentionActions.get(buildUnreadMessageAlertKey(client.id)),
+                client.lastActiveAt
+            )
         ) {
             clientsNeedingAttentionIds.add(client.id);
         }
@@ -365,16 +396,19 @@ export async function loadCoachDashboardInsights(input: {
             }).currentStreak
             : 0;
 
-        const checkInNeedsAttention =
-            dueState.isConfigured
-            && !hasCheckInThisWeek
-            && (dueState.isOverdue || dueState.isDueToday);
+        const checkInNeedsAttention = isCoachClientCheckInAttentionNeeded(dueState, hasCheckInThisWeek);
         const setupNeedsAttention =
             !client.hasCheckInSchedule
-            && attentionActions.get(buildSetupNeededAlertKey(client.id))?.action !== "dismissed";
+            && !isDismissedAlertCurrentlyHidden(
+                attentionActions.get(buildSetupNeededAlertKey(client.id)),
+                client.lastActiveAt
+            );
         const unreadNeedsAttention =
             unreadMessages > 0
-            && attentionActions.get(buildUnreadMessageAlertKey(client.id))?.action !== "dismissed";
+            && !isDismissedAlertCurrentlyHidden(
+                attentionActions.get(buildUnreadMessageAlertKey(client.id)),
+                client.lastActiveAt
+            );
 
         const needsAttention =
             (plannedToday && !completedToday && !input.activeSessions[client.id])
@@ -452,7 +486,15 @@ export async function loadCoachDashboardInsights(input: {
 
     const unreadTotal = Object.entries(unreadByPeer).reduce((sum, [clientId, count]) => {
         if (count <= 0) return sum;
-        if (attentionActions.get(buildUnreadMessageAlertKey(clientId))?.action === "dismissed") return sum;
+        const client = activeClients.find((row) => row.id === clientId);
+        if (
+            isDismissedAlertCurrentlyHidden(
+                attentionActions.get(buildUnreadMessageAlertKey(clientId)),
+                client?.lastActiveAt ?? null
+            )
+        ) {
+            return sum;
+        }
         return sum + count;
     }, 0);
     const activeWorkoutsNow = Object.values(input.activeSessions).filter(Boolean).length;

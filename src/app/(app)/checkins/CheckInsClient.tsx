@@ -10,6 +10,16 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { formatDate, getWeekNumber, cn } from "@/lib/utils";
+import {
+    formatCheckInDueSubtitle,
+    formatCheckInPeriodTitle,
+    formatCheckInWeekFromCheckIn,
+    formatCheckInWeekFromDate,
+    formatCheckInWeekLabel,
+    formatCheckInWeekShortFromCheckIn,
+    getIsoWeekStartDate,
+    getIsoWeekYear,
+} from "@/lib/checkInLabels";
 import { uploadMediaFile, resolveUploadUrl } from "@/lib/compressImage";
 import {
     getPerformanceMetricsFeedback,
@@ -55,6 +65,8 @@ interface Props {
         isOverdue: boolean;
         daysUntilNext: number | null;
         dueDayLabel: string | null;
+        currentPeriodDueDate?: string | null;
+        nextDueDate?: string | null;
         frequencyWeeks: number | null;
         startDate?: string | null;
     };
@@ -69,6 +81,7 @@ interface Props {
         name: string;
         label: string;
         weekNumber: number;
+        periodLabel?: string;
         isOverdue: boolean;
     }>;
 }
@@ -165,12 +178,8 @@ function ratingChips(c: CheckIn, isSleepHidden?: boolean) {
 }
 
 /* ─────────────────── Previous check-in summary ─────────────── */
-function getDateFromWeek(week: number, year: number) {
-    const d = new Date(year, 0, 1);
-    const dayNum = d.getDay() || 7;
-    const firstThursday = new Date(year, 0, 1 + (dayNum <= 4 ? 4 - dayNum : 11 - dayNum));
-    const targetDate = new Date(firstThursday.getTime() + (week - 1) * 7 * 24 * 60 * 60 * 1000);
-    return targetDate.toISOString().split("T")[0];
+function weekStartDateString(week: number, createdAt: string) {
+    return getIsoWeekStartDate(week, getIsoWeekYear(new Date(createdAt))).toISOString().split("T")[0];
 }
 
 function PrevCheckInCard({ prev, setViewerMedia, isWeightHidden, isSleepHidden }: {
@@ -188,7 +197,7 @@ function PrevCheckInCard({ prev, setViewerMedia, isWeightHidden, isSleepHidden }
             >
                 <div className="flex items-center gap-3">
                     <Calendar className="w-4 h-4 text-fg-subtle" />
-                    <span className="text-xs font-bold text-fg-muted">Week {prev.weekNumber} check-in</span>
+                    <span className="text-xs font-bold text-fg-muted">{formatCheckInPeriodTitle(prev.weekNumber, prev.createdAt)}</span>
                     {!isWeightHidden && prev.bodyweightKg && (
                         <span className="text-xs font-black text-fg">{prev.bodyweightKg.toFixed(2)}kg</span>
                     )}
@@ -321,6 +330,10 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highl
         setDeleting(false);
     };
 
+    const weekShortLabel = formatCheckInWeekShortFromCheckIn(c);
+    const [weekDayLabel, ...weekMonthParts] = weekShortLabel.split(" ");
+    const weekMonthLabel = weekMonthParts.join(" ");
+
     return (
         <div className={cn(
             "rounded-2xl border overflow-hidden",
@@ -341,16 +354,20 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highl
             >
                 <div className="flex items-center gap-3">
                     <div className={cn(
-                        "w-11 h-11 rounded-xl flex flex-col items-center justify-center shrink-0 text-center",
+                        "w-11 h-11 rounded-xl flex flex-col items-center justify-center shrink-0 text-center px-1",
                         c.status === "REVIEWED" ? "bg-success/10 text-success" : "bg-brand-500/10 text-brand-400"
                     )}>
-                        <span className="text-[8px] font-black uppercase leading-none">Wk</span>
-                        <span className="text-base font-black leading-tight">{c.weekNumber}</span>
+                        <span className="text-[9px] font-black uppercase leading-none tracking-tight">
+                            {weekMonthLabel}
+                        </span>
+                        <span className="text-sm font-black leading-tight">
+                            {weekDayLabel}
+                        </span>
                     </div>
                     <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                             <span className="text-sm font-bold text-fg truncate">
-                                {isCoach ? (c.user?.name ?? "Client") : `Week ${c.weekNumber}`}
+                                {isCoach ? (c.user?.name ?? "Client") : formatCheckInWeekFromCheckIn(c)}
                             </span>
                             <span className={cn(
                                 "text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border",
@@ -697,18 +714,18 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
         if (hasTodayEntry) {
             if (checkInDueState.isConfigured && daysUntilNext !== null) {
                 if (daysUntilNext === 1) return "Next check-in is tomorrow";
+                if (daysUntilNext !== null && checkInDueState.nextDueDate) {
+                    return formatCheckInDueSubtitle({
+                        ...checkInDueState,
+                        isDueToday: false,
+                        isOverdue: false,
+                    });
+                }
                 return `Next check-in in ${daysUntilNext} days`;
             }
             return "Check-in completed";
         }
-        if (checkInDueState.isConfigured) {
-            if (isOverdue) return "Check-in overdue";
-            if (isDueDay) return "Check-in is due today";
-            if (daysUntilNext === 1) return "Next check-in is tomorrow";
-            if (daysUntilNext !== null) return `Next check-in in ${daysUntilNext} days`;
-            return `Due ${checkInDueState.dueDayLabel}`;
-        }
-        return "No check-in due";
+        return formatCheckInDueSubtitle(checkInDueState);
     };
 
     // Stats based on selection or defaults
@@ -759,8 +776,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
 
     const editCheckIn = (c: CheckIn) => {
         setCheckInId(c.id);
-        const year = new Date(c.createdAt).getFullYear();
-        setSelectedDate(getDateFromWeek(c.weekNumber, year));
+        setSelectedDate(weekStartDateString(c.weekNumber, c.createdAt));
         setEnergy(c.energyRating || 0);
         setSleep(c.sleepRating || 0);
         setDiet(c.dietRating || 0);
@@ -918,7 +934,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                                             "text-xs mt-0.5",
                                             client.isOverdue ? "text-warning font-semibold" : "text-fg-muted"
                                         )}>
-                                            {client.label} · Week {client.weekNumber}
+                                            {client.label} · {client.periodLabel ?? formatCheckInWeekLabel(client.weekNumber)}
                                         </p>
                                         <p className="text-[10px] text-fg-subtle mt-1">
                                             Waiting for client to submit — nothing to review yet
@@ -1073,7 +1089,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                                 </div>
                                 <div className="flex-1">
                                     <div className="flex items-center gap-2">
-                                        <p className="font-black text-fg">Week {currentWeekReal} Complete</p>
+                                        <p className="font-black text-fg">Check-in complete</p>
                                         {!isWeightHidden && periodSummary?.weight?.changeKg != null && periodSummary.weight.hasPreviousCheckIn && (
                                             <span className={cn(
                                                 "text-[9px] font-black px-1.5 py-0.5 rounded-md border",
@@ -1246,10 +1262,10 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
             <div className="flex items-center justify-between px-1">
                 <div>
                     <h2 className="text-xl font-black text-fg tracking-tight">
-                        {editMode ? `Edit Week ${selectedWeek}` : `New Check-in`}
+                        {editMode ? `Edit ${formatCheckInWeekLabel(selectedWeek)} check-in` : "New Check-in"}
                     </h2>
                     <p className="text-xs text-fg-muted mt-0.5">
-                        {editMode ? "Modify your current submission" : `Week ${selectedWeek} · Select date & log`}
+                        {editMode ? "Modify your current submission" : `${formatCheckInWeekFromDate(selectedDate)} · Select date & log`}
                     </p>
                 </div>
                 <button 
@@ -1267,7 +1283,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                         <span className="text-sm font-black text-fg uppercase tracking-wide">Check-in Date</span>
                     </div>
                     <span className="text-[10px] font-black text-brand-400 uppercase tracking-widest">
-                        Week {selectedWeek}
+                        {formatCheckInWeekFromDate(selectedDate)}
                     </span>
                 </div>
                 <div 
@@ -1463,7 +1479,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                     ) : (
                         <div className="flex items-center justify-center gap-3">
                             <Send className="w-4 h-4" />
-                            {editMode ? `Update Week ${selectedWeek}` : `Submit Check-in`}
+                            {editMode ? `Update ${formatCheckInWeekLabel(selectedWeek)} check-in` : `Submit Check-in`}
                         </div>
                     )}
                 </button>

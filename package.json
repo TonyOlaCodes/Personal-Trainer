@@ -41,6 +41,7 @@
     "prisma": "^6.19.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-easy-crop": "^6.0.2",
     "react-hook-form": "^7.71.2",
     "recharts": "^3.8.0",
     "socket.io": "^4.8.3",

@@ -40,15 +40,25 @@ export async function GET(req: Request) {
         where,
         include: {
             plan: { select: { name: true } },
+            generator: { select: { id: true, name: true, email: true } },
             usedBy: { select: { id: true, name: true, email: true } },
         },
         orderBy: { createdAt: "desc" },
     });
-    const accountStatusMap = await getUserAccountStatusMap(codes.flatMap((c) => c.usedBy?.id ? [c.usedBy.id] : []));
+    const accountStatusMap = await getUserAccountStatusMap(codes.flatMap((c) => [
+        ...(c.usedBy?.id ? [c.usedBy.id] : []),
+        ...(c.generator?.id ? [c.generator.id] : []),
+    ]));
 
     return NextResponse.json(codes.map(c => ({
         ...c,
         planName: c.plan?.name ?? null,
+        createdBy: c.generator
+            ? (accountStatusMap.get(c.generator.id)?.isDeleted
+                ? accountStatusMap.get(c.generator.id)?.deletedName ?? c.generator.name ?? c.generator.email
+                : c.generator.name ?? c.generator.email)
+            : null,
+        createdById: c.generator?.id ?? null,
         usedByName: c.usedBy
             ? (accountStatusMap.get(c.usedBy.id)?.isDeleted
                 ? accountStatusMap.get(c.usedBy.id)?.deletedName ?? c.usedBy.name

@@ -16,8 +16,10 @@ import { ensurePlanOriginalCreatorColumn } from "@/lib/planCreator";
 import { ensureAccessRequestColumns } from "@/lib/accessRequest";
 import { ensureAchievementsTables } from "@/lib/achievements";
 import { ensureCoachAttentionActionsTable } from "@/lib/coachAttentionActions";
+import { ensurePlanMissedSessionHistoryTable } from "@/lib/planMissedSessionHistory";
 import { ensureGeneralPremiumRole } from "@/lib/ensureGeneralPremiumRole";
 import { ensureLogSetExerciseNamesReady } from "@/lib/logSetExerciseName";
+import { ensureLogSetExerciseOrdersReady } from "@/lib/logSetExerciseOrder";
 
 let appSchemaReady = false;
 let appSchemaPromise: Promise<void> | null = null;
@@ -49,8 +51,10 @@ export async function ensureAppSchema() {
             ensureAccessRequestColumns(),
             ensureAchievementsTables(),
             ensureCoachAttentionActionsTable(),
+            ensurePlanMissedSessionHistoryTable(),
             ensureGeneralPremiumRole(),
             ensureLogSetExerciseNamesReady(),
+            ensureLogSetExerciseOrdersReady(),
         ]);
         appSchemaReady = true;
     })();

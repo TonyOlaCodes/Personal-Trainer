@@ -5,6 +5,7 @@ import { TopBar } from "@/components/layout/TopBar";
 import { ClientDetailView } from "./ClientDetailView";
 import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
 import { getEffectiveCheckInDueStateForUser } from "@/lib/coachAttentionActions";
+import { formatCheckInDueDate, formatCheckInWeekLabel, getIsoWeekYear } from "@/lib/checkInLabels";
 import { getWeekNumber } from "@/lib/utils";
 import { getDailyMetricTargets } from "@/lib/dailyMetrics";
 import { format } from "date-fns";
@@ -162,6 +163,9 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                 label: checkInDueState.isOverdue ? "Check-in overdue" : "Check-in due today",
                 isOverdue: checkInDueState.isOverdue,
                 weekNumber: checkInWeekNumber,
+                periodLabel:
+                    formatCheckInDueDate(checkInDueState.currentPeriodDueDate)
+                    ?? formatCheckInWeekLabel(checkInWeekNumber, getIsoWeekYear(new Date())),
             }
             : null;
 

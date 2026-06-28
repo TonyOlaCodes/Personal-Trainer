@@ -10,7 +10,10 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { cn, formatDate, getInitials } from "@/lib/utils";
+import { formatCheckInPeriodTitle } from "@/lib/checkInLabels";
+import { cn, formatDate, getInitials, toDateKey } from "@/lib/utils";
+import { shiftDateKey } from "@/lib/coachNotificationSchedule";
+import { useCurrentDate } from "@/hooks/useCurrentDate";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { getPresenceIndicator, formatLastActiveText } from "@/lib/userPresence";
 import { PendingReviewsModal, type PendingReviewItem } from "@/components/shared/PendingReviewsModal";
@@ -24,7 +27,6 @@ import {
 } from "@/lib/coachDashboardInsights";
 
 const CHECK_IN_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const UPCOMING_PREVIEW_COUNT = 6;
 
 interface Client {
     id: string;
@@ -222,7 +224,7 @@ function ClientInsightRow({
                     </p>
                 </div>
                 <div>
-                    <p className="text-[10px] text-fg-subtle uppercase font-bold tracking-widest">Adherence</p>
+                    <p className="text-[10px] text-fg-subtle uppercase font-bold tracking-widest">Workouts done</p>
                     <p className="text-xs font-semibold text-fg">
                         {insight.compliancePercent != null
                             ? `${insight.compliancePercent}% this week`
@@ -242,19 +244,29 @@ function ClientInsightRow({
 
 export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, availablePlans, insights }: Props) {
     const router = useRouter();
+    const now = useCurrentDate();
+    const todayKey = toDateKey(now);
+    const tomorrowKey = shiftDateKey(todayKey, 1);
     const [skippedClients, setSkippedClients] = useState<string[]>([]);
     const [savingSetup, setSavingSetup] = useState(false);
     const [showPendingReviews, setShowPendingReviews] = useState(false);
     const [showAttentionInbox, setShowAttentionInbox] = useState(false);
     const [showAllUpcoming, setShowAllUpcoming] = useState(false);
 
-    const visibleUpcoming = useMemo(() => {
-        const events = insights.upcomingEvents;
-        if (showAllUpcoming) return events;
-        return events.slice(0, UPCOMING_PREVIEW_COUNT);
-    }, [insights.upcomingEvents, showAllUpcoming]);
+    const previewDateKeys = useMemo(
+        () => new Set([todayKey, tomorrowKey]),
+        [todayKey, tomorrowKey]
+    );
 
-    const hasMoreUpcoming = insights.upcomingEvents.length > UPCOMING_PREVIEW_COUNT;
+    const visibleUpcoming = useMemo(() => {
+        if (showAllUpcoming) return insights.upcomingEvents;
+        return insights.upcomingEvents.filter((event) => previewDateKeys.has(event.dateKey));
+    }, [insights.upcomingEvents, showAllUpcoming, previewDateKeys]);
+
+    const hasMoreUpcoming = useMemo(
+        () => insights.upcomingEvents.some((event) => !previewDateKeys.has(event.dateKey)),
+        [insights.upcomingEvents, previewDateKeys]
+    );
 
     const upcomingByDate = useMemo(() => {
         const groups = new Map<string, UpcomingEvent[]>();
@@ -620,86 +632,27 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                 </Link>
             </div>
 
-            {/* Upcoming */}
-            <section className="space-y-3">
-                <div className="flex items-center justify-between px-2">
-                    <h3 className="heading-3 flex items-center gap-2">
-                        <Clock className="w-5 h-5 text-brand-400" />
-                        Upcoming
-                    </h3>
-                    <Link href="/coach/calendar" className="text-xs text-brand-400 hover:underline">Calendar</Link>
-                </div>
-                <div className="card p-4 sm:p-5">
-                    <p className="text-[10px] font-black text-brand-400 uppercase tracking-widest mb-3">
-                        Next 7 days
-                    </p>
-                    {insights.upcomingEvents.length === 0 ? (
-                        <p className="text-sm text-fg-muted">Nothing scheduled in the next 7 days.</p>
-                    ) : (
-                        <div className="space-y-4">
-                            {[...upcomingByDate.entries()].map(([dateLabel, events]) => (
-                                <div key={dateLabel}>
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle mb-2 px-1">
-                                        {dateLabel}
-                                    </p>
-                                    <ul className="space-y-2">
-                                        {events.map((event) => (
-                                            <li key={event.id}>
-                                                <Link
-                                                    href={event.href}
-                                                    className="flex items-center justify-between gap-3 py-2.5 px-3 rounded-xl hover:bg-surface-muted/40 transition-colors group border border-transparent hover:border-surface-border"
-                                                >
-                                                    <div className="flex items-start gap-3 min-w-0">
-                                                        <div className={cn(
-                                                            "w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5",
-                                                            event.type === "checkin"
-                                                                ? "bg-brand-400/10"
-                                                                : "bg-success/10"
-                                                        )}>
-                                                            {event.type === "checkin" ? (
-                                                                <ClipboardCheck className="w-4 h-4 text-brand-400" />
-                                                            ) : (
-                                                                <Dumbbell className="w-4 h-4 text-success" />
-                                                            )}
-                                                        </div>
-                                                        <div className="min-w-0">
-                                                            <p className="text-sm font-black text-fg truncate group-hover:text-brand-400 transition-colors">
-                                                                {event.clientName}
-                                                            </p>
-                                                            <p className="text-xs text-fg-muted mt-0.5">
-                                                                <span className={cn(
-                                                                    "font-bold",
-                                                                    event.type === "checkin" ? "text-brand-300" : "text-success"
-                                                                )}>
-                                                                    {event.typeLabel}
-                                                                </span>
-                                                                {" · "}
-                                                                {event.label}
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                    <ChevronRight className="w-4 h-4 text-fg-subtle group-hover:text-brand-400 shrink-0" />
-                                                </Link>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            ))}
+            {totals.overdueCheckIns > 0 && (
+                <Link
+                    href="/checkins?view=overdue"
+                    className="card flex items-center justify-between gap-4 p-4 border-warning/30 bg-warning/5 hover:border-warning/45 transition-all"
+                >
+                    <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-10 h-10 rounded-xl bg-warning/15 flex items-center justify-center shrink-0">
+                            <ClipboardCheck className="w-5 h-5 text-warning" />
                         </div>
-                    )}
-                    {hasMoreUpcoming && (
-                        <button
-                            type="button"
-                            onClick={() => setShowAllUpcoming((prev) => !prev)}
-                            className="w-full text-center text-xs font-bold text-brand-400 hover:text-brand-300 transition-colors pt-4 mt-2 border-t border-surface-border"
-                        >
-                            {showAllUpcoming
-                                ? "Show less"
-                                : `View more (${insights.upcomingEvents.length - UPCOMING_PREVIEW_COUNT} more)`}
-                        </button>
-                    )}
-                </div>
-            </section>
+                        <div className="min-w-0">
+                            <p className="text-sm font-black text-fg">
+                                {totals.overdueCheckIns} overdue check-in{totals.overdueCheckIns === 1 ? "" : "s"}
+                            </p>
+                            <p className="text-xs text-fg-muted truncate">
+                                Clients who missed their scheduled check-in — same list as Check-ins → Overdue
+                            </p>
+                        </div>
+                    </div>
+                    <ArrowUpRight className="w-4 h-4 text-warning shrink-0" />
+                </Link>
+            )}
 
             <div className="grid lg:grid-cols-3 gap-8">
                 {/* Client Roster */}
@@ -796,6 +749,87 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                             })
                         )}
                     </div>
+
+                    {/* Upcoming */}
+                    <section className="space-y-3 pt-2">
+                        <div className="flex items-center justify-between px-2">
+                            <h3 className="heading-3 flex items-center gap-2">
+                                <Clock className="w-5 h-5 text-brand-400" />
+                                Upcoming
+                            </h3>
+                            <Link href="/coach/calendar" className="text-xs text-brand-400 hover:underline">Calendar</Link>
+                        </div>
+                        <div className="card p-4 sm:p-5">
+                            <p className="text-[10px] font-black text-brand-400 uppercase tracking-widest mb-3">
+                                {showAllUpcoming ? "Next 7 days" : "Today & tomorrow"}
+                            </p>
+                            {insights.upcomingEvents.length === 0 ? (
+                                <p className="text-sm text-fg-muted">Nothing scheduled in the next 7 days.</p>
+                            ) : visibleUpcoming.length === 0 ? (
+                                <p className="text-sm text-fg-muted">Nothing today or tomorrow.</p>
+                            ) : (
+                                <div className="space-y-4">
+                                    {[...upcomingByDate.entries()].map(([dateLabel, events]) => (
+                                        <div key={dateLabel}>
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle mb-2 px-1">
+                                                {dateLabel}
+                                            </p>
+                                            <ul className="space-y-2">
+                                                {events.map((event) => (
+                                                    <li key={event.id}>
+                                                        <Link
+                                                            href={event.href}
+                                                            className="flex items-center justify-between gap-3 py-2.5 px-3 rounded-xl hover:bg-surface-muted/40 transition-colors group border border-transparent hover:border-surface-border"
+                                                        >
+                                                            <div className="flex items-start gap-3 min-w-0">
+                                                                <div className={cn(
+                                                                    "w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5",
+                                                                    event.type === "checkin"
+                                                                        ? "bg-brand-400/10"
+                                                                        : "bg-success/10"
+                                                                )}>
+                                                                    {event.type === "checkin" ? (
+                                                                        <ClipboardCheck className="w-4 h-4 text-brand-400" />
+                                                                    ) : (
+                                                                        <Dumbbell className="w-4 h-4 text-success" />
+                                                                    )}
+                                                                </div>
+                                                                <div className="min-w-0">
+                                                                    <p className="text-sm font-black text-fg truncate group-hover:text-brand-400 transition-colors">
+                                                                        {event.clientName}
+                                                                    </p>
+                                                                    <p className="text-xs text-fg-muted mt-0.5">
+                                                                        <span className={cn(
+                                                                            "font-bold",
+                                                                            event.type === "checkin" ? "text-brand-300" : "text-success"
+                                                                        )}>
+                                                                            {event.typeLabel}
+                                                                        </span>
+                                                                        {" · "}
+                                                                        {event.label}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                            <ChevronRight className="w-4 h-4 text-fg-subtle group-hover:text-brand-400 shrink-0" />
+                                                        </Link>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                            {hasMoreUpcoming && (
+                                <button
+                                    type="button"
+                                    onClick={() => setShowAllUpcoming((prev) => !prev)}
+                                    className="w-full text-center text-xs font-bold text-brand-400 hover:text-brand-300 transition-colors pt-4 mt-2 border-t border-surface-border"
+                                >
+                                    {showAllUpcoming ? "Show less" : "Show more"}
+                                </button>
+                            )}
+                        </div>
+                    </section>
                 </div>
 
                 {/* Sidebar: Quick Reviews */}
@@ -818,7 +852,7 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                                 <div className="flex items-start justify-between gap-3">
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2 mb-1">
-                                            <span className="text-[10px] font-black text-brand-400 uppercase tracking-widest">Week {ci.week} Check-in</span>
+                                            <span className="text-[10px] font-black text-brand-400 uppercase tracking-widest">{formatCheckInPeriodTitle(ci.week, ci.date)}</span>
                                             {ci.status === "Pending" ? (
                                                 <span className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-pulse shadow-glow-brand" />
                                             ) : (

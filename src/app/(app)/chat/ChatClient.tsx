@@ -28,6 +28,8 @@ import { MediaLightbox } from "@/components/shared/MediaLightbox";
 import { ProfileLink } from "@/components/shared/ProfileLink";
 import { CoachChatTools } from "@/components/chat/CoachChatTools";
 import { useChatUnread } from "@/components/chat/ChatUnreadProvider";
+import { useMobileKeyboardOpen } from "@/hooks/useMobileKeyboardOpen";
+import { useScrollLock } from "@/hooks/useScrollLock";
 import type { CoachPlanRecord } from "@/lib/coachPlans";
 
 /* ─── Types ──────────────────────────────────────────── */
@@ -159,6 +161,7 @@ export function ChatClient({
     const isCoachUser = currentUserRole === "COACH" || currentUserRole === "SUPER_ADMIN";
     const canViewLastOnline = currentUserRole === "COACH" || currentUserRole === "SUPER_ADMIN";
     const { refresh: refreshGlobalUnread } = useChatUnread();
+    const keyboardOpen = useMobileKeyboardOpen();
     const [tab, setTab] = useState<"direct" | "general">("general");
     const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
     const [isHydrated, setIsHydrated] = useState(false);
@@ -287,6 +290,8 @@ export function ChatClient({
         mq.addEventListener("change", update);
         return () => mq.removeEventListener("change", update);
     }, []);
+
+    useScrollLock(isHydrated && !isMdUp);
 
     useEffect(() => {
         const mq = window.matchMedia("(max-width: 639px)");
@@ -1207,13 +1212,19 @@ export function ChatClient({
 
     const renderBroadcastLabel = (msg: Message, isMine: boolean) => {
         if (msg.actionType !== "BROADCAST") return null;
+
+        const isAdminSender = msg.sender.role === "SUPER_ADMIN";
+        const label = isAdminSender
+            ? "Message from admin"
+            : `From coach · ${msg.sender.name?.trim() || "Coach"}`;
+
         return (
             <div className={cn(
                 "flex items-center gap-1.5 mb-1.5 text-[9px] font-black uppercase tracking-widest",
                 isMine ? "text-white/80" : "text-warning"
             )}>
                 <Megaphone className="w-3 h-3 shrink-0" />
-                Coach broadcast
+                {label}
             </div>
         );
     };
@@ -1468,7 +1479,14 @@ export function ChatClient({
 
     return (
         <div
-            className="flex overflow-hidden bg-surface animate-fade-in fixed inset-x-0 top-0 bottom-20 z-40 w-full max-w-full md:static md:z-auto md:h-[calc(100dvh-4rem)] md:bottom-auto"
+            className={cn(
+                "flex flex-col overflow-hidden bg-surface animate-fade-in w-full max-w-full",
+                "max-md:fixed max-md:inset-x-0 max-md:top-0 max-md:z-40",
+                keyboardOpen
+                    ? "max-md:h-dvh"
+                    : "max-md:h-[calc(100dvh-5rem-env(safe-area-inset-bottom,0px))]",
+                "md:static md:z-auto md:h-[calc(100dvh-4rem)] md:bottom-auto"
+            )}
             onClick={() => closeMessageActions()}
         >
             

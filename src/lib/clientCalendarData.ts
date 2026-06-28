@@ -1,10 +1,15 @@
 import { prisma } from "@/lib/prisma";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
 import { loadPlanScheduleRevisions, type PlanScheduleRevisionRecord } from "@/lib/planScheduleHistory";
+import {
+    loadHistoricalMissedSessions,
+    type HistoricalMissedSession,
+} from "@/lib/planMissedSessionHistory";
 import { getClientAttentionActions, getExcusedMissedWorkoutKeys } from "@/lib/coachAttentionActions";
 import { toDateKey } from "@/lib/utils";
 import { cleanupStaleInProgressSessions } from "@/lib/workoutSessionCleanup";
 import { resolveLogSetExerciseName } from "@/lib/logSetExerciseName";
+import { logSetDisplayOrderBy } from "@/lib/logSetGrouping";
 
 export interface ClientCalendarPayload {
     activePlan: {
@@ -29,7 +34,9 @@ export interface ClientCalendarPayload {
         workoutId: string;
         duration: number | null;
         sets: Array<{
+            exerciseId: string;
             exerciseName: string;
+            exerciseOrder: number | null;
             setNumber: number;
             reps: number | null;
             weightKg: number | null;
@@ -45,6 +52,8 @@ export interface ClientCalendarPayload {
     scheduleRevisions: PlanScheduleRevisionRecord[];
     /** `${dateKey}:${workoutId}` keys for missed workouts excused by the coach */
     excusedMissedWorkoutKeys: string[];
+    /** Missed sessions frozen before plan edits so past calendar cells stay accurate */
+    historicalMissedSessions: HistoricalMissedSession[];
 }
 
 export async function loadClientCalendarData(userId: string): Promise<ClientCalendarPayload> {
@@ -79,7 +88,12 @@ export async function loadClientCalendarData(userId: string): Promise<ClientCale
             where: { userId, status: "COMPLETED" },
             include: {
                 workout: { select: { name: true, id: true } },
-                sets: { include: { exercise: { select: { name: true } } } },
+                sets: {
+                    include: {
+                        exercise: { select: { name: true, order: true, muscleGroup: true } },
+                    },
+                    orderBy: logSetDisplayOrderBy,
+                },
             },
             orderBy: { loggedAt: "desc" },
             take: 365,
@@ -92,9 +106,10 @@ export async function loadClientCalendarData(userId: string): Promise<ClientCale
     ]);
 
     const activePlan = userPlan?.plan ?? null;
-    const [scheduleRevisions, clientActions] = await Promise.all([
+    const [scheduleRevisions, clientActions, historicalMissedSessions] = await Promise.all([
         activePlan ? loadPlanScheduleRevisions(activePlan.id) : Promise.resolve([]),
         getClientAttentionActions(userId),
+        loadHistoricalMissedSessions(userId),
     ]);
     const excusedMissedWorkoutKeys = [...getExcusedMissedWorkoutKeys(clientActions)];
 
@@ -127,7 +142,9 @@ export async function loadClientCalendarData(userId: string): Promise<ClientCale
             workoutId: l.workoutId,
             duration: (l as { duration?: number | null }).duration ?? null,
             sets: l.sets.map((s) => ({
+                exerciseId: s.exerciseId,
                 exerciseName: resolveLogSetExerciseName(s),
+                exerciseOrder: (s as { exerciseOrder?: number | null }).exerciseOrder ?? s.exercise.order ?? null,
                 setNumber: s.setNumber,
                 reps: s.reps,
                 weightKg: s.weightKg,
@@ -142,5 +159,6 @@ export async function loadClientCalendarData(userId: string): Promise<ClientCale
         })),
         scheduleRevisions,
         excusedMissedWorkoutKeys,
+        historicalMissedSessions,
     };
 }

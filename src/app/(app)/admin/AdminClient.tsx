@@ -8,6 +8,7 @@ import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { getAccessCodeStatus } from "@/lib/accessCodeStatus";
 import { PLAN_TEMPLATES } from "@/lib/templates";
 import { AdminAnnouncementsPanel } from "./AdminAnnouncementsPanel";
+import { DeletePlanConfirmModal } from "@/components/shared/DeletePlanConfirmModal";
 
 interface AdminUser {
     id: string;
@@ -43,6 +44,8 @@ interface AdminCode {
     id: string;
     code: string;
     planName?: string | null;
+    createdBy?: string | null;
+    createdById?: string | null;
     usedBy?: string | null;
     usedByName?: string | null;
     usedByEmail?: string | null;
@@ -55,8 +58,10 @@ interface AdminCode {
     expiresAt?: string | null;
 }
 
-type RawAdminCode = Omit<AdminCode, "usedBy"> & {
+type RawAdminCode = Omit<AdminCode, "usedBy" | "createdBy"> & {
     usedBy?: string | { id?: string; name?: string | null; email?: string | null } | null;
+    createdBy?: string | { id?: string; name?: string | null; email?: string | null } | null;
+    generator?: { id?: string; name?: string | null; email?: string | null } | null;
 };
 
 interface AdminCoach {
@@ -151,8 +156,15 @@ function sortAdminUsers(users: AdminUser[], field: UserSortField, dir: SortDir) 
 
 function normalizeCode(code: RawAdminCode): AdminCode {
     const usedByObject = typeof code.usedBy === "object" && code.usedBy !== null ? code.usedBy : null;
+    const createdByObject = typeof code.createdBy === "object" && code.createdBy !== null
+        ? code.createdBy
+        : code.generator ?? null;
     return {
         ...code,
+        createdBy: typeof code.createdBy === "string"
+            ? code.createdBy
+            : createdByObject?.name ?? createdByObject?.email ?? null,
+        createdById: code.createdById ?? createdByObject?.id ?? null,
         usedBy: typeof code.usedBy === "string"
             ? code.usedBy
             : code.usedByName ?? usedByObject?.name ?? usedByObject?.email ?? code.usedByEmail ?? null,
@@ -212,6 +224,7 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
     const [generatingCode, setGeneratingCode] = useState(false);
     const [deletingCodeId, setDeletingCodeId] = useState<string | null>(null);
     const [deletingPlanId, setDeletingPlanId] = useState<string | null>(null);
+    const [planPendingDelete, setPlanPendingDelete] = useState<AdminPlan | null>(null);
     const [newCode, setNewCode] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
     const [selectedPlanId, setSelectedPlanId] = useState<string>("");
@@ -275,21 +288,17 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
         setDeletingCodeId(null);
     };
 
-    const deletePlan = async (plan: AdminPlan) => {
-        const activeNote = plan.userCount > 0
-            ? `${plan.userCount} user${plan.userCount === 1 ? " has" : "s have"} this as their active plan. `
-            : "";
-        if (!confirm(`Delete "${plan.name}"?\n\n${activeNote}This permanently removes the plan and cannot be undone.`)) {
-            return;
-        }
+    const confirmDeletePlan = async () => {
+        if (!planPendingDelete) return;
 
-        setDeletingPlanId(plan.id);
+        setDeletingPlanId(planPendingDelete.id);
         try {
-            const res = await fetch(`/api/plans/${plan.id}`, { method: "DELETE" });
+            const res = await fetch(`/api/plans/${planPendingDelete.id}`, { method: "DELETE" });
             const data = await res.json().catch(() => ({}));
             if (res.ok) {
-                const deletedIds = Array.isArray(data.deletedIds) ? data.deletedIds as string[] : [plan.id];
+                const deletedIds = Array.isArray(data.deletedIds) ? data.deletedIds as string[] : [planPendingDelete.id];
                 setPlansList((current) => current.filter((p) => !deletedIds.includes(p.id)));
+                setPlanPendingDelete(null);
                 return;
             }
             alert(typeof data.error === "string" ? data.error : "Could not delete plan.");
@@ -395,6 +404,18 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
 
     return (
         <div className="space-y-6 animate-fade-in">
+            <DeletePlanConfirmModal
+                open={planPendingDelete !== null}
+                planName={planPendingDelete?.name ?? ""}
+                mode="delete"
+                activeUserCount={planPendingDelete?.userCount ?? 0}
+                busy={planPendingDelete !== null && deletingPlanId === planPendingDelete.id}
+                onClose={() => {
+                    if (deletingPlanId !== planPendingDelete?.id) setPlanPendingDelete(null);
+                }}
+                onConfirm={confirmDeletePlan}
+            />
+
             {/* Stats */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 {stats.map((s) => (
@@ -714,7 +735,7 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
                                         </Link>
                                         <button
                                             type="button"
-                                            onClick={() => deletePlan(p)}
+                                            onClick={() => setPlanPendingDelete(p)}
                                             disabled={deletingPlanId === p.id}
                                             className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-danger/10 text-fg-subtle hover:text-danger transition-colors disabled:opacity-50"
                                             title="Delete plan"
@@ -901,6 +922,9 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
                                             </div>
                                             <p className="text-[10px] text-fg-muted font-bold uppercase tracking-widest mt-1">
                                                 {c.planName ? c.planName : "Open Entry"} · {formatDate(c.createdAt)}
+                                                {c.createdBy && (
+                                                    <span className="text-fg-subtle"> · Created by {c.createdBy}</span>
+                                                )}
                                             </p>
                                             {c.usedBy && (
                                                 <div className="flex items-center gap-1.5 mt-1">

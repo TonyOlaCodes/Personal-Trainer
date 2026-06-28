@@ -11,6 +11,7 @@ import {
     Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getActiveNavHref } from "@/lib/navActive";
 import { useChatUnread, formatUnreadBadge } from "@/components/chat/ChatUnreadProvider";
 import { useMobileKeyboardOpen } from "@/hooks/useMobileKeyboardOpen";
 
@@ -48,25 +49,20 @@ export function MobileTabBar({ userRole = "FREE" }: MobileTabBarProps) {
         return item.roles.includes(userRole);
     });
 
+    const activeHref = getActiveNavHref(pathname, filteredItems);
+
     const hideOnWorkoutLog =
         pathname.startsWith("/plans/log/") && !pathname.startsWith("/plans/log/view/");
 
-    if (hideOnWorkoutLog) return null;
+    if (hideOnWorkoutLog || keyboardOpen) return null;
 
     return (
         <nav
-            aria-hidden={keyboardOpen}
-            className={cn(
-                "md:hidden fixed bottom-0 inset-x-0 z-50 glass glass-border border-t border-surface-border safe-area-pb",
-                "transition-none will-change-transform",
-                keyboardOpen
-                    ? "translate-y-full pointer-events-none opacity-0"
-                    : "translate-y-0 opacity-100"
-            )}
+            className="md:hidden fixed bottom-0 inset-x-0 z-50 glass glass-border border-t border-surface-border safe-area-pb"
         >
             <div className="flex items-center justify-around px-2 py-2 overflow-hidden gap-1 w-full max-w-full">
                 {filteredItems.map((item) => {
-                    const active = pathname.startsWith(item.href);
+                    const active = item.href === activeHref;
                     const badge = item.href === "/chat" ? chatBadge : undefined;
                     return (
                         <Link

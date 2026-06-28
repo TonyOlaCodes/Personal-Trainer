@@ -1,9 +1,14 @@
 import { prisma } from "@/lib/prisma";
 import { APP_TIMEZONE } from "@/lib/appTimezone";
-import { getCheckInDueState, getUserCheckInSchedule } from "@/lib/checkInSchedule";
-import { applyCheckInAttentionOverrides, getClientAttentionActions } from "@/lib/coachAttentionActions";
+import { getCheckInDueState, getUserCheckInSchedule, type CheckInDueState, type CheckInSchedule } from "@/lib/checkInSchedule";
+import {
+    applyCheckInAttentionOverrides,
+    getClientAttentionActions,
+    type CoachAttentionActionRow,
+} from "@/lib/coachAttentionActions";
 import { getLocalTimeParts } from "@/lib/coachNotificationSchedule";
-import { getWeekNumber } from "@/lib/utils";
+import { formatCheckInDueDate, formatCheckInWeekLabel, getIsoWeekYear } from "@/lib/checkInLabels";
+import { getWeekNumber, parseLogDate } from "@/lib/utils";
 import { isInactiveAccount } from "@/lib/userDeactivation";
 
 export interface OverdueCheckInClient {
@@ -11,13 +16,51 @@ export interface OverdueCheckInClient {
     name: string;
     label: string;
     weekNumber: number;
+    periodLabel: string;
     isOverdue: boolean;
+}
+
+/** App-timezone "today" for coach check-in overdue / attention logic. */
+export function getCoachAppToday(referenceDate = new Date()) {
+    const todayKey = getLocalTimeParts(referenceDate, APP_TIMEZONE).dateKey;
+    const today = parseLogDate(todayKey);
+    const weekNumber = getWeekNumber(today);
+    return { today, todayKey, weekNumber };
+}
+
+/** Shared due-state for coach panel, inbox, and /checkins overdue tab. */
+export function resolveCoachClientCheckInDueState(
+    schedule: CheckInSchedule,
+    clientActions: CoachAttentionActionRow[],
+    clientId: string,
+    lastActiveAt: Date | null | undefined,
+    referenceDate = new Date()
+): CheckInDueState & { weekNumber: number; todayKey: string } {
+    const { today, todayKey, weekNumber } = getCoachAppToday(referenceDate);
+    const dueStateRaw = getCheckInDueState(schedule, today);
+    const dueState = applyCheckInAttentionOverrides(
+        dueStateRaw,
+        clientActions,
+        clientId,
+        weekNumber,
+        today,
+        lastActiveAt
+    );
+    return { ...dueState, weekNumber, todayKey };
+}
+
+export function isCoachClientCheckInAttentionNeeded(
+    dueState: CheckInDueState,
+    hasCheckInThisWeek: boolean
+): boolean {
+    return dueState.isConfigured
+        && !hasCheckInThisWeek
+        && (dueState.isOverdue || dueState.isDueToday);
 }
 
 /** Clients assigned to this coach who owe a check-in but have not submitted one this week. */
 export async function getOverdueCheckInClientsForCoach(coachId: string): Promise<OverdueCheckInClient[]> {
-    const now = new Date();
-    const weekNumber = getWeekNumber(now);
+    const { weekNumber } = getCoachAppToday();
 
     const clients = await prisma.user.findMany({
         where: {
@@ -30,6 +73,7 @@ export async function getOverdueCheckInClientsForCoach(coachId: string): Promise
             id: true,
             name: true,
             email: true,
+            lastActiveAt: true,
             isDeleted: true,
             isDeactivated: true,
             checkIns: {
@@ -48,17 +92,23 @@ export async function getOverdueCheckInClientsForCoach(coachId: string): Promise
         if (client.checkIns.length > 0) continue;
 
         const schedule = await getUserCheckInSchedule(client.id);
-        const dueStateRaw = getCheckInDueState(schedule, now);
         const clientActions = await getClientAttentionActions(client.id);
-        const dueState = applyCheckInAttentionOverrides(dueStateRaw, clientActions, weekNumber, now);
-        if (!dueState.isConfigured) continue;
-        if (!dueState.isOverdue && !dueState.isDueToday) continue;
+        const dueState = resolveCoachClientCheckInDueState(
+            schedule,
+            clientActions,
+            client.id,
+            client.lastActiveAt
+        );
+        if (!isCoachClientCheckInAttentionNeeded(dueState, false)) continue;
 
         overdue.push({
             id: client.id,
             name: client.name ?? client.email ?? "Client",
             label: dueState.isOverdue ? "Check-in overdue" : "Due today",
             weekNumber,
+            periodLabel:
+                formatCheckInDueDate(dueState.currentPeriodDueDate)
+                ?? formatCheckInWeekLabel(weekNumber, getIsoWeekYear(parseLogDate(dueState.todayKey))),
             isOverdue: dueState.isOverdue,
         });
     }
@@ -72,9 +122,9 @@ export async function getOverdueCheckInClientsForCoach(coachId: string): Promise
 }
 
 export function getCoachCheckInWeekNumber(referenceDate = new Date()): number {
-    return getWeekNumber(referenceDate);
+    return getCoachAppToday(referenceDate).weekNumber;
 }
 
 export function getCoachCheckInTodayKey(referenceDate = new Date()): string {
-    return getLocalTimeParts(referenceDate, APP_TIMEZONE).dateKey;
+    return getCoachAppToday(referenceDate).todayKey;
 }

@@ -7,8 +7,10 @@ import {
 } from "@/lib/dataSafety";
 import {
     maybeRecordPlanScheduleRevision,
+    scheduleWeeksStructureEqual,
     serializePlanWeeksForSchedule,
 } from "@/lib/planScheduleHistory";
+import { snapshotMissedSessionsForPlanChange } from "@/lib/planMissedSessionHistory";
 import {
     ACTIVE_WORKOUT_DAY_MAX,
     ARCHIVED_WORKOUT_DAY_BASE,
@@ -282,7 +284,10 @@ export async function updatePlanPreservingHistory(
             include: planInclude,
         });
         const newWeeks = serializePlanWeeksForSchedule(updatedPlan.weeks);
-        await maybeRecordPlanScheduleRevision(tx, planId, priorWeeks, newWeeks);
+        if (!scheduleWeeksStructureEqual(priorWeeks, newWeeks)) {
+            await maybeRecordPlanScheduleRevision(tx, planId, priorWeeks, newWeeks);
+            await snapshotMissedSessionsForPlanChange(tx, planId, priorWeeks);
+        }
 
         return updatedPlan;
     });

@@ -9,6 +9,12 @@ import { getWeekNumber } from "@/lib/utils";
 
 export type CoachAttentionActionType = "dismissed" | "excused";
 
+/** No app activity for this many days — client treated as inactive for dismiss snooze. */
+export const CLIENT_APP_INACTIVE_DAYS = 10;
+
+/** Inactive-client dismisses on needs-attention reappear after this many days. */
+export const INACTIVE_CLIENT_DISMISS_SNOOZE_DAYS = 3;
+
 export type CoachAttentionCategory =
     | "missed_workout"
     | "check_in_overdue"
@@ -152,25 +158,64 @@ export function isMissedWorkoutExcused(
 export function isCheckInAlertDismissed(
     actions: Map<string, CoachAttentionActionRow>,
     clientId: string,
-    weekNumber: number
+    weekNumber: number,
+    clientLastActiveAt?: Date | null,
+    now = new Date()
 ): boolean {
     const key = buildCheckInAlertKey(clientId, weekNumber);
-    return actions.get(key)?.action === "dismissed";
+    return isDismissedAlertCurrentlyHidden(actions.get(key), clientLastActiveAt, now);
+}
+
+export function isClientInactiveOnApp(
+    lastActiveAt: Date | null | undefined,
+    now = new Date()
+): boolean {
+    if (!lastActiveAt) return true;
+    const cutoff = now.getTime() - CLIENT_APP_INACTIVE_DAYS * 86400000;
+    return lastActiveAt.getTime() < cutoff;
+}
+
+/** True when a dismissed alert should stay hidden (permanent for active clients, 3d snooze if inactive). */
+export function isDismissedAlertCurrentlyHidden(
+    action: CoachAttentionActionRow | undefined,
+    clientLastActiveAt: Date | null | undefined,
+    now = new Date()
+): boolean {
+    if (!action || action.action !== "dismissed") return false;
+
+    if (isClientInactiveOnApp(clientLastActiveAt, now)) {
+        const dismissedAt = new Date(action.createdAt).getTime();
+        if (Number.isNaN(dismissedAt)) return false;
+        const snoozeMs = INACTIVE_CLIENT_DISMISS_SNOOZE_DAYS * 86400000;
+        return now.getTime() - dismissedAt < snoozeMs;
+    }
+
+    return true;
 }
 
 /** Client-facing: overdue/due-week check-in hidden after coach dismisses for that week. */
 export function applyCheckInAttentionOverrides(
     dueState: CheckInDueState,
     clientActions: CoachAttentionActionRow[],
+    clientId: string,
     weekNumber: number,
-    today = new Date()
+    today = new Date(),
+    clientLastActiveAt: Date | null | undefined = null
 ): CheckInDueState {
-    const dismissed = clientActions.some(
-        (row) =>
-            (row.category === "check_in_overdue" || row.category === "check_in_missed")
-            && row.action === "dismissed"
-            && row.weekNumber === weekNumber
-    );
+    const alertKey = buildCheckInAlertKey(clientId, weekNumber);
+    const dismissRow =
+        clientActions.find(
+            (row) => row.alertKey === alertKey && row.action === "dismissed"
+        )
+        ?? clientActions.find(
+            (row) =>
+                (row.category === "check_in_overdue" || row.category === "check_in_missed")
+                && row.action === "dismissed"
+                && row.weekNumber === weekNumber
+        );
+    const dismissed = dismissRow
+        ? isDismissedAlertCurrentlyHidden(dismissRow, clientLastActiveAt, today)
+        : false;
 
     if (!dismissed || !dueState.isConfigured) return dueState;
     if (!dueState.isOverdue && !dueState.isDueToday && !dueState.isDueWeek) return dueState;
@@ -219,8 +264,21 @@ export async function getEffectiveCheckInDueStateForUser(
 ): Promise<CheckInDueState> {
     const dueState = getCheckInDueState(schedule, today);
     const weekNumber = getWeekNumber(today);
-    const clientActions = await getClientAttentionActions(userId);
-    return applyCheckInAttentionOverrides(dueState, clientActions, weekNumber, today);
+    const [clientActions, user] = await Promise.all([
+        getClientAttentionActions(userId),
+        prisma.user.findUnique({
+            where: { id: userId },
+            select: { lastActiveAt: true },
+        }),
+    ]);
+    return applyCheckInAttentionOverrides(
+        dueState,
+        clientActions,
+        userId,
+        weekNumber,
+        today,
+        user?.lastActiveAt ?? null
+    );
 }
 
 export function getExcusedMissedWorkoutKeys(clientActions: CoachAttentionActionRow[]): Set<string> {

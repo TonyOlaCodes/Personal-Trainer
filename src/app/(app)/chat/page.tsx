@@ -178,15 +178,13 @@ export default async function ChatPage() {
     }
 
     return (
-        <div className="-mb-20 h-0 overflow-hidden md:mb-0 md:h-auto md:overflow-visible">
-            <ChatClient
-                currentUserId={user.id}
-                currentUserRole={user.role}
-                conversations={conversations}
-                canUseDirectChat={isClientRole(user.role) || isCoachRole(user.role)}
-                coachPlans={coachPlans}
-                initialUnread={initialUnread}
-            />
-        </div>
+        <ChatClient
+            currentUserId={user.id}
+            currentUserRole={user.role}
+            conversations={conversations}
+            canUseDirectChat={isClientRole(user.role) || isCoachRole(user.role)}
+            coachPlans={coachPlans}
+            initialUnread={initialUnread}
+        />
     );
 }

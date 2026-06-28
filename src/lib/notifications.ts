@@ -1,16 +1,14 @@
 import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 import {
-    COACH_NOTIFY_PREF_TO_TIME_FIELD,
     DEFAULT_MISSED_NOTIFY_TIME,
     type CoachNotificationPref,
-    deliveryModeForPref,
     isValidTimezone,
-    nextDeliveryUtc,
     normalizeNotifyTime,
     type CoachNotificationSchedule,
 } from "@/lib/coachNotificationSchedule";
 import { APP_TIMEZONE } from "@/lib/appTimezone";
+import { NOTIFICATION_TYPES, QUICK_REPLY_TEMPLATES } from "@/lib/notificationTypes";
 
 export interface NotificationItem {
     id: string;
@@ -329,6 +327,54 @@ export async function notifyClientOfMissedWorkout(input: {
     });
 }
 
+/** Coach assigned a plan — one unread alert per plan; never a separate chat DM alert. */
+export async function notifyClientOfPlanAssigned(input: {
+    clientUserId: string;
+    coachId: string;
+    coachName: string;
+    planId: string;
+    planName?: string | null;
+}) {
+    if (!(await userWantsNotification(input.clientUserId, "notifyOnPlanUpdate"))) return;
+
+    await ensureNotificationsTable();
+
+    const coachLabel = input.coachName.trim() || "Your coach";
+    const route = `/plans?highlight=${input.planId}`;
+
+    const existing = await prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT "id"
+        FROM "notifications"
+        WHERE "userId" = ${input.clientUserId}
+          AND "type" = ${NOTIFICATION_TYPES.PLAN_ASSIGNED}
+          AND "entityType" = 'PLAN'
+          AND "entityId" = ${input.planId}
+          AND "read" = false
+        ORDER BY "createdAt" DESC
+        LIMIT 1
+    `;
+
+    if (existing[0]) {
+        await prisma.$executeRaw`
+            UPDATE "notifications"
+            SET "message" = ${coachLabel},
+                "route" = ${route},
+                "createdAt" = CURRENT_TIMESTAMP
+            WHERE "id" = ${existing[0].id}
+        `;
+        return;
+    }
+
+    await createNotification({
+        userId: input.clientUserId,
+        type: NOTIFICATION_TYPES.PLAN_ASSIGNED,
+        message: coachLabel,
+        entityType: "PLAN",
+        entityId: input.planId,
+        route,
+    });
+}
+
 /** One unread coach-message alert per coach; updates timestamp if more messages arrive. */
 export async function notifyClientOfCoachMessage(input: {
     clientUserId: string;
@@ -378,13 +424,16 @@ export async function notifyClientOfCoachBroadcast(input: {
     clientUserId: string;
     coachId: string;
     coachName: string;
+    senderRole?: string;
     route: string;
 }) {
     if (!(await userWantsNotification(input.clientUserId, "notifyOnCoachMessage"))) return;
 
     await ensureNotificationsTable();
 
-    const message = input.coachName.trim() || "Your coach";
+    const message = input.senderRole === "SUPER_ADMIN"
+        ? "Admin"
+        : (input.coachName.trim() || "Your coach");
     const existing = await prisma.$queryRaw<Array<{ id: string }>>`
         SELECT "id"
         FROM "notifications"
@@ -461,27 +510,6 @@ export async function notifyCoachOfClientMessage(input: {
     });
 }
 
-async function enqueuePendingCoachNotification(input: {
-    coachId: string;
-    prefKey: CoachNotificationPref;
-    type: string;
-    message: string;
-    entityType: string;
-    entityId?: string | null;
-    route: string;
-    deliverAfter: Date;
-}) {
-    await ensurePendingCoachNotificationsTable();
-
-    await prisma.$executeRaw`
-        INSERT INTO "pending_coach_notifications"
-            ("id", "coachId", "prefKey", "type", "message", "entityType", "entityId", "route", "deliverAfter")
-        VALUES
-            (${randomUUID()}, ${input.coachId}, ${input.prefKey}, ${input.type}, ${input.message},
-             ${input.entityType}, ${input.entityId ?? null}, ${input.route}, ${input.deliverAfter})
-    `;
-}
-
 export async function deliverCoachNotification(
     coachId: string,
     pref: CoachNotificationPref,
@@ -494,24 +522,7 @@ export async function deliverCoachNotification(
     }
 ) {
     if (!(await userWantsNotification(coachId, pref))) return;
-
-    const schedule = await getCoachNotificationSchedule(coachId);
-    if (deliveryModeForPref(schedule, pref) === "immediate") {
-        await createNotification({ userId: coachId, ...payload });
-        return;
-    }
-
-    const timeField = COACH_NOTIFY_PREF_TO_TIME_FIELD[pref] as keyof CoachNotificationSchedule;
-    const notifyTime = schedule[timeField];
-    if (typeof notifyTime !== "string") return;
-
-    const deliverAfter = nextDeliveryUtc(schedule.timezone, notifyTime);
-    await enqueuePendingCoachNotification({
-        coachId,
-        prefKey: pref,
-        deliverAfter,
-        ...payload,
-    });
+    await createNotification({ userId: coachId, ...payload });
 }
 
 export async function flushPendingCoachNotifications(referenceDate = new Date()) {
@@ -597,38 +608,6 @@ export async function notifyCoachOfClientBodyweight(input: {
         entityType: "BODYWEIGHT",
         entityId: null,
         route: `/coach/client/${input.clientId}`,
-    });
-}
-
-export async function notifyCoachOfMissedCheckIn(input: {
-    coachId: string;
-    clientId: string;
-    clientName: string;
-    weekNumber: number;
-}) {
-    await deliverCoachNotification(input.coachId, "notifyOnMissedCheckIn", {
-        type: "CLIENT_MISSED_CHECKIN",
-        message: `${input.clientName} has not completed their check-in`,
-        entityType: "USER",
-        entityId: `${input.clientId}:${input.weekNumber}`,
-        route: `/coach/client/${input.clientId}`,
-    });
-}
-
-export async function notifyCoachOfMissedWorkout(input: {
-    coachId: string;
-    clientId: string;
-    clientName: string;
-    workoutName: string;
-    dateKey: string;
-    workoutId: string;
-}) {
-    await deliverCoachNotification(input.coachId, "notifyOnMissedWorkout", {
-        type: "CLIENT_MISSED_WORKOUT",
-        message: `${input.clientName} missed ${input.workoutName}`,
-        entityType: "USER",
-        entityId: `${input.clientId}:${input.dateKey}:${input.workoutId}`,
-        route: `/chat?with=${input.clientId}`,
     });
 }
 

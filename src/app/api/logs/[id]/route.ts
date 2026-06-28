@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { withResolvedLogSetMedia } from "@/lib/uploadUrls";
 import { resolveLogSetExerciseName } from "@/lib/logSetExerciseName";
+import { logSetDisplayOrderBy } from "@/lib/logSetGrouping";
 import { getWorkoutNotes } from "@/lib/workoutNotes";
 import { canEditWorkoutLog, canViewWorkoutLog } from "@/lib/userProfile";
 import { triggerAchievementSync } from "@/lib/achievements";
@@ -31,7 +32,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
                 workout: { select: { id: true, name: true } },
                 sets: {
                     include: { exercise: { select: { id: true, name: true, muscleGroup: true } } },
-                    orderBy: [{ exercise: { order: "asc" } }, { setNumber: "asc" }],
+                    orderBy: logSetDisplayOrderBy,
                 },
             },
         });

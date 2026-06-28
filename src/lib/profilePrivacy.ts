@@ -19,7 +19,7 @@ export type ProfilePrivacy = Record<ProfilePrivacyKey, boolean>;
 
 export interface SocialLinks {
     instagram?: string;
-    twitter?: string;
+    tiktok?: string;
     youtube?: string;
     website?: string;
 }
@@ -93,7 +93,7 @@ export function parseSocialLinks(raw: unknown): SocialLinks {
     if (!raw || typeof raw !== "object") return {};
     const input = raw as Record<string, unknown>;
     const links: SocialLinks = {};
-    for (const key of ["instagram", "twitter", "youtube", "website"] as const) {
+    for (const key of ["instagram", "tiktok", "youtube", "website"] as const) {
         const value = input[key];
         if (typeof value === "string" && value.trim()) {
             links[key] = value.trim();
@@ -103,7 +103,7 @@ export function parseSocialLinks(raw: unknown): SocialLinks {
 }
 
 export function hasSocialLinks(links: SocialLinks): boolean {
-    return Boolean(links.instagram || links.twitter || links.youtube || links.website);
+    return Boolean(links.instagram || links.tiktok || links.youtube || links.website);
 }
 
 export async function getUserProfilePrivacy(userId: string): Promise<ProfilePrivacy> {

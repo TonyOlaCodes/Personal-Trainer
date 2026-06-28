@@ -7,6 +7,8 @@ import { notifyCoachOfClientWorkout } from "@/lib/notifications";
 import { triggerAchievementSync } from "@/lib/achievements";
 import { normalizeStoredUploadUrl } from "@/lib/uploadUrls";
 import { ensureLogSetExerciseNameColumn } from "@/lib/logSetExerciseName";
+import { ensureLogSetExerciseOrderColumn, resolvePersistedExerciseOrder } from "@/lib/logSetExerciseOrder";
+import { logSetDisplayOrderBy } from "@/lib/logSetGrouping";
 import { z } from "zod";
 
 const logSchema = z.object({
@@ -35,6 +37,7 @@ const logSchema = z.object({
 export async function POST(req: Request) {
     await ensureDbSchema();
     await ensureLogSetExerciseNameColumn();
+    await ensureLogSetExerciseOrderColumn();
     const authResult = await requireAuthUser(req);
     if (authResult.error) return authResult.error;
     const user = authResult.user;
@@ -198,9 +201,19 @@ export async function POST(req: Request) {
         loggedAt: loggedAt ? parseLogDate(loggedAt) : new Date(),
     };
 
+    const exerciseOrderById = new Map<string, number>();
+    for (const s of setsWithRealIds) {
+        if (exerciseOrderById.has(s.exerciseId)) continue;
+        exerciseOrderById.set(
+            s.exerciseId,
+            resolvePersistedExerciseOrder(s.exerciseOrder, exerciseOrderById.size)
+        );
+    }
+
     const setsCreate = setsWithRealIds.map((s) => ({
         exerciseId: s.exerciseId,
         exerciseName: exerciseNameById.get(s.exerciseId) ?? s.exerciseName?.trim() ?? "Unknown",
+        exerciseOrder: exerciseOrderById.get(s.exerciseId) ?? 999,
         setNumber: s.setNumber,
         reps: s.reps,
         weightKg: s.weightKg,
@@ -309,7 +322,7 @@ export async function GET(req: Request) {
                         },
                     },
                 },
-                orderBy: { setNumber: "asc" as const },
+                orderBy: logSetDisplayOrderBy,
             },
         };
 

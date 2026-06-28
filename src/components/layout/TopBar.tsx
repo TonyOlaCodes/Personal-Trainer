@@ -21,6 +21,17 @@ interface TopBarProps {
     hideSearch?: boolean;
 }
 
+function PlanAssignedNotificationText({ message }: { message: string }) {
+    const coachName = message || "Your coach";
+    return (
+        <>
+            <span className="font-bold text-fg">{coachName}</span>
+            <span className="text-brand-400 font-black tracking-wide"> (Coach)</span>
+            <span className="text-fg-muted font-medium"> — Assigned you a new plan</span>
+        </>
+    );
+}
+
 function CoachMessageNotificationText({ message }: { message: string }) {
     const coachName = message === "New message from your coach" ? "Your coach" : message;
     return (
@@ -33,11 +44,21 @@ function CoachMessageNotificationText({ message }: { message: string }) {
 }
 
 function CoachBroadcastNotificationText({ message }: { message: string }) {
+    if (message === "Admin") {
+        return (
+            <>
+                <span className="text-fg-muted font-medium">Message from </span>
+                <span className="font-bold text-fg">Admin</span>
+                <span className="text-warning font-bold"> — Important broadcast</span>
+            </>
+        );
+    }
+
     const coachName = message || "Your coach";
     return (
         <>
+            <span className="text-fg-muted font-medium">From coach · </span>
             <span className="font-bold text-fg">{coachName}</span>
-            <span className="text-brand-400 font-black tracking-wide"> (Coach)</span>
             <span className="text-warning font-bold"> — Important broadcast</span>
         </>
     );
@@ -326,6 +347,8 @@ export function TopBar({ title, subtitle, showToday = false, streak, hideSearch 
                                                                 <CoachMessageNotificationText message={n.message} />
                                                             ) : n.type === NOTIFICATION_TYPES.COACH_BROADCAST ? (
                                                                 <CoachBroadcastNotificationText message={n.message} />
+                                                            ) : n.type === NOTIFICATION_TYPES.PLAN_ASSIGNED ? (
+                                                                <PlanAssignedNotificationText message={n.message} />
                                                             ) : n.type === NOTIFICATION_TYPES.GLOBAL_ANNOUNCEMENT ? (
                                                                 <AnnouncementNotificationText message={n.message} />
                                                             ) : n.type === NOTIFICATION_TYPES.ACHIEVEMENT_UNLOCKED ? (

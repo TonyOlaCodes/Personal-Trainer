@@ -2,9 +2,10 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
-import { createNotification, userWantsNotification } from "@/lib/notifications";
+import { notifyClientOfPlanAssigned } from "@/lib/notifications";
 import { requireCoachCanEditClient } from "@/lib/apiAuth";
 import { triggerAchievementSync } from "@/lib/achievements";
+import { assignCoachPlanToClient } from "@/lib/coachPlanAssignment";
 
 const planUpdateSchema = z.object({
     clientId: z.string().min(1),
@@ -29,48 +30,28 @@ export async function POST(req: Request) {
         const client = await prisma.user.findUnique({ where: { id: clientId } });
         if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 });
 
-        const plan = await prisma.plan.findUnique({ where: { id: planId } });
-        if (!plan) return NextResponse.json({ error: "Plan not found" }, { status: 404 });
-
-        // Update plan in transaction
-        await prisma.$transaction(async (tx) => {
-            // Deactivate existing
-            await tx.userPlan.updateMany({
-                where: { userId: client.id },
-                data: { isActive: false },
-            });
-
-            // Create or update connection
-            const existing = await tx.userPlan.findUnique({
-                where: { userId_planId: { userId: client.id, planId: planId } }
-            });
-
-            if (existing) {
-                await tx.userPlan.update({
-                    where: { id: existing.id },
-                    data: { isActive: true }
-                });
-            } else {
-                await tx.userPlan.create({
-                    data: { userId: client.id, planId: planId, isActive: true }
-                });
-            }
+        const result = await assignCoachPlanToClient({
+            coachId: coach.id,
+            clientId: client.id,
+            planId,
+            allowAnyCoachPlan: coach.role === "SUPER_ADMIN",
         });
 
-        if (await userWantsNotification(client.id, "notifyOnPlanUpdate")) {
-            await createNotification({
-                userId: client.id,
-                type: "PLAN_UPDATED",
-                message: "Your coach assigned you a new plan",
-                entityType: "PLAN",
-                entityId: plan.id,
-                route: `/plans?highlight=${plan.id}`,
-            });
-        }
+        await notifyClientOfPlanAssigned({
+            clientUserId: client.id,
+            coachId: coach.id,
+            coachName: coach.name ?? coach.email ?? "Your coach",
+            planId: result.assignedPlanId,
+            planName: result.plan.name,
+        });
 
         triggerAchievementSync(coach.id);
 
-        return NextResponse.json({ success: true });
+        return NextResponse.json({
+            success: true,
+            planId: result.assignedPlanId,
+            cloned: result.cloned,
+        });
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : "Failed to assign plan";
         return NextResponse.json({ error: message }, { status: 400 });

@@ -7,6 +7,7 @@ import { startOfWeek, endOfWeek } from "date-fns";
 import { getBodyweightSummary } from "@/lib/bodyweight";
 import { getBodyweightAverageSinceLastCheckIn } from "@/lib/checkInPeriodSummary";
 import { getWorkoutsTargetFromUserPlan } from "@/lib/planTrainingTarget";
+import { getPlannedWorkoutForDate } from "@/lib/planSchedule";
 import { withResolvedCheckInMedia } from "@/lib/uploadUrls";
 import { DashboardClient } from "./DashboardClient";
 import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
@@ -102,68 +103,31 @@ export default async function DashboardPage() {
 
         const activeUserPlan = user.plans[0] ?? null;
         const activePlan = activeUserPlan?.plan ?? null;
-        const weeks = activePlan?.weeks ?? [];
-        
-        let currentWeekIndex = 0;
-        let todayWorkout: any = null;
-        const jsDow = today.getDay();
-        const todayDow0Mon = jsDow === 0 ? 6 : jsDow - 1; // 0=Mon ... 6=Sun
+        const activeUserPlanLike = activeUserPlan && activePlan
+            ? { startedAt: activeUserPlan.startedAt, plan: { weeks: activePlan.weeks } }
+            : null;
 
-        const findWorkoutForDate = (date: Date) => {
-            if (!activeUserPlan || weeks.length === 0) return null;
+        const todayWorkoutPlanned = getPlannedWorkoutForDate(activeUserPlanLike, today, { today });
 
-            const startedAt = new Date(activeUserPlan.startedAt);
-            startedAt.setHours(0, 0, 0, 0);
-            const targetDate = new Date(date);
-            targetDate.setHours(0, 0, 0, 0);
-            const diffDays = Math.floor((targetDate.getTime() - startedAt.getTime()) / 86400000);
-            if (diffDays < 0) return null;
+        const todayWorkoutFromPlan = todayWorkoutPlanned && activePlan
+            ? activePlan.weeks.flatMap((week) => week.workouts).find((w) => w.id === todayWorkoutPlanned.id) ?? null
+            : null;
 
-            let weekIndex = Math.floor(diffDays / 7);
-            if (weekIndex >= weeks.length) weekIndex = weekIndex % weeks.length;
-
-            const week = weeks[weekIndex] || weeks[0];
-            if (!week) return null;
-
-            const targetJsDow = targetDate.getDay();
-            const targetDow0Mon = targetJsDow === 0 ? 6 : targetJsDow - 1;
-            const fallbackDayNumber = targetDow0Mon + 1;
-            const usesOneIndexedWeekdays = week.workouts.length >= 5
-                && week.workouts.every((w: any) => w.dayOfWeek !== null && w.dayOfWeek !== undefined && w.dayOfWeek === w.dayNumber);
-            const targetDayOfWeek = usesOneIndexedWeekdays
-                ? (targetDow0Mon === 6 ? 0 : targetDow0Mon + 1)
-                : targetDow0Mon;
-
-            return week.workouts.find((w: any) => w.dayOfWeek === targetDayOfWeek)
-                || week.workouts.find((w: any) => (w.dayOfWeek === null || w.dayOfWeek === undefined) && w.dayNumber === fallbackDayNumber)
-                || null;
-        };
-
-        if (activeUserPlan && weeks.length > 0) {
-            const startedAt = new Date(activeUserPlan.startedAt);
-            startedAt.setHours(0, 0, 0, 0);
-
-            const diffDays = Math.floor((today.getTime() - startedAt.getTime()) / 86400000);
-            if (diffDays >= 0) {
-                currentWeekIndex = Math.floor(diffDays / 7);
-                if (currentWeekIndex >= weeks.length) currentWeekIndex = currentWeekIndex % weeks.length;
-
-                const fallbackDayNumber = todayDow0Mon + 1;
-                
-                const week = weeks[currentWeekIndex] || weeks[0];
-                if (week) {
-                    const usesOneIndexedWeekdays = week.workouts.length >= 5
-                        && week.workouts.every((w: any) => w.dayOfWeek !== null && w.dayOfWeek !== undefined && w.dayOfWeek === w.dayNumber);
-                    const targetDayOfWeek = usesOneIndexedWeekdays
-                        ? (todayDow0Mon === 6 ? 0 : todayDow0Mon + 1)
-                        : todayDow0Mon;
-
-                    todayWorkout = week.workouts.find((w: any) => w.dayOfWeek === targetDayOfWeek)
-                                || week.workouts.find((w: any) => (w.dayOfWeek === null || w.dayOfWeek === undefined) && w.dayNumber === fallbackDayNumber)
-                                || null;
-                }
+        const todayWorkout = todayWorkoutFromPlan
+            ? {
+                id: todayWorkoutFromPlan.id,
+                name: todayWorkoutFromPlan.name,
+                notes: (todayWorkoutFromPlan as { notes?: string | null }).notes ?? null,
+                exercises: todayWorkoutFromPlan.exercises.map((ex) => ({
+                    id: ex.id,
+                    name: ex.name,
+                    sets: ex.sets,
+                    reps: ex.reps,
+                    weightTargetKg: ex.weightTargetKg,
+                    muscleGroup: ex.muscleGroup ?? null,
+                })),
             }
-        }
+            : null;
 
         const isTodayWorkoutCompleted = todayWorkout && user.workoutLogs.some(
             (l: any) => l.status === "COMPLETED" && 
@@ -192,7 +156,7 @@ export default async function DashboardPage() {
         for (let offset = 1; offset <= 42; offset++) {
             const candidateDate = parseLogDate(todayDate);
             candidateDate.setDate(candidateDate.getDate() + offset);
-            const candidateWorkout = findWorkoutForDate(candidateDate);
+            const candidateWorkout = getPlannedWorkoutForDate(activeUserPlanLike, candidateDate, { today });
             if (candidateWorkout) {
                 nextTrainingDay = {
                     id: candidateWorkout.id,
@@ -288,6 +252,7 @@ export default async function DashboardPage() {
                                 id: currentCheckin.id,
                                 weekNumber: currentCheckin.weekNumber,
                                 status: currentCheckin.status as string,
+                                createdAt: currentCheckin.createdAt.toISOString(),
                             } : null}
                             checkInDueState={checkInDueState}
                             checkInPanel={checkInPanel}

@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient, Role } from "@prisma/client";
+import { assignCoachPlanToClient } from "@/lib/coachPlanAssignment";
 
 export async function generateCoachAccessCode(
     prisma: PrismaClient,
@@ -117,22 +118,15 @@ export async function redeemAccessCodeForUser(
                 coachId,
             },
         });
-
-        if (accessCode.planId) {
-            const existing = await tx.userPlan.findUnique({
-                where: { userId_planId: { userId: user.id, planId: accessCode.planId } },
-            });
-            if (!existing) {
-                await tx.userPlan.updateMany({
-                    where: { userId: user.id },
-                    data: { isActive: false },
-                });
-                await tx.userPlan.create({
-                    data: { userId: user.id, planId: accessCode.planId, isActive: true },
-                });
-            }
-        }
     });
+
+    if (accessCode.planId && coachId) {
+        await assignCoachPlanToClient({
+            coachId,
+            clientId: user.id,
+            planId: accessCode.planId,
+        });
+    }
 
     return {
         success: true,

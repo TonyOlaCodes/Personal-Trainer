@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { APP_TIMEZONE } from "@/lib/appTimezone";
-import { getCheckInDueState, getUserCheckInSchedule } from "@/lib/checkInSchedule";
+import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
 import {
     computeWeeklyCompliance,
     getMondayStart,
@@ -15,8 +15,11 @@ import {
     buildPendingReviewAlertKey,
     buildSetupNeededAlertKey,
     buildUnreadMessageAlertKey,
+    CLIENT_APP_INACTIVE_DAYS,
     getCoachAttentionActions,
     getExcusedMissedWorkoutKeysForClient,
+    isDismissedAlertCurrentlyHidden,
+    type CoachAttentionActionRow,
     type CoachAttentionActionType,
     type CoachAttentionCategory,
 } from "@/lib/coachAttentionActions";
@@ -24,7 +27,13 @@ import { getPlannedWorkoutForDate, type ActiveUserPlanLike } from "@/lib/planSch
 import { loadPlanScheduleRevisionsByPlanIds } from "@/lib/planScheduleHistory";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
 import { isInactiveAccount } from "@/lib/userDeactivation";
-import { getWeekNumber, parseLogDate, toDateKey } from "@/lib/utils";
+import { formatCheckInDueDate, formatCheckInWeekFromCheckIn } from "@/lib/checkInLabels";
+import {
+    getCoachAppToday,
+    isCoachClientCheckInAttentionNeeded,
+    resolveCoachClientCheckInDueState,
+} from "@/lib/coachOverdueCheckIns";
+import { parseLogDate, toDateKey } from "@/lib/utils";
 
 export interface CoachAttentionInboxItem {
     id: string;
@@ -71,27 +80,34 @@ function formatDateLabel(dateKey: string, todayKey: string): string {
 }
 
 function getItemStatus(
-    actions: Map<string, { action: CoachAttentionActionType }>,
-    alertKey: string
+    actions: Map<string, CoachAttentionActionRow>,
+    alertKey: string,
+    clientLastActiveAt: Date | null | undefined,
+    now = new Date()
 ): "open" | CoachAttentionActionType {
-    return actions.get(alertKey)?.action ?? "open";
+    const action = actions.get(alertKey);
+    if (isDismissedAlertCurrentlyHidden(action, clientLastActiveAt, now)) {
+        return "dismissed";
+    }
+    if (action?.action === "excused") return "excused";
+    return "open";
 }
 
 function isAlertDismissed(
-    actions: Map<string, { action: CoachAttentionActionType }>,
-    alertKey: string
+    actions: Map<string, CoachAttentionActionRow>,
+    alertKey: string,
+    clientLastActiveAt: Date | null | undefined,
+    now = new Date()
 ): boolean {
-    return actions.get(alertKey)?.action === "dismissed";
+    return isDismissedAlertCurrentlyHidden(actions.get(alertKey), clientLastActiveAt, now);
 }
 
 const MISSED_LOOKBACK_DAYS = 7;
-const INACTIVE_DAYS = 10;
+const INACTIVE_DAYS = CLIENT_APP_INACTIVE_DAYS;
 const LOW_COMPLIANCE_PERCENT = 50;
 
 export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAttentionInboxItem[]> {
-    const todayKey = getLocalTimeParts(new Date(), APP_TIMEZONE).dateKey;
-    const today = parseLogDate(todayKey);
-    const weekNumber = getWeekNumber(today);
+    const { today, todayKey, weekNumber } = getCoachAppToday();
     const weekStart = getMondayStart(today);
     const lookbackStart = shiftDateKey(todayKey, -MISSED_LOOKBACK_DAYS);
 
@@ -160,7 +176,7 @@ export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAtt
                 status: "PENDING",
                 user: { coachId, isDeleted: false, isDeactivated: false },
             },
-            include: { user: { select: { id: true, name: true, email: true } } },
+            include: { user: { select: { id: true, name: true, email: true, lastActiveAt: true } } },
             orderBy: { createdAt: "desc" },
         }),
     ]);
@@ -182,9 +198,12 @@ export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAtt
     const items: CoachAttentionInboxItem[] = [];
     const inactiveCutoff = Date.now() - INACTIVE_DAYS * 86400000;
 
+    const now = new Date();
+
     for (const client of clients) {
         if (isInactiveAccount(client)) continue;
 
+        const clientLastActiveAt = client.lastActiveAt;
         const clientName = client.name ?? client.email ?? "Client";
         const chatHref = `/chat?with=${client.id}`;
         const activePlan = client.plans[0] ?? null;
@@ -213,7 +232,7 @@ export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAtt
                 if (completedLogKeys.has(`${dateKey}:${planned.id}`)) continue;
 
                 const alertKey = buildMissedWorkoutAlertKey(client.id, dateKey, planned.id);
-                if (isAlertDismissed(actions, alertKey)) continue;
+                if (isAlertDismissed(actions, alertKey, clientLastActiveAt, now)) continue;
 
                 items.push({
                     id: alertKey,
@@ -224,7 +243,7 @@ export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAtt
                     dateKey,
                     dateLabel: formatDateLabel(dateKey, todayKey),
                     explanation: `${clientName} did not complete ${planned.name} on ${formatDateLabel(dateKey, todayKey).toLowerCase()}.`,
-                    status: getItemStatus(actions, alertKey),
+                    status: getItemStatus(actions, alertKey, clientLastActiveAt, now),
                     urgent: offset === 1,
                     workoutId: planned.id,
                     workoutName: planned.name,
@@ -236,40 +255,44 @@ export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAtt
         }
 
         const schedule = await getUserCheckInSchedule(client.id);
-        const dueState = getCheckInDueState(schedule, today);
         const hasCheckInThisWeek = client.checkIns.length > 0;
+        const clientAttentionRows = [...actions.values()].filter((row) => row.clientId === client.id);
+        const dueState = resolveCoachClientCheckInDueState(
+            schedule,
+            clientAttentionRows,
+            client.id,
+            clientLastActiveAt
+        );
 
-        if (dueState.isConfigured && !hasCheckInThisWeek && (dueState.isOverdue || dueState.isDueToday)) {
+        if (isCoachClientCheckInAttentionNeeded(dueState, hasCheckInThisWeek)) {
             const alertKey = buildCheckInAlertKey(client.id, weekNumber);
-            if (!isAlertDismissed(actions, alertKey)) {
-                const category: CoachAttentionCategory = dueState.isOverdue
-                    ? "check_in_overdue"
-                    : "check_in_missed";
-                items.push({
-                    id: alertKey,
-                    category,
-                    clientId: client.id,
-                    clientName,
-                    issueType: dueState.isOverdue
-                        ? ISSUE_LABELS.check_in_overdue
-                        : ISSUE_LABELS.check_in_missed,
-                    dateKey: todayKey,
-                    dateLabel: dueState.isOverdue ? "Overdue" : "Due today",
-                    explanation: dueState.isOverdue
-                        ? `Weekly check-in was due on ${dueState.dueDayLabel ?? "schedule"} and has not been submitted.`
-                        : `Weekly check-in is due today (${dueState.dueDayLabel ?? "scheduled day"}).`,
-                    status: getItemStatus(actions, alertKey),
-                    urgent: dueState.isOverdue,
-                    weekNumber,
-                    href: `/coach/client/${client.id}`,
-                    chatHref,
-                });
-            }
+            const category: CoachAttentionCategory = dueState.isOverdue
+                ? "check_in_overdue"
+                : "check_in_missed";
+            items.push({
+                id: alertKey,
+                category,
+                clientId: client.id,
+                clientName,
+                issueType: dueState.isOverdue
+                    ? ISSUE_LABELS.check_in_overdue
+                    : ISSUE_LABELS.check_in_missed,
+                dateKey: todayKey,
+                dateLabel: dueState.isOverdue ? "Overdue" : "Due today",
+                explanation: dueState.isOverdue
+                    ? `Weekly check-in was due ${formatCheckInDueDate(dueState.currentPeriodDueDate) ?? "on schedule"} and has not been submitted.`
+                    : `Weekly check-in is due today${formatCheckInDueDate(dueState.currentPeriodDueDate) ? ` · ${formatCheckInDueDate(dueState.currentPeriodDueDate)}` : ""}.`,
+                status: getItemStatus(actions, alertKey, clientLastActiveAt, now),
+                urgent: dueState.isOverdue,
+                weekNumber,
+                href: `/coach/client/${client.id}`,
+                chatHref,
+            });
         }
 
         if (!dueState.isConfigured) {
             const alertKey = buildSetupNeededAlertKey(client.id);
-            if (!isAlertDismissed(actions, alertKey)) {
+            if (!isAlertDismissed(actions, alertKey, clientLastActiveAt, now)) {
                 items.push({
                     id: alertKey,
                     category: "setup_needed",
@@ -279,7 +302,7 @@ export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAtt
                     dateKey: todayKey,
                     dateLabel: "Now",
                     explanation: "Check-in schedule and onboarding setup are incomplete.",
-                    status: getItemStatus(actions, alertKey),
+                    status: getItemStatus(actions, alertKey, clientLastActiveAt, now),
                     urgent: true,
                     href: `/coach/client/${client.id}`,
                     chatHref,
@@ -310,7 +333,7 @@ export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAtt
 
         if (isInactive || lowCompliance) {
             const alertKey = buildFallingBehindAlertKey(client.id, weekNumber);
-            if (!isAlertDismissed(actions, alertKey)) {
+            if (!isAlertDismissed(actions, alertKey, clientLastActiveAt, now)) {
                 items.push({
                     id: alertKey,
                     category: "falling_behind",
@@ -321,8 +344,8 @@ export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAtt
                     dateLabel: "This week",
                     explanation: isInactive
                         ? `No app activity in ${INACTIVE_DAYS}+ days — client may need a check-in.`
-                        : `Plan adherence is ${compliance.percent}% this week (below ${LOW_COMPLIANCE_PERCENT}%).`,
-                    status: getItemStatus(actions, alertKey),
+                        : `Only ${compliance.percent}% of planned workouts done this week (below ${LOW_COMPLIANCE_PERCENT}%).`,
+                    status: getItemStatus(actions, alertKey, clientLastActiveAt, now),
                     urgent: isInactive,
                     weekNumber,
                     href: `/coach/client/${client.id}`,
@@ -334,7 +357,7 @@ export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAtt
         const unread = unreadCounts[client.id] ?? 0;
         if (unread > 0) {
             const alertKey = buildUnreadMessageAlertKey(client.id);
-            if (!isAlertDismissed(actions, alertKey)) {
+            if (!isAlertDismissed(actions, alertKey, clientLastActiveAt, now)) {
                 items.push({
                     id: alertKey,
                     category: "unread_message",
@@ -344,7 +367,7 @@ export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAtt
                     dateKey: todayKey,
                     dateLabel: "Recent",
                     explanation: `${unread} unread message${unread === 1 ? "" : "s"} waiting for your reply.`,
-                    status: getItemStatus(actions, alertKey),
+                    status: getItemStatus(actions, alertKey, clientLastActiveAt, now),
                     urgent: unread >= 3,
                     unreadCount: unread,
                     href: chatHref,
@@ -356,7 +379,8 @@ export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAtt
 
     for (const checkIn of pendingReviews) {
         const alertKey = buildPendingReviewAlertKey(checkIn.id);
-        if (isAlertDismissed(actions, alertKey)) continue;
+        const reviewLastActiveAt = checkIn.user.lastActiveAt ?? null;
+        if (isAlertDismissed(actions, alertKey, reviewLastActiveAt, now)) continue;
 
         const clientName = checkIn.user.name ?? checkIn.user.email ?? "Client";
         items.push({
@@ -367,8 +391,8 @@ export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAtt
             issueType: ISSUE_LABELS.pending_check_in,
             dateKey: toDateKey(checkIn.createdAt),
             dateLabel: formatDateLabel(toDateKey(checkIn.createdAt), todayKey),
-            explanation: `Week ${checkIn.weekNumber} check-in submitted and awaiting your review.`,
-            status: getItemStatus(actions, alertKey),
+            explanation: `${formatCheckInWeekFromCheckIn(checkIn)} submitted and awaiting your review.`,
+            status: getItemStatus(actions, alertKey, reviewLastActiveAt, now),
             urgent: false,
             checkInId: checkIn.id,
             weekNumber: checkIn.weekNumber,

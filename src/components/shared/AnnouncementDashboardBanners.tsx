@@ -26,7 +26,7 @@ export function AnnouncementDashboardBanners({ banners, onOpen }: Props) {
                         </div>
                         <div className="min-w-0 flex-1">
                             <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">
-                                Message from {banner.adminName}
+                                Message from Admin
                             </p>
                             <h4 className="font-bold text-fg truncate">{banner.title}</h4>
                             <p className="text-sm text-fg-muted truncate">{banner.body}</p>

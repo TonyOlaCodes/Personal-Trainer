@@ -169,6 +169,7 @@ export default async function CoachDashboardPage() {
                 isDeleted: false,
                 isDeactivated: false,
                 email: client.email,
+                lastActiveAt: client.lastActiveAt,
                 hasCheckInSchedule: extra?.schedule?.day !== null,
                 checkInSchedule: extra?.schedule ?? { day: null, frequencyWeeks: null, startDate: null },
                 currentWeekCheckInId: weekCheckInByUserId.get(client.id) ?? null,

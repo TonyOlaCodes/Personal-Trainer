@@ -330,14 +330,13 @@ export async function ensureAnnouncementNotificationsSent(announcement: Announce
     if (!full) return;
 
     const userIds = await getTargetUserIds(full);
-    const adminName = full.adminName || "Admin";
     const preview = full.body.length > 100 ? `${full.body.slice(0, 97)}...` : full.body;
 
     for (const userId of userIds) {
         await createNotification({
             userId,
             type: NOTIFICATION_TYPES.GLOBAL_ANNOUNCEMENT,
-            message: `Message from ${adminName}: ${preview}`,
+            message: `Message from Admin: ${preview}`,
             entityType: "ANNOUNCEMENT",
             entityId: full.id,
             route: `/dashboard?announcement=${full.id}`,

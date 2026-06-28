@@ -19,6 +19,7 @@ import {
     UserPlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getActiveNavHref } from "@/lib/navActive";
 import { BrandLogo } from "@/components/shared/BrandLogo";
 import { useChatUnread, formatUnreadBadge } from "@/components/chat/ChatUnreadProvider";
 import { AccountNav } from "@/components/layout/AccountNav";
@@ -77,6 +78,8 @@ export function Sidebar({ userRole = "FREE", showCheckIns = false, initialCollap
         return item.roles.includes(userRole);
     });
 
+    const activeHref = getActiveNavHref(pathname, filteredItems);
+
     return (
         <aside className="hidden md:flex flex-col fixed left-0 top-0 h-full w-[var(--sidebar-width)] bg-surface-card border-r border-surface-border z-40 transition-all duration-300">
             {/* Collapse Toggle Button - Floating on border */}
@@ -105,7 +108,7 @@ export function Sidebar({ userRole = "FREE", showCheckIns = false, initialCollap
             {/* Navigation */}
             <nav className={cn("flex-1 py-4 space-y-1 overflow-y-auto no-scrollbar", collapsed ? "px-1.5" : "px-3")}>
                 {filteredItems.map((item) => {
-                    const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);
+                    const active = item.href === activeHref;
                     const badge = item.href === "/chat" ? chatBadge : item.badge;
                     return (
                         <Link

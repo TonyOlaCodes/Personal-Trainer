@@ -1,10 +1,20 @@
 import { prisma } from "@/lib/prisma";
-import { createNotification, notifyClientOfCheckInRequest, notifyClientOfCoachBroadcast, notifyClientOfCoachMessage, notifyClientOfMissedWorkout, userWantsNotification } from "@/lib/notifications";
+import { notifyClientOfCheckInRequest, notifyClientOfCoachBroadcast, notifyClientOfCoachMessage, notifyClientOfMissedWorkout, notifyClientOfPlanAssigned } from "@/lib/notifications";
 import { NOTIFICATION_TYPES, QUICK_REPLY_TEMPLATES } from "@/lib/notificationTypes";
 import { requireCoachCanEditClient } from "@/lib/apiAuth";
+import { assignCoachPlanToClient } from "@/lib/coachPlanAssignment";
 import type { User } from "@prisma/client";
 
 export type ChatActionType = "PLAN_ASSIGNED" | "CHECKIN_REQUEST" | "MISSED_WORKOUT" | "BROADCAST" | "ACCESS_REQUEST";
+
+/** Chat rows with these action types carry their own notification — not a generic DM alert. */
+const CHAT_ACTIONS_WITH_DEDICATED_NOTIFY = new Set<ChatActionType>([
+    "BROADCAST",
+    "CHECKIN_REQUEST",
+    "MISSED_WORKOUT",
+    "PLAN_ASSIGNED",
+    "ACCESS_REQUEST",
+]);
 
 let messageActionColumnsReady = false;
 
@@ -21,33 +31,9 @@ export async function ensureMessageActionColumns() {
     messageActionColumnsReady = true;
 }
 
-export async function assignPlanToClient(clientId: string, planId: string) {
-    const plan = await prisma.plan.findUnique({ where: { id: planId } });
-    if (!plan) throw new Error("Plan not found");
-
-    await prisma.$transaction(async (tx) => {
-        await tx.userPlan.updateMany({
-            where: { userId: clientId },
-            data: { isActive: false },
-        });
-
-        const existing = await tx.userPlan.findUnique({
-            where: { userId_planId: { userId: clientId, planId } },
-        });
-
-        if (existing) {
-            await tx.userPlan.update({
-                where: { id: existing.id },
-                data: { isActive: true },
-            });
-        } else {
-            await tx.userPlan.create({
-                data: { userId: clientId, planId, isActive: true },
-            });
-        }
-    });
-
-    return plan;
+export async function assignPlanToClient(coachId: string, clientId: string, planId: string) {
+    const result = await assignCoachPlanToClient({ coachId, clientId, planId });
+    return result.plan;
 }
 
 export async function createCoachDirectMessage(input: {
@@ -101,11 +87,12 @@ export async function createCoachDirectMessage(input: {
                 clientUserId: client.id,
                 coachId: input.coach.id,
                 coachName: input.coach.name ?? input.coach.email ?? "Your coach",
+                senderRole: input.coach.role,
                 route: `/chat?with=${input.coach.id}`,
             };
             if (input.actionType === "BROADCAST") {
                 await notifyClientOfCoachBroadcast(notifyInput);
-            } else if (input.actionType !== "CHECKIN_REQUEST" && input.actionType !== "MISSED_WORKOUT") {
+            } else if (!input.actionType || !CHAT_ACTIONS_WITH_DEDICATED_NOTIFY.has(input.actionType)) {
                 await notifyClientOfCoachMessage(notifyInput);
             }
         }
@@ -118,18 +105,15 @@ export async function sendPlanViaChat(coach: User, clientId: string, planId: str
     const editCheck = await requireCoachCanEditClient(coach, clientId);
     if (editCheck.error) throw new Error("Forbidden");
 
-    const plan = await assignPlanToClient(clientId, planId);
+    const plan = await assignPlanToClient(coach.id, clientId, planId);
 
-    if (await userWantsNotification(clientId, "notifyOnPlanUpdate")) {
-        await createNotification({
-            userId: clientId,
-            type: "PLAN_UPDATED",
-            message: "Your coach assigned you a new plan",
-            entityType: "PLAN",
-            entityId: plan.id,
-            route: `/plans?highlight=${plan.id}`,
-        });
-    }
+    await notifyClientOfPlanAssigned({
+        clientUserId: clientId,
+        coachId: coach.id,
+        coachName: coach.name ?? coach.email ?? "Your coach",
+        planId: plan.id,
+        planName: plan.name,
+    });
 
     const content = note?.trim()
         || `Your coach assigned you a new training plan: ${plan.name}`;

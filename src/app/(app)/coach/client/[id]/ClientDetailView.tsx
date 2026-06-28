@@ -87,10 +87,13 @@ interface WorkoutHistoryEntry {
     volume: number;
 }
 
+import { formatCheckInPeriodTitle, formatCheckInWeekLabel } from "@/lib/checkInLabels";
+
 interface ClientCheckInStatus {
     label: string;
     isOverdue: boolean;
     weekNumber: number;
+    periodLabel: string;
 }
 
 interface Props {
@@ -532,12 +535,12 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                 </div>
             </div>
 
-            {/* Performance Intelligence Card (moved to top of details for better optimized hierarchy) */}
+            {/* Training overview */}
             <div className="card w-fit max-w-full p-4 border-brand-500/20 bg-gradient-brand/5 shadow-glow-brand-sm">
                 <div className="flex items-center justify-between gap-4 mb-4 text-brand-400">
                     <div className="flex items-center gap-2">
                         <Zap className="w-4 h-4" />
-                        <h4 className="text-[10px] font-black uppercase tracking-widest italic">Performance Intelligence</h4>
+                        <h4 className="text-[10px] font-black uppercase tracking-widest italic">Training overview</h4>
                     </div>
                     <Link
                         href={`/coach/calendar?clientId=${client.id}`}
@@ -550,7 +553,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                 </div>
                 <div className="flex flex-wrap items-end gap-x-6 gap-y-3 sm:gap-x-8">
                     <div className="space-y-0.5">
-                        <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle whitespace-nowrap">Adherence (30d)</p>
+                        <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle whitespace-nowrap">Workouts done (30 days)</p>
                         <p className="text-xl font-black text-fg leading-none italic">{client.adherencePercentage ?? 0}<span className="text-brand-400">%</span></p>
                     </div>
                     <div className="space-y-0.5">
@@ -564,7 +567,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                         </p>
                     </div>
                     <div className="space-y-0.5">
-                        <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Trend</p>
+                        <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Vs last month</p>
                         <p className={cn(
                             "text-xl font-black leading-none italic font-mono",
                             client.adherenceTrend === "UP" ? "text-success" : client.adherenceTrend === "DOWN" ? "text-danger" : "text-fg-muted"
@@ -1036,7 +1039,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                             {checkInStatus.label}
                                         </p>
                                         <p className="text-[10px] text-fg-muted font-bold uppercase tracking-[0.1em] mt-1">
-                                            Week {checkInStatus.weekNumber} · Waiting for client to submit
+                                            {checkInStatus.periodLabel} · Waiting for client to submit
                                         </p>
                                     </div>
                                 </div>
@@ -1106,7 +1109,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                             <Scale className="w-6 h-6" />
                                         </div>
                                         <div>
-                                            <p className="text-xs font-black text-fg uppercase tracking-widest">Week {ci.week} Check-in</p>
+                                            <p className="text-xs font-black text-fg uppercase tracking-widest">{formatCheckInPeriodTitle(ci.week, ci.date)}</p>
                                             <p className="text-[10px] text-fg-subtle font-bold uppercase tracking-[0.1em] mt-0.5">{formatDate(ci.date)}</p>
                                         </div>
                                     </div>

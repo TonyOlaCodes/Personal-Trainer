@@ -3,6 +3,7 @@
 import { CheckCircle2, ChevronRight, ClipboardList, X } from "lucide-react";
 import Link from "next/link";
 import { ModalOverlay } from "@/components/shared/ModalOverlay";
+import { formatCheckInPeriodTitle } from "@/lib/checkInLabels";
 import { cn, formatDate, getInitials } from "@/lib/utils";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
 
@@ -79,7 +80,7 @@ export function PendingReviewsModal({ open, onClose, reviews }: Props) {
                                         <span className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-pulse shadow-glow-brand shrink-0" />
                                     </div>
                                     <p className="text-[10px] font-black uppercase tracking-widest text-brand-400 mt-0.5">
-                                        Week {review.week} check-in
+                                        {formatCheckInPeriodTitle(review.week, review.date)}
                                     </p>
                                     <p className="text-[10px] text-fg-subtle mt-1">{formatDate(review.date)}</p>
                                 </div>

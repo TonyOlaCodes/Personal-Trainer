@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
 /** Viewport height shrink above this ≈ software keyboard visible (px). */
-const KEYBOARD_THRESHOLD = 100;
+const KEYBOARD_THRESHOLD = 80;
+
+const MobileKeyboardContext = createContext(false);
 
 function isTextInput(el: EventTarget | null): boolean {
     if (!el || !(el instanceof HTMLElement)) return false;
@@ -22,28 +24,38 @@ function measureKeyboardOpen(): boolean {
     return gap > KEYBOARD_THRESHOLD;
 }
 
-/** True while the software keyboard is open on mobile (< md breakpoint). */
-export function useMobileKeyboardOpen(): boolean {
+function useMobileKeyboardDetection(): boolean {
     const [keyboardOpen, setKeyboardOpen] = useState(false);
 
     useEffect(() => {
         const mobile = window.matchMedia("(max-width: 767px)");
         if (!mobile.matches) return;
 
-        const sync = () => setKeyboardOpen(measureKeyboardOpen());
+        let blurTimer: ReturnType<typeof setTimeout> | null = null;
+
+        const clearBlurTimer = () => {
+            if (blurTimer) clearTimeout(blurTimer);
+            blurTimer = null;
+        };
+
+        const sync = () => {
+            if (!mobile.matches) {
+                setKeyboardOpen(false);
+                return;
+            }
+            setKeyboardOpen(isTextInput(document.activeElement) || measureKeyboardOpen());
+        };
 
         const onFocusIn = (e: FocusEvent) => {
+            clearBlurTimer();
             if (isTextInput(e.target)) {
                 setKeyboardOpen(true);
             }
         };
 
         const onFocusOut = () => {
-            requestAnimationFrame(() => {
-                const active = document.activeElement;
-                if (isTextInput(active)) return;
-                sync();
-            });
+            clearBlurTimer();
+            blurTimer = setTimeout(sync, 120);
         };
 
         const vv = window.visualViewport;
@@ -58,6 +70,7 @@ export function useMobileKeyboardOpen(): boolean {
         mobile.addEventListener("change", onBreakpointChange);
 
         return () => {
+            clearBlurTimer();
             vv?.removeEventListener("resize", sync);
             vv?.removeEventListener("scroll", sync);
             document.removeEventListener("focusin", onFocusIn);
@@ -67,4 +80,23 @@ export function useMobileKeyboardOpen(): boolean {
     }, []);
 
     return keyboardOpen;
+}
+
+export function MobileKeyboardProvider({ children }: { children: ReactNode }) {
+    const keyboardOpen = useMobileKeyboardDetection();
+
+    useEffect(() => {
+        document.documentElement.dataset.mobileKeyboardOpen = keyboardOpen ? "true" : "";
+    }, [keyboardOpen]);
+
+    return (
+        <MobileKeyboardContext.Provider value={keyboardOpen}>
+            {children}
+        </MobileKeyboardContext.Provider>
+    );
+}
+
+/** True while the software keyboard is open on mobile (< md breakpoint). */
+export function useMobileKeyboardOpen(): boolean {
+    return useContext(MobileKeyboardContext);
 }

@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { Sidebar } from "@/components/layout/Sidebar";
-import { MobileTabBar } from "@/components/layout/MobileTabBar";
+import { AppMobileFrame } from "@/components/layout/AppMobileFrame";
 import { RoleProvider } from "@/lib/RoleContext";
 import { getUserDeactivationStatusByClerkId } from "@/lib/userDeactivation";
 import { ensureAppSchema, formatErrorDetails } from "@/lib/ensureAppSchema";
@@ -98,12 +98,10 @@ export default async function AppLayout({
                 <Sidebar userRole={userRole} showCheckIns={showCheckIns} initialCollapsed={isSidebarCollapsed} />
 
                 <div className="md:pl-[var(--sidebar-width)] w-full max-w-full min-w-0">
-                    <main className="min-h-screen pb-20 md:pb-0 w-full max-w-full min-w-0">
+                    <AppMobileFrame userRole={userRole}>
                         {children}
-                    </main>
+                    </AppMobileFrame>
                 </div>
-
-                <MobileTabBar userRole={userRole} />
             </div>
             </ChatUnreadProvider>
             </AppUserProvider>

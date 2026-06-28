@@ -11,6 +11,7 @@ import { WorkoutFeelingEditor } from "@/components/shared/WorkoutFeelingEditor";
 import { BackButton } from "@/components/shared/BackButton";
 import { defaultHomeForRole } from "@/lib/roles";
 import { canEditWorkoutLog, canViewWorkoutLog } from "@/lib/userProfile";
+import { groupLogSetsByExercise, logSetDisplayOrderBy, formatLoggedWeight } from "@/lib/logSetGrouping";
 import { resolveLogSetExerciseName } from "@/lib/logSetExerciseName";
 
 export default async function LogViewPage({ params }: { params: Promise<{ logId: string }> }) {
@@ -28,7 +29,7 @@ export default async function LogViewPage({ params }: { params: Promise<{ logId:
             workout: true,
             sets: {
                 include: { exercise: true },
-                orderBy: [{ exercise: { order: 'asc' } }, { setNumber: 'asc' }],
+                orderBy: logSetDisplayOrderBy,
             }
         }
     });
@@ -43,24 +44,7 @@ export default async function LogViewPage({ params }: { params: Promise<{ logId:
     const isOwner = log.user.id === actor.id;
     const canEdit = await canEditWorkoutLog(actor, log);
 
-    // Group sets by exercise using snapshotted names (not live plan order)
-    const exercisesMap = new Map<string, { name: string; muscleGroup: string | null; sets: typeof log.sets; minSet: number }>();
-    log.sets.forEach(set => {
-        const name = resolveLogSetExerciseName(set);
-        if (!exercisesMap.has(set.exercise.id)) {
-            exercisesMap.set(set.exercise.id, {
-                name,
-                muscleGroup: set.exercise.muscleGroup,
-                sets: [],
-                minSet: set.setNumber,
-            });
-        }
-        const group = exercisesMap.get(set.exercise.id)!;
-        group.name = name;
-        group.minSet = Math.min(group.minSet, set.setNumber);
-        group.sets.push(set);
-    });
-    const groupedExercises = Array.from(exercisesMap.values()).sort((a, b) => a.minSet - b.minSet);
+    const groupedExercises = groupLogSetsByExercise(log.sets, (set) => resolveLogSetExerciseName(set));
 
     return (
         <div className="bg-surface min-h-screen pb-20">
@@ -137,8 +121,8 @@ export default async function LogViewPage({ params }: { params: Promise<{ logId:
                 )}
 
                 <div className="space-y-6">
-                    {groupedExercises.map((ex, idx) => (
-                        <div key={idx} className="card p-6 border-brand-500/10">
+                    {groupedExercises.map((ex) => (
+                        <div key={ex.exerciseId} className="card p-6 border-brand-500/10">
                             <div className="flex items-center justify-between mb-6">
                                 <div className="flex items-center gap-4">
                                     <div className="w-10 h-10 rounded-xl bg-surface-muted border border-surface-border flex items-center justify-center text-brand-400">
@@ -174,7 +158,7 @@ export default async function LogViewPage({ params }: { params: Promise<{ logId:
                                             <span className="col-span-1 font-black text-fg-subtle tracking-tighter">#{set.setNumber}{set.isWarmup ? " W" : ""}</span>
                                             <span className="col-span-1 font-black text-center text-fg">{set.reps || "-"}</span>
                                             <span className="col-span-1 font-black text-center text-brand-400 italic">
-                                                {set.weightKg ? `${set.weightKg}` : "-"} <span className="text-[9px] not-italic text-fg-subtle">KG</span>
+                                                {formatLoggedWeight(set.weightKg)}
                                             </span>
                                             <span className="col-span-1 font-black text-center text-warning italic">{set.rpe || "-"}</span>
                                             <span className={cn("col-span-1 font-black text-center", est1RM ? "text-warning-400" : "text-fg-subtle")}>

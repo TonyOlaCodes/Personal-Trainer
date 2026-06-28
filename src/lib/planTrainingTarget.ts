@@ -1,3 +1,5 @@
+import { getPlanDayOffset, resolvePlanWeekIndex } from "./planSchedule";
+
 type PlanWorkoutLike = {
     name: string;
     exercises?: { id?: string }[] | null;
@@ -29,10 +31,9 @@ export function getCurrentPlanWeekIndex(activeUserPlan: ActivePlanLike, now = ne
     const weeks = activeUserPlan.plan.weeks;
     if (weeks.length === 0) return 0;
 
-    const startedAt = new Date(activeUserPlan.startedAt);
-    const diffDays = Math.max(0, Math.ceil((now.getTime() - startedAt.getTime()) / 86400000));
-    let index = Math.floor(diffDays / 7);
-    if (index >= weeks.length) index = weeks.length - 1;
+    const diffDays = getPlanDayOffset(activeUserPlan.startedAt, now);
+    const index = resolvePlanWeekIndex(weeks.length, diffDays);
+    if (index === null) return weeks.length - 1;
     return index;
 }
 

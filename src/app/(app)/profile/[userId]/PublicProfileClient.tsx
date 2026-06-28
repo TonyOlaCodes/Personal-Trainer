@@ -137,7 +137,7 @@ function formatSocialHref(key: keyof SocialLinks, value: string): string {
     if (!trimmed) return "";
     if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed;
     if (key === "instagram") return `https://instagram.com/${trimmed.replace(/^@/, "")}`;
-    if (key === "twitter") return `https://x.com/${trimmed.replace(/^@/, "")}`;
+    if (key === "tiktok") return `https://tiktok.com/@${trimmed.replace(/^@/, "")}`;
     if (key === "youtube") return trimmed.startsWith("@")
         ? `https://youtube.com/${trimmed}`
         : `https://youtube.com/@${trimmed.replace(/^@/, "")}`;
@@ -406,7 +406,7 @@ export function PublicProfileClient({ userId }: Props) {
                             {socialEntries.map(([key, value]) => {
                                 const href = formatSocialHref(key, value);
                                 const Icon = key === "instagram" ? Instagram : key === "youtube" ? Youtube : ExternalLink;
-                                const label = key === "twitter" ? "X" : key.charAt(0).toUpperCase() + key.slice(1);
+                                const label = key === "tiktok" ? "TikTok" : key.charAt(0).toUpperCase() + key.slice(1);
                                 return (
                                     <a
                                         key={key}
@@ -512,7 +512,7 @@ export function PublicProfileClient({ userId }: Props) {
                     {profile.streak != null && profile.streak > 0 && (
                         <div className="card p-4 flex items-center gap-3 flex-1 min-w-[140px]">
                             <StreakBadge streak={profile.streak} size="md" />
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-fg-subtle">Adherence streak</p>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-fg-subtle">Workout streak</p>
                         </div>
                     )}
                     {profile.totalWorkouts != null && profile.totalWorkouts > 0 && (

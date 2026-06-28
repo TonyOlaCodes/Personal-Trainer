@@ -6,10 +6,12 @@ import { parseLogDate, toDateKey } from "@/lib/utils";
 export interface CalendarComplianceInput {
     activePlan: { weeks: ActiveUserPlanLike["plan"]["weeks"] } | null;
     planStartedAt: string | null;
-    loggedDates: Array<{ date: string }>;
+    loggedDates: Array<{ date: string; workoutId?: string }>;
     scheduleRevisions?: ActiveUserPlanLike["scheduleRevisions"];
     /** `${dateKey}:${workoutId}` keys for coach-excused missed workouts */
     excusedMissedWorkoutKeys?: string[];
+    /** Frozen missed sessions from before plan edits */
+    historicalMissedSessions?: Array<{ dateKey: string; workoutId: string; workoutName: string }>;
 }
 
 export interface CalendarComplianceResult {
@@ -21,6 +23,8 @@ export interface CalendarComplianceResult {
 export interface CalendarComplianceOptions {
     /** Coach view: exclude today from % until the client logs today's planned session. */
     excludeTodayUntilLogged?: boolean;
+    /** When range extends past today, pass the real "today" for schedule + today rules. Defaults to range end. */
+    referenceToday?: Date;
 }
 
 function toActiveUserPlan(input: CalendarComplianceInput): ActiveUserPlanLike | null {
@@ -49,6 +53,13 @@ function eachDateKeyInclusive(fromKey: string, toKey: string): string[] {
     return keys;
 }
 
+function hasDueSlotOnDate(countedSlots: Set<string>, dateKey: string): boolean {
+    for (const slotKey of countedSlots) {
+        if (slotKey.startsWith(`${dateKey}:`)) return true;
+    }
+    return false;
+}
+
 export function getMondayStart(date: Date): Date {
     const { dateKey } = getLocalTimeParts(date, APP_TIMEZONE);
     const [y, m, d] = dateKey.split("-").map(Number);
@@ -58,6 +69,11 @@ export function getMondayStart(date: Date): Date {
     dt.setUTCDate(dt.getUTCDate() + diff);
     const mondayKey = `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
     return parseLogDate(mondayKey);
+}
+
+export function getWeekEnd(date: Date): Date {
+    const mondayKey = toDateKey(getMondayStart(date));
+    return parseLogDate(addDaysToDateKey(mondayKey, 6));
 }
 
 export function getMonthStart(date: Date): Date {
@@ -88,7 +104,7 @@ export function isFutureCalendarMonth(reference: Date, year: number, monthIndex:
     return monthIndex + 1 > m;
 }
 
-/** Full-month compliance for a visible calendar month (current = month-to-date). */
+/** Full-month compliance for a visible calendar month (includes all scheduled days in the month). */
 export function computeComplianceForMonth(
     input: CalendarComplianceInput,
     year: number,
@@ -97,11 +113,13 @@ export function computeComplianceForMonth(
     options?: CalendarComplianceOptions
 ): CalendarComplianceResult {
     const monthStart = parseLogDate(`${year}-${String(monthIndex + 1).padStart(2, "0")}-01`);
+    const rangeEnd = getMonthEnd(monthStart);
     const isCurrentMonth = isSameCalendarMonth(reference, year, monthIndex);
-    const rangeEnd = isCurrentMonth ? reference : getMonthEnd(monthStart);
-    const rangeOptions = isCurrentMonth
-        ? options
-        : { ...options, excludeTodayUntilLogged: false };
+    const rangeOptions: CalendarComplianceOptions = {
+        ...options,
+        referenceToday: reference,
+        excludeTodayUntilLogged: isCurrentMonth ? options?.excludeTodayUntilLogged : false,
+    };
 
     return computeWorkoutCompliance(input, monthStart, rangeEnd, rangeOptions);
 }
@@ -110,7 +128,7 @@ export function computeComplianceForMonth(
 export function computeWorkoutCompliance(
     input: CalendarComplianceInput,
     rangeStart: Date,
-    today: Date,
+    rangeEnd: Date,
     options?: CalendarComplianceOptions
 ): CalendarComplianceResult {
     const activeUserPlan = toActiveUserPlan(input);
@@ -118,11 +136,16 @@ export function computeWorkoutCompliance(
         return { completed: 0, due: 0, percent: null };
     }
 
+    const referenceToday = options?.referenceToday ?? rangeEnd;
     const loggedSet = new Set(input.loggedDates.map((l) => l.date));
+    const loggedWorkoutSet = new Set(
+        input.loggedDates.map((l) => `${l.date}:${l.workoutId ?? ""}`)
+    );
     const excusedSet = new Set(input.excusedMissedWorkoutKeys ?? []);
+    const countedSlots = new Set<string>();
     const startKey = toDateKey(rangeStart);
-    const endKey = toDateKey(today);
-    const todayKey = endKey;
+    const endKey = toDateKey(rangeEnd);
+    const todayKey = toDateKey(referenceToday);
     const excludeTodayUntilLogged = options?.excludeTodayUntilLogged ?? false;
 
     let completed = 0;
@@ -130,11 +153,12 @@ export function computeWorkoutCompliance(
 
     for (const dateKey of eachDateKeyInclusive(startKey, endKey)) {
         const day = parseLogDate(dateKey);
-        const planned = getPlannedWorkoutForDate(activeUserPlan, day, { today });
+        const planned = getPlannedWorkoutForDate(activeUserPlan, day, { today: referenceToday });
         if (!planned) continue;
 
-        const isLogged = loggedSet.has(dateKey);
-        const isExcused = !isLogged && excusedSet.has(`${dateKey}:${planned.id}`);
+        const slotKey = `${dateKey}:${planned.id}`;
+        const isLogged = loggedWorkoutSet.has(slotKey) || loggedSet.has(dateKey);
+        const isExcused = !isLogged && excusedSet.has(slotKey);
         if (excludeTodayUntilLogged && dateKey === todayKey && !isLogged && !isExcused) {
             continue;
         }
@@ -143,6 +167,40 @@ export function computeWorkoutCompliance(
         if (isLogged || isExcused) {
             completed++;
         }
+        countedSlots.add(slotKey);
+    }
+
+    for (const session of input.historicalMissedSessions ?? []) {
+        if (session.dateKey < startKey || session.dateKey > endKey) continue;
+        const slotKey = `${session.dateKey}:${session.workoutId}`;
+        if (countedSlots.has(slotKey)) continue;
+
+        const isLogged = loggedWorkoutSet.has(slotKey);
+        const isExcused = excusedSet.has(slotKey);
+        if (excludeTodayUntilLogged && session.dateKey === todayKey && !isLogged && !isExcused) {
+            continue;
+        }
+
+        due++;
+        countedSlots.add(slotKey);
+        if (isLogged || isExcused) {
+            completed++;
+        }
+    }
+
+    // Completed logs from prior schedules / plan switches when live schedule no longer lists that day.
+    for (const log of input.loggedDates) {
+        if (!log.workoutId) continue;
+        if (log.date < startKey || log.date > endKey) continue;
+        if (log.date > todayKey) continue;
+
+        const slotKey = `${log.date}:${log.workoutId}`;
+        if (countedSlots.has(slotKey)) continue;
+        if (hasDueSlotOnDate(countedSlots, log.date)) continue;
+
+        due++;
+        completed++;
+        countedSlots.add(slotKey);
     }
 
     const percent = due > 0 ? Math.round((completed / due) * 100) : null;
@@ -165,7 +223,10 @@ export function computeWeeklyCompliance(
     today: Date,
     options?: CalendarComplianceOptions
 ): CalendarComplianceResult {
-    return computeWorkoutCompliance(input, getMondayStart(today), today, options);
+    return computeWorkoutCompliance(input, getMondayStart(today), getWeekEnd(today), {
+        ...options,
+        referenceToday: today,
+    });
 }
 
 export function computeMonthlyCompliance(
@@ -173,7 +234,10 @@ export function computeMonthlyCompliance(
     today: Date,
     options?: CalendarComplianceOptions
 ): CalendarComplianceResult {
-    return computeWorkoutCompliance(input, getMonthStart(today), today, options);
+    return computeWorkoutCompliance(input, getMonthStart(today), getMonthEnd(today), {
+        ...options,
+        referenceToday: today,
+    });
 }
 
 export function complianceTone(percent: number | null): "success" | "warning" | "danger" | "muted" {

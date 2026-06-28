@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Settings } from "lucide-react";
 import { cn, getInitials } from "@/lib/utils";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { useAppUser } from "@/lib/AppUserContext";
@@ -60,31 +59,20 @@ export function AccountNav({ variant = "sidebar", collapsed = false }: Props) {
     }
 
     return (
-        <div className={cn("space-y-1", collapsed && "flex flex-col items-center")}>
-            <Link
-                href={accountHref}
-                className={cn(
-                    onSettings ? "sidebar-link-active" : "sidebar-link",
-                    collapsed ? "w-10 h-10 p-0 mx-auto justify-center gap-0" : "gap-3"
-                )}
-                title={collapsed ? accountLabel : undefined}
-            >
-                {avatar}
-                {!collapsed && (
-                    <span className="text-xs font-semibold animate-fade-in truncate">{accountLabel}</span>
-                )}
-            </Link>
-            <Link
-                href={accountHref}
-                className={cn(
-                    onSettings ? "sidebar-link-active" : "sidebar-link",
-                    collapsed ? "w-10 h-10 p-0 mx-auto justify-center gap-0" : "gap-3"
-                )}
-                title={collapsed ? "Settings" : undefined}
-            >
-                <Settings className="w-4.5 h-4.5 flex-shrink-0" style={{ width: "1.125rem", height: "1.125rem" }} />
-                {!collapsed && <span className="text-xs font-semibold animate-fade-in">Settings</span>}
-            </Link>
-        </div>
+        <Link
+            href={accountHref}
+            className={cn(
+                onSettings ? "sidebar-link-active" : "sidebar-link",
+                collapsed ? "w-10 h-10 p-0 mx-auto justify-center gap-0" : "gap-3",
+                collapsed && "flex"
+            )}
+            title={collapsed ? accountLabel : undefined}
+            aria-label="Open settings"
+        >
+            {avatar}
+            {!collapsed && (
+                <span className="text-xs font-semibold animate-fade-in truncate">{accountLabel}</span>
+            )}
+        </Link>
     );
 }

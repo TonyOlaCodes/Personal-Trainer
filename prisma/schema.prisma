@@ -309,6 +309,7 @@ model LogSet {
   workoutLogId String
   exerciseId   String
   exerciseName String? // Snapshotted at log time — never rely on Exercise.name alone for history
+  exerciseOrder Int? // Snapshotted session order at log time — matches plan unless client/coach reordered
   setNumber    Int
   reps         Int?
   weightKg     Float?

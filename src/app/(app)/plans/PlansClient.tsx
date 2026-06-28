@@ -5,12 +5,13 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
     Plus, Dumbbell, Calendar, ChevronRight, Star,
-    Trash2, Play, Ticket, Share2, Check, PauseCircle,
+    Trash2, Play, Ticket, Share2, Check, PauseCircle, User,
 } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import { PLAN_TEMPLATES } from "@/lib/templates";
 import { isCoachRole } from "@/lib/roles";
 import { ActiveSessionBanner, type ActiveSessionInfo } from "@/components/shared/ActiveSessionBanner";
+import { DeletePlanConfirmModal } from "@/components/shared/DeletePlanConfirmModal";
 
 interface Plan {
     id: string;
@@ -25,6 +26,7 @@ interface Plan {
     weekCount: number;
     startedAt: string;
     tags: string[];
+    assignedClient?: { id: string; name: string } | null;
 }
 
 interface Props {
@@ -57,7 +59,12 @@ export function PlansClient({ plans, userRole, activeSession = null }: Props) {
     const [code, setCode] = useState("");
     const [codeStatus, setCodeStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
     const [codeMsg, setCodeMsg] = useState("");
-    const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [planPendingDelete, setPlanPendingDelete] = useState<{
+        id: string;
+        name: string;
+        isOwned: boolean;
+    } | null>(null);
+    const [deleteBusy, setDeleteBusy] = useState(false);
     const [copiedId, setCopiedId] = useState<string | null>(null);
     const [localPlans, setLocalPlans] = useState(plans);
     const [visibilitySavingId, setVisibilitySavingId] = useState<string | null>(null);
@@ -98,25 +105,28 @@ export function PlansClient({ plans, userRole, activeSession = null }: Props) {
         }
     };
 
-    const deletePlan = async (planId: string, isOwned: boolean) => {
-        if (deletingId !== planId) {
-            setDeletingId(planId);
-            return;
-        }
+    const confirmDeletePlan = async () => {
+        if (!planPendingDelete) return;
 
-        const res = await fetch(`/api/plans/${planId}`, { method: "DELETE" });
-        if (res.ok) {
-            window.location.reload();
-            return;
-        }
+        const { id: planId, isOwned } = planPendingDelete;
+        setDeleteBusy(true);
+        try {
+            const res = await fetch(`/api/plans/${planId}`, { method: "DELETE" });
+            if (res.ok) {
+                window.location.reload();
+                return;
+            }
 
-        const data = await res.json().catch(() => ({}));
-        const message =
-            res.status === 409 && isOwned
-                ? `${data.error ?? "This plan has training history and cannot be deleted."}\n\nTip: Deactivate the plan or use "Remove from my plans" if you imported it — your logged sessions stay safe.`
-                : (data.error ?? "Failed to remove plan");
-        alert(message);
-        setDeletingId(null);
+            const data = await res.json().catch(() => ({}));
+            const message =
+                res.status === 409 && isOwned
+                    ? `${data.error ?? "This plan has training history and cannot be deleted."}\n\nTip: Deactivate the plan or use "Remove from my plans" if you imported it — your logged sessions stay safe.`
+                    : (data.error ?? "Failed to remove plan");
+            alert(message);
+        } finally {
+            setDeleteBusy(false);
+            setPlanPendingDelete(null);
+        }
     };
 
     const importPlan = async () => {
@@ -139,11 +149,26 @@ export function PlansClient({ plans, userRole, activeSession = null }: Props) {
 
     return (
         <div className="space-y-6 animate-fade-in">
+            <DeletePlanConfirmModal
+                open={planPendingDelete !== null}
+                planName={planPendingDelete?.name ?? ""}
+                mode={planPendingDelete?.isOwned ? "delete" : "remove"}
+                busy={deleteBusy}
+                onClose={() => {
+                    if (!deleteBusy) setPlanPendingDelete(null);
+                }}
+                onConfirm={confirmDeletePlan}
+            />
+
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
                     <h2 className="heading-2">Your Plans</h2>
-                    <p className="subheading mt-1">{localPlans.length} programme{localPlans.length !== 1 ? "s" : ""} saved</p>
+                    <p className="subheading mt-1">
+                        {isCoach
+                            ? `${localPlans.length} programme${localPlans.length !== 1 ? "s" : ""} · one client per plan (copies created automatically when needed)`
+                            : `${localPlans.length} programme${localPlans.length !== 1 ? "s" : ""} saved`}
+                    </p>
                 </div>
                 <Link href="/plans/create" className="btn-primary btn-sm">
                     <Plus className="w-4 h-4" />
@@ -253,10 +278,27 @@ export function PlansClient({ plans, userRole, activeSession = null }: Props) {
                                                     <Calendar className="w-3 h-3" />
                                                     {plan.weekCount} weeks
                                                 </span>
-                                                <span>Started {formatDate(plan.startedAt)}</span>
-                                                <span className="text-xs font-semibold text-brand-400">
-                                                    Created by {plan.creatorName}
-                                                </span>
+                                                {isCoach ? (
+                                                    plan.assignedClient ? (
+                                                        <Link
+                                                            href={`/coach/client/${plan.assignedClient.id}`}
+                                                            onClick={(e) => e.stopPropagation()}
+                                                            className="flex items-center gap-1 text-brand-400 font-semibold hover:text-brand-300"
+                                                        >
+                                                            <User className="w-3 h-3" />
+                                                            Assigned to {plan.assignedClient.name}
+                                                        </Link>
+                                                    ) : (
+                                                        <span className="text-fg-muted">Not assigned</span>
+                                                    )
+                                                ) : (
+                                                    <>
+                                                        <span>Started {formatDate(plan.startedAt)}</span>
+                                                        <span className="text-xs font-semibold text-brand-400">
+                                                            Created by {plan.creatorName}
+                                                        </span>
+                                                    </>
+                                                )}
                                             </div>
                                         </div>
                                     </Link>
@@ -282,16 +324,13 @@ export function PlansClient({ plans, userRole, activeSession = null }: Props) {
                                             )
                                         )}
                                         <button
-                                            onClick={() => deletePlan(plan.id, plan.isOwned)}
-                                            className={cn(
-                                                "btn-icon w-8 h-8 rounded-lg transition-all",
-                                                deletingId === plan.id ? "bg-danger text-white scale-110 shadow-glow-sm" : "hover:bg-danger/10 hover:text-danger text-fg-subtle"
-                                            )}
-                                            title={
-                                                deletingId === plan.id
-                                                    ? plan.isOwned ? "Confirm delete?" : "Confirm remove?"
-                                                    : plan.isOwned ? "Delete plan" : "Remove from my plans"
-                                            }
+                                            onClick={() => setPlanPendingDelete({
+                                                id: plan.id,
+                                                name: plan.name,
+                                                isOwned: plan.isOwned,
+                                            })}
+                                            className="btn-icon w-8 h-8 rounded-lg transition-all hover:bg-danger/10 hover:text-danger text-fg-subtle"
+                                            title={plan.isOwned ? "Delete plan" : "Remove from my plans"}
                                         >
                                             <Trash2 className="w-4 h-4" />
                                         </button>

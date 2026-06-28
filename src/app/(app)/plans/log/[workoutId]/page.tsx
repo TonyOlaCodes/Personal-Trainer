@@ -7,6 +7,7 @@ import { getExerciseMediaByNames } from "@/lib/exerciseMedia";
 import { getLocalDayBounds, parseLogDate, toDateKey } from "@/lib/utils";
 import { withResolvedLogSetMedia } from "@/lib/uploadUrls";
 import { resolveLogSetExerciseName } from "@/lib/logSetExerciseName";
+import { logSetDisplayOrderBy } from "@/lib/logSetGrouping";
 import { canAccessClient } from "@/lib/apiAuth";
 import { isInactiveAccount } from "@/lib/userDeactivation";
 import { defaultHomeForRole, isCoachRole } from "@/lib/roles";
@@ -15,7 +16,7 @@ export const metadata = { title: "Logging session" };
 
 const activeLogInclude = {
     sets: {
-        orderBy: { setNumber: "asc" as const },
+        orderBy: logSetDisplayOrderBy,
         include: {
             exercise: {
                 select: {

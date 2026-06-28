@@ -4,15 +4,15 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import {
     User, Bell, Palette,
     HelpCircle, LogOut, ChevronRight, Check,
-    Camera, Loader2, Target, RotateCcw, ImageIcon, Link2, ArrowLeft,
+    Camera, Loader2, Target, ImageIcon, Link2, ArrowLeft,
 } from "lucide-react";
 import { useClerk } from "@clerk/nextjs";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { cn, getInitials } from "@/lib/utils";
 import { resolveUploadUrl, uploadMediaFile } from "@/lib/compressImage";
+import { ImageCropModal } from "@/components/shared/ImageCropModal";
 import { isCoachRole, isClientRole, isCoachedPremium } from "@/lib/roles";
-import { DEFAULT_MISSED_NOTIFY_TIME } from "@/lib/coachNotificationSchedule";
 import {
     type SocialLinks,
 } from "@/lib/profilePrivacy";
@@ -45,13 +45,7 @@ interface Props {
         notifyOnCheckInReview?: boolean;
         notifyOnWorkoutFeedback?: boolean;
         notifyOnMissedCheckIn?: boolean;
-        notifyOnMissedWorkout?: boolean;
         notifyOnClientMessage?: boolean;
-        notifyOnWorkoutTime?: string | null;
-        notifyOnCheckInTime?: string | null;
-        notifyOnMetricUpdateTime?: string | null;
-        notifyOnMissedCheckInTime?: string | null;
-        notifyOnMissedWorkoutTime?: string | null;
         bio?: string | null;
         isPrivateProfile?: boolean;
         bannerUrl?: string | null;
@@ -94,6 +88,11 @@ export function SettingsClient({ user }: Props) {
     const fileRef = useRef<HTMLInputElement>(null);
     const bannerRef = useRef<HTMLInputElement>(null);
     const profileReadyRef = useRef(false);
+    const [cropState, setCropState] = useState<{
+        imageSrc: string;
+        target: "avatar" | "banner";
+        fileName: string;
+    } | null>(null);
 
     // Goals form states
     const [goal, setGoal] = useState(user.goal || "");
@@ -134,17 +133,7 @@ export function SettingsClient({ user }: Props) {
     const [notifyOnCheckInReview, setNotifyOnCheckInReview] = useState(user.notifyOnCheckInReview ?? true);
     const [notifyOnWorkoutFeedback, setNotifyOnWorkoutFeedback] = useState(user.notifyOnWorkoutFeedback ?? true);
     const [notifyOnMissedCheckIn, setNotifyOnMissedCheckIn] = useState(user.notifyOnMissedCheckIn ?? true);
-    const [notifyOnMissedWorkout, setNotifyOnMissedWorkout] = useState(user.notifyOnMissedWorkout ?? true);
     const [notifyOnClientMessage, setNotifyOnClientMessage] = useState(user.notifyOnClientMessage ?? true);
-    const [notifyOnWorkoutTime, setNotifyOnWorkoutTime] = useState(user.notifyOnWorkoutTime ?? "");
-    const [notifyOnCheckInTime, setNotifyOnCheckInTime] = useState(user.notifyOnCheckInTime ?? "");
-    const [notifyOnMetricUpdateTime, setNotifyOnMetricUpdateTime] = useState(user.notifyOnMetricUpdateTime ?? "");
-    const [notifyOnMissedCheckInTime, setNotifyOnMissedCheckInTime] = useState(
-        user.notifyOnMissedCheckInTime ?? DEFAULT_MISSED_NOTIFY_TIME
-    );
-    const [notifyOnMissedWorkoutTime, setNotifyOnMissedWorkoutTime] = useState(
-        user.notifyOnMissedWorkoutTime ?? DEFAULT_MISSED_NOTIFY_TIME
-    );
     const [notifSaving, setNotifSaving] = useState(false);
     const [notifSaved, setNotifSaved] = useState(false);
     const notifReadyRef = useRef(false);
@@ -155,14 +144,7 @@ export function SettingsClient({ user }: Props) {
             payload.notifyOnWorkout = notifyOnWorkout;
             payload.notifyOnCheckIn = notifyOnCheckIn;
             payload.notifyOnMetricUpdate = notifyOnMetricUpdate;
-            payload.notifyOnMissedCheckIn = notifyOnMissedCheckIn;
-            payload.notifyOnMissedWorkout = notifyOnMissedWorkout;
             payload.notifyOnClientMessage = notifyOnClientMessage;
-            payload.notifyOnWorkoutTime = notifyOnWorkout && notifyOnWorkoutTime ? notifyOnWorkoutTime : null;
-            payload.notifyOnCheckInTime = notifyOnCheckIn && notifyOnCheckInTime ? notifyOnCheckInTime : null;
-            payload.notifyOnMetricUpdateTime = notifyOnMetricUpdate && notifyOnMetricUpdateTime ? notifyOnMetricUpdateTime : null;
-            payload.notifyOnMissedCheckInTime = notifyOnMissedCheckIn ? notifyOnMissedCheckInTime : null;
-            payload.notifyOnMissedWorkoutTime = notifyOnMissedWorkout ? notifyOnMissedWorkoutTime : null;
         }
         if (showClientNotifications) {
             payload.notifyOnCoachMessage = notifyOnCoachMessage;
@@ -179,13 +161,7 @@ export function SettingsClient({ user }: Props) {
         notifyOnCheckIn,
         notifyOnMetricUpdate,
         notifyOnMissedCheckIn,
-        notifyOnMissedWorkout,
         notifyOnClientMessage,
-        notifyOnWorkoutTime,
-        notifyOnCheckInTime,
-        notifyOnMetricUpdateTime,
-        notifyOnMissedCheckInTime,
-        notifyOnMissedWorkoutTime,
         notifyOnCoachMessage,
         notifyOnPlanUpdate,
         notifyOnCheckInReview,
@@ -289,39 +265,72 @@ export function SettingsClient({ user }: Props) {
         localStorage.setItem("pt-theme", theme);
     }, [theme]);
 
-    const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const closeCropModal = useCallback(() => {
+        setCropState((current) => {
+            if (current?.imageSrc) URL.revokeObjectURL(current.imageSrc);
+            return null;
+        });
+    }, []);
+
+    const openCropModal = (file: File, target: "avatar" | "banner") => {
+        if (!file.type.startsWith("image/")) {
+            alert("Please choose an image file.");
+            return;
+        }
+        setCropState({
+            imageSrc: URL.createObjectURL(file),
+            target,
+            fileName: file.name,
+        });
+    };
+
+    const handleAvatarFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
+        if (fileRef.current) fileRef.current.value = "";
         if (!file || uploading) return;
-        setUploading(true);
+        openCropModal(file, "avatar");
+    };
+
+    const handleBannerFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (bannerRef.current) bannerRef.current.value = "";
+        if (!file || bannerUploading) return;
+        openCropModal(file, "banner");
+    };
+
+    const handleCropConfirm = async (file: File) => {
+        const target = cropState?.target;
+        if (!target) return;
+
+        if (target === "avatar") {
+            setUploading(true);
+            try {
+                const url = await uploadMediaFile(file);
+                setAvatarUrl(url);
+                closeCropModal();
+            } catch (error) {
+                alert(error instanceof Error ? error.message : "Upload failed");
+            } finally {
+                setUploading(false);
+            }
+            return;
+        }
+
+        setBannerUploading(true);
         try {
             const url = await uploadMediaFile(file);
-            setAvatarUrl(url);
+            setBannerUrl(url);
+            closeCropModal();
         } catch (error) {
             alert(error instanceof Error ? error.message : "Upload failed");
         } finally {
-            setUploading(false);
-            if (fileRef.current) fileRef.current.value = "";
+            setBannerUploading(false);
         }
     };
 
     const handleRemoveAvatar = () => {
         setAvatarUrl("");
         if (fileRef.current) fileRef.current.value = "";
-    };
-
-    const handleBannerUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file || bannerUploading) return;
-        setBannerUploading(true);
-        try {
-            const url = await uploadMediaFile(file);
-            setBannerUrl(url);
-        } catch (error) {
-            alert(error instanceof Error ? error.message : "Upload failed");
-        } finally {
-            setBannerUploading(false);
-            if (bannerRef.current) bannerRef.current.value = "";
-        }
     };
 
     const handleRemoveBanner = () => {
@@ -391,6 +400,12 @@ export function SettingsClient({ user }: Props) {
         return () => window.clearTimeout(timer);
     }, [activeSection, buildGoalPayload, router]);
 
+    useEffect(() => {
+        return () => {
+            if (cropState?.imageSrc) URL.revokeObjectURL(cropState.imageSrc);
+        };
+    }, [cropState?.imageSrc]);
+
     const handleRedeemCode = async () => {
         if (!secretCode.trim()) return;
         setRedeeming(true);
@@ -417,6 +432,7 @@ export function SettingsClient({ user }: Props) {
     const supportEmail = process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? "tonyolajide@gmail.com";
 
     return (
+        <>
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 animate-fade-in pb-20">
             {!activeSection ? (
                 <div className="space-y-6">
@@ -447,36 +463,38 @@ export function SettingsClient({ user }: Props) {
                         Sign Out
                     </button>
 
-                    <div className="card p-6 border-brand-800/20 bg-brand-950/20 flex flex-col sm:flex-row items-center justify-between gap-4">
-                        <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-2xl bg-brand-900/40 flex items-center justify-center">
-                                <HelpCircle className="w-6 h-6 text-brand-400" />
-                            </div>
-                            <div>
-                                <h4 className="font-bold text-fg">Need help?</h4>
-                                <p className="text-[15px] text-fg-muted leading-snug">Email {supportEmail} or support the app.</p>
-                                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs text-fg-subtle">
-                                    <Link href="/privacy" className="hover:text-brand-400 transition-colors">
-                                        Privacy Policy
-                                    </Link>
-                                    <span aria-hidden="true">·</span>
-                                    <Link href="/terms" className="hover:text-brand-400 transition-colors">
-                                        Terms of Service
-                                    </Link>
+                    <div className="space-y-2">
+                        <div className="card p-6 border-brand-800/20 bg-brand-950/20 flex flex-col sm:flex-row items-center justify-between gap-4">
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 rounded-2xl bg-brand-900/40 flex items-center justify-center">
+                                    <HelpCircle className="w-6 h-6 text-brand-400" />
+                                </div>
+                                <div>
+                                    <h4 className="font-bold text-fg">Need help?</h4>
+                                    <p className="text-[15px] text-fg-muted leading-snug">Email {supportEmail} or support the app.</p>
                                 </div>
                             </div>
+                            <div className="flex flex-wrap gap-2 justify-end">
+                                <Link href="/donate" className="btn-ghost whitespace-nowrap font-bold uppercase tracking-wide">
+                                    Support the app
+                                </Link>
+                                <button
+                                    type="button"
+                                    onClick={() => { window.location.href = `mailto:${supportEmail}`; }}
+                                    className="btn-secondary whitespace-nowrap"
+                                >
+                                    Contact Support
+                                </button>
+                            </div>
                         </div>
-                        <div className="flex flex-wrap gap-2 justify-end">
-                            <Link href="/donate" className="btn-ghost whitespace-nowrap font-bold uppercase tracking-wide">
-                                Support the app
+                        <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 px-1 text-xs text-fg-subtle">
+                            <Link href="/privacy" className="hover:text-brand-400 transition-colors">
+                                Privacy Policy
                             </Link>
-                            <button
-                                type="button"
-                                onClick={() => { window.location.href = `mailto:${supportEmail}`; }}
-                                className="btn-secondary whitespace-nowrap"
-                            >
-                                Contact Support
-                            </button>
+                            <span aria-hidden="true">·</span>
+                            <Link href="/terms" className="hover:text-brand-400 transition-colors">
+                                Terms of Service
+                            </Link>
                         </div>
                     </div>
                 </div>
@@ -525,7 +543,7 @@ export function SettingsClient({ user }: Props) {
                                 >
                                     {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
                                 </button>
-                                <input type="file" ref={fileRef} onChange={handleUpload} className="hidden" accept="image/*" />
+                                <input type="file" ref={fileRef} onChange={handleAvatarFileSelect} className="hidden" accept="image/*" />
                             </div>
                             {avatarUrl && (
                                 <button
@@ -623,7 +641,7 @@ export function SettingsClient({ user }: Props) {
                                         </button>
                                     )}
                                 </div>
-                                <input type="file" ref={bannerRef} onChange={handleBannerUpload} className="hidden" accept="image/*" />
+                                <input type="file" ref={bannerRef} onChange={handleBannerFileSelect} className="hidden" accept="image/*" />
                             </div>
                         </div>
 
@@ -635,7 +653,7 @@ export function SettingsClient({ user }: Props) {
                             <div className="grid sm:grid-cols-2 gap-4">
                                 {([
                                     ["instagram", "Instagram"],
-                                    ["twitter", "X / Twitter"],
+                                    ["tiktok", "TikTok"],
                                     ["youtube", "YouTube"],
                                     ["website", "Website"],
                                 ] as const).map(([key, label]) => (
@@ -946,52 +964,23 @@ export function SettingsClient({ user }: Props) {
                                     checked={notifyOnClientMessage}
                                     onChange={setNotifyOnClientMessage}
                                 />
-                                <CoachNotificationToggle
+                                <NotificationToggle
                                     label="Client completes a workout"
                                     description="When a client finishes a logged session."
                                     checked={notifyOnWorkout}
                                     onChange={setNotifyOnWorkout}
-                                    time={notifyOnWorkoutTime}
-                                    onTimeChange={setNotifyOnWorkoutTime}
-                                    timeHint="Leave blank for instant alerts. Set a time to batch until then each day."
                                 />
-                                <CoachNotificationToggle
+                                <NotificationToggle
                                     label="Client submits a check-in"
                                     description="When a client sends a weekly check-in."
                                     checked={notifyOnCheckIn}
                                     onChange={setNotifyOnCheckIn}
-                                    time={notifyOnCheckInTime}
-                                    onTimeChange={setNotifyOnCheckInTime}
-                                    timeHint="Leave blank for instant alerts."
                                 />
-                                <CoachNotificationToggle
+                                <NotificationToggle
                                     label="Client logs bodyweight"
                                     description="When a client records their weight on the dashboard."
                                     checked={notifyOnMetricUpdate}
                                     onChange={setNotifyOnMetricUpdate}
-                                    time={notifyOnMetricUpdateTime}
-                                    onTimeChange={setNotifyOnMetricUpdateTime}
-                                    timeHint="Leave blank for instant alerts."
-                                />
-                                <CoachNotificationToggle
-                                    label="Client misses a scheduled check-in"
-                                    description="Alert the morning after a due check-in was not submitted."
-                                    checked={notifyOnMissedCheckIn}
-                                    onChange={setNotifyOnMissedCheckIn}
-                                    time={notifyOnMissedCheckInTime}
-                                    onTimeChange={setNotifyOnMissedCheckInTime}
-                                    requireTime
-                                    timeHint="Default 9:00 — the day after the check-in was due."
-                                />
-                                <CoachNotificationToggle
-                                    label="Client misses a scheduled workout"
-                                    description="Alert the morning after a planned session was not completed."
-                                    checked={notifyOnMissedWorkout}
-                                    onChange={setNotifyOnMissedWorkout}
-                                    time={notifyOnMissedWorkoutTime}
-                                    onTimeChange={setNotifyOnMissedWorkoutTime}
-                                    requireTime
-                                    timeHint="Default 9:00 — the day after the workout was due."
                                 />
                             </div>
                         )}
@@ -1073,67 +1062,21 @@ export function SettingsClient({ user }: Props) {
                 </div>
             )}
         </div>
-    );
-}
-
-function CoachNotificationToggle({
-    label,
-    description,
-    checked,
-    onChange,
-    time,
-    onTimeChange,
-    requireTime = false,
-    timeHint,
-}: {
-    label: string;
-    description: string;
-    checked: boolean;
-    onChange: (value: boolean) => void;
-    time: string;
-    onTimeChange: (value: string) => void;
-    requireTime?: boolean;
-    timeHint?: string;
-}) {
-    return (
-        <div className="p-4 rounded-2xl border border-surface-border bg-surface-muted/30 space-y-3">
-            <NotificationToggle
-                label={label}
-                description={description}
-                checked={checked}
-                onChange={onChange}
+        {cropState && (
+            <ImageCropModal
+                open
+                imageSrc={cropState.imageSrc}
+                aspect={cropState.target === "avatar" ? 1 : 3}
+                cropShape={cropState.target === "avatar" ? "round" : "rect"}
+                title={cropState.target === "avatar" ? "Profile photo" : "Profile banner"}
+                fileName={cropState.fileName}
+                maxOutputWidth={cropState.target === "avatar" ? 512 : 1600}
+                onClose={closeCropModal}
+                onConfirm={handleCropConfirm}
+                confirming={cropState.target === "avatar" ? uploading : bannerUploading}
             />
-            {checked && (
-                <div className="pl-1 space-y-1.5 border-t border-surface-border/60 pt-3">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">
-                        {requireTime ? "Daily alert time" : "Delivery time (optional)"}
-                    </label>
-                    <div className="flex items-center gap-2">
-                        <input
-                            type="time"
-                            className="input h-10 w-full max-w-[160px] text-sm font-bold"
-                            value={time}
-                            required={requireTime}
-                            onChange={(e) => onTimeChange(e.target.value)}
-                        />
-                        {time && (
-                            <button
-                                type="button"
-                                onClick={() => onTimeChange(requireTime ? DEFAULT_MISSED_NOTIFY_TIME : "")}
-                                className="btn-icon h-10 w-10 shrink-0 text-fg-subtle hover:text-fg"
-                                title={requireTime ? "Reset to default time" : "Clear time"}
-                                aria-label={requireTime ? "Reset to default time" : "Clear time"}
-                            >
-                                <RotateCcw className="w-4 h-4" />
-                            </button>
-                        )}
-                    </div>
-                    {timeHint && (
-                        <p className="text-[11px] text-fg-muted">{timeHint}</p>
-                    )}
-                </div>
-            )}
-        </div>
+        )}
+        </>
     );
 }
 

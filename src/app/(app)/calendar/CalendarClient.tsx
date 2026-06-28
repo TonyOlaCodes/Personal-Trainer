@@ -12,9 +12,18 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ReturnLink } from "@/components/shared/ReturnLink";
-import { cn, toDateKey, parseLogDate } from "@/lib/utils";
+import { cn, toDateKey, parseLogDate, formatDate } from "@/lib/utils";
 import { useCurrentDate } from "@/hooks/useCurrentDate";
-import { getPlannedWorkoutForDate, type PlanScheduleRevisionRecord } from "@/lib/planSchedule";
+import {
+    getPlannedWorkoutForDate,
+    getPlanDayOffset,
+    getPlanEndDateKey,
+    getPlanProgramWeekNumber,
+    getPlanScheduleMode,
+    isDateAfterPlanEnd,
+    type PlanScheduleRevisionRecord,
+} from "@/lib/planSchedule";
+import { groupLogSetsByExercise, formatLoggedWeight } from "@/lib/logSetGrouping";
 
 /* ─────────────────────────── Types ─────────────────────────── */
 interface PlanExercise { name: string; sets: number; reps: string; }
@@ -23,7 +32,9 @@ interface PlanWeek { weekNumber: number; workouts: PlanWorkout[]; }
 interface ActivePlan { id?: string; name: string; weeks: PlanWeek[]; }
 
 interface LogSet {
+    exerciseId: string;
     exerciseName: string;
+    exerciseOrder?: number | null;
     setNumber: number;
     reps?: number | null;
     weightKg?: number | null;
@@ -57,6 +68,7 @@ interface Props {
     inProgressSessions: InProgressSession[];
     scheduleRevisions?: PlanScheduleRevisionRecord[];
     excusedMissedWorkoutKeys?: string[];
+    historicalMissedSessions?: Array<{ dateKey: string; workoutId: string; workoutName: string }>;
     coachView?: {
         clientId: string;
         clientName: string;
@@ -81,6 +93,7 @@ export function CalendarClient({
     inProgressSessions,
     scheduleRevisions = [],
     excusedMissedWorkoutKeys = [],
+    historicalMissedSessions = [],
     coachView,
     view: controlledView,
     onViewChange,
@@ -158,6 +171,14 @@ export function CalendarClient({
         return map;
     }, [inProgressSessions]);
 
+    const historicalMissedByDate = useMemo(() => {
+        const map = new Map<string, { workoutId: string; workoutName: string }>();
+        for (const session of historicalMissedSessions) {
+            map.set(session.dateKey, session);
+        }
+        return map;
+    }, [historicalMissedSessions]);
+
     const [localExcusedKeys, setLocalExcusedKeys] = useState(excusedMissedWorkoutKeys);
     const [statusUpdating, setStatusUpdating] = useState(false);
 
@@ -185,26 +206,65 @@ export function CalendarClient({
         [activePlan, planStartedAt, scheduleRevisions]
     );
 
+    const planWeekCount = activePlan?.weeks.length ?? 0;
+    const planScheduleMode = getPlanScheduleMode(planWeekCount);
+
+    const planEndDateKey = useMemo(
+        () => (planStartedAt && planWeekCount > 1 ? getPlanEndDateKey(planStartedAt, planWeekCount) : null),
+        [planStartedAt, planWeekCount]
+    );
+
     const todayDate = useMemo(() => parseLogDate(todayKey), [todayKey]);
 
-    const resolvePlannedWorkoutForDate = useCallback((date: Date): PlanWorkout | null => {
-        const planned = getPlannedWorkoutForDate(activeUserPlan, date, { today: todayDate });
-        if (!planned) return null;
+    const currentProgramWeek = useMemo(() => {
+        if (!planStartedAt || planWeekCount <= 1) return null;
+        const diffDays = getPlanDayOffset(planStartedAt, todayDate);
+        return getPlanProgramWeekNumber(planWeekCount, diffDays);
+    }, [planStartedAt, planWeekCount, todayDate]);
 
-        for (const week of activePlan?.weeks ?? []) {
-            const match = week.workouts.find((workout) => workout.id === planned.id);
-            if (match) return match;
+    const isPlanComplete = planEndDateKey !== null && todayKey > planEndDateKey;
+
+    const getProgramWeekForDateKey = useCallback((dateKey: string) => {
+        if (!planStartedAt || planWeekCount <= 1) return null;
+        const diffDays = getPlanDayOffset(planStartedAt, parseLogDate(dateKey));
+        return getPlanProgramWeekNumber(planWeekCount, diffDays);
+    }, [planStartedAt, planWeekCount]);
+
+    const resolvePlannedWorkoutForDate = useCallback((date: Date, dateKey?: string): PlanWorkout | null => {
+        const planned = getPlannedWorkoutForDate(activeUserPlan, date, { today: todayDate });
+        if (planned) {
+            for (const week of activePlan?.weeks ?? []) {
+                const match = week.workouts.find((workout) => workout.id === planned.id);
+                if (match) return match;
+            }
+
+            const snapshotExercises = (planned as PlanWorkout & { exercises?: PlanExercise[] }).exercises;
+            return {
+                id: planned.id,
+                name: planned.name,
+                dayNumber: planned.dayNumber,
+                dayOfWeek: planned.dayOfWeek ?? null,
+                exercises: snapshotExercises ?? [],
+            };
         }
 
-        const snapshotExercises = (planned as PlanWorkout & { exercises?: PlanExercise[] }).exercises;
+        const key = dateKey ?? toDateKey(date);
+        if (planStartedAt && planWeekCount > 1 && isDateAfterPlanEnd(planStartedAt, planWeekCount, key)) {
+            return null;
+        }
+        if (logMap[key]?.length) return null;
+
+        const historical = historicalMissedByDate.get(key);
+        if (!historical) return null;
+
         return {
-            id: planned.id,
-            name: planned.name,
-            dayNumber: planned.dayNumber,
-            dayOfWeek: planned.dayOfWeek ?? null,
-            exercises: snapshotExercises ?? [],
+            id: historical.workoutId,
+            name: historical.workoutName,
+            dayNumber: 0,
+            dayOfWeek: null,
+            exercises: [],
         };
-    }, [activePlan?.weeks, activeUserPlan, todayDate]);
+    }, [activePlan?.weeks, activeUserPlan, todayDate, historicalMissedByDate, logMap, planStartedAt, planWeekCount]);
 
     /* ─── Calendar Generation ─── */
     const firstDay = new Date(view.year, view.month, 1);
@@ -224,7 +284,7 @@ export function CalendarClient({
         return new Date(y, m - 1, d);
     }, [selectedDateKey]);
     const selectedLogs = logMap[selectedDateKey] ?? [];
-    const selectedPlanned = resolvePlannedWorkoutForDate(selectedDate);
+    const selectedPlanned = resolvePlannedWorkoutForDate(selectedDate, selectedDateKey);
     const resumeSession = selectedPlanned
         ? inProgressByDate[selectedDateKey]?.find((s) => s.workoutId === selectedPlanned.id) ?? null
         : null;
@@ -236,6 +296,11 @@ export function CalendarClient({
         && selectedDateKey < todayKey
         && selectedLogs.length === 0
         && isWorkoutExcused(selectedDateKey, selectedPlanned.id)
+    );
+    const selectedIsAfterPlan = Boolean(
+        planStartedAt
+        && planWeekCount > 1
+        && isDateAfterPlanEnd(planStartedAt, planWeekCount, selectedDateKey)
     );
 
     const updateWorkoutStatus = useCallback(async (status: "excused" | "missed") => {
@@ -312,6 +377,28 @@ export function CalendarClient({
                             {MONTHS[view.month]}
                             <span className="text-brand-400/30 font-light">{view.year}</span>
                         </h2>
+                        {activePlan && planStartedAt && (
+                            <p className="text-[10px] font-bold text-fg-muted uppercase tracking-widest">
+                                {planScheduleMode === "repeat" ? (
+                                    <>Repeating weekly · same schedule every week</>
+                                ) : (
+                                    <>
+                                        {planWeekCount}-week program
+                                        {currentProgramWeek && !isPlanComplete && (
+                                            <> · Week {currentProgramWeek} of {planWeekCount}</>
+                                        )}
+                                        {planEndDateKey && (
+                                            <>
+                                                {" · "}
+                                                {isPlanComplete
+                                                    ? "Program complete"
+                                                    : `Ends ${formatDate(planEndDateKey)}`}
+                                            </>
+                                        )}
+                                    </>
+                                )}
+                            </p>
+                        )}
                     </div>
                     <div className="flex items-center gap-1.5 bg-surface-muted/50 p-1.5 rounded-2xl border border-surface-border">
                         <button 
@@ -355,10 +442,20 @@ export function CalendarClient({
                             const dayLogs = day ? logMap[dateKey] : null;
                             const log = dayLogs?.[0] ?? null;
                             const dayInProgress = !dayLogs?.length ? inProgressByDate[dateKey]?.[0] ?? null : null;
-                            const planned = dateObj ? resolvePlannedWorkoutForDate(dateObj) : null;
+                            const planned = dateObj ? resolvePlannedWorkoutForDate(dateObj, dateKey) : null;
                             const isPast = dateKey !== "" && dateKey < todayKey;
                             const isTodayDay = dateKey === todayKey;
                             const selected = dateKey === selectedDateKey;
+                            const isAfterPlan = Boolean(
+                                planStartedAt
+                                && planWeekCount > 1
+                                && isDateAfterPlanEnd(planStartedAt, planWeekCount, dateKey)
+                            );
+                            const isBeforePlan = Boolean(
+                                planStartedAt
+                                && dateKey < toDateKey(new Date(planStartedAt))
+                            );
+                            const programWeek = planned ? getProgramWeekForDateKey(dateKey) : null;
 
                             // Status logic
                             let status: 'completed' | 'in-progress' | 'missed' | 'excused' | 'scheduled' | 'rest' = 'rest';
@@ -379,7 +476,9 @@ export function CalendarClient({
                                         "min-h-[110px] sm:min-h-[130px] p-2 border-b border-r border-surface-border/50 last:border-r-0 transition-all group flex flex-col items-start gap-1 relative overflow-hidden",
                                         !day && "bg-surface-muted/5",
                                         day && "cursor-pointer hover:bg-surface-muted/20",
-                                        selected && "bg-brand-950/20"
+                                        selected && "bg-brand-950/20",
+                                        isAfterPlan && "bg-surface-muted/15 opacity-60",
+                                        isBeforePlan && "opacity-70"
                                     )}
                                 >
                                     {day && (
@@ -427,6 +526,11 @@ export function CalendarClient({
                                                     </div>
                                                 ) : planned ? (
                                                     <div className="space-y-1">
+                                                        {programWeek && (
+                                                            <span className="text-[8px] font-black uppercase tracking-widest text-fg-subtle/80">
+                                                                Week {programWeek}
+                                                            </span>
+                                                        )}
                                                         <div className={cn(
                                                             "h-1 rounded-full overflow-hidden",
                                                             status === 'excused' ? "bg-emerald-900/30" :
@@ -447,6 +551,10 @@ export function CalendarClient({
                                                             {planned.name.replace(/workout/gi, '').trim()}
                                                         </span>
                                                     </div>
+                                                ) : isAfterPlan ? (
+                                                    <span className="text-[8px] font-black uppercase tracking-widest text-fg-subtle/70 mt-auto">
+                                                        After program
+                                                    </span>
                                                 ) : (
                                                     <div className="h-0.5 rounded-full bg-surface-border opacity-30 mt-auto" />
                                                 )}
@@ -530,10 +638,11 @@ export function CalendarClient({
                                         <Zap className="w-3 h-3 text-brand-400" /> PERFORMANCE
                                     </p>
                                     <div className="space-y-0.5">
-                                        {Array.from(new Set(sessionLog.sets.map(s => s.exerciseName))).map((exName, idx) => {
-                                            const exSets = sessionLog.sets.filter(s => s.exerciseName === exName);
+                                        {groupLogSetsByExercise(sessionLog.sets).map((exerciseGroup) => {
+                                            const exSets = exerciseGroup.sets;
+                                            const exName = exerciseGroup.name;
                                             return (
-                                                <div key={idx} className="p-4 bg-surface-muted/20 border border-surface-border/50 rounded-2xl mb-2 group transition-all hover:border-brand-500/30">
+                                                <div key={exerciseGroup.exerciseId} className="p-4 bg-surface-muted/20 border border-surface-border/50 rounded-2xl mb-2 group transition-all hover:border-brand-500/30">
                                                     <div className="flex items-center justify-between mb-2">
                                                         <div>
                                                             <span className="text-xs font-black text-fg group-hover:text-brand-400 transition-colors uppercase italic tracking-tighter">{exName}</span>
@@ -550,9 +659,9 @@ export function CalendarClient({
                                                         <span className="text-[10px] font-black text-fg-subtle opacity-60">{exSets.length} sets</span>
                                                     </div>
                                                     <div className="flex flex-wrap gap-1.5">
-                                                        {exSets.map((s, si) => (
-                                                            <div key={si} className="text-[9px] font-black px-2 py-1 bg-surface-card border border-surface-border rounded-lg text-fg opacity-80">
-                                                                {s.reps} <span className="text-fg-subtle opacity-50">x</span> {s.weightKg}kg
+                                                        {exSets.map((s) => (
+                                                            <div key={`${exerciseGroup.exerciseId}-${s.setNumber}`} className="text-[9px] font-black px-2 py-1 bg-surface-card border border-surface-border rounded-lg text-fg opacity-80">
+                                                                {s.reps ?? "—"} <span className="text-fg-subtle opacity-50">x</span> {formatLoggedWeight(s.weightKg)}
                                                             </div>
                                                         ))}
                                                     </div>
@@ -750,6 +859,18 @@ export function CalendarClient({
                                         {resumeSession ? "Resume Session" : "View Workout"}
                                     </ReturnLink>
                                 )}
+                            </div>
+                        ) : selectedIsAfterPlan ? (
+                            <div className="flex flex-col items-center justify-center p-12 text-center space-y-4 bg-surface-muted/10 rounded-3xl border border-dashed border-surface-border/60">
+                                <div className="w-16 h-16 rounded-full bg-surface-muted/30 flex items-center justify-center border border-surface-border">
+                                    <Info className="w-8 h-8 text-fg-subtle opacity-30" />
+                                </div>
+                                <div className="max-w-[220px]">
+                                    <p className="text-xs font-black text-fg uppercase tracking-widest mb-1 opacity-80">Program Complete</p>
+                                    <p className="text-[10px] text-fg-subtle font-bold leading-relaxed">
+                                        This {planWeekCount}-week plan finished{planEndDateKey ? ` on ${formatDate(planEndDateKey)}` : ""}. No further sessions are scheduled.
+                                    </p>
+                                </div>
                             </div>
                         ) : (
                             <div className="flex flex-col items-center justify-center p-12 text-center space-y-4 bg-surface-muted/10 rounded-3xl border border-dashed border-surface-border/60">

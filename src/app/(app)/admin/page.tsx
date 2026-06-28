@@ -63,6 +63,7 @@ export default async function AdminPage() {
         prisma.accessCode.findMany({
             include: {
                 plan: { select: { name: true } },
+                generator: { select: { id: true, name: true, email: true } },
                 usedBy: { select: { id: true, name: true, email: true } },
             },
             orderBy: { createdAt: "desc" },
@@ -95,7 +96,10 @@ export default async function AdminPage() {
         ...coaches.map((coach) => coach.id),
         ...coaches.flatMap((coach) => coach.clients.map((client) => client.id)),
         ...plans.flatMap((plan) => plan.userPlans.map((assignment) => assignment.user.id)),
-        ...recentCodes.flatMap((code) => code.usedBy?.id ? [code.usedBy.id] : []),
+        ...recentCodes.flatMap((code) => [
+            ...(code.usedBy?.id ? [code.usedBy.id] : []),
+            ...(code.generator?.id ? [code.generator.id] : []),
+        ]),
     ]);
     const activeCoaches = coaches.filter((coach) => {
         const status = accountStatusMap.get(coach.id);
@@ -189,6 +193,12 @@ export default async function AdminPage() {
                         id: c.id,
                         code: c.code,
                         planName: c.plan?.name ?? null,
+                        createdBy: c.generator
+                            ? (accountStatusMap.get(c.generator.id)?.isDeleted
+                                ? accountStatusMap.get(c.generator.id)?.deletedName ?? c.generator.name ?? c.generator.email
+                                : c.generator.name ?? c.generator.email)
+                            : null,
+                        createdById: c.generator?.id ?? null,
                         usedBy: c.usedBy
                             ? (accountStatusMap.get(c.usedBy.id)?.isDeleted
                                 ? accountStatusMap.get(c.usedBy.id)?.deletedName ?? c.usedBy.name ?? c.usedBy.email

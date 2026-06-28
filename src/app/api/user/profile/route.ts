@@ -61,7 +61,7 @@ const profileSchema = z.object({
     socialLinks: z
         .object({
             instagram: z.string().max(120).optional(),
-            twitter: z.string().max(120).optional(),
+            tiktok: z.string().max(120).optional(),
             youtube: z.string().max(120).optional(),
             website: z.string().max(200).optional(),
         })

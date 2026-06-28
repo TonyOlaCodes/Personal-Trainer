@@ -38,7 +38,7 @@ export function AnnouncementModal({
                             </div>
                             <div className="min-w-0">
                                 <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">
-                                    Message from {announcement.adminName}
+                                    Message from Admin
                                 </p>
                                 <h3 className="text-lg font-black text-fg mt-0.5 break-words">{announcement.title}</h3>
                             </div>

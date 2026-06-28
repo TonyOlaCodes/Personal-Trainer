@@ -9,6 +9,7 @@ import { ReturnLink } from "@/components/shared/ReturnLink";
 import { ActiveSessionBanner } from "@/components/shared/ActiveSessionBanner";
 import { CheckInsClient } from "@/app/(app)/checkins/CheckInsClient";
 import { Dumbbell, ChevronRight, Clock, Flame, Activity, Calendar, Ticket, Check, Edit3, Trash2, Scale, Utensils, Footprints, Moon, AlertCircle, X } from "lucide-react";
+import { formatCheckInDueSubtitle, formatCheckInPeriodTitle } from "@/lib/checkInLabels";
 import { formatDate, formatRelative, cn, toDateKey, parseLogDate, toLoggedAtIso } from "@/lib/utils";
 import { appendReturnTo } from "@/lib/navigation";
 import { notifyWorkoutStatsChanged } from "@/lib/workoutStatsRefresh";
@@ -61,6 +62,7 @@ interface Props {
         id: string;
         weekNumber: number;
         status: string;
+        createdAt?: string;
     } | null;
     checkInDueState: {
         isConfigured: boolean;
@@ -69,6 +71,8 @@ interface Props {
         daysUntilNext: number | null;
         dueDayLabel: string | null;
         frequencyWeeks: number | null;
+        currentPeriodDueDate?: string | null;
+        nextDueDate?: string | null;
     };
     checkInPanel?: {
         checkIns: Array<{
@@ -854,23 +858,17 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                             </div>
                             <div>
                                 <p className="text-sm font-black text-fg">
-                                    {currentCheckin ? `Week ${currentCheckin.weekNumber} Check-in` : "Weekly Check-in"}
+                                    {currentCheckin
+                                        ? formatCheckInPeriodTitle(
+                                            currentCheckin.weekNumber,
+                                            currentCheckin.createdAt
+                                        )
+                                        : "Weekly Check-in"}
                                 </p>
                                 <p className="text-xs text-fg-muted mt-0.5">
-                                    {currentCheckin 
+                                    {currentCheckin
                                         ? currentCheckin.status === "REVIEWED" ? "✅ Coach reviewed" : "⏳ Awaiting coach review"
-                                        : !checkInDueState.isConfigured
-                                            ? "No check-in due — your coach hasn't set a schedule yet"
-                                            : checkInDueState.isOverdue
-                                                ? "Check-in overdue"
-                                                : checkInDueState.isDueToday
-                                                    ? "Check-in is due today"
-                                                    : checkInDueState.daysUntilNext === 1
-                                                        ? "Next check-in is tomorrow"
-                                                        : checkInDueState.daysUntilNext !== null
-                                                            ? `Next check-in in ${checkInDueState.daysUntilNext} days`
-                                                            : `Scheduled for ${checkInDueState.dueDayLabel}`
-                                    }
+                                        : formatCheckInDueSubtitle(checkInDueState)}
                                 </p>
                             </div>
                         </div>

@@ -108,6 +108,7 @@ export default async function CheckInsPage() {
                 daysUntilNext: null,
                 nextDueDate: null,
                 dueDayLabel: null,
+                currentPeriodDueDate: null,
             };
 
         return (

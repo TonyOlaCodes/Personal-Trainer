@@ -6,39 +6,26 @@ import {
     type ScheduleWorkoutSnapshot,
 } from "@/lib/planScheduleHistory";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
+import { ensureLogSetExerciseNameColumn } from "@/lib/logSetExerciseName";
 
 const REPAIR_VERSION = 1;
 
 let columnReady = false;
 let readyPromise: Promise<void> | null = null;
 
-export function resolveLogSetExerciseName(set: {
-    exerciseName?: string | null;
-    exercise?: { name?: string | null } | null;
-}): string {
-    const snap = set.exerciseName?.trim();
-    if (snap) return snap;
-    return set.exercise?.name?.trim() || "Unknown";
-}
-
-export async function ensureLogSetExerciseNameColumn() {
+export async function ensureLogSetExerciseOrderColumn() {
     if (columnReady) return;
+    await ensureLogSetExerciseNameColumn();
     await prisma.$executeRaw`
         ALTER TABLE "log_sets"
-        ADD COLUMN IF NOT EXISTS "exerciseName" TEXT
-    `;
-    await prisma.$executeRaw`
-        CREATE TABLE IF NOT EXISTS "_app_schema_meta" (
-            "key" TEXT PRIMARY KEY,
-            "value" TEXT NOT NULL
-        )
+        ADD COLUMN IF NOT EXISTS "exerciseOrder" INTEGER
     `;
     columnReady = true;
 }
 
 async function getRepairVersion(): Promise<number> {
     const rows = await prisma.$queryRaw<Array<{ value: string }>>`
-        SELECT "value" FROM "_app_schema_meta" WHERE "key" = 'log_set_exercise_name_repair' LIMIT 1
+        SELECT "value" FROM "_app_schema_meta" WHERE "key" = 'log_set_exercise_order_repair' LIMIT 1
     `;
     return rows[0] ? Number(rows[0].value) || 0 : 0;
 }
@@ -46,7 +33,7 @@ async function getRepairVersion(): Promise<number> {
 async function setRepairVersion(version: number) {
     await prisma.$executeRaw`
         INSERT INTO "_app_schema_meta" ("key", "value")
-        VALUES ('log_set_exercise_name_repair', ${String(version)})
+        VALUES ('log_set_exercise_order_repair', ${String(version)})
         ON CONFLICT ("key") DO UPDATE SET "value" = EXCLUDED."value"
     `;
 }
@@ -131,76 +118,20 @@ function findScheduleWorkout(
     return null;
 }
 
-function inferExerciseNamesForLog(
-    sets: Array<{
-        id: string;
-        exerciseId: string;
-        setNumber: number;
-        exercise: { name: string; isCustom?: boolean };
-    }>,
-    scheduleWorkout: ScheduleWorkoutSnapshot | null
-): Map<string, string> {
+function resolveOrderFromSchedule(
+    exerciseId: string,
+    scheduleWorkout: ScheduleWorkoutSnapshot | null,
+    fallbackIndex: number
+): number {
     const scheduleExercises = scheduleWorkout?.exercises ?? [];
-    const groups = new Map<string, { order: number; exercise: { name: string; isCustom?: boolean } }>();
-
-    sets.forEach((set, index) => {
-        const existing = groups.get(set.exerciseId);
-        const scheduleIndex = scheduleExercises.findIndex((row) => row.id === set.exerciseId);
-        const order = set.exercise.isCustom
-            ? 1000 + index
-            : scheduleIndex >= 0
-                ? scheduleIndex
-                : 1000 + index;
-
-        if (!existing) {
-            groups.set(set.exerciseId, { order, exercise: set.exercise });
-            return;
-        }
-        existing.order = Math.min(existing.order, order);
-    });
-
-    const ordered = [...groups.entries()].sort((a, b) => a[1].order - b[1].order);
-    const result = new Map<string, string>();
-
-    ordered.forEach(([exerciseId, group], index) => {
-        if (group.exercise.isCustom) {
-            result.set(exerciseId, group.exercise.name.trim() || "Custom Exercise");
-            return;
-        }
-
-        const byId = scheduleExercises.find((row) => row.id === exerciseId);
-        if (byId?.name) {
-            result.set(exerciseId, byId.name.trim());
-            return;
-        }
-
-        const byPosition = scheduleExercises[index]?.name?.trim();
-        if (byPosition) {
-            result.set(exerciseId, byPosition);
-            return;
-        }
-
-        result.set(exerciseId, group.exercise.name.trim() || "Unknown");
-    });
-
-    return result;
+    const byId = scheduleExercises.findIndex((row) => row.id === exerciseId);
+    if (byId >= 0) return byId;
+    return 1000 + fallbackIndex;
 }
 
-function pickMajorityName(counts: Map<string, number>): string | null {
-    let bestName: string | null = null;
-    let bestCount = 0;
-    for (const [name, count] of counts) {
-        if (count > bestCount) {
-            bestCount = count;
-            bestName = name;
-        }
-    }
-    return bestName;
-}
-
-/** Rebuild snapshotted exercise names from schedule history and log order. */
-export async function repairLogSetExerciseNames() {
-    await ensureLogSetExerciseNameColumn();
+/** Backfill snapshotted exercise order for historical logs. */
+export async function repairLogSetExerciseOrders() {
+    await ensureLogSetExerciseOrderColumn();
 
     const logs = await prisma.workoutLog.findMany({
         where: { status: "COMPLETED" },
@@ -217,17 +148,16 @@ export async function repairLogSetExerciseNames() {
                 select: {
                     id: true,
                     exerciseId: true,
+                    exerciseOrder: true,
                     setNumber: true,
-                    exerciseName: true,
-                    exercise: { select: { name: true, isCustom: true } },
+                    exercise: { select: { order: true, isCustom: true } },
                 },
-                orderBy: { setNumber: "asc" },
+                orderBy: [{ exercise: { order: "asc" } }, { setNumber: "asc" }],
             },
         },
     });
 
-    const votesByExerciseId = new Map<string, Map<string, number>>();
-    const setTargets = new Map<string, string>();
+    const updates = new Map<string, number>();
 
     for (const log of logs) {
         const planId = log.workout.week?.planId;
@@ -237,66 +167,51 @@ export async function repairLogSetExerciseNames() {
             scheduleWorkout = findScheduleWorkout(cache, log.workoutId, log.loggedAt);
         }
 
-        const inferred = inferExerciseNamesForLog(log.sets, scheduleWorkout);
+        const seenExerciseIds = new Set<string>();
+        let appearanceIndex = 0;
+
         for (const set of log.sets) {
-            const inferredName = inferred.get(set.exerciseId);
-            if (!inferredName) continue;
+            if (seenExerciseIds.has(set.exerciseId)) continue;
+            seenExerciseIds.add(set.exerciseId);
 
-            setTargets.set(set.id, inferredName);
+            if (typeof set.exerciseOrder === "number" && set.exerciseOrder >= 0) continue;
 
-            let counts = votesByExerciseId.get(set.exerciseId);
-            if (!counts) {
-                counts = new Map();
-                votesByExerciseId.set(set.exerciseId, counts);
+            const fallbackIndex = appearanceIndex++;
+            const order = set.exercise.isCustom
+                ? 1000 + fallbackIndex
+                : resolveOrderFromSchedule(set.exerciseId, scheduleWorkout, fallbackIndex);
+
+            for (const row of log.sets) {
+                if (row.exerciseId === set.exerciseId) {
+                    updates.set(row.id, order);
+                }
             }
-            counts.set(inferredName, (counts.get(inferredName) ?? 0) + 1);
         }
     }
 
     const batchSize = 200;
-    const updates = [...setTargets.entries()];
-    for (let i = 0; i < updates.length; i += batchSize) {
-        const chunk = updates.slice(i, i + batchSize);
+    const entries = [...updates.entries()];
+    for (let i = 0; i < entries.length; i += batchSize) {
+        const chunk = entries.slice(i, i + batchSize);
         await prisma.$transaction(
-            chunk.map(([id, exerciseName]) =>
+            chunk.map(([id, exerciseOrder]) =>
                 prisma.logSet.update({
                     where: { id },
-                    data: { exerciseName },
+                    data: { exerciseOrder },
                 })
             )
         );
     }
-
-    for (const [exerciseId, counts] of votesByExerciseId) {
-        const canonical = pickMajorityName(counts);
-        if (!canonical) continue;
-
-        const exercise = await prisma.exercise.findUnique({
-            where: { id: exerciseId },
-            select: { name: true, isCustom: true },
-        });
-        if (!exercise || exercise.isCustom) continue;
-        if (exercise.name.trim() === canonical) continue;
-
-        const totalVotes = [...counts.values()].reduce((sum, count) => sum + count, 0);
-        const canonicalVotes = counts.get(canonical) ?? 0;
-        if (canonicalVotes < totalVotes / 2) continue;
-
-        await prisma.exercise.update({
-            where: { id: exerciseId },
-            data: { name: canonical },
-        });
-    }
 }
 
-export async function ensureLogSetExerciseNamesReady() {
+export async function ensureLogSetExerciseOrdersReady() {
     if (readyPromise) return readyPromise;
 
     readyPromise = (async () => {
-        await ensureLogSetExerciseNameColumn();
+        await ensureLogSetExerciseOrderColumn();
         const version = await getRepairVersion();
         if (version < REPAIR_VERSION) {
-            await repairLogSetExerciseNames();
+            await repairLogSetExerciseOrders();
             await setRepairVersion(REPAIR_VERSION);
         }
     })();
@@ -306,4 +221,12 @@ export async function ensureLogSetExerciseNamesReady() {
     } finally {
         readyPromise = null;
     }
+}
+
+export function resolvePersistedExerciseOrder(
+    exerciseOrder: number | undefined,
+    exerciseListIndex: number
+): number {
+    if (typeof exerciseOrder === "number" && exerciseOrder >= 0) return exerciseOrder;
+    return exerciseListIndex >= 0 ? exerciseListIndex : 999;
 }

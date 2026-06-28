@@ -8,6 +8,7 @@ import { isCoachRole } from "@/lib/roles";
 import { cleanupStaleInProgressSessions } from "@/lib/workoutSessionCleanup";
 import { ensurePlanOriginalCreatorColumn } from "@/lib/planCreator";
 import { ensurePlansShareCodes } from "@/lib/planShareCode";
+import { getActiveAssigneesByPlanIdForCoach } from "@/lib/coachPlanAssignment";
 
 export const metadata = { title: "Plans" };
 
@@ -83,20 +84,23 @@ export default async function PlansPage() {
     let plans;
 
     if (isCoachRole(user.role)) {
-        const created = await prisma.plan.findMany({
-            where: { creatorId: user.id },
-            include: {
-                _count: { select: { weeks: true } },
-                creator: { select: { name: true } },
-                originalCreator: { select: { name: true } },
-                weeks: {
-                    include: { _count: { select: { workouts: true } } },
-                    take: 1,
-                    orderBy: { weekNumber: "asc" },
+        const [created, assigneesByPlanId] = await Promise.all([
+            prisma.plan.findMany({
+                where: { creatorId: user.id },
+                include: {
+                    _count: { select: { weeks: true } },
+                    creator: { select: { name: true } },
+                    originalCreator: { select: { name: true } },
+                    weeks: {
+                        include: { _count: { select: { workouts: true } } },
+                        take: 1,
+                        orderBy: { weekNumber: "asc" },
+                    },
                 },
-            },
-            orderBy: { updatedAt: "desc" },
-        });
+                orderBy: { updatedAt: "desc" },
+            }),
+            getActiveAssigneesByPlanIdForCoach(user.id),
+        ]);
 
         plans = created.map((plan) => ({
             id: plan.id,
@@ -111,6 +115,7 @@ export default async function PlansPage() {
             weekCount: plan._count.weeks,
             startedAt: plan.createdAt.toISOString(),
             tags: plan.tags,
+            assignedClient: assigneesByPlanId.get(plan.id) ?? null,
         }));
     } else {
         plans = user.plans.map((up) => ({

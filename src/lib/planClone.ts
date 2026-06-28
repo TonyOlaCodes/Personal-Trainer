@@ -1,9 +1,24 @@
 import { prisma } from "@/lib/prisma";
+import type { PlanType } from "@prisma/client";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
 import { resolvePlanOriginalCreatorId } from "@/lib/planCreator";
 import { generateUniquePlanShareCode } from "@/lib/planShareCode";
 
-export async function clonePlanForUser(sourcePlanId: string, userId: string, nameSuffix = " (Copied)") {
+export type ClonePlanOptions = {
+    nameSuffix?: string;
+    name?: string;
+    type?: PlanType;
+};
+
+export async function clonePlanForUser(
+    sourcePlanId: string,
+    userId: string,
+    optionsOrSuffix: ClonePlanOptions | string = " (Copied)"
+) {
+    const options: ClonePlanOptions = typeof optionsOrSuffix === "string"
+        ? { nameSuffix: optionsOrSuffix }
+        : optionsOrSuffix;
+
     const originalPlan = await prisma.plan.findUnique({
         where: { id: sourcePlanId },
         select: {
@@ -29,11 +44,13 @@ export async function clonePlanForUser(sourcePlanId: string, userId: string, nam
     const shareCode = await generateUniquePlanShareCode();
     const originalCreatorId = resolvePlanOriginalCreatorId(originalPlan);
 
+    const clonedName = options.name ?? `${originalPlan.name}${options.nameSuffix ?? " (Copied)"}`;
+
     const clonedPlan = await prisma.plan.create({
         data: {
-            name: `${originalPlan.name}${nameSuffix}`,
+            name: clonedName,
             description: originalPlan.description,
-            type: "USER_CREATED",
+            type: options.type ?? "USER_CREATED",
             creatorId: userId,
             originalCreatorId,
             isPublic: false,

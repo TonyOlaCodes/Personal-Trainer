@@ -14,6 +14,8 @@ export interface CheckInDueState extends CheckInSchedule {
     daysUntilNext: number | null;
     nextDueDate: string | null;
     dueDayLabel: string | null;
+    /** Calendar due date for the current check-in period (when isDueWeek). */
+    currentPeriodDueDate: string | null;
 }
 
 export const CHECK_IN_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -128,6 +130,7 @@ export function getCheckInDueState(schedule: CheckInSchedule, today = new Date()
             daysUntilNext: null,
             nextDueDate: null,
             dueDayLabel: null,
+            currentPeriodDueDate: null,
         };
     }
 
@@ -168,5 +171,6 @@ export function getCheckInDueState(schedule: CheckInSchedule, today = new Date()
         daysUntilNext,
         nextDueDate: nextDueDate.toISOString(),
         dueDayLabel: CHECK_IN_DAYS[day],
+        currentPeriodDueDate: isDueWeek ? dueDateThisWeek.toISOString() : null,
     };
 }
