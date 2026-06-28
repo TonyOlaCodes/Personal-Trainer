@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from "react";
 import {
     Users, Activity, Calendar, MessageSquare,
     MapPin, Info, Dumbbell, Award, Scale, MoreHorizontal, ChevronRight, CheckCircle2, Edit3, Zap, Settings,
-    Trash2, AlertTriangle, Clock, Search, X, Pin
+    Trash2, AlertTriangle, Clock, Search, X, Pin, ClipboardList, Loader2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
@@ -87,12 +87,19 @@ interface WorkoutHistoryEntry {
     volume: number;
 }
 
+interface ClientCheckInStatus {
+    label: string;
+    isOverdue: boolean;
+    weekNumber: number;
+}
+
 interface Props {
     client: Client;
     currentUserId: string;
     availablePlans: { id: string; name: string; type: string }[];
     logs: ClientLog[];
     checkIns: ClientCheckIn[];
+    checkInStatus?: ClientCheckInStatus | null;
     bodyweightHistory: { date: string; weightKg: number }[];
     workoutNotes: ClientWorkoutNote[];
     workoutHistory: WorkoutHistoryEntry[];
@@ -102,7 +109,7 @@ interface Props {
     readOnly?: boolean;
 }
 
-export function ClientDetailView({ client, currentUserId, availablePlans, logs, checkIns, bodyweightHistory, workoutNotes, workoutHistory, exerciseHistory, exerciseLastDone, initialPinnedExercises = [], readOnly = false }: Props) {
+export function ClientDetailView({ client, currentUserId, availablePlans, logs, checkIns, checkInStatus = null, bodyweightHistory, workoutNotes, workoutHistory, exerciseHistory, exerciseLastDone, initialPinnedExercises = [], readOnly = false }: Props) {
     const canEdit = !readOnly;
     const [assigning, setAssigning] = useState(false);
     const [assignMode, setAssignMode] = useState<"MENU" | "LIST" | "IMPORT">("MENU");
@@ -114,6 +121,9 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
     const [checkInDay, setCheckInDay] = useState(client.checkInSchedule.day ?? 6);
     const [checkInFrequency, setCheckInFrequency] = useState(client.checkInSchedule.frequencyWeeks ?? 1);
     const [savingSchedule, setSavingSchedule] = useState(false);
+    const [sendingCheckInRequest, setSendingCheckInRequest] = useState(false);
+    const [checkInRequestSent, setCheckInRequestSent] = useState(false);
+    const [checkInRequestError, setCheckInRequestError] = useState<string | null>(null);
     const [targetWeightKg, setTargetWeightKg] = useState(client.targetWeightKg ? String(client.targetWeightKg) : "");
     const [targetCalories, setTargetCalories] = useState(client.targetCalories ? String(client.targetCalories) : "");
     const [targetSteps, setTargetSteps] = useState(client.targetSteps ? String(client.targetSteps) : "");
@@ -265,6 +275,26 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
             alert(e.message || "Network error.");
         } finally {
             setSavingSchedule(false);
+        }
+    };
+
+    const sendCheckInRequest = async () => {
+        if (!canEdit) return;
+        setSendingCheckInRequest(true);
+        setCheckInRequestError(null);
+        try {
+            const res = await fetch("/api/coach/chat/request-checkin", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ clientId: client.id }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error ?? "Failed to send check-in request");
+            setCheckInRequestSent(true);
+        } catch (err) {
+            setCheckInRequestError(err instanceof Error ? err.message : "Failed to send check-in request");
+        } finally {
+            setSendingCheckInRequest(false);
         }
     };
 
@@ -968,11 +998,86 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                         Check-ins
                     </h3>
                     <div className="space-y-3 max-h-[340px] overflow-y-auto no-scrollbar pr-1">
+                        {checkInStatus && (
+                            <div className={cn(
+                                "card p-5 border space-y-3",
+                                checkInStatus.isOverdue
+                                    ? "border-warning/30 bg-warning/5"
+                                    : "border-brand-500/30 bg-brand-500/5"
+                            )}>
+                                <div className="flex items-start gap-3">
+                                    <div className={cn(
+                                        "w-11 h-11 rounded-2xl flex items-center justify-center border shrink-0",
+                                        checkInStatus.isOverdue
+                                            ? "bg-warning/10 border-warning/30 text-warning"
+                                            : "bg-brand-500/10 border-brand-500/30 text-brand-400"
+                                    )}>
+                                        {checkInStatus.isOverdue ? (
+                                            <AlertTriangle className="w-5 h-5" />
+                                        ) : (
+                                            <Scale className="w-5 h-5" />
+                                        )}
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <p className={cn(
+                                            "text-xs font-black uppercase tracking-widest",
+                                            checkInStatus.isOverdue ? "text-warning" : "text-brand-400"
+                                        )}>
+                                            {checkInStatus.label}
+                                        </p>
+                                        <p className="text-[10px] text-fg-muted font-bold uppercase tracking-[0.1em] mt-1">
+                                            Week {checkInStatus.weekNumber} · Waiting for client to submit
+                                        </p>
+                                    </div>
+                                </div>
+                                {canEdit && (
+                                    checkInRequestSent ? (
+                                        <div className="space-y-2">
+                                            <p className="text-xs font-semibold text-success flex items-center gap-1.5">
+                                                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                                                Check-in request sent
+                                            </p>
+                                            <Link
+                                                href={`/chat?with=${client.id}`}
+                                                className="btn-secondary w-full h-10 text-xs font-black uppercase tracking-widest inline-flex items-center justify-center gap-2"
+                                            >
+                                                <MessageSquare className="w-4 h-4" />
+                                                Open chat
+                                            </Link>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => void sendCheckInRequest()}
+                                                disabled={sendingCheckInRequest}
+                                                className={cn(
+                                                    "btn-primary w-full h-10 text-xs font-black uppercase tracking-widest inline-flex items-center justify-center gap-2",
+                                                    checkInStatus.isOverdue && "bg-warning hover:bg-warning/90 border-warning/30"
+                                                )}
+                                            >
+                                                {sendingCheckInRequest ? (
+                                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                                ) : (
+                                                    <ClipboardList className="w-4 h-4" />
+                                                )}
+                                                {sendingCheckInRequest ? "Sending..." : "Send check-in request"}
+                                            </button>
+                                            {checkInRequestError && (
+                                                <p className="text-[11px] text-red-400 font-semibold">{checkInRequestError}</p>
+                                            )}
+                                        </div>
+                                    )
+                                )}
+                            </div>
+                        )}
                         {checkIns.length === 0 ? (
+                            !checkInStatus && (
                             <div className="card p-12 text-center border-dashed opacity-50 flex flex-col items-center">
                                 <Calendar className="w-8 h-8 text-fg-subtle mb-3" />
                                 <p className="text-xs text-fg-muted font-black uppercase tracking-widest italic">No check-ins yet.</p>
                             </div>
+                            )
                         ) : (
                             checkIns.map((ci) => (
                                 <Link 

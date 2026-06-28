@@ -3,7 +3,8 @@ import { redirect, notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { ClientDetailView } from "./ClientDetailView";
-import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
+import { getCheckInDueState, getUserCheckInSchedule } from "@/lib/checkInSchedule";
+import { getWeekNumber } from "@/lib/utils";
 import { getDailyMetricTargets } from "@/lib/dailyMetrics";
 import { format } from "date-fns";
 import { createExerciseSessionEntry, mergeSetIntoExerciseSession, normalizeExerciseHistory } from "@/lib/exerciseHistory";
@@ -48,7 +49,9 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             target.isDeactivated ||
             target.email.endsWith("@deleted.local");
 
-        const [activePlan, availablePlans, checkInSchedule, bodyweightRows, workoutNotesRows, completedLogs, clientMetricTargets, pinnedExercises] = await Promise.all([
+        const checkInWeekNumber = getWeekNumber(new Date());
+
+        const [activePlan, availablePlans, checkInSchedule, hasCheckInThisWeek, bodyweightRows, workoutNotesRows, completedLogs, clientMetricTargets, pinnedExercises] = await Promise.all([
             Promise.resolve(target.plans[0]?.plan ?? null),
             prisma.plan.findMany({
                 where: { creatorId: actor.id },
@@ -56,6 +59,10 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                 orderBy: { updatedAt: "desc" },
             }).then((plans) => dedupeCoachPlansByName(plans).map(({ updatedAt: _updatedAt, ...plan }) => plan)),
             getUserCheckInSchedule(target.id),
+            prisma.checkIn.findFirst({
+                where: { userId: target.id, weekNumber: checkInWeekNumber },
+                select: { id: true },
+            }).then((row) => row != null),
             prisma.$queryRaw<Array<{ date: string; weightKg: number }>>`
                 SELECT "loggedDate"::text AS "date", "weightKg"
                 FROM "bodyweight_logs"
@@ -143,6 +150,19 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             : await getActiveSessionsForClients([target.id]);
         const activeSession = activeSessions[target.id] ?? null;
 
+        const checkInDueState = getCheckInDueState(checkInSchedule, new Date());
+        const awaitingCheckIn =
+            checkInDueState.isConfigured &&
+            !hasCheckInThisWeek &&
+            (checkInDueState.isOverdue || checkInDueState.isDueToday);
+        const checkInStatus = awaitingCheckIn
+            ? {
+                label: checkInDueState.isOverdue ? "Check-in overdue" : "Check-in due today",
+                isOverdue: checkInDueState.isOverdue,
+                weekNumber: checkInWeekNumber,
+            }
+            : null;
+
         return (
             <>
                 <TopBar
@@ -188,6 +208,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                                 date: l.loggedAt ? l.loggedAt.toISOString() : new Date().toISOString(),
                                 setCount: (l.sets ?? []).filter((s) => s.isCompleted).length,
                             }))}
+                        checkInStatus={checkInStatus}
                         checkIns={(target.checkIns ?? []).map((ci) => ({
                             id: ci.id,
                             week: ci.weekNumber,
