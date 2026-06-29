@@ -153,9 +153,6 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
             : ""
     );
     const [latestWeight, setLatestWeight] = useState(bodyweight.latestWeightKg);
-    const [selectedPreviousWeight, setSelectedPreviousWeight] = useState(
-        bodyweight.selectedDate === todayDate ? bodyweight.selectedPreviousWeightKg : null
-    );
     const [weightLogged, setWeightLogged] = useState(
         bodyweight.selectedDate === todayDate && Boolean(bodyweight.selectedWeightKg)
     );
@@ -207,7 +204,6 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
             setWeightDate(todayDate);
             setWeight("");
             setWeightLogged(false);
-            setSelectedPreviousWeight(null);
             setWeightMsg("");
             setCalories("");
             setSteps("");
@@ -280,7 +276,6 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                 if (!res.ok || cancelled) return;
                 setWeight(data.selected?.weightKg ? data.selected.weightKg.toFixed(2) : "");
                 setWeightLogged(Boolean(data.selected));
-                setSelectedPreviousWeight(data.selectedPrevious?.weightKg ?? null);
                 setLatestWeight(data.latest?.weightKg ?? null);
             } catch (e) {
                 console.error(e);
@@ -347,7 +342,6 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
             if (res.ok) {
                 setWeight(data.selected?.weightKg ? data.selected.weightKg.toFixed(2) : parsedWeight.toFixed(2));
                 setWeightLogged(true);
-                setSelectedPreviousWeight(data.selectedPrevious?.weightKg ?? null);
                 setLatestWeight(data.latest?.weightKg ?? parsedWeight);
                 setWeightMsg("");
                 router.refresh();
@@ -433,34 +427,6 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
         if (key === "steps") return "Add daily steps";
         if (key === "sleepHours") return "Track your sleep";
         return "Tap to log";
-    };
-
-    const getMetricInsight = (key: string, logged: boolean) => {
-        if (key === "weight") {
-            if (logged && user.targetWeightKg != null && user.targetWeightKg > 0) {
-                return `Goal ${user.targetWeightKg.toFixed(1)} kg`;
-            }
-            if (logged && selectedPreviousWeight != null && weight) {
-                const current = parseFloat(weight);
-                if (Number.isFinite(current)) {
-                    const delta = Math.round((current - selectedPreviousWeight) * 10) / 10;
-                    if (Math.abs(delta) < 0.05) return "Same as last log";
-                    const sign = delta > 0 ? "+" : "";
-                    return `${sign}${delta.toFixed(1)} kg vs last log`;
-                }
-            }
-            return logged ? "Weight logged" : "Log today for trends";
-        }
-        if (key === "calories") {
-            return logged ? "Fueling recovery" : "Log to check limit";
-        }
-        if (key === "steps") {
-            return logged ? "Active moving streak" : "Steps lower than usual";
-        }
-        if (key === "sleepHours") {
-            return logged ? "Sleep improving" : "Track rest quality";
-        }
-        return "";
     };
 
     const greeting = () => {
@@ -567,6 +533,263 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
         }
     };
 
+    const shouldPrioritizeCheckIn = Boolean(checkInPanel && !currentCheckin && checkInDueState.isDueToday);
+    const metricsBeforeWorkout = Boolean(todayCompleted || !todayWorkout);
+    const checkInDueLabelState = {
+        ...checkInDueState,
+        currentPeriodDueDate: checkInDueState.currentPeriodDueDate ?? null,
+        nextDueDate: checkInDueState.nextDueDate ?? null,
+    };
+
+    const renderDailyMetrics = () => (
+        <>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+                <div className="flex items-center gap-2">
+                    <Activity className="w-4 h-4 text-brand-400" />
+                    <h3 className="text-sm font-black uppercase tracking-widest text-fg">Daily Metrics</h3>
+                </div>
+                <div className="flex items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            viewingTodayRef.current = true;
+                            setWeightDate(todayDate);
+                        }}
+                        className={cn(
+                            "h-8 px-3 rounded-lg border text-[9px] font-black uppercase tracking-widest transition-all",
+                            isWeightDateToday
+                                ? "border-success/30 bg-success/10 text-success shadow-glow-success-sm"
+                                : "border-surface-border bg-surface-muted/40 text-fg-muted hover:text-fg"
+                        )}
+                    >
+                        Today
+                    </button>
+                    <label className="flex items-center gap-2 rounded-lg border border-surface-border bg-surface-muted/40 px-2.5 py-1.5 text-[11px] font-bold text-fg-muted cursor-pointer hover:border-brand-500/20 transition-all">
+                        <Calendar className="w-3 h-3 text-brand-400" />
+                        <input
+                            type="date"
+                            value={weightDate}
+                            onChange={(e) => {
+                                const next = e.target.value;
+                                viewingTodayRef.current = next === todayDate;
+                                setWeightDate(next);
+                            }}
+                            className="bg-transparent text-fg focus:outline-none cursor-pointer"
+                        />
+                    </label>
+                </div>
+            </div>
+
+            <div id="weekly-metrics" className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                {!user.hiddenGoals?.includes("weight") && (
+                    <div className={cn(
+                        "card p-2.5 sm:p-3 flex items-center gap-2 transition-all relative overflow-hidden group",
+                        weightLogged
+                            ? "bg-success/10 border-success/30 shadow-glow-success-sm"
+                            : "bg-surface-muted/10 border-brand-500/10 hover:border-brand-500/30"
+                    )}>
+                        <div className={cn(
+                            "w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform",
+                            weightLogged ? "bg-success/15" : "bg-brand-500/5"
+                        )}>
+                            {weightLogged ? <Check className="w-3.5 h-3.5 text-success" /> : <Scale className="w-3.5 h-3.5 text-brand-400" />}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                            <p className={cn(
+                                "text-[8px] font-black tracking-widest uppercase",
+                                weightLogged ? "text-success" : "text-fg-subtle"
+                            )}>
+                                Weight
+                            </p>
+                            <div className="flex items-baseline gap-1">
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    value={weight}
+                                    onChange={(e) => setWeight(e.target.value)}
+                                    onBlur={(e) => handleUpdateWeight(e.target.value)}
+                                    className="w-14 sm:w-16 bg-transparent text-base sm:text-lg font-black text-fg focus:outline-none focus:text-brand-400 transition-colors"
+                                    placeholder={latestWeight ? latestWeight.toFixed(2) : "--"}
+                                />
+                                <span className="text-[9px] font-semibold text-fg-muted uppercase">kg</span>
+                            </div>
+                            <p className={cn(
+                                "text-[9px] font-bold mt-0.5 truncate",
+                                weightLogged ? "text-success" : "text-fg-subtle"
+                            )}>
+                                {bodyweightStatus()}
+                            </p>
+                        </div>
+                        {savingWeight && (
+                            <div className="absolute top-2 right-2">
+                                <div className="w-3 h-3 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {[
+                    {
+                        key: "calories" as const,
+                        label: "Calories",
+                        unit: "kcal",
+                        icon: Utensils,
+                        value: calories,
+                        setValue: setCalories,
+                        logged: caloriesLogged,
+                        latest: latestCalories,
+                        target: dailyMetrics.targets.targetCalories,
+                        step: "1",
+                    },
+                    {
+                        key: "steps" as const,
+                        label: "Steps",
+                        unit: "steps",
+                        icon: Footprints,
+                        value: steps,
+                        setValue: setSteps,
+                        logged: stepsLogged,
+                        latest: latestSteps,
+                        target: dailyMetrics.targets.targetSteps,
+                        step: "1",
+                    },
+                    {
+                        key: "sleepHours" as const,
+                        label: "Sleep",
+                        unit: "hrs",
+                        icon: Moon,
+                        value: sleepHours,
+                        setValue: setSleepHours,
+                        logged: sleepLogged,
+                        latest: latestSleepHours,
+                        target: dailyMetrics.targets.targetSleepHours,
+                        step: "0.1",
+                    },
+                ]
+                .filter(m => {
+                    const matchKey = m.key === "sleepHours" ? "sleep" : m.key;
+                    return !user.hiddenGoals?.includes(matchKey);
+                })
+                .map((metric) => {
+                    const Icon = metric.icon;
+                    return (
+                        <div
+                            key={metric.key}
+                            className={cn(
+                                "card p-2.5 sm:p-3 flex items-center gap-2 transition-all relative overflow-hidden",
+                                metric.logged
+                                    ? "bg-success/10 border-success/30 shadow-glow-success-sm"
+                                    : "bg-surface-muted/10 border-brand-500/10 hover:border-brand-500/30"
+                            )}
+                        >
+                            <div className={cn(
+                                "w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center shrink-0",
+                                metric.logged ? "bg-success/15" : "bg-brand-500/5"
+                            )}>
+                                {metric.logged ? <Check className="w-3.5 h-3.5 text-success" /> : <Icon className="w-3.5 h-3.5 text-brand-400" />}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <p className={cn(
+                                    "text-[8px] font-black tracking-widest uppercase",
+                                    metric.logged ? "text-success" : "text-fg-subtle"
+                                )}>
+                                    {metric.label}
+                                </p>
+                                <div className="flex items-baseline gap-1">
+                                    <input
+                                        type="number"
+                                        step={metric.step}
+                                        value={metric.value}
+                                        onChange={(e) => metric.setValue(e.target.value)}
+                                        onBlur={(e) => handleUpdateDailyMetric(metric.key, e.target.value)}
+                                        className="w-14 sm:w-16 bg-transparent text-base sm:text-lg font-black text-fg focus:outline-none focus:text-brand-400 transition-colors"
+                                        placeholder={metric.latest ? metric.latest.toString() : metric.target ? metric.target.toString() : "--"}
+                                    />
+                                    <span className="text-[9px] font-semibold text-fg-muted uppercase">{metric.unit}</span>
+                                </div>
+                                <p className={cn(
+                                    "text-[9px] font-bold mt-0.5 truncate",
+                                    metric.logged ? "text-success" : "text-fg-subtle"
+                                )}>
+                                    {dailyMetricStatus(metric.key, metric.logged)}
+                                </p>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        </>
+    );
+
+    const renderCheckInWidget = () => {
+        if (!checkInPanel) return null;
+
+        return (
+            <button
+                type="button"
+                id="dashboard-check-in"
+                onClick={() => checkInPanel && setShowCheckInPanel(true)}
+                className="block group w-full text-left"
+            >
+                <div className={cn(
+                    "card p-4 flex items-center justify-between transition-all hover:shadow-glow-sm",
+                    shouldPrioritizeCheckIn && "border-warning/30 bg-warning/10 shadow-glow-warning-sm",
+                    !shouldPrioritizeCheckIn && currentCheckin
+                        ? "border-success/20 bg-success/5 shadow-glow-success-sm"
+                        : !shouldPrioritizeCheckIn && !checkInDueState.isConfigured
+                            ? "border-surface-border bg-surface-muted/30"
+                        : !shouldPrioritizeCheckIn && checkInDueState.isOverdue
+                            ? "border-danger/20 bg-danger/5 shadow-glow-danger-sm"
+                        : !shouldPrioritizeCheckIn && checkInDueState.isDueToday
+                            ? "border-warning/20 bg-warning/5 shadow-glow-warning-sm"
+                        : !shouldPrioritizeCheckIn
+                            ? "border-surface-border bg-surface-muted/30"
+                            : ""
+                )}>
+                    <div className="flex items-center gap-3">
+                        <div className={cn(
+                            "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
+                            currentCheckin
+                                ? "bg-success/15"
+                                : !checkInDueState.isConfigured
+                                    ? "bg-surface-muted"
+                                : checkInDueState.isOverdue
+                                    ? "bg-danger/10"
+                                    : "bg-warning/10"
+                        )}>
+                            {currentCheckin
+                                ? <Check className="w-5 h-5 text-success" />
+                                : !checkInDueState.isConfigured
+                                    ? <Calendar className="w-5 h-5 text-fg-subtle" />
+                                : checkInDueState.isOverdue
+                                    ? <AlertCircle className="w-5 h-5 text-danger animate-pulse-slow" />
+                                    : <Calendar className="w-5 h-5 text-warning animate-pulse-slow" />
+                            }
+                        </div>
+                        <div>
+                            <p className="text-sm font-black text-fg">
+                                {currentCheckin
+                                    ? formatCheckInPeriodTitle(
+                                        currentCheckin.weekNumber,
+                                        currentCheckin.createdAt
+                                    )
+                                    : shouldPrioritizeCheckIn
+                                        ? "Weekly Check-in Due Today"
+                                        : "Weekly Check-in"}
+                            </p>
+                            <p className="text-xs text-fg-muted mt-0.5">
+                                {currentCheckin
+                                    ? currentCheckin.status === "REVIEWED" ? "Coach reviewed" : "Awaiting coach review"
+                                    : formatCheckInDueSubtitle(checkInDueLabelState)}
+                            </p>
+                        </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-fg-subtle group-hover:text-fg transition-colors" />
+                </div>
+            </button>
+        );
+    };
+
     return (
         <div className="space-y-6 animate-fade-in pb-10">
             <RecentSessionsExplorer
@@ -664,6 +887,10 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
             )}
 
             {/* Today's Workout — first priority on dashboard */}
+            {shouldPrioritizeCheckIn && renderCheckInWidget()}
+
+            {metricsBeforeWorkout && renderDailyMetrics()}
+
             <div id="today-workout">
                 <div className="flex items-center justify-between mb-3">
                     <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
@@ -797,251 +1024,10 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                 )}
             </div>
 
-            {/* Daily Metrics Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
-                <div className="flex items-center gap-2">
-                    <Activity className="w-5 h-5 text-brand-400" />
-                    <h3 className="heading-3">Daily Metrics & Quick Updates</h3>
-                </div>
-                <div className="flex items-center gap-2">
-                    <button
-                        type="button"
-                        onClick={() => {
-                            viewingTodayRef.current = true;
-                            setWeightDate(todayDate);
-                        }}
-                        className={cn(
-                            "h-9 px-3.5 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all",
-                            isWeightDateToday
-                                ? "border-success/30 bg-success/10 text-success shadow-glow-success-sm"
-                                : "border-surface-border bg-surface-muted/40 text-fg-muted hover:text-fg"
-                        )}
-                    >
-                        Today
-                    </button>
-                    <label className="flex items-center gap-2 rounded-xl border border-surface-border bg-surface-muted/40 px-3 py-1.5 text-xs font-bold text-fg-muted cursor-pointer hover:border-brand-500/20 transition-all">
-                        <Calendar className="w-3.5 h-3.5 text-brand-400" />
-                        <input
-                            type="date"
-                            value={weightDate}
-                            onChange={(e) => {
-                                const next = e.target.value;
-                                viewingTodayRef.current = next === todayDate;
-                                setWeightDate(next);
-                            }}
-                            className="bg-transparent text-fg focus:outline-none cursor-pointer"
-                        />
-                    </label>
-                </div>
-            </div>
-
-            <div id="weekly-metrics" className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
-                {/* Daily Weight Update */}
-                {!user.hiddenGoals?.includes("weight") && (
-                    <div className={cn(
-                        "card p-3 sm:p-4 flex items-center gap-2 sm:gap-3 transition-all relative overflow-hidden group",
-                        weightLogged
-                            ? "bg-success/10 border-success/30 shadow-glow-success-sm"
-                            : "bg-surface-muted/10 border-brand-500/10 hover:border-brand-500/30"
-                    )}>
-                    <div className={cn(
-                        "w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform",
-                        weightLogged ? "bg-success/15" : "bg-brand-500/5"
-                    )}>
-                        {weightLogged ? <Check className="w-3.5 h-3.5 sm:w-4.5 sm:h-4.5 text-success" /> : <Scale className="w-3.5 h-3.5 sm:w-4.5 sm:h-4.5 text-brand-400" />}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                        <p className={cn(
-                            "text-[9px] font-black tracking-widest uppercase mb-0.5",
-                            weightLogged ? "text-success" : "text-fg-subtle"
-                        )}>
-                            Weight
-                        </p>
-                        <div className="flex items-baseline gap-1">
-                            <input 
-                                type="number" 
-                                step="0.01"
-                                value={weight}
-                                onChange={(e) => setWeight(e.target.value)}
-                                onBlur={(e) => handleUpdateWeight(e.target.value)}
-                                className="w-16 sm:w-20 bg-transparent text-lg sm:text-2xl font-black text-fg focus:outline-none focus:text-brand-400 transition-colors"
-                                placeholder={latestWeight ? latestWeight.toFixed(2) : "--"}
-                            />
-                            <span className="text-[10px] font-semibold text-fg-muted uppercase">kg</span>
-                        </div>
-                        <p className={cn(
-                            "text-[10px] font-bold mt-1 truncate",
-                            weightLogged ? "text-success" : "text-fg-subtle"
-                        )}>
-                            {bodyweightStatus()}
-                        </p>
-                        <p className="text-[8px] sm:text-[9px] text-brand-400 font-semibold mt-0.5 opacity-80 leading-none truncate">
-                            {getMetricInsight("weight", weightLogged)}
-                        </p>
-                    </div>
-                    {savingWeight && (
-                        <div className="absolute top-2 right-2">
-                            <div className="w-3 h-3 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
-                        </div>
-                    )}
-                    </div>
-                )}
-
-                {[
-                    {
-                        key: "calories" as const,
-                        label: "Calories",
-                        unit: "kcal",
-                        icon: Utensils,
-                        value: calories,
-                        setValue: setCalories,
-                        logged: caloriesLogged,
-                        latest: latestCalories,
-                        target: dailyMetrics.targets.targetCalories,
-                        step: "1",
-                    },
-                    {
-                        key: "steps" as const,
-                        label: "Steps",
-                        unit: "steps",
-                        icon: Footprints,
-                        value: steps,
-                        setValue: setSteps,
-                        logged: stepsLogged,
-                        latest: latestSteps,
-                        target: dailyMetrics.targets.targetSteps,
-                        step: "1",
-                    },
-                    {
-                        key: "sleepHours" as const,
-                        label: "Sleep",
-                        unit: "hrs",
-                        icon: Moon,
-                        value: sleepHours,
-                        setValue: setSleepHours,
-                        logged: sleepLogged,
-                        latest: latestSleepHours,
-                        target: dailyMetrics.targets.targetSleepHours,
-                        step: "0.1",
-                    },
-                ]
-                .filter(m => {
-                    const matchKey = m.key === "sleepHours" ? "sleep" : m.key;
-                    return !user.hiddenGoals?.includes(matchKey);
-                })
-                .map((metric) => {
-                    const Icon = metric.icon;
-                    return (
-                        <div
-                            key={metric.key}
-                            className={cn(
-                                "card p-3 sm:p-4 flex items-center gap-2 sm:gap-3 transition-all relative overflow-hidden",
-                                metric.logged
-                                    ? "bg-success/10 border-success/30 shadow-glow-success-sm"
-                                    : "bg-surface-muted/10 border-brand-500/10 hover:border-brand-500/30"
-                            )}
-                        >
-                            <div className={cn(
-                                "w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0",
-                                metric.logged ? "bg-success/15" : "bg-brand-500/5"
-                            )}>
-                                {metric.logged ? <Check className="w-3.5 h-3.5 sm:w-4.5 sm:h-4.5 text-success" /> : <Icon className="w-3.5 h-3.5 sm:w-4.5 sm:h-4.5 text-brand-400" />}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                                <p className={cn(
-                                    "text-[9px] font-black tracking-widest uppercase mb-0.5",
-                                    metric.logged ? "text-success" : "text-fg-subtle"
-                                )}>
-                                    {metric.label}
-                                </p>
-                                <div className="flex items-baseline gap-1">
-                                    <input
-                                        type="number"
-                                        step={metric.step}
-                                        value={metric.value}
-                                        onChange={(e) => metric.setValue(e.target.value)}
-                                        onBlur={(e) => handleUpdateDailyMetric(metric.key, e.target.value)}
-                                        className="w-16 sm:w-20 bg-transparent text-lg sm:text-2xl font-black text-fg focus:outline-none focus:text-brand-400 transition-colors"
-                                        placeholder={metric.latest ? metric.latest.toString() : metric.target ? metric.target.toString() : "--"}
-                                    />
-                                    <span className="text-[10px] font-semibold text-fg-muted uppercase">{metric.unit}</span>
-                                </div>
-                                <p className={cn(
-                                    "text-[10px] font-bold mt-1 truncate",
-                                    metric.logged ? "text-success" : "text-fg-subtle"
-                                )}>
-                                    {dailyMetricStatus(metric.key, metric.logged)}
-                                </p>
-                                <p className="text-[8px] sm:text-[9px] text-brand-400 font-semibold mt-0.5 opacity-80 leading-none truncate">
-                                    {getMetricInsight(metric.key, metric.logged)}
-                                </p>
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
+            {!metricsBeforeWorkout && renderDailyMetrics()}
             
-            {/* Check-in Widget — always visible for Premium; schedule optional */}
-            {checkInPanel && (
-                <button
-                    type="button"
-                    id="dashboard-check-in"
-                    onClick={() => checkInPanel && setShowCheckInPanel(true)}
-                    className="block group w-full text-left"
-                >
-                    <div className={cn(
-                        "card p-4 flex items-center justify-between transition-all hover:shadow-glow-sm",
-                        currentCheckin 
-                            ? "border-success/20 bg-success/5 shadow-glow-success-sm" 
-                            : !checkInDueState.isConfigured
-                                ? "border-surface-border bg-surface-muted/30"
-                            : checkInDueState.isOverdue
-                                ? "border-danger/20 bg-danger/5 shadow-glow-danger-sm"
-                                : checkInDueState.isDueToday
-                                    ? "border-warning/20 bg-warning/5 shadow-glow-warning-sm"
-                                    : "border-surface-border bg-surface-muted/30"
-                    )}>
-                        <div className="flex items-center gap-3">
-                            <div className={cn(
-                                "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
-                                currentCheckin 
-                                    ? "bg-success/15" 
-                                    : !checkInDueState.isConfigured
-                                        ? "bg-surface-muted"
-                                    : checkInDueState.isOverdue
-                                        ? "bg-danger/10"
-                                        : "bg-warning/10"
-                            )}>
-                                {currentCheckin 
-                                    ? <Check className="w-5 h-5 text-success" />
-                                    : !checkInDueState.isConfigured
-                                        ? <Calendar className="w-5 h-5 text-fg-subtle" />
-                                    : checkInDueState.isOverdue
-                                        ? <AlertCircle className="w-5 h-5 text-danger animate-pulse-slow" />
-                                        : <Calendar className="w-5 h-5 text-warning animate-pulse-slow" />
-                                }
-                            </div>
-                            <div>
-                                <p className="text-sm font-black text-fg">
-                                    {currentCheckin
-                                        ? formatCheckInPeriodTitle(
-                                            currentCheckin.weekNumber,
-                                            currentCheckin.createdAt
-                                        )
-                                        : "Weekly Check-in"}
-                                </p>
-                                <p className="text-xs text-fg-muted mt-0.5">
-                                    {currentCheckin
-                                        ? currentCheckin.status === "REVIEWED" ? "✅ Coach reviewed" : "⏳ Awaiting coach review"
-                                        : formatCheckInDueSubtitle(checkInDueState)}
-                                </p>
-                            </div>
-                        </div>
-                        <ChevronRight className="w-4 h-4 text-fg-subtle group-hover:text-fg transition-colors" />
-                    </div>
-                </button>
-            )}
-
+            {/* Check-in Widget - always visible for Premium; schedule optional */}
+            {!shouldPrioritizeCheckIn && renderCheckInWidget()}
 
             {/* Recent Workouts */}
             <div id="recent-sessions">
