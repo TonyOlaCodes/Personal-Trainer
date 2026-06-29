@@ -77,10 +77,11 @@ export async function canViewWorkoutLog(
     viewer: Pick<{ id: string; role: string; coachId: string | null }, "id" | "role" | "coachId">,
     log: { userId: string; status: string; user?: { coachId: string | null } | null }
 ): Promise<boolean> {
-    if (log.status !== "COMPLETED") return false;
     if (viewer.id === log.userId) return true;
     if (viewer.role === "SUPER_ADMIN") return true;
     if (viewer.role === "COACH" && log.user?.coachId === viewer.id) return true;
+
+    if (log.status !== "COMPLETED") return false;
 
     return canViewFullProfile(viewer, log.userId);
 }

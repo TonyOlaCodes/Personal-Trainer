@@ -270,7 +270,7 @@ export default async function DashboardPage() {
                 <div className="p-6 max-w-5xl mx-auto">
                         <DashboardClient
                             user={{ name: user.name, role: user.role, weightKg: user.weightKg, targetWeightKg: user.targetWeightKg, goal: user.goal, hiddenGoals: user.hiddenGoals ?? [] }}
-                            activePlan={activePlan ? { name: activePlan.name } : null}
+                            activePlan={activePlan ? { id: activePlan.id, name: activePlan.name } : null}
                             todayWorkout={todayWorkout}
                             nextTrainingDay={nextTrainingDay}
                             todayCompleted={!!isTodayWorkoutCompleted}

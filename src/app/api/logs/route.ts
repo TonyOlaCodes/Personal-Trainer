@@ -52,6 +52,13 @@ export async function POST(req: Request) {
     if (subjectResult.error) return subjectResult.error;
     const subjectUserId = subjectResult.subjectUserId;
 
+    if (status === "COMPLETED" && subjectUserId !== user.id) {
+        return NextResponse.json(
+            { error: "Only the client can complete their workout session" },
+            { status: 403 }
+        );
+    }
+
     if (!(await workoutAssignedToUser(subjectUserId, workoutId))) {
         return NextResponse.json({ error: "Workout is not part of your assigned plans" }, { status: 403 });
     }

@@ -90,9 +90,10 @@ export function resolveScheduleWeeksForDate(
     liveWeeks: PlanWeekLike[],
     revisions: PlanScheduleRevisionRecord[],
     date: Date,
-    today: Date
+    today: Date,
+    dateKey?: string
 ): PlanWeekLike[] {
-    const targetKey = toDateKey(date);
+    const targetKey = dateKey ?? toDateKey(date);
     const todayKey = toDateKey(today);
 
     if (targetKey >= todayKey) {

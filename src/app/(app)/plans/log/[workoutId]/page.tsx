@@ -144,6 +144,7 @@ export default async function WorkoutLogPage({
               id: activeLog.id,
               loggedAt: activeLog.loggedAt.toISOString(),
               duration: activeLog.duration,
+              updatedAt: activeLog.updatedAt.toISOString(),
               sets: activeLog.sets.map((set) => withResolvedLogSetMedia({
                   exerciseId: set.exerciseId,
                   setNumber: set.setNumber,

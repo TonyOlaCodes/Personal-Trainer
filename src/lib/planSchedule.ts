@@ -43,13 +43,20 @@ export function addDaysToDateKey(dateKey: string, days: number): string {
     return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
 }
 
-/** Whole days since plan start (local calendar days). */
-export function getPlanDayOffset(startedAt: Date | string, date: Date): number {
-    const started = new Date(startedAt);
-    started.setHours(0, 0, 0, 0);
-    const targetDate = new Date(date);
-    targetDate.setHours(0, 0, 0, 0);
-    return Math.floor((targetDate.getTime() - started.getTime()) / 86400000);
+/** Monday=0 … Sunday=6 from a YYYY-MM-DD key (timezone-independent). */
+export function weekdayMon0FromDateKey(dateKey: string): number {
+    const [y, m, d] = dateKey.split("-").map(Number);
+    const jsDow = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+    return jsDow === 0 ? 6 : jsDow - 1;
+}
+
+/** Whole days since plan start using app calendar date keys. */
+export function getPlanDayOffset(startedAt: Date | string, date: Date, dateKey?: string): number {
+    const startKey = toDateKey(new Date(startedAt));
+    const targetKey = dateKey ?? toDateKey(date);
+    const [sy, sm, sd] = startKey.split("-").map(Number);
+    const [dy, dm, dd] = targetKey.split("-").map(Number);
+    return Math.floor((Date.UTC(dy, dm - 1, dd) - Date.UTC(sy, sm - 1, sd)) / 86400000);
 }
 
 /**
@@ -87,9 +94,9 @@ export function isDateAfterPlanEnd(
     return endKey !== null && dateKey > endKey;
 }
 
-function findWorkoutOnWeek(week: PlanWeekLike, targetDate: Date): PlanWorkoutLike | null {
-    const jsDow = targetDate.getDay();
-    const dow0Mon = jsDow === 0 ? 6 : jsDow - 1;
+function findWorkoutOnWeek(week: PlanWeekLike, targetDate: Date, dateKey?: string): PlanWorkoutLike | null {
+    const key = dateKey ?? toDateKey(targetDate);
+    const dow0Mon = weekdayMon0FromDateKey(key);
     const fallbackDayNumber = dow0Mon + 1;
     const usesOneIndexedWeekdays = week.workouts.length >= 5
         && week.workouts.every((w) => w.dayOfWeek !== null && w.dayOfWeek !== undefined && w.dayOfWeek === w.dayNumber);
@@ -106,28 +113,30 @@ function findWorkoutOnWeek(week: PlanWeekLike, targetDate: Date): PlanWorkoutLik
 export function getPlannedWorkoutForDate(
     activeUserPlan: ActiveUserPlanLike | null | undefined,
     date: Date,
-    options?: { today?: Date }
+    options?: { today?: Date; dateKey?: string }
 ): PlanWorkoutLike | null {
     if (!activeUserPlan?.plan?.weeks?.length) return null;
 
+    const dateKey = options?.dateKey ?? toDateKey(date);
     const today = options?.today
         ?? parseLogDate(getLocalTimeParts(new Date(), APP_TIMEZONE).dateKey);
     const weeks = resolveScheduleWeeksForDate(
         activeUserPlan.plan.weeks,
         activeUserPlan.scheduleRevisions ?? [],
         date,
-        today
+        today,
+        dateKey
     );
     if (weeks.length === 0) return null;
 
-    const diffDays = getPlanDayOffset(activeUserPlan.startedAt, date);
+    const diffDays = getPlanDayOffset(activeUserPlan.startedAt, date, dateKey);
     const weekIndex = resolvePlanWeekIndex(weeks.length, diffDays);
     if (weekIndex === null) return null;
 
     const week = weeks[weekIndex];
     if (!week) return null;
 
-    return findWorkoutOnWeek(week, date);
+    return findWorkoutOnWeek(week, date, dateKey);
 }
 
 export { activeWorkoutWhere };

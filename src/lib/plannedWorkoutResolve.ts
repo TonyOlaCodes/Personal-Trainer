@@ -9,6 +9,7 @@ import {
     type PlanScheduleRevisionRecord,
     type ScheduleWeekSnapshot,
 } from "@/lib/planScheduleHistory";
+import { toDateKey } from "@/lib/utils";
 
 export interface PlannedWorkoutExercise {
     id: string;
@@ -35,33 +36,35 @@ export function resolvePlannedWorkoutWithExercisesForDate(input: {
     scheduleRevisions?: PlanScheduleRevisionRecord[];
     date: Date;
     today?: Date;
+    dateKey?: string;
 }): ResolvedPlannedWorkout | null {
     const today = input.today ?? input.date;
+    const dateKey = input.dateKey ?? toDateKey(input.date);
     const activeUserPlan: ActiveUserPlanLike = {
         startedAt: input.startedAt,
         plan: { weeks: input.weeks },
         scheduleRevisions: input.scheduleRevisions ?? [],
     };
 
-    const planned = getPlannedWorkoutForDate(activeUserPlan, input.date, { today });
+    const planned = getPlannedWorkoutForDate(activeUserPlan, input.date, { today, dateKey });
     if (!planned) return null;
 
     const weeks = resolveScheduleWeeksForDate(
         input.weeks,
         input.scheduleRevisions ?? [],
         input.date,
-        today
+        today,
+        dateKey
     );
-    const diffDays = getPlanDayOffset(input.startedAt, input.date);
+    const diffDays = getPlanDayOffset(input.startedAt, input.date, dateKey);
     const weekIndex = resolvePlanWeekIndex(weeks.length, diffDays);
     if (weekIndex === null) return null;
 
     const week = weeks[weekIndex];
     const workout = week?.workouts.find((row) => row.id === planned.id);
-    if (!workout) return null;
 
-    const exercises = (workout.exercises ?? []).map((exercise, index) => ({
-        id: exercise.id ?? `${workout.id}-ex-${index}`,
+    const exercises = (workout?.exercises ?? []).map((exercise, index) => ({
+        id: exercise.id ?? `${planned.id}-ex-${index}`,
         name: exercise.name,
         sets: exercise.sets,
         reps: exercise.reps,
@@ -69,10 +72,10 @@ export function resolvePlannedWorkoutWithExercisesForDate(input: {
     }));
 
     return {
-        id: workout.id,
-        name: workout.name,
-        dayNumber: workout.dayNumber,
-        dayOfWeek: workout.dayOfWeek ?? null,
+        id: planned.id,
+        name: planned.name,
+        dayNumber: workout?.dayNumber ?? planned.dayNumber,
+        dayOfWeek: workout?.dayOfWeek ?? planned.dayOfWeek ?? null,
         exercises,
     };
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect, useRef } from "react";
+import { Suspense, useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { DashboardAnnouncementBanners } from "@/components/shared/DashboardAnnouncementBanners";
@@ -52,7 +52,7 @@ interface Props {
         goal?: string | null;
         hiddenGoals?: string[];
     };
-    activePlan: { name: string } | null;
+    activePlan: { id: string; name: string } | null;
     todayWorkout: Workout | null;
     nextTrainingDay: { id: string; name: string; date: string; dayLabel: string } | null;
     todayCompleted?: boolean;
@@ -133,6 +133,8 @@ interface Props {
         };
     };
 }
+
+const TODAY_EXERCISE_PREVIEW = 3;
 
 export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDay, todayCompleted, activeSession, recentLogs, avgDurationMin, currentCheckin, checkInDueState, checkInPanel, bodyweight, dailyMetrics }: Props) {
     const router = useRouter();
@@ -473,6 +475,25 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
         router.push(appendReturnTo(`/plans/log/${workoutId}${dateQuery}`, currentPath));
     };
 
+    const planPreviewHref = useMemo(() => {
+        if (todayWorkout) {
+            return appendReturnTo(
+                `/plans/log/${todayWorkout.id}?date=${encodeURIComponent(todayDate)}`,
+                currentPath
+            );
+        }
+        if (nextTrainingDay) {
+            return appendReturnTo(
+                `/plans/log/${nextTrainingDay.id}?date=${encodeURIComponent(nextTrainingDay.date)}`,
+                currentPath
+            );
+        }
+        if (activePlan?.id) {
+            return `/plans/create?id=${activePlan.id}&view=true`;
+        }
+        return "/plans";
+    }, [todayWorkout, nextTrainingDay, activePlan?.id, todayDate, currentPath]);
+
     const handleStartTodayWorkout = async () => {
         if (!todayWorkout || startingWorkout) return;
 
@@ -579,9 +600,18 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                         {greeting()}, {user.name?.split(" ")[0] ?? "Athlete"}
                     </h2>
                     <div className="flex items-center gap-3 mt-1">
-                        <p className="text-sm text-fg-muted font-medium">
-                            {activePlan ? `Active plan: ${activePlan.name}` : "No active plan - pick one to get started."}
-                        </p>
+                        {activePlan ? (
+                            <Link
+                                href={planPreviewHref}
+                                className="text-sm text-fg-muted font-medium hover:text-brand-400 transition-colors"
+                            >
+                                Active plan: <span className="text-fg">{activePlan.name}</span>
+                            </Link>
+                        ) : (
+                            <p className="text-sm text-fg-muted font-medium">
+                                No active plan — pick one to get started.
+                            </p>
+                        )}
                         {avgDurationMin !== undefined && avgDurationMin > 0 && (
                             <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-surface-muted border border-surface-border text-[10px] font-bold text-fg-subtle uppercase tracking-widest">
                                 <Clock className="w-3 h-3 text-brand-400" />
@@ -621,6 +651,148 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                                 {codeMsg}
                             </p>
                         )}
+                    </div>
+                )}
+            </div>
+
+            {/* Active Session Prompt */}
+            {localActiveSession && (
+                <ActiveSessionBanner
+                    session={localActiveSession}
+                    onDiscarded={() => setLocalActiveSession(null)}
+                />
+            )}
+
+            {/* Today's Workout — first priority on dashboard */}
+            <div id="today-workout">
+                <div className="flex items-center justify-between mb-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
+                        <h3 className="heading-3">Today&apos;s Workout</h3>
+                        {(nextTrainingDay && (!todayWorkout || todayCompleted)) && (
+                            <ReturnLink
+                                href={`/plans/log/${nextTrainingDay.id}?date=${encodeURIComponent(nextTrainingDay.date)}`}
+                                className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-brand-300 hover:text-brand-200 transition-colors"
+                            >
+                                Next training day — preview {nextTrainingDay.name} ({nextTrainingDay.dayLabel} {formatDate(nextTrainingDay.date, { day: "numeric", month: "long" })})
+                                <ChevronRight className="w-3 h-3" />
+                            </ReturnLink>
+                        )}
+                    </div>
+                    {(todayWorkout && !todayCompleted) && (
+                        <span className="text-xs text-brand-400 font-black uppercase tracking-widest animate-pulse-slow">
+                            {localActiveSession?.workoutId === todayWorkout.id ? "Active now" : "Scheduled today"}
+                        </span>
+                    )}
+                </div>
+
+                {todayCompleted ? (
+                    <div className="card p-10 text-center space-y-4 bg-success-950/20 border-success-500/30">
+                        <Check className="w-12 h-12 text-success mx-auto opacity-80" />
+                        <div>
+                            <p className="font-black text-lg text-success uppercase tracking-tight">Session Completed</p>
+                            <p className="text-sm text-fg-muted max-w-xs mx-auto mt-2">
+                                Great job! You have crushed today&apos;s scheduled workout. Take some time to rest and recover.
+                            </p>
+                        </div>
+                    </div>
+                ) : todayWorkout ? (
+                    <div className="card p-5">
+                        <div className="flex items-start justify-between mb-4">
+                            <div>
+                                <Link
+                                    href={planPreviewHref}
+                                    className="font-semibold text-lg text-fg hover:text-brand-400 transition-colors"
+                                >
+                                    {todayWorkout.name}
+                                </Link>
+                                <p className="text-sm text-fg-muted mt-0.5">
+                                    {todayWorkout.exercises.length} exercises
+                                    {todayWorkout.notes && ` · ${todayWorkout.notes}`}
+                                </p>
+                            </div>
+                            <div className="badge-muted">
+                                <Clock className="w-3 h-3" />
+                                ~60 min
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            {todayWorkout.exercises.slice(0, TODAY_EXERCISE_PREVIEW).map((ex) => (
+                                <div
+                                    key={ex.id}
+                                    className="flex items-center justify-between py-2.5 px-3 rounded-xl bg-surface-muted border border-surface-border"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-lg bg-brand-950 flex items-center justify-center">
+                                            <Dumbbell className="w-3.5 h-3.5 text-brand-400" />
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-medium text-fg">{ex.name}</p>
+                                            {ex.muscleGroup && (
+                                                <p className="text-xs text-fg-subtle">{ex.muscleGroup}</p>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-sm font-semibold text-fg">
+                                            {isCardio(ex.name, ex.muscleGroup)
+                                                ? `${ex.sets > 1 ? `${ex.sets} × ` : ""}${ex.reps} min`
+                                                : `${ex.sets} × ${ex.reps}`}
+                                        </p>
+                                        {ex.weightTargetKg && (
+                                            <p className="text-xs text-fg-muted">
+                                                {isCardio(ex.name, ex.muscleGroup) ? `Lvl ${ex.weightTargetKg}` : `${ex.weightTargetKg.toFixed(2)}kg`}
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+
+                            {todayWorkout.exercises.length > TODAY_EXERCISE_PREVIEW && (
+                                <p className="text-xs text-fg-muted text-center pt-1">
+                                    +{todayWorkout.exercises.length - TODAY_EXERCISE_PREVIEW} more exercises
+                                </p>
+                            )}
+                        </div>
+
+                        <div className="mt-6 pt-4 border-t border-surface-border/50 flex justify-center">
+                            <button
+                                type="button"
+                                onClick={handleStartTodayWorkout}
+                                disabled={startingWorkout}
+                                className={cn(
+                                    "btn-primary w-full max-w-md py-4 text-sm font-black uppercase tracking-widest flex items-center justify-center gap-2 rounded-2xl transition-all hover:scale-[1.02] active:scale-[0.98] shadow-glow-brand disabled:opacity-60",
+                                    localActiveSession?.workoutId === todayWorkout.id ? "shadow-glow-success bg-success border-success hover:bg-success-600" : ""
+                                )}
+                            >
+                                <Flame className={cn("w-4.5 h-4.5", localActiveSession?.workoutId === todayWorkout.id && "animate-pulse")} />
+                                {startingWorkout
+                                    ? "Starting..."
+                                    : localActiveSession?.workoutId === todayWorkout.id
+                                        ? "Resume Workout Session"
+                                        : "Start Workout"}
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="card p-10 text-center space-y-4 bg-surface-muted/30 border-dashed">
+                        <Dumbbell className="w-12 h-12 text-brand-400 mx-auto opacity-40" />
+                        <div>
+                            <p className="font-black text-lg text-fg uppercase tracking-tight">
+                                {activePlan ? "Rest Day" : "No Active Plan"}
+                            </p>
+                            <p className="text-sm text-fg-muted max-w-xs mx-auto mt-2">
+                                {activePlan
+                                    ? "Nothing scheduled today — good time to recover or stretch."
+                                    : "You don't have an active plan yet. Pick one to start tracking your sessions."}
+                            </p>
+                        </div>
+                        <Link
+                            href={activePlan ? planPreviewHref : "/plans"}
+                            className="btn-primary shadow-glow-brand-sm mx-auto px-8 h-11 text-[10px] font-black uppercase tracking-widest"
+                        >
+                            {activePlan ? "View Plan Preview" : "Start a Plan →"}
+                        </Link>
                     </div>
                 )}
             </div>
@@ -809,14 +981,6 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                 })}
             </div>
             
-            {/* Active Session Prompt */}
-            {localActiveSession && (
-                <ActiveSessionBanner
-                    session={localActiveSession}
-                    onDiscarded={() => setLocalActiveSession(null)}
-                />
-            )}
-
             {/* Check-in Widget — always visible for Premium; schedule optional */}
             {checkInPanel && (
                 <button
@@ -878,136 +1042,6 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                 </button>
             )}
 
-
-            {/* Today's Workout */}
-            <div id="today-workout">
-                <div className="flex items-center justify-between mb-3">
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
-                        <h3 className="heading-3">Today&apos;s Workout</h3>
-                        {(nextTrainingDay && (!todayWorkout || todayCompleted)) && (
-                            <ReturnLink
-                                href={`/plans/log/${nextTrainingDay.id}?date=${encodeURIComponent(nextTrainingDay.date)}`}
-                                className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-brand-300 hover:text-brand-200 transition-colors"
-                            >
-                                Next training day — preview {nextTrainingDay.name} ({nextTrainingDay.dayLabel} {formatDate(nextTrainingDay.date, { day: "numeric", month: "long" })})
-                                <ChevronRight className="w-3 h-3" />
-                            </ReturnLink>
-                        )}
-                    </div>
-                    {(todayWorkout && !todayCompleted) && (
-                        <span className="text-xs text-brand-400 font-black uppercase tracking-widest animate-pulse-slow">
-                            {localActiveSession?.workoutId === todayWorkout.id ? "Active now" : "Scheduled today"}
-                        </span>
-                    )}
-                </div>
-
-                {todayCompleted ? (
-                    <div className="card p-10 text-center space-y-4 bg-success-950/20 border-success-500/30">
-                        <Check className="w-12 h-12 text-success mx-auto opacity-80" />
-                        <div>
-                            <p className="font-black text-lg text-success uppercase tracking-tight">Session Completed</p>
-                            <p className="text-sm text-fg-muted max-w-xs mx-auto mt-2">
-                                Great job! You have crushed today&apos;s scheduled workout. Take some time to rest and recover.
-                            </p>
-                        </div>
-                    </div>
-                ) : todayWorkout ? (
-                    <div className="card p-5">
-                        <div className="flex items-start justify-between mb-4">
-                            <div>
-                                <h4 className="font-semibold text-lg text-fg">{todayWorkout.name}</h4>
-                                <p className="text-sm text-fg-muted mt-0.5">
-                                    {todayWorkout.exercises.length} exercises
-                                    {todayWorkout.notes && ` · ${todayWorkout.notes}`}
-                                </p>
-                            </div>
-                            <div className="badge-muted">
-                                <Clock className="w-3 h-3" />
-                                ~60 min
-                            </div>
-                        </div>
-
-                        <div className="space-y-2">
-                            {todayWorkout.exercises.slice(0, 5).map((ex) => (
-                                <div
-                                    key={ex.id}
-                                    className="flex items-center justify-between py-2.5 px-3 rounded-xl bg-surface-muted border border-surface-border"
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-lg bg-brand-950 flex items-center justify-center">
-                                            <Dumbbell className="w-3.5 h-3.5 text-brand-400" />
-                                        </div>
-                                        <div>
-                                            <p className="text-sm font-medium text-fg">{ex.name}</p>
-                                            {ex.muscleGroup && (
-                                                <p className="text-xs text-fg-subtle">{ex.muscleGroup}</p>
-                                            )}
-                                        </div>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="text-sm font-semibold text-fg">
-                                            {isCardio(ex.name, ex.muscleGroup)
-                                                ? `${ex.sets > 1 ? `${ex.sets} × ` : ""}${ex.reps} min`
-                                                : `${ex.sets} × ${ex.reps}`}
-                                        </p>
-                                        {ex.weightTargetKg && (
-                                            <p className="text-xs text-fg-muted">
-                                                {isCardio(ex.name, ex.muscleGroup) ? `Lvl ${ex.weightTargetKg}` : `${ex.weightTargetKg.toFixed(2)}kg`}
-                                            </p>
-                                        )}
-                                    </div>
-                                </div>
-                            ))}
-
-                            {todayWorkout.exercises.length > 5 && (
-                                <p className="text-xs text-fg-muted text-center pt-1">
-                                    +{todayWorkout.exercises.length - 5} more exercises
-                                </p>
-                            )}
-                        </div>
-
-                        {/* Centered Start / Resume CTA */}
-                        <div className="mt-6 pt-4 border-t border-surface-border/50 flex justify-center">
-                            <button
-                                type="button"
-                                onClick={handleStartTodayWorkout}
-                                disabled={startingWorkout}
-                                className={cn(
-                                    "btn-primary w-full max-w-md py-4 text-sm font-black uppercase tracking-widest flex items-center justify-center gap-2 rounded-2xl transition-all hover:scale-[1.02] active:scale-[0.98] shadow-glow-brand disabled:opacity-60",
-                                    localActiveSession?.workoutId === todayWorkout.id ? "shadow-glow-success bg-success border-success hover:bg-success-600" : ""
-                                )}
-                            >
-                                <Flame className={cn("w-4.5 h-4.5", localActiveSession?.workoutId === todayWorkout.id && "animate-pulse")} />
-                                {startingWorkout
-                                    ? "Starting..."
-                                    : localActiveSession?.workoutId === todayWorkout.id
-                                        ? "Resume Workout Session"
-                                        : "Start Workout"}
-                            </button>
-                        </div>
-                    </div>
-                ) : (
-                    <div className="card p-10 text-center space-y-4 bg-surface-muted/30 border-dashed">
-                        <Dumbbell className="w-12 h-12 text-brand-400 mx-auto opacity-40" />
-                        <div>
-                            <p className="font-black text-lg text-fg uppercase tracking-tight">
-                                {activePlan ? "Rest Day" : "No Active Plan"}
-                            </p>
-                            <p className="text-sm text-fg-muted max-w-xs mx-auto mt-2">
-                                {activePlan
-                                    ? "Nothing scheduled today — good time to recover or stretch."
-                                    : "You don't have an active plan yet. Pick one to start tracking your sessions."}
-                            </p>
-                        </div>
-                        <Link
-                            href="/plans"
-                            className="btn-primary shadow-glow-brand-sm mx-auto px-8 h-11 text-[10px] font-black uppercase tracking-widest"
-                        >
-                            {activePlan ? "View Full Plan" : "Start a Plan →"}
-                        </Link>
-                    </div>
-                )}
-            </div>
 
             {/* Recent Workouts */}
             <div id="recent-sessions">

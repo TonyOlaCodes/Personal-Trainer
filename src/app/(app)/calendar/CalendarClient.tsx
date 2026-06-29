@@ -260,12 +260,21 @@ export function CalendarClient({
     );
 
     const resolvePlannedWorkoutForDate = useCallback((date: Date, dateKey?: string): PlanWorkout | null => {
-        if (!planStartedAt || serializedPlanWeeks.length === 0) {
-            const key = dateKey ?? toDateKey(date);
-            if (planStartedAt && planWeekCount > 1 && isDateAfterPlanEnd(planStartedAt, planWeekCount, key)) {
-                return null;
-            }
-            if (logMap[key]?.length) return null;
+        const key = dateKey ?? toDateKey(date);
+
+        const workoutFromLog = (): PlanWorkout | null => {
+            const session = logMap[key]?.[0];
+            if (!session) return null;
+            return {
+                id: session.workoutId,
+                name: session.workoutName,
+                dayNumber: 0,
+                dayOfWeek: null,
+                exercises: [],
+            };
+        };
+
+        const workoutFromHistorical = (): PlanWorkout | null => {
             const historical = historicalMissedByDate.get(key);
             if (!historical) return null;
             return {
@@ -275,6 +284,13 @@ export function CalendarClient({
                 dayOfWeek: null,
                 exercises: [],
             };
+        };
+
+        if (!planStartedAt || serializedPlanWeeks.length === 0) {
+            if (planStartedAt && planWeekCount > 1 && isDateAfterPlanEnd(planStartedAt, planWeekCount, key)) {
+                return workoutFromLog();
+            }
+            return workoutFromLog() ?? workoutFromHistorical();
         }
 
         const resolved = resolvePlannedWorkoutWithExercisesForDate({
@@ -283,6 +299,7 @@ export function CalendarClient({
             scheduleRevisions,
             date,
             today: todayDate,
+            dateKey: key,
         });
         if (resolved) {
             return {
@@ -294,22 +311,11 @@ export function CalendarClient({
             };
         }
 
-        const key = dateKey ?? toDateKey(date);
         if (planWeekCount > 1 && isDateAfterPlanEnd(planStartedAt, planWeekCount, key)) {
-            return null;
+            return workoutFromLog();
         }
-        if (logMap[key]?.length) return null;
 
-        const historical = historicalMissedByDate.get(key);
-        if (!historical) return null;
-
-        return {
-            id: historical.workoutId,
-            name: historical.workoutName,
-            dayNumber: 0,
-            dayOfWeek: null,
-            exercises: [],
-        };
+        return workoutFromLog() ?? workoutFromHistorical();
     }, [serializedPlanWeeks, scheduleRevisions, planStartedAt, todayDate, historicalMissedByDate, logMap, planWeekCount]);
 
     /* ─── Calendar Generation ─── */

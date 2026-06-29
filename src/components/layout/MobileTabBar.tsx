@@ -51,10 +51,7 @@ export function MobileTabBar({ userRole = "FREE" }: MobileTabBarProps) {
 
     const activeHref = getActiveNavHref(pathname, filteredItems);
 
-    const hideOnWorkoutLog =
-        pathname.startsWith("/plans/log/") && !pathname.startsWith("/plans/log/view/");
-
-    if (hideOnWorkoutLog || keyboardOpen) return null;
+    if (keyboardOpen) return null;
 
     return (
         <nav

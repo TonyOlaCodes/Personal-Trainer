@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
     Timer, Flame, Check, HelpCircle,
@@ -12,8 +12,6 @@ import { notifyWorkoutStatsChanged } from "@/lib/workoutStatsRefresh";
 import { isCardio, ExerciseAutocomplete } from "@/components/shared/ExerciseAutocomplete";
 import { WorkoutFeelingPicker } from "@/components/shared/WorkoutFeelingPicker";
 import { useScrollLock } from "@/hooks/useScrollLock";
-import { useMobileKeyboardOpen } from "@/hooks/useMobileKeyboardOpen";
-
 interface Exercise {
     id: string;
     name: string;
@@ -90,7 +88,22 @@ interface InitialActiveLog {
     id: string;
     loggedAt: string;
     duration?: number | null;
+    updatedAt?: string;
     sets: ActiveLogSet[];
+}
+
+const WORKOUT_SET_INPUT_ATTR = "data-workout-set-input";
+
+function isWorkoutSetInputFocused() {
+    if (typeof document === "undefined") return false;
+    const el = document.activeElement;
+    return el instanceof HTMLElement && el.hasAttribute(WORKOUT_SET_INPUT_ATTR);
+}
+
+function remoteUpdatedAtMs(value?: string | Date | null): number {
+    if (!value) return 0;
+    const ms = new Date(value).getTime();
+    return Number.isFinite(ms) ? ms : 0;
 }
 
 function readStoredStartTime(localStorageKey: string): number | null {
@@ -248,11 +261,11 @@ export function WorkoutLogClient({
 }: Props) {
     const router = useRouter();
     const searchParams = useSearchParams();
-    const keyboardOpen = useMobileKeyboardOpen();
     const returnTo = getReturnToFromSearchParams(searchParams);
     const targetDateStr = logDate ? toDateKey(parseLogDate(logDate)) : toDateKey(new Date());
     const localStorageKey = `workout_start_time_${workout.id}_${targetDateStr}${clientId ? `_${clientId}` : ""}`;
     const logSubjectFields = clientId ? { clientId } : {};
+    const isCoachForClient = Boolean(clientId);
 
     const [initialSession] = useState(() => {
         if (initialActiveLog) {
@@ -291,6 +304,11 @@ export function WorkoutLogClient({
     const sessionActive = Boolean(activeLogId);
     const [previewExercise, setPreviewExercise] = useState<{ name: string; media: ExercisePreviewMedia } | null>(null);
     const [modalTouchStart, setModalTouchStart] = useState<number | null>(null);
+
+    const lastRemoteUpdatedAtRef = useRef(
+        remoteUpdatedAtMs(initialActiveLog?.updatedAt)
+    );
+    const isSavingRef = useRef(false);
 
     const modalOpen = Boolean(previewExercise) || isSubstituting !== null || isAddingExercise || showFinishModal;
     useScrollLock(modalOpen);
@@ -361,6 +379,9 @@ export function WorkoutLogClient({
                     setActiveExercises(restored.exercises);
                     setLogs(restored.logs);
                     setStartTime(restored.startTime);
+                    if (active.updatedAt) {
+                        lastRemoteUpdatedAtRef.current = remoteUpdatedAtMs(active.updatedAt);
+                    }
                 }
             } catch (e) {
                 console.error("Failed to sync workout session:", e);
@@ -374,6 +395,103 @@ export function WorkoutLogClient({
             cancelled = true;
         };
     }, [activeLogId, clientId, initialActiveLog, isSameDay, localStorageKey, logDate, targetDateStr, workout.exercises, workout.id]);
+
+    // Live sync weight/reps/RPE between coach and client on the same in-progress session.
+    useEffect(() => {
+        if (!activeLogId || !sessionActive || modalOpen) return;
+
+        let cancelled = false;
+
+        const pullRemoteSession = async () => {
+            if (cancelled || isSavingRef.current || isWorkoutSetInputFocused()) return;
+
+            try {
+                const res = await fetch(`/api/logs/${activeLogId}`, { cache: "no-store" });
+                if (!res.ok) {
+                    if (res.status === 404) {
+                        router.push(returnTo);
+                        router.refresh();
+                    }
+                    return;
+                }
+
+                const remote = await res.json();
+                if (cancelled || isSavingRef.current || isWorkoutSetInputFocused()) return;
+
+                if (remote.status === "COMPLETED") {
+                    router.push(returnTo);
+                    router.refresh();
+                    return;
+                }
+
+                const remoteUpdatedAt = remoteUpdatedAtMs(remote.updatedAt);
+                if (remoteUpdatedAt <= lastRemoteUpdatedAtRef.current) return;
+
+                const remotePayload: InitialActiveLog = {
+                    id: remote.id,
+                    loggedAt: remote.loggedAt,
+                    duration: remote.duration,
+                    updatedAt: remote.updatedAt,
+                    sets: (remote.sets ?? []).map((set: {
+                        exerciseId?: string;
+                        exercise?: Exercise | null;
+                        setNumber: number;
+                        reps?: number | null;
+                        weightKg?: number | null;
+                        rpe?: number | null;
+                        isCompleted?: boolean | null;
+                        isWarmup?: boolean | null;
+                        videoUrl?: string | null;
+                    }) => ({
+                        exerciseId: set.exerciseId ?? set.exercise?.id ?? "",
+                        setNumber: set.setNumber,
+                        reps: set.reps,
+                        weightKg: set.weightKg,
+                        rpe: set.rpe,
+                        isCompleted: set.isCompleted,
+                        isWarmup: set.isWarmup,
+                        videoUrl: set.videoUrl,
+                        exercise: set.exercise ?? null,
+                    })),
+                };
+
+                const merged = restoreSessionState(remotePayload, workout.exercises, localStorageKey);
+                lastRemoteUpdatedAtRef.current = remoteUpdatedAt;
+                setLogs(merged.logs);
+                setActiveExercises(merged.exercises);
+            } catch {
+                // ignore transient poll errors
+            }
+        };
+
+        pullRemoteSession();
+        const interval = setInterval(() => {
+            if (document.visibilityState === "visible") {
+                void pullRemoteSession();
+            }
+        }, 1000);
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === "visible") {
+                void pullRemoteSession();
+            }
+        };
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+
+        return () => {
+            cancelled = true;
+            clearInterval(interval);
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+        };
+    }, [
+        activeLogId,
+        sessionActive,
+        modalOpen,
+        localStorageKey,
+        returnTo,
+        router,
+        workout.exercises,
+    ]);
 
     // Track when Swap/Add modal is open and adjust startTime when closed to pause timer
     useEffect(() => {
@@ -464,6 +582,9 @@ export function WorkoutLogClient({
 
             const saved = await createRes.json();
             if (saved.id) setActiveLogId(saved.id);
+            if (saved.updatedAt) {
+                lastRemoteUpdatedAtRef.current = remoteUpdatedAtMs(saved.updatedAt);
+            }
         } catch (e) {
             console.error("Failed to start workout session:", e);
             alert("Could not start workout session.");
@@ -506,6 +627,7 @@ export function WorkoutLogClient({
         try {
             const finalStartTime = startTimeOverride ?? startTime;
             const elapsedMinutes = Math.max(0, Math.floor((Date.now() - finalStartTime) / 60000));
+            isSavingRef.current = true;
             const res = await fetch("/api/logs", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -521,9 +643,14 @@ export function WorkoutLogClient({
             if (res.ok) {
                 const saved = await res.json();
                 if (saved.id) setActiveLogId(saved.id);
+                if (saved.updatedAt) {
+                    lastRemoteUpdatedAtRef.current = remoteUpdatedAtMs(saved.updatedAt);
+                }
             }
         } catch (e) {
             console.error("Auto-save failed:", e);
+        } finally {
+            isSavingRef.current = false;
         }
     };
 
@@ -665,6 +792,7 @@ export function WorkoutLogClient({
     };
 
     const handleInitiateFinish = () => {
+        if (isCoachForClient) return;
         const flattenedSets = Object.entries(logs).flatMap(([exId, sets]) =>
             sets.map(s => ({ ...s, exerciseId: exId }))
         );
@@ -741,7 +869,16 @@ export function WorkoutLogClient({
         }
     };
 
+    const handleExitSession = () => {
+        router.push(returnTo);
+    };
+
     const handleDiscard = async () => {
+        if (isCoachForClient && sessionActive) {
+            handleExitSession();
+            return;
+        }
+
         if (!sessionActive) {
             router.push(returnTo);
             return;
@@ -784,13 +921,17 @@ export function WorkoutLogClient({
                     disabled={isDiscarding}
                     className={cn(
                         "btn-icon",
-                        sessionActive
+                        sessionActive && !isCoachForClient
                             ? "text-danger/60 hover:text-danger hover:bg-danger/10"
                             : "text-fg-muted hover:text-fg hover:bg-surface-muted"
                     )}
-                    title={sessionActive ? "Discard Workout" : "Back"}
+                    title={
+                        sessionActive
+                            ? (isCoachForClient ? "Exit" : "Discard Workout")
+                            : "Back"
+                    }
                 >
-                    {sessionActive ? <Trash2 className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
+                    {sessionActive && !isCoachForClient ? <Trash2 className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
                 </button>
                 <div className="text-center">
                     <h2 className="text-sm font-bold text-fg truncate max-w-[180px]">{workout.name}</h2>
@@ -806,9 +947,18 @@ export function WorkoutLogClient({
                     )}
                 </div>
                 {sessionActive ? (
-                    <button onClick={handleInitiateFinish} disabled={saving} className="btn-primary btn-sm px-4 shadow-glow-brand">
-                        Finish
-                    </button>
+                    isCoachForClient ? (
+                        <button
+                            onClick={handleExitSession}
+                            className="btn-secondary btn-sm px-4"
+                        >
+                            Exit
+                        </button>
+                    ) : (
+                        <button onClick={handleInitiateFinish} disabled={saving} className="btn-primary btn-sm px-4 shadow-glow-brand">
+                            Finish
+                        </button>
+                    )
                 ) : (
                     <button
                         onClick={handleStartWorkout}
@@ -821,7 +971,7 @@ export function WorkoutLogClient({
                 )}
             </div>
 
-            <div className="flex-1 p-4 pt-20 pb-[calc(6.5rem+env(safe-area-inset-bottom,0px))] overflow-y-auto no-scrollbar md:pl-[calc(var(--sidebar-width)+1rem)] md:pb-28">
+            <div className="flex-1 p-4 pt-20 pb-20 overflow-y-auto no-scrollbar md:pl-[calc(var(--sidebar-width)+1rem)] md:pb-28">
                 <div className="max-w-2xl mx-auto space-y-6">
                     {clientName && (
                         <div className="card p-3 border-brand-500/30 bg-brand-950/20 text-center">
@@ -1020,6 +1170,7 @@ export function WorkoutLogClient({
                                                     type="number"
                                                     readOnly={!sessionActive}
                                                     disabled={!sessionActive}
+                                                    {...{ [WORKOUT_SET_INPUT_ATTR]: "" }}
                                                     className={cn(
                                                         "input-sm w-full bg-surface-elevated border-none text-center text-sm font-semibold rounded-lg h-10",
                                                         !cardio && (displayWeight || weightPlaceholder) ? "pr-5 pl-1" : "px-1",
@@ -1043,6 +1194,7 @@ export function WorkoutLogClient({
                                                 type="number"
                                                 readOnly={!sessionActive}
                                                 disabled={!sessionActive}
+                                                {...{ [WORKOUT_SET_INPUT_ATTR]: "" }}
                                                 className={cn(
                                                     "input-sm w-full bg-surface-elevated border-none text-center text-sm font-semibold rounded-lg h-10 px-0",
                                                     sessionActive && "focus:ring-1 focus:ring-brand-500"
@@ -1058,6 +1210,7 @@ export function WorkoutLogClient({
                                                 type="number"
                                                 readOnly={!sessionActive}
                                                 disabled={!sessionActive}
+                                                {...{ [WORKOUT_SET_INPUT_ATTR]: "" }}
                                                 className={cn(
                                                     "input-sm w-full bg-surface-elevated border-none text-center text-sm font-semibold rounded-lg h-10 px-0",
                                                     sessionActive && "focus:ring-1 focus:ring-brand-500"
@@ -1139,7 +1292,8 @@ export function WorkoutLogClient({
                         <span className="text-xs font-black uppercase tracking-widest">Add Exercise</span>
                     </button>
                     
-                    <div className="mt-16 pb-32 text-center space-y-6 max-w-sm mx-auto animate-fade-in delay-500">
+                    {!isCoachForClient && (
+                    <div className="hidden md:block mt-16 pb-8 text-center space-y-6 max-w-sm mx-auto animate-fade-in delay-500">
                         <div className="w-24 h-0.5 bg-gradient-to-r from-transparent via-brand-500/50 to-transparent mx-auto mb-10" />
                         <div className="space-y-2">
                              <p className="text-[10px] font-black uppercase tracking-[0.4em] text-brand-400 animate-pulse-slow">Mission: Complete</p>
@@ -1153,6 +1307,7 @@ export function WorkoutLogClient({
                             Finish Workout
                         </button>
                     </div>
+                    )}
                     </>
                     )}
                 </div>
@@ -1273,22 +1428,8 @@ export function WorkoutLogClient({
                 </div>
             )}
 
-            {sessionActive && !showFinishModal && !keyboardOpen && (
-            <div className="fixed bottom-0 inset-x-0 z-40 p-4 pt-3 border-t border-surface-border bg-surface glass md:hidden pb-[max(1rem,env(safe-area-inset-bottom))]">
-                <button
-                    onClick={handleInitiateFinish}
-                    className="btn-primary w-full h-12 text-base shadow-glow-brand"
-                >
-                    Finish Workout
-                </button>
-            </div>
-            )}
-
             {!sessionActive && (
-            <div className={cn(
-                "fixed bottom-0 inset-x-0 z-40 p-4 pt-3 border-t border-surface-border bg-surface glass md:pl-[var(--sidebar-width)] pb-[max(1rem,env(safe-area-inset-bottom))]",
-                keyboardOpen && "max-md:hidden"
-            )}>
+            <div className="hidden md:block fixed bottom-0 inset-x-0 z-40 p-4 pt-3 border-t border-surface-border bg-surface glass md:pl-[var(--sidebar-width)] pb-[max(1rem,env(safe-area-inset-bottom))]">
                 <button
                     onClick={handleStartWorkout}
                     disabled={isStarting || isCheckingSession}
@@ -1300,7 +1441,7 @@ export function WorkoutLogClient({
             </div>
             )}
 
-            {showFinishModal && (
+            {showFinishModal && !isCoachForClient && (
                 <div className="fixed inset-0 z-[70] flex overflow-hidden overscroll-none items-end sm:items-center justify-center bg-black/80 animate-fade-in sm:p-4">
                     <div
                         className="bg-surface-card w-full sm:max-w-sm max-h-[min(92dvh,100%)] sm:max-h-[90vh] rounded-t-[2rem] sm:rounded-[2rem] border border-surface-border shadow-glow-brand-lg flex flex-col animate-slide-up"
