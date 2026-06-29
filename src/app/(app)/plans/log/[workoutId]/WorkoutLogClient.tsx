@@ -323,10 +323,7 @@ export function WorkoutLogClient({
                 )
         );
 
-    const getWeightPlaceholder = (exerciseId: string, exerciseName: string, setNumber: number, weightTargetKg?: number | null) => {
-        if (weightTargetKg != null && weightTargetKg > 0) {
-            return weightTargetKg.toString();
-        }
+    const getWeightPlaceholder = (exerciseId: string, exerciseName: string, setNumber: number) => {
         const lastSet = findLastCompletedSet(exerciseId, exerciseName, setNumber);
         if (lastSet?.weightKg != null && lastSet.weightKg > 0) {
             return lastSet.weightKg.toString();
@@ -334,18 +331,13 @@ export function WorkoutLogClient({
         return "";
     };
 
-    const getRepsPlaceholder = (exerciseId: string, exerciseName: string, setNumber: number, planReps?: string) => {
-        const planned = parseInt(planReps || "", 10);
-        if (planned > 0) return String(planned);
+    const getRepsPlaceholder = (exerciseId: string, exerciseName: string, setNumber: number) => {
         const lastSet = findLastCompletedSet(exerciseId, exerciseName, setNumber);
         if (lastSet?.reps != null && lastSet.reps > 0) {
             return String(lastSet.reps);
         }
         return "";
     };
-
-    const hasPlanWeight = (weightTargetKg?: number | null) =>
-        weightTargetKg != null && weightTargetKg > 0;
 
     const getRpePlaceholder = (exerciseId: string, exerciseName: string, setNumber: number) => {
         const lastSet = findLastCompletedSet(exerciseId, exerciseName, setNumber);
@@ -861,9 +853,10 @@ export function WorkoutLogClient({
                 console.error("Save failed:", errMsg);
                 alert(`Failed to save: ${errMsg}`);
             }
-        } catch (err: any) {
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
             console.error("Submit error:", err);
-            alert(`Save failed (Connection/JS Error): ${err?.message || err}`);
+            alert(`Save failed (Connection/JS Error): ${message}`);
         } finally {
             setSaving(false);
         }
@@ -1099,8 +1092,8 @@ export function WorkoutLogClient({
                                 </div>
 
                                 {logs[ex.id]?.map((set, sIdx) => {
-                                    const weightPlaceholder = getWeightPlaceholder(ex.id, ex.name, set.setNumber, ex.weightTargetKg);
-                                    const repsPlaceholder = getRepsPlaceholder(ex.id, ex.name, set.setNumber, ex.reps);
+                                    const weightPlaceholder = getWeightPlaceholder(ex.id, ex.name, set.setNumber);
+                                    const repsPlaceholder = getRepsPlaceholder(ex.id, ex.name, set.setNumber);
                                     const rpePlaceholder = getRpePlaceholder(ex.id, ex.name, set.setNumber);
                                     const displayWeight = set.weightKg || (sessionActive ? "" : weightPlaceholder);
                                     const displayReps = set.reps > 0 ? set.reps : (sessionActive ? "" : repsPlaceholder);
@@ -1177,10 +1170,7 @@ export function WorkoutLogClient({
                                                         sessionActive && "focus:ring-1 focus:ring-brand-500"
                                                     )}
                                                     value={displayWeight}
-                                                    placeholder={
-                                                        weightPlaceholder
-                                                        || (hasPlanWeight(ex.weightTargetKg) ? String(ex.weightTargetKg) : "Last week")
-                                                    }
+                                                    placeholder={weightPlaceholder}
                                                     onChange={(e) => updateSet(ex.id, sIdx, { weightKg: e.target.value })}
                                                 />
                                                 {!cardio && (displayWeight || weightPlaceholder) && (
@@ -1200,7 +1190,7 @@ export function WorkoutLogClient({
                                                     sessionActive && "focus:ring-1 focus:ring-brand-500"
                                                 )}
                                                 value={displayReps}
-                                                placeholder={repsPlaceholder || "0"}
+                                                placeholder={repsPlaceholder}
                                                 onChange={(e) => updateSet(ex.id, sIdx, { reps: parseInt(e.target.value) || 0 })}
                                             />
                                         </div>
@@ -1216,7 +1206,7 @@ export function WorkoutLogClient({
                                                     sessionActive && "focus:ring-1 focus:ring-brand-500"
                                                 )}
                                                 value={sessionActive ? set.rpe : (set.rpe || rpePlaceholder)}
-                                                placeholder={rpePlaceholder || "RPE"}
+                                                placeholder={rpePlaceholder}
                                                 onChange={(e) => updateSet(ex.id, sIdx, { rpe: e.target.value })}
                                             />
                                         </div>
