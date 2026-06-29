@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from "react";
 import {
     Users, Activity, Calendar, MessageSquare,
     MapPin, Info, Dumbbell, Award, Scale, MoreHorizontal, ChevronRight, CheckCircle2, Edit3, Zap, Settings,
-    Trash2, AlertTriangle, Clock, Search, X, Pin, ClipboardList, Loader2,
+    Trash2, AlertTriangle, Clock, Search, X, Pin, ClipboardList, Loader2, Plus,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
@@ -536,21 +536,60 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                 </div>
             </div>
 
+            {/* Active plan summary */}
+            <div className="card p-5 sm:p-6 border-brand-500/25 bg-brand-500/5 shadow-glow-brand-sm">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <Link
+                        href={client.activePlan ? `/plans/create?id=${client.activePlan.id}&view=true` : "#"}
+                        className={cn(
+                            "group flex items-start gap-4 min-w-0",
+                            !client.activePlan && "pointer-events-none"
+                        )}
+                    >
+                        <div className="w-12 h-12 rounded-2xl bg-brand-500/10 border border-brand-500/25 flex items-center justify-center shrink-0">
+                            <Dumbbell className="w-5 h-5 text-brand-400" />
+                        </div>
+                        <div className="min-w-0">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">Active Plan</p>
+                            <h3 className="text-xl sm:text-2xl font-black text-fg tracking-tight truncate group-hover:text-brand-300 transition-colors">
+                                {client.activePlan?.name ?? "No plan assigned"}
+                            </h3>
+                            <p className="text-xs text-fg-muted mt-1">
+                                {client.activePlan ? "Click to view this client's current programme." : "Deploy a plan before assigning workouts."}
+                            </p>
+                        </div>
+                    </Link>
+                    <div className="flex flex-col sm:flex-row gap-2 lg:shrink-0">
+                        {client.activePlan && (
+                            <Link
+                                href={`/plans/create?id=${client.activePlan.id}&view=true`}
+                                className="btn-secondary h-11 px-5 inline-flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest"
+                            >
+                                View Plan
+                                <ChevronRight className="w-4 h-4" />
+                            </Link>
+                        )}
+                        {canEdit && (
+                            <Link
+                                href={client.activePlan ? `/plans/create?id=${client.activePlan.id}&clientId=${client.id}` : `/plans/create?clientId=${client.id}`}
+                                className="btn-primary h-11 px-5 inline-flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest shadow-glow-brand"
+                            >
+                                {client.activePlan ? <Edit3 className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                                {client.activePlan ? "Edit Plan" : "Create Plan"}
+                            </Link>
+                        )}
+                    </div>
+                </div>
+            </div>
+
             {/* Training overview */}
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div className="card w-fit max-w-full p-4 border-brand-500/20 bg-gradient-brand/5 shadow-glow-brand-sm">
                 <div className="flex items-center justify-between gap-4 mb-4 text-brand-400">
                     <div className="flex items-center gap-2">
                         <Zap className="w-4 h-4" />
                         <h4 className="text-[10px] font-black uppercase tracking-widest italic">Training overview</h4>
                     </div>
-                    <Link
-                        href={`/coach/calendar?clientId=${client.id}`}
-                        className="btn-icon h-8 w-8 text-brand-400 hover:text-brand-300 hover:bg-brand-500/10 border border-brand-500/20"
-                        title="Open client calendar"
-                        aria-label="Open client calendar"
-                    >
-                        <Calendar className="w-4 h-4" />
-                    </Link>
                 </div>
                 <div className="flex flex-wrap items-end gap-x-6 gap-y-3 sm:gap-x-8">
                     <div className="space-y-0.5">
@@ -577,6 +616,16 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                         </p>
                     </div>
                 </div>
+            </div>
+            <Link
+                href={`/coach/calendar?clientId=${client.id}`}
+                className="btn-primary h-12 px-5 sm:px-6 inline-flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest shadow-glow-brand lg:mt-1 lg:shrink-0"
+                title="Open client calendar"
+                aria-label="Open client calendar"
+            >
+                <Calendar className="w-5 h-5" />
+                Calendar
+            </Link>
             </div>
 
             {/* Trends Grid: Weight/Volume Chart (2/3 width) & Check-ins Sidebar (1/3 width) */}
@@ -1007,11 +1056,11 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                         )}
                     </div>
 
-                    <h3 className="heading-3 px-2 flex items-center gap-2 uppercase tracking-widest text-[11px] font-black text-success">
+                    <h3 className="hidden">
                         <Calendar className="w-4 h-4" />
                         Check-ins
                     </h3>
-                    <div className="space-y-3 max-h-[340px] overflow-y-auto no-scrollbar pr-1">
+                    <div className="hidden">
                         {checkInStatus && (
                             <div className={cn(
                                 "card p-5 border space-y-3",
@@ -1410,7 +1459,133 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                 </div>
             </div>
 
-            {/* ── EXERCISE PROGRESSION HISTORY ── */}
+            {/* Check-ins */}
+            <section className="space-y-4">
+                <div className="flex items-center justify-between px-2">
+                    <h3 className="heading-3 flex items-center gap-2 uppercase tracking-widest text-[11px] font-black text-success">
+                        <Calendar className="w-4 h-4" />
+                        Check-ins
+                    </h3>
+                    <Link href="/checkins" className="text-xs text-brand-400 hover:underline">See all</Link>
+                </div>
+                <div className="space-y-3 max-h-[520px] overflow-y-auto no-scrollbar pr-1">
+                        {checkInStatus && (
+                            <div className={cn(
+                                "card p-5 border space-y-3",
+                                checkInStatus.isOverdue
+                                    ? "border-warning/30 bg-warning/5"
+                                    : "border-brand-500/30 bg-brand-500/5"
+                            )}>
+                                <div className="flex items-start gap-3">
+                                    <div className={cn(
+                                        "w-11 h-11 rounded-2xl flex items-center justify-center border shrink-0",
+                                        checkInStatus.isOverdue
+                                            ? "bg-warning/10 border-warning/30 text-warning"
+                                            : "bg-brand-500/10 border-brand-500/30 text-brand-400"
+                                    )}>
+                                        {checkInStatus.isOverdue ? (
+                                            <AlertTriangle className="w-5 h-5" />
+                                        ) : (
+                                            <Scale className="w-5 h-5" />
+                                        )}
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <p className={cn(
+                                            "text-xs font-black uppercase tracking-widest",
+                                            checkInStatus.isOverdue ? "text-warning" : "text-brand-400"
+                                        )}>
+                                            {checkInStatus.label}
+                                        </p>
+                                        <p className="text-[10px] text-fg-muted font-bold uppercase tracking-[0.1em] mt-1">
+                                            {checkInStatus.periodLabel} - Waiting for client to submit
+                                        </p>
+                                    </div>
+                                </div>
+                                {canEdit && (
+                                    checkInRequestSent ? (
+                                        <div className="space-y-2">
+                                            <p className="text-xs font-semibold text-success flex items-center gap-1.5">
+                                                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                                                Check-in request sent
+                                            </p>
+                                            <Link
+                                                href={`/chat?with=${client.id}`}
+                                                className="btn-secondary w-full h-10 text-xs font-black uppercase tracking-widest inline-flex items-center justify-center gap-2"
+                                            >
+                                                <MessageSquare className="w-4 h-4" />
+                                                Open chat
+                                            </Link>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => void sendCheckInRequest()}
+                                                disabled={sendingCheckInRequest}
+                                                className={cn(
+                                                    "btn-primary w-full h-10 text-xs font-black uppercase tracking-widest inline-flex items-center justify-center gap-2",
+                                                    checkInStatus.isOverdue && "bg-warning hover:bg-warning/90 border-warning/30"
+                                                )}
+                                            >
+                                                {sendingCheckInRequest ? (
+                                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                                ) : (
+                                                    <ClipboardList className="w-4 h-4" />
+                                                )}
+                                                {sendingCheckInRequest ? "Sending..." : "Send check-in request"}
+                                            </button>
+                                            {checkInRequestError && (
+                                                <p className="text-[11px] text-red-400 font-semibold">{checkInRequestError}</p>
+                                            )}
+                                        </div>
+                                    )
+                                )}
+                            </div>
+                        )}
+                        {checkIns.length === 0 ? (
+                            !checkInStatus && (
+                                <div className="p-12 text-center border border-dashed border-surface-border rounded-2xl opacity-60 flex flex-col items-center">
+                                    <Calendar className="w-8 h-8 text-fg-subtle mb-3" />
+                                    <p className="text-xs text-fg-muted font-black uppercase tracking-widest italic">No check-ins yet.</p>
+                                </div>
+                            )
+                        ) : (
+                            checkIns.map((ci) => (
+                                <Link
+                                    href={`/checkins?highlight=${ci.id}`}
+                                    key={ci.id}
+                                    className={cn(
+                                        "card-hover p-5 border transition-all flex items-center justify-between group",
+                                        ci.status === "Pending" ? "border-brand-500/40 bg-brand-500/5 shadow-glow-brand-sm" : "hover:bg-surface-subtle"
+                                    )}
+                                >
+                                    <div className="flex items-center gap-4 min-w-0">
+                                        <div className={cn(
+                                            "w-12 h-12 rounded-2xl flex items-center justify-center border transition-all shrink-0",
+                                            ci.status === "Pending" ? "bg-brand-500/10 border-brand-500/30 text-brand-400" : "bg-surface-muted text-fg-subtle group-hover:border-brand-500/30"
+                                        )}>
+                                            <Scale className="w-6 h-6" />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className="text-xs font-black text-fg uppercase tracking-widest truncate">{formatCheckInPeriodTitle(ci.week, ci.date)}</p>
+                                            <p className="text-[10px] text-fg-subtle font-bold uppercase tracking-[0.1em] mt-0.5">{formatDate(ci.date)}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3 shrink-0">
+                                        {ci.status === "Pending" ? (
+                                            <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-brand-500 text-white text-[9px] font-black uppercase tracking-widest shadow-glow-brand animate-pulse">Review</span>
+                                        ) : (
+                                            <span className="text-[9px] font-black uppercase tracking-widest text-success border border-success/30 px-3 py-1.5 rounded-xl">Reviewed</span>
+                                        )}
+                                        <ChevronRight className="w-4 h-4 text-fg-subtle group-hover:text-brand-400 group-hover:translate-x-1 transition-all" />
+                                    </div>
+                                </Link>
+                            ))
+                        )}
+                </div>
+            </section>
+
+            {/* Exercise progression history */}
             <section className="space-y-4 border-t border-surface-border pt-12 mt-12">
                 <div className="flex items-center gap-2 mb-2">
                     <Activity className="w-4 h-4 text-brand-400" />
