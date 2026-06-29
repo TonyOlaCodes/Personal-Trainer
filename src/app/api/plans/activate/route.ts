@@ -22,11 +22,15 @@ export async function POST(req: Request) {
 
     const { planId } = z.object({ planId: z.string().nullable() }).parse(await req.json());
 
-    if (planId) {
-        const assignment = await prisma.userPlan.findUnique({
+    const targetAssignment = planId
+        ? await prisma.userPlan.findUnique({
             where: { userId_planId: { userId: user.id, planId } },
-        });
-        if (!assignment) {
+            select: { startedAt: true },
+        })
+        : null;
+
+    if (planId) {
+        if (!targetAssignment) {
             return NextResponse.json({ error: "Plan is not in your library" }, { status: 404 });
         }
     }
@@ -39,6 +43,18 @@ export async function POST(req: Request) {
     const switchingPlans = Boolean(
         planId && previousActive && previousActive.planId !== planId
     );
+
+    const earliestCompletedLogForTarget = planId
+        ? await prisma.workoutLog.findFirst({
+            where: {
+                userId: user.id,
+                status: "COMPLETED",
+                workout: { week: { planId } },
+            },
+            select: { loggedAt: true },
+            orderBy: { loggedAt: "asc" },
+        })
+        : null;
 
     await prisma.$transaction(async (tx) => {
         if (switchingPlans && previousActive) {
@@ -68,10 +84,17 @@ export async function POST(req: Request) {
         });
 
         if (planId) {
+            const reactivatedStartedAt = earliestCompletedLogForTarget
+                ? new Date(Math.min(
+                    targetAssignment!.startedAt.getTime(),
+                    earliestCompletedLogForTarget.loggedAt.getTime()
+                ))
+                : new Date();
+
             await tx.userPlan.update({
                 where: { userId_planId: { userId: user.id, planId } },
                 data: switchingPlans
-                    ? { isActive: true, startedAt: new Date() }
+                    ? { isActive: true, startedAt: reactivatedStartedAt }
                     : { isActive: true },
             });
         }
