@@ -104,7 +104,7 @@ export function isFutureCalendarMonth(reference: Date, year: number, monthIndex:
     return monthIndex + 1 > m;
 }
 
-/** Full-month compliance for a visible calendar month (includes all scheduled days in the month). */
+/** Compliance for a visible calendar month. Current month only counts sessions due so far. */
 export function computeComplianceForMonth(
     input: CalendarComplianceInput,
     year: number,
@@ -113,8 +113,8 @@ export function computeComplianceForMonth(
     options?: CalendarComplianceOptions
 ): CalendarComplianceResult {
     const monthStart = parseLogDate(`${year}-${String(monthIndex + 1).padStart(2, "0")}-01`);
-    const rangeEnd = getMonthEnd(monthStart);
     const isCurrentMonth = isSameCalendarMonth(reference, year, monthIndex);
+    const rangeEnd = isCurrentMonth ? reference : getMonthEnd(monthStart);
     const rangeOptions: CalendarComplianceOptions = {
         ...options,
         referenceToday: reference,
@@ -223,7 +223,7 @@ export function computeWeeklyCompliance(
     today: Date,
     options?: CalendarComplianceOptions
 ): CalendarComplianceResult {
-    return computeWorkoutCompliance(input, getMondayStart(today), getWeekEnd(today), {
+    return computeWorkoutCompliance(input, getMondayStart(today), today, {
         ...options,
         referenceToday: today,
     });
@@ -234,7 +234,7 @@ export function computeMonthlyCompliance(
     today: Date,
     options?: CalendarComplianceOptions
 ): CalendarComplianceResult {
-    return computeWorkoutCompliance(input, getMonthStart(today), getMonthEnd(today), {
+    return computeWorkoutCompliance(input, getMonthStart(today), today, {
         ...options,
         referenceToday: today,
     });

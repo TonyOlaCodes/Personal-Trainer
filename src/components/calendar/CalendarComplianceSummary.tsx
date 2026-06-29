@@ -77,9 +77,12 @@ export function CalendarComplianceSummary({
     now,
     excludeTodayUntilLogged = false,
 }: CalendarComplianceSummaryProps) {
-    const complianceOptions = excludeTodayUntilLogged
-        ? ({ excludeTodayUntilLogged: true } as const)
-        : undefined;
+    const complianceOptions = useMemo(
+        () => excludeTodayUntilLogged
+            ? ({ excludeTodayUntilLogged: true } as const)
+            : undefined,
+        [excludeTodayUntilLogged]
+    );
 
     const isViewingCurrentMonth = isSameCalendarMonth(now, calendarView.year, calendarView.month);
 
@@ -113,14 +116,14 @@ export function CalendarComplianceSummary({
             <div className="grid grid-cols-2 gap-2 sm:gap-3">
                 <ComplianceCard
                     label="This Week"
-                    sublabel="Mon–Sun this week"
+                    sublabel="So far this week"
                     completed={weekCompliance.completed}
                     due={weekCompliance.due}
                     percent={weekCompliance.percent}
                 />
                 <ComplianceCard
                     label="This Month"
-                    sublabel="All sessions this month"
+                    sublabel="So far this month"
                     completed={monthCompliance.completed}
                     due={monthCompliance.due}
                     percent={monthCompliance.percent}
