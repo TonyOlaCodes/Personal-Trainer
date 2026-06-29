@@ -23,7 +23,6 @@ import {
 import { getPlannedWorkoutForDate, type ActiveUserPlanLike } from "@/lib/planSchedule";
 import { loadPlanScheduleRevisionsByPlanIds } from "@/lib/planScheduleHistory";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
-import { isInactiveAccount } from "@/lib/userDeactivation";
 import { formatCheckInDueDate } from "@/lib/checkInLabels";
 import {
     getCoachAppToday,
@@ -289,16 +288,22 @@ export async function loadCoachDashboardInsights(input: {
     }
 
     const adherenceLogsByUser = new Map<string, Array<{ workoutId: string; dateKey: string }>>();
+    const completedWorkoutDateKeysByUser = new Map<string, Set<string>>();
     for (const log of adherenceLogs) {
         const startedAt = planStartedAtByUser.get(log.userId);
         if (startedAt != null && log.loggedAt.getTime() < startedAt) continue;
 
+        const dateKey = getLocalTimeParts(log.loggedAt, APP_TIMEZONE).dateKey;
         const rows = adherenceLogsByUser.get(log.userId) ?? [];
         rows.push({
             workoutId: log.workoutId,
-            dateKey: getLocalTimeParts(log.loggedAt, APP_TIMEZONE).dateKey,
+            dateKey,
         });
         adherenceLogsByUser.set(log.userId, rows);
+
+        const completedKeys = completedWorkoutDateKeysByUser.get(log.userId) ?? new Set<string>();
+        completedKeys.add(`${log.workoutId}:${dateKey}`);
+        completedWorkoutDateKeysByUser.set(log.userId, completedKeys);
     }
 
     const clientInsights: Record<string, ClientDashboardInsight> = {};
@@ -457,7 +462,12 @@ export async function loadCoachDashboardInsights(input: {
             const date = parseLogDate(dateKey);
 
             const plannedWorkout = getPlannedWorkoutForDate(activeUserPlan, date, { today });
-            if (plannedWorkout) {
+            const completedWorkoutKeys = completedWorkoutDateKeysByUser.get(client.id);
+            const isWorkoutCompleted = plannedWorkout
+                ? (completedWorkoutKeys?.has(`${plannedWorkout.id}:${dateKey}`) ?? false)
+                : false;
+
+            if (plannedWorkout && !isWorkoutCompleted) {
                 upcomingEvents.push({
                     id: `${client.id}-workout-${dateKey}`,
                     clientId: client.id,
