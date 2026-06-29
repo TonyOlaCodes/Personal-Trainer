@@ -15,7 +15,6 @@ import { ReturnLink } from "@/components/shared/ReturnLink";
 import { cn, toDateKey, parseLogDate, formatDate } from "@/lib/utils";
 import { useCurrentDate } from "@/hooks/useCurrentDate";
 import {
-    getPlannedWorkoutForDate,
     getPlanDayOffset,
     getPlanEndDateKey,
     getPlanProgramWeekNumber,
@@ -36,6 +35,12 @@ interface PlanExercise { id: string; name: string; sets: number; reps: string; o
 interface PlanWorkout { dayNumber: number; dayOfWeek?: number | null; name: string; id: string; exercises: PlanExercise[]; }
 interface PlanWeek { weekNumber: number; workouts: PlanWorkout[]; }
 interface ActivePlan { id?: string; name: string; weeks: PlanWeek[]; }
+
+interface CalendarCell {
+    dateKey: string;
+    day: number;
+    inCurrentMonth: boolean;
+}
 
 interface LogSet {
     exerciseId: string;
@@ -201,17 +206,6 @@ export function CalendarClient({
         return excusedKeys.has(`${dateKey}:${workoutId}`);
     }, [excusedKeys]);
 
-    const activeUserPlan = useMemo(
-        () => (activePlan && planStartedAt
-            ? {
-                startedAt: planStartedAt,
-                plan: { weeks: activePlan.weeks },
-                scheduleRevisions,
-            }
-            : null),
-        [activePlan, planStartedAt, scheduleRevisions]
-    );
-
     const planWeekCount = activePlan?.weeks.length ?? 0;
     const planScheduleMode = getPlanScheduleMode(planWeekCount);
 
@@ -320,15 +314,22 @@ export function CalendarClient({
 
     /* ─── Calendar Generation ─── */
     const firstDay = new Date(view.year, view.month, 1);
-    const lastDay = new Date(view.year, view.month + 1, 0);
     const startDow = (firstDay.getDay() + 6) % 7; 
-    const daysInMonth = lastDay.getDate();
+    const gridStart = new Date(view.year, view.month, 1 - startDow);
+    const gridEnd = new Date(view.year, view.month + 1, 0);
+    const endDow = (gridEnd.getDay() + 6) % 7;
+    gridEnd.setDate(gridEnd.getDate() + (6 - endDow));
 
-    const cells: (number | null)[] = [
-        ...Array(startDow).fill(null),
-        ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
-    ];
-    while (cells.length % 7 !== 0) cells.push(null);
+    const cells: CalendarCell[] = [];
+    const cursor = new Date(gridStart);
+    while (cursor <= gridEnd) {
+        cells.push({
+            dateKey: toDateKey(cursor),
+            day: cursor.getDate(),
+            inCurrentMonth: cursor.getMonth() === view.month,
+        });
+        cursor.setDate(cursor.getDate() + 1);
+    }
 
     /* ─── Selected Day Helpers ─── */
     const selectedDate = useMemo(() => {
@@ -471,16 +472,14 @@ export function CalendarClient({
                         ))}
                     </div>
                     <div className="grid grid-cols-7 bg-surface-card/30 backdrop-blur-md">
-                        {cells.map((day, idx) => {
-                            const dateKey = day
-                                ? `${view.year}-${String(view.month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`
-                                : "";
-                            const dateObj = day ? parseLogDate(dateKey) : null;
-                            const dayLogs = day ? logMap[dateKey] : null;
+                        {cells.map((cell) => {
+                            const { dateKey, day, inCurrentMonth } = cell;
+                            const dateObj = parseLogDate(dateKey);
+                            const dayLogs = logMap[dateKey] ?? null;
                             const log = dayLogs?.[0] ?? null;
                             const dayInProgress = !dayLogs?.length ? inProgressByDate[dateKey]?.[0] ?? null : null;
-                            const planned = dateObj ? resolvePlannedWorkoutForDate(dateObj, dateKey) : null;
-                            const isPast = dateKey !== "" && dateKey < todayKey;
+                            const planned = resolvePlannedWorkoutForDate(dateObj, dateKey);
+                            const isPast = dateKey < todayKey;
                             const isTodayDay = dateKey === todayKey;
                             const selected = dateKey === selectedDateKey;
                             const isAfterPlan = Boolean(
@@ -506,24 +505,23 @@ export function CalendarClient({
 
                             return (
                                 <button 
-                                    key={idx} 
-                                    disabled={!day}
-                                    onClick={() => dateObj && setSelectedDateKey(dateKey)}
+                                    key={dateKey} 
+                                    onClick={() => setSelectedDateKey(dateKey)}
                                     className={cn(
                                         "min-h-[110px] sm:min-h-[130px] p-2 border-b border-r border-surface-border/50 last:border-r-0 transition-all group flex flex-col items-start gap-1 relative overflow-hidden",
-                                        !day && "bg-surface-muted/5",
-                                        day && "cursor-pointer hover:bg-surface-muted/20",
+                                        "cursor-pointer hover:bg-surface-muted/20",
+                                        !inCurrentMonth && "bg-surface-muted/10 opacity-55 hover:opacity-80",
                                         selected && "bg-brand-950/20",
                                         isAfterPlan && "bg-surface-muted/15 opacity-60",
                                         isBeforePlan && "opacity-70"
                                     )}
                                 >
-                                    {day && (
-                                        <>
+                                    <>
                                             <div className="w-full flex justify-between items-start mb-1">
                                                 <span className={cn(
                                                     "text-sm font-black flex items-center justify-center w-7 h-7 rounded-lg transition-all",
-                                                    isTodayDay ? "bg-brand-400 text-white shadow-glow-brand" : (selected ? "bg-fg text-surface" : "text-fg-subtle group-hover:text-fg")
+                                                    isTodayDay ? "bg-brand-400 text-white shadow-glow-brand" : (selected ? "bg-fg text-surface" : "text-fg-subtle group-hover:text-fg"),
+                                                    !inCurrentMonth && !isTodayDay && !selected && "text-fg-subtle/60"
                                                 )}>
                                                     {day}
                                                 </span>
@@ -598,8 +596,7 @@ export function CalendarClient({
                                             </div>
 
                                             {selected && <div className="absolute inset-x-0 bottom-0 h-0.5 bg-brand-400 shadow-glow-brand" />}
-                                        </>
-                                    )}
+                                    </>
                                 </button>
                             );
                         })}
