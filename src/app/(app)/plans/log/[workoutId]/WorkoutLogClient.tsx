@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
     Timer, Flame, Check, HelpCircle,
-    Trash2, Plus, InfoIcon, Award, Play, Zap, X, ChevronLeft, ChevronDown
+    Trash2, Plus, InfoIcon, Award, Play, Zap, X, ChevronLeft
 } from "lucide-react";
 import { cn, generateId, formatDate, isSameCalendarDay, parseLogDate, toDateKey, toLoggedAtIso, calculateOneRM } from "@/lib/utils";
 import { appendReturnTo, getReturnToFromSearchParams } from "@/lib/navigation";
@@ -291,8 +291,6 @@ export function WorkoutLogClient({
     const sessionActive = Boolean(activeLogId);
     const [previewExercise, setPreviewExercise] = useState<{ name: string; media: ExercisePreviewMedia } | null>(null);
     const [modalTouchStart, setModalTouchStart] = useState<number | null>(null);
-    /** Exercises using per-set weight/reps (default: same values for all sets). */
-    const [individualSetExercises, setIndividualSetExercises] = useState<Set<string>>(new Set());
 
     const modalOpen = Boolean(previewExercise) || isSubstituting !== null || isAddingExercise || showFinishModal;
     useScrollLock(modalOpen);
@@ -330,26 +328,6 @@ export function WorkoutLogClient({
 
     const hasPlanWeight = (weightTargetKg?: number | null) =>
         weightTargetKg != null && weightTargetKg > 0;
-
-    const toggleIndividualSets = (exId: string) => {
-        setIndividualSetExercises((prev) => {
-            const next = new Set(prev);
-            if (next.has(exId)) {
-                next.delete(exId);
-            } else {
-                next.add(exId);
-            }
-            return next;
-        });
-    };
-
-    const getUnifiedSetValues = (ex: Exercise, sets: SetLog[]) => {
-        const weightPlaceholder = getWeightPlaceholder(ex.id, ex.name, 1, ex.weightTargetKg);
-        const repsPlaceholder = getRepsPlaceholder(ex.id, ex.name, 1, ex.reps);
-        const weightKg = sets.find((s) => s.weightKg.trim() !== "")?.weightKg ?? "";
-        const reps = sets.find((s) => s.reps > 0)?.reps ?? 0;
-        return { weightKg, reps, weightPlaceholder, repsPlaceholder };
-    };
 
     const getRpePlaceholder = (exerciseId: string, exerciseName: string, setNumber: number) => {
         const lastSet = findLastCompletedSet(exerciseId, exerciseName, setNumber);
@@ -547,25 +525,6 @@ export function WorkoutLogClient({
         } catch (e) {
             console.error("Auto-save failed:", e);
         }
-    };
-
-    const updateAllSets = (exId: string, updates: Partial<Pick<SetLog, "weightKg" | "reps">>) => {
-        setLogs((prev) => {
-            const nextSets = prev[exId].map((set) => {
-                const merged = { ...set, ...updates };
-                if (
-                    updates.weightKg !== undefined
-                    && updates.weightKg.trim() !== ""
-                    && !set.isCompleted
-                ) {
-                    merged.isCompleted = true;
-                }
-                return merged;
-            });
-            const next = { ...prev, [exId]: nextSets };
-            saveProgress(next);
-            return next;
-        });
     };
 
     const updateSet = (exId: string, setIdx: number, updates: Partial<SetLog>) => {
@@ -891,9 +850,6 @@ export function WorkoutLogClient({
                         const media = exerciseMedia[ex.name];
                         const hasPreview = !!(media?.videoUrl || media?.instructions);
                         const cardio = isCardio(ex.name, ex.muscleGroup);
-                        const isIndividualSets = individualSetExercises.has(ex.id);
-                        const exerciseSets = logs[ex.id] ?? [];
-                        const unified = getUnifiedSetValues(ex, exerciseSets);
 
                         return (
                         <div key={ex.id} id={`exercise-${ex.id}`} className="card p-4 space-y-4 animate-slide-up">
@@ -931,17 +887,6 @@ export function WorkoutLogClient({
 
                                 {ex.notes && <p className="text-xs text-fg-muted -mt-1">{ex.notes}</p>}
 
-                                {!cardio && (
-                                    <button
-                                        type="button"
-                                        onClick={() => toggleIndividualSets(ex.id)}
-                                        className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-fg-subtle hover:text-brand-400 transition-colors w-fit"
-                                    >
-                                        <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", isIndividualSets && "rotate-180")} />
-                                        {isIndividualSets ? "Same weight & reps for all sets" : "Edit sets individually"}
-                                    </button>
-                                )}
-
                                 {sessionActive && (
                                     <div className="flex items-center gap-2 pt-1">
                                         <button
@@ -968,32 +913,24 @@ export function WorkoutLogClient({
                                     sessionActive ? "grid-cols-10 md:grid-cols-12" : "grid-cols-12"
                                 )}>
                                     <div className="col-span-1 text-center">{cardio ? "Rd" : "Set"}</div>
-                                    {(isIndividualSets || cardio) && (
+                                    {!cardio && (
                                         <>
-                                            <div className={cn("text-center", sessionActive ? "col-span-4 md:col-span-3" : "col-span-3")}>{cardio ? "Lvl/Spd" : "Weight"}</div>
-                                            <div className="col-span-2 text-center">{cardio ? "Mins" : "Reps"}</div>
+                                            <div className={cn("text-center", sessionActive ? "col-span-4 md:col-span-3" : "col-span-3")}>Weight</div>
+                                            <div className="col-span-2 text-center">Reps</div>
                                         </>
                                     )}
-                                    {!isIndividualSets && !cardio && (
-                                        <div className={cn("text-left normal-case font-semibold text-fg-muted", sessionActive ? "col-span-6 md:col-span-5" : "col-span-5")}>
-                                            {hasPlanWeight(ex.weightTargetKg)
-                                                ? "Plan target applies to all sets"
-                                                : "Last week shown as placeholder until you log"}
-                                        </div>
+                                    {cardio && (
+                                        <>
+                                            <div className={cn("text-center", sessionActive ? "col-span-4 md:col-span-3" : "col-span-3")}>Lvl/Spd</div>
+                                            <div className="col-span-2 text-center">Mins</div>
+                                        </>
                                     )}
-                                    <div className={cn(
-                                        "text-center",
-                                        !isIndividualSets && !cardio
-                                            ? (sessionActive ? "col-span-3 md:col-span-2" : "col-span-2")
-                                            : (sessionActive ? "col-span-3 md:col-span-2" : "col-span-2")
-                                    )}>RPE</div>
+                                    <div className={cn("text-center", sessionActive ? "col-span-3 md:col-span-2" : "col-span-2")}>RPE</div>
                                     {!cardio && (
                                         <div
                                             className={cn(
                                                 "text-center",
-                                                sessionActive
-                                                    ? (isIndividualSets ? "hidden md:block md:col-span-2" : "hidden md:block md:col-span-2")
-                                                    : "col-span-4"
+                                                sessionActive ? "hidden md:block md:col-span-2" : "col-span-4"
                                             )}
                                             title="Estimated 1RM"
                                         >
@@ -1004,74 +941,19 @@ export function WorkoutLogClient({
                                     {sessionActive && (
                                         <div className={cn(
                                             "text-center hidden md:block",
-                                            cardio ? "md:col-span-4" : (isIndividualSets ? "md:col-span-2" : "md:col-span-3")
+                                            cardio ? "md:col-span-4" : "md:col-span-2"
                                         )}>
                                             Actions
                                         </div>
                                     )}
                                 </div>
 
-                                {!isIndividualSets && !cardio && (
-                                    <div className={cn(
-                                        "grid gap-1.5 md:gap-2 p-2 rounded-xl bg-brand-500/5 border border-brand-500/15 mb-1",
-                                        sessionActive ? "grid-cols-10 md:grid-cols-12" : "grid-cols-12"
-                                    )}>
-                                        <div className="col-span-1" />
-                                        <div className={cn(sessionActive ? "col-span-4 md:col-span-3" : "col-span-3")}>
-                                            <div className="relative">
-                                                <input
-                                                    type="number"
-                                                    readOnly={!sessionActive}
-                                                    disabled={!sessionActive}
-                                                    className={cn(
-                                                        "input-sm w-full bg-surface-elevated border-none text-center text-sm font-semibold rounded-lg h-10 pr-5 pl-1",
-                                                        sessionActive && "focus:ring-1 focus:ring-brand-500"
-                                                    )}
-                                                    value={unified.weightKg || (!sessionActive ? unified.weightPlaceholder : "")}
-                                                    placeholder={
-                                                        unified.weightPlaceholder
-                                                        || (hasPlanWeight(ex.weightTargetKg) ? String(ex.weightTargetKg) : "Last week")
-                                                    }
-                                                    onChange={(e) => updateAllSets(ex.id, { weightKg: e.target.value })}
-                                                />
-                                                <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] text-fg-subtle pointer-events-none">kg</span>
-                                            </div>
-                                        </div>
-                                        <div className="col-span-2">
-                                            <input
-                                                type="number"
-                                                readOnly={!sessionActive}
-                                                disabled={!sessionActive}
-                                                className={cn(
-                                                    "input-sm w-full bg-surface-elevated border-none text-center text-sm font-semibold rounded-lg h-10 px-0",
-                                                    sessionActive && "focus:ring-1 focus:ring-brand-500"
-                                                )}
-                                                value={unified.reps > 0
-                                                    ? unified.reps
-                                                    : (!sessionActive ? unified.repsPlaceholder : "")}
-                                                placeholder={unified.repsPlaceholder || "Reps"}
-                                                onChange={(e) => updateAllSets(ex.id, { reps: parseInt(e.target.value, 10) || 0 })}
-                                            />
-                                        </div>
-                                        <div className={cn(
-                                            "flex items-center text-[9px] font-semibold text-fg-subtle normal-case",
-                                            sessionActive ? "col-span-3 md:col-span-6" : "col-span-7"
-                                        )}>
-                                            Same for every set
-                                        </div>
-                                    </div>
-                                )}
-
                                 {logs[ex.id]?.map((set, sIdx) => {
                                     const weightPlaceholder = getWeightPlaceholder(ex.id, ex.name, set.setNumber, ex.weightTargetKg);
                                     const repsPlaceholder = getRepsPlaceholder(ex.id, ex.name, set.setNumber, ex.reps);
                                     const rpePlaceholder = getRpePlaceholder(ex.id, ex.name, set.setNumber);
-                                    const displayWeight = isIndividualSets
-                                        ? (set.weightKg || (sessionActive ? "" : weightPlaceholder))
-                                        : (unified.weightKg || (sessionActive ? "" : unified.weightPlaceholder));
-                                    const displayReps = isIndividualSets
-                                        ? (set.reps > 0 ? set.reps : (sessionActive ? "" : repsPlaceholder))
-                                        : (unified.reps > 0 ? unified.reps : (sessionActive ? "" : unified.repsPlaceholder));
+                                    const displayWeight = set.weightKg || (sessionActive ? "" : weightPlaceholder);
+                                    const displayReps = set.reps > 0 ? set.reps : (sessionActive ? "" : repsPlaceholder);
                                     const weightNum = parseFloat(String(displayWeight)) || 0;
                                     const repsNum = typeof displayReps === "number" ? displayReps : parseInt(String(displayReps), 10) || 0;
                                     const est1RM = !cardio && !set.isWarmup && weightNum > 0 && repsNum > 0 ? calculateOneRM(weightNum, repsNum) : null;
@@ -1132,7 +1014,6 @@ export function WorkoutLogClient({
                                             )}
                                         </div>
 
-                                        {(isIndividualSets || cardio) && (
                                         <div className={cn(sessionActive ? "col-span-4 md:col-span-3" : "col-span-3")}>
                                             <div className="relative">
                                                 <input
@@ -1156,9 +1037,7 @@ export function WorkoutLogClient({
                                                 )}
                                             </div>
                                         </div>
-                                        )}
 
-                                        {(isIndividualSets || cardio) && (
                                         <div className="col-span-2">
                                             <input
                                                 type="number"
@@ -1173,23 +1052,8 @@ export function WorkoutLogClient({
                                                 onChange={(e) => updateSet(ex.id, sIdx, { reps: parseInt(e.target.value) || 0 })}
                                             />
                                         </div>
-                                        )}
 
-                                        {!isIndividualSets && !cardio && (
-                                            <div className={cn(
-                                                "hidden md:flex items-center text-[10px] text-fg-subtle font-medium tabular-nums",
-                                                sessionActive ? "md:col-span-5" : "md:col-span-5"
-                                            )}>
-                                                {(displayWeight || weightPlaceholder) && (displayReps || repsPlaceholder)
-                                                    ? `${displayWeight || weightPlaceholder}kg × ${displayReps || repsPlaceholder}`
-                                                    : "—"}
-                                            </div>
-                                        )}
-
-                                        <div className={cn(
-                                            sessionActive ? "col-span-3 md:col-span-2" : "col-span-2",
-                                            !isIndividualSets && !cardio && sessionActive && "col-span-4 md:col-span-2"
-                                        )}>
+                                        <div className={cn(sessionActive ? "col-span-3 md:col-span-2" : "col-span-2")}>
                                             <input
                                                 type="number"
                                                 readOnly={!sessionActive}
@@ -1207,9 +1071,7 @@ export function WorkoutLogClient({
                                         {!cardio && (
                                             <div className={cn(
                                                 "flex items-center justify-center min-w-0",
-                                                sessionActive
-                                                    ? (isIndividualSets ? "hidden md:flex md:col-span-2" : "hidden md:flex md:col-span-2")
-                                                    : "col-span-4"
+                                                sessionActive ? "hidden md:flex md:col-span-2" : "col-span-4"
                                             )}>
                                                 <span className={cn(
                                                     "text-xs font-bold tabular-nums whitespace-nowrap",
@@ -1221,10 +1083,7 @@ export function WorkoutLogClient({
                                         )}
 
                                         {sessionActive && (
-                                        <div className={cn(
-                                            "hidden md:flex items-center justify-end gap-1",
-                                            cardio ? "md:col-span-4" : (isIndividualSets ? "md:col-span-2" : "md:col-span-3")
-                                        )}>
+                                        <div className={cn("hidden md:flex items-center justify-end gap-1", cardio ? "md:col-span-4" : "md:col-span-2")}>
                                             {setActions}
                                         </div>
                                         )}
