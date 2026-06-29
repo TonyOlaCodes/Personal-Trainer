@@ -468,6 +468,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                 sessions={logs}
                 initialSessionId={sessionsInitialId}
                 canAddCoachNote={canEdit}
+                alignToAppShell
             />
             {readOnly && (
                 <div className="card p-4 border-warning/30 bg-warning/5 flex items-start gap-3">

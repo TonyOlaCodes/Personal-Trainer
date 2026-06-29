@@ -23,6 +23,7 @@ interface Props {
     emptyMessage?: string;
     loading?: boolean;
     error?: string;
+    alignToAppShell?: boolean;
 }
 
 const PREVIEW_LIMIT = 5;
@@ -40,11 +41,12 @@ export function RecentSessionsListModal({
     emptyMessage = "No workouts logged yet.",
     loading = false,
     error = "",
+    alignToAppShell = false,
 }: Props) {
     if (!open) return null;
 
     return (
-        <ModalOverlay onClose={onClose}>
+        <ModalOverlay onClose={onClose} alignToAppShell={alignToAppShell}>
             <div
                 className="bg-surface-card w-full sm:max-w-lg max-h-[85vh] rounded-t-[2rem] sm:rounded-3xl border border-surface-border shadow-glow-brand-lg overflow-hidden animate-slide-up flex flex-col"
                 onClick={(e) => e.stopPropagation()}

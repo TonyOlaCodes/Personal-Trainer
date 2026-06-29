@@ -10,6 +10,7 @@ interface ModalOverlayProps {
     className?: string;
     children: ReactNode;
     closeOnBackdrop?: boolean;
+    alignToAppShell?: boolean;
 }
 
 export function ModalOverlay({
@@ -18,6 +19,7 @@ export function ModalOverlay({
     className,
     children,
     closeOnBackdrop = Boolean(onClose),
+    alignToAppShell = false,
 }: ModalOverlayProps) {
     useScrollLock(open);
 
@@ -33,6 +35,7 @@ export function ModalOverlay({
         <div
             className={cn(
                 "fixed inset-0 z-[60] flex overflow-hidden overscroll-none items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm animate-fade-in sm:p-4",
+                alignToAppShell && "md:left-[var(--sidebar-width)]",
                 className
             )}
             onClick={handleBackdropClick}

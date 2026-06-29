@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Loader2 } from "lucide-react";
 import { useScrollLock } from "@/hooks/useScrollLock";
 import { RecentSessionsListModal, PREVIEW_LIMIT, type RecentSessionItem } from "./RecentSessionsListModal";
 import { WorkoutSessionModal } from "./WorkoutSessionModal";
@@ -22,6 +21,8 @@ interface Props {
     fetchHistoryOnOpen?: boolean;
     /** Load history for another user (coach viewing a client). */
     historyUserId?: string;
+    /** Keep desktop modals centered in the main app column instead of under the sidebar. */
+    alignToAppShell?: boolean;
 }
 
 function mapHistoryResponse(items: Array<{ id: string; workoutName: string; loggedAt: string; setCount?: number }>): RecentSessionItem[] {
@@ -47,6 +48,7 @@ export function RecentSessionsExplorer({
     onDeleted,
     fetchHistoryOnOpen = false,
     historyUserId,
+    alignToAppShell = false,
 }: Props) {
     useScrollLock(open);
 
@@ -137,6 +139,7 @@ export function RecentSessionsExplorer({
                 canDelete={canDelete}
                 canEditFeeling={canEditFeeling || canDelete}
                 onDeleted={onDeleted}
+                alignToAppShell={alignToAppShell}
             />
         );
     }
@@ -151,6 +154,7 @@ export function RecentSessionsExplorer({
             emptyMessage={emptyMessage}
             loading={loadingHistory}
             error={historyError}
+            alignToAppShell={alignToAppShell}
             onSelect={(sessionId) => {
                 setActiveSessionId(sessionId);
                 setView("detail");

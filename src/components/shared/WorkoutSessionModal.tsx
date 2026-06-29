@@ -50,6 +50,7 @@ interface Props {
     canDelete?: boolean;
     canEditFeeling?: boolean;
     onDeleted?: () => void;
+    alignToAppShell?: boolean;
 }
 
 export function WorkoutSessionModal({
@@ -62,6 +63,7 @@ export function WorkoutSessionModal({
     canDelete = false,
     canEditFeeling = false,
     onDeleted,
+    alignToAppShell = false,
 }: Props) {
     const [session, setSession] = useState<SessionData | null>(null);
     const [loading, setLoading] = useState(false);
@@ -175,7 +177,7 @@ export function WorkoutSessionModal({
     };
 
     return (
-        <ModalOverlay className="bg-black/60 backdrop-blur-none sm:p-6 p-0">
+        <ModalOverlay alignToAppShell={alignToAppShell} className="bg-black/60 backdrop-blur-none sm:p-6 p-0">
             <div
                 className="w-full sm:max-w-3xl max-h-[92vh] bg-surface-card border border-surface-border rounded-t-3xl sm:rounded-2xl shadow-modal overflow-hidden animate-slide-up"
                 onClick={(e) => e.stopPropagation()}
