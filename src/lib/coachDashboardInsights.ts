@@ -12,6 +12,7 @@ import { getMissedWorkoutsYesterdayForCoach } from "@/lib/coachMissedWorkoutsYes
 import { loadCoachAttentionInboxOpenOnly } from "@/lib/coachAttentionInbox";
 import {
     applyCheckInAttentionOverrides,
+    buildMissedWorkoutAlertKey,
     buildSetupNeededAlertKey,
     buildUnreadMessageAlertKey,
     getCoachAttentionActions,
@@ -332,10 +333,6 @@ export async function loadCoachDashboardInsights(input: {
             name: plannedToday?.name ?? null,
         };
 
-        if (plannedToday && !completedToday && !input.activeSessions[client.id]) {
-            clientsNeedingAttentionIds.add(client.id);
-        }
-
         const dueStateRaw = getCheckInDueState(client.checkInSchedule, today);
         const clientAttentionRows = [...attentionActions.values()].filter((row) => row.clientId === client.id);
         const dueState = applyCheckInAttentionOverrides(
@@ -410,8 +407,23 @@ export async function loadCoachDashboardInsights(input: {
                 client.lastActiveAt
             );
 
+        const missedWorkoutNeedsAttention = openMissedWorkoutsYesterday.some(
+            (row) =>
+                row.clientId === client.id
+                && !isDismissedAlertCurrentlyHidden(
+                    attentionActions.get(
+                        buildMissedWorkoutAlertKey(client.id, row.dateKey, row.workoutId)
+                    ),
+                    client.lastActiveAt
+                )
+        );
+
+        if (missedWorkoutNeedsAttention) {
+            clientsNeedingAttentionIds.add(client.id);
+        }
+
         const needsAttention =
-            (plannedToday && !completedToday && !input.activeSessions[client.id])
+            missedWorkoutNeedsAttention
             || checkInNeedsAttention
             || setupNeedsAttention
             || unreadNeedsAttention;

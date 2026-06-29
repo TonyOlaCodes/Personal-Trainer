@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getEffectiveCheckInDueStateForUser } from "@/lib/coachAttentionActions";
 import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
 import { getPlannedWorkoutForDate, activeWorkoutWhere } from "@/lib/planSchedule";
+import { shiftDateKey } from "@/lib/coachNotificationSchedule";
 import { getWeekNumber, toDateKey } from "@/lib/utils";
 import { isInactiveAccount } from "@/lib/userDeactivation";
 
@@ -17,8 +18,9 @@ export async function getCoachClientFilterFlags(
 
     const today = new Date();
     today.setHours(12, 0, 0, 0);
-    const dateKey = toDateKey(today);
-    const [y, m, d] = dateKey.split("-").map(Number);
+    const todayKey = toDateKey(today);
+    const yesterdayKey = shiftDateKey(todayKey, -1);
+    const [y, m, d] = yesterdayKey.split("-").map(Number);
     const dayStart = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
     const dayEnd = new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999));
     const weekNumber = getWeekNumber(today);

@@ -617,10 +617,10 @@ export function ChatClient({
                     void refreshGlobalUnread();
                     if (fetched.length > 0) {
                         const lastMessage = fetched[fetched.length - 1] as Message;
-                        setConversationActivity((prev) => ({
-                            ...prev,
-                            [selectedConv.userId]: lastMessage.createdAt,
-                        }));
+                    setConversationActivity((prev) => ({
+                        ...prev,
+                        [selectedConv.userId]: lastMessage.createdAt,
+                    }));
                     }
                 }
             }
@@ -1416,10 +1416,10 @@ export function ChatClient({
                                                     {unread > 99 ? "99+" : unread}
                                                 </span>
                                             )}
-                                            {["COACH", "SUPER_ADMIN"].includes(conv.role) && (
-                                                <Star className="w-3 h-3 text-brand-400 fill-brand-400 shrink-0" />
-                                            )}
-                                        </div>
+                                        {["COACH", "SUPER_ADMIN"].includes(conv.role) && (
+                                            <Star className="w-3 h-3 text-brand-400 fill-brand-400 shrink-0" />
+                                        )}
+                                    </div>
                                     </div>
                                     {canViewLastOnline && session ? (
                                         <p className="text-[10px] text-success font-bold truncate flex items-center gap-1">
@@ -1429,9 +1429,9 @@ export function ChatClient({
                                     ) : canViewLastOnline && presence ? (
                                         <p className="text-[10px] text-fg-subtle truncate">{presence.label}</p>
                                     ) : (
-                                        <p className="text-[10px] uppercase font-bold tracking-widest text-fg-subtle">
-                                            {conv.isDeleted ? "Inactive" : (roleLabels[conv.role] ?? conv.role)}
-                                        </p>
+                                    <p className="text-[10px] uppercase font-bold tracking-widest text-fg-subtle">
+                                        {conv.isDeleted ? "Inactive" : (roleLabels[conv.role] ?? conv.role)}
+                                    </p>
                                     )}
                                 </div>
                             </button>
@@ -1480,11 +1480,12 @@ export function ChatClient({
     return (
         <div
             className={cn(
-                "flex flex-col overflow-hidden bg-surface animate-fade-in w-full max-w-full",
-                "fixed inset-x-0 top-0 z-30 md:left-[var(--sidebar-width)] md:right-0 md:bottom-0 md:z-auto md:h-dvh md:max-h-dvh",
+                "flex flex-col overflow-hidden bg-surface animate-fade-in min-w-0 max-w-full",
+                "fixed inset-x-0 top-0 z-30 h-dvh max-h-dvh",
+                "md:static md:z-auto md:w-full md:h-dvh md:max-h-dvh",
                 keyboardOpen
                     ? "bottom-0"
-                    : "bottom-[calc(3.75rem+env(safe-area-inset-bottom,0px))]"
+                    : "bottom-[calc(3.75rem+env(safe-area-inset-bottom,0px))] md:bottom-0"
             )}
             onClick={() => closeMessageActions()}
         >
@@ -1508,17 +1509,17 @@ export function ChatClient({
                         )}
                     >
                         {renderConversationPanel()}
-                    </div>
-                )}
+                </div>
+            )}
                 {showThreadPanel && (
-                <div className="flex-1 flex flex-col min-w-0 min-h-0 h-full overflow-hidden">
+                <div className="flex-1 flex flex-col min-w-0 min-h-0 h-full overflow-hidden overflow-x-hidden">
                 {showThreadContent ? (
                 <>
                 {/* ── Header ── */}
                 <div className="h-14 flex items-center justify-between px-5 border-b border-surface-border bg-surface-card/95 backdrop-blur-md shrink-0 z-10">
                     <div className="flex items-center gap-3 min-w-0 flex-1">
                         {(tab === "direct" && selectedConv) || tab === "general" ? (
-                        <button
+                        <button 
                             type="button"
                             className="md:hidden flex items-center gap-1 text-brand-400 font-bold hover:text-brand-300 transition-colors bg-brand-400/10 hover:bg-brand-400/20 px-2 py-1.5 rounded-lg shrink-0"
                             onClick={() => setShowConversationThread(false)}
@@ -1562,7 +1563,7 @@ export function ChatClient({
                                                 title={selectedPresence.label}
                                             />
                                         )}
-                                    </div>
+                                </div>
                                 </div>
                                 {peerTyping ? (
                                     <p className="text-[10px] text-brand-400 font-medium flex items-center gap-1.5 mt-0.5">
@@ -1635,7 +1636,7 @@ export function ChatClient({
                 )}
                 <div
                     ref={messagesScrollRef}
-                    className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 py-4 space-y-3 no-scrollbar"
+                    className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden overscroll-contain px-5 py-4 space-y-3 no-scrollbar"
                     onClick={(e) => {
                         if ((e.target as HTMLElement).closest("[data-chat-action]")) {
                             e.stopPropagation();
@@ -1882,7 +1883,7 @@ export function ChatClient({
 
                                     <div
                                         ref={(el) => { messageRowRefs.current[msg.id] = el; }}
-                                        className={cn("flex items-end gap-2 group w-full touch-pan-y", isMine && "justify-end")}
+                                        className={cn("flex items-end gap-2 group w-full min-w-0 max-w-full touch-pan-y", isMine && "justify-end")}
                                         onTouchStart={handleMessageTouchStart(msg.id, isMine)}
                                         onTouchMove={handleMessageTouchMove}
                                         onTouchEnd={handleMessageTouchEnd(msg, isMine)}
@@ -2007,26 +2008,26 @@ export function ChatClient({
                                                                 "relative cursor-pointer overflow-hidden shadow-sm hover:opacity-95 transition-opacity",
                                                                 CHAT_MEDIA_THUMB
                                                             )}
-                                                            onClick={() => msg.mediaUrl && setViewerMedia({ src: resolveUploadUrl(msg.mediaUrl), type: "VIDEO" })}
-                                                        >
+                                                    onClick={() => msg.mediaUrl && setViewerMedia({ src: resolveUploadUrl(msg.mediaUrl), type: "VIDEO" })}
+                                                >
                                                             <video src={resolveUploadUrl(msg.mediaUrl)} className="w-full h-full object-cover pointer-events-none" />
                                                             <div className="absolute inset-0 bg-black/25 flex items-center justify-center transition-colors hover:bg-black/15">
                                                                 <div className="w-9 h-9 bg-white/30 backdrop-blur-md rounded-full flex items-center justify-center text-white">
                                                                     <div className="w-0 h-0 border-t-[6px] border-t-transparent border-l-[10px] border-l-white border-b-[6px] border-b-transparent ml-0.5" />
-                                                                </div>
-                                                            </div>
                                                         </div>
-                                                    ) : (
-                                                        <img
-                                                            src={resolveUploadUrl(msg.mediaUrl)}
-                                                            alt="media"
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <img 
+                                                    src={resolveUploadUrl(msg.mediaUrl)} 
+                                                    alt="media" 
                                                             className={cn(
                                                                 CHAT_MEDIA_THUMB,
                                                                 "cursor-pointer hover:opacity-90 transition-opacity shadow-sm"
                                                             )}
-                                                            onClick={() => msg.mediaUrl && setViewerMedia({ src: resolveUploadUrl(msg.mediaUrl), type: "IMAGE" })}
-                                                        />
-                                                    )}
+                                                    onClick={() => msg.mediaUrl && setViewerMedia({ src: resolveUploadUrl(msg.mediaUrl), type: "IMAGE" })}
+                                                />
+                                            )}
                                                     {msg.content?.trim() && (
                                                         <div className={cn(
                                                             isMine ? "bubble-sent break-words" : "bubble-received break-words",
@@ -2079,7 +2080,7 @@ export function ChatClient({
                                             </div>
 
                                             {renderMessageActions()}
-                                        </div>
+                                                            </div>
                                     </div>
                                 </div>
                             );
@@ -2141,7 +2142,7 @@ export function ChatClient({
                                             <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
                                                 <div className="w-8 h-8 bg-white/30 backdrop-blur-md rounded-full flex items-center justify-center text-white">
                                                     <div className="w-0 h-0 border-t-[5px] border-t-transparent border-l-[8px] border-l-white border-b-[5px] border-b-transparent ml-0.5" />
-                                                </div>
+                                </div>
                                             </div>
                                         </>
                                     )}
@@ -2204,7 +2205,7 @@ export function ChatClient({
                         </div>
                     </div>
                 )}
-                </div>
+                    </div>
                 )}
             </div>
         </div>
