@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import Link from "next/link";
 import { Bell, Search, X, Trophy } from "lucide-react";
 import { StreakBadge } from "@/components/shared/StreakBadge";
 import { useRouter } from "next/navigation";
@@ -247,7 +246,7 @@ export function TopBar({ title, subtitle, showToday = false, streak, hideSearch 
 
     return (
         <>
-        <header className="fixed top-0 left-0 right-0 md:left-[var(--sidebar-width)] h-16 flex items-center justify-between gap-2 px-4 sm:px-6 border-b border-surface-border bg-surface-card/80 glass z-40 w-full max-w-full min-w-0 overflow-visible">
+        <header className="fixed top-0 left-0 right-0 md:left-[var(--sidebar-width)] h-16 flex items-center justify-between gap-2 px-4 sm:px-6 border-b border-surface-border bg-surface-card/80 glass z-40 min-w-0 overflow-visible">
             <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
                 {showToday ? (
                     <LiveTodayHeader />
