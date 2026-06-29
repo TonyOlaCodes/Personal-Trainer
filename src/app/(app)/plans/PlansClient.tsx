@@ -2,16 +2,17 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
     Plus, Dumbbell, Calendar, ChevronRight, Star,
-    Trash2, Play, Ticket, Share2, Check, PauseCircle, User,
+    Trash2, Play, Ticket, Share2, Check, PauseCircle, User, X, Loader2,
 } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import { PLAN_TEMPLATES } from "@/lib/templates";
 import { isCoachRole } from "@/lib/roles";
 import { ActiveSessionBanner, type ActiveSessionInfo } from "@/components/shared/ActiveSessionBanner";
 import { DeletePlanConfirmModal } from "@/components/shared/DeletePlanConfirmModal";
+import { ModalOverlay } from "@/components/shared/ModalOverlay";
 
 interface Plan {
     id: string;
@@ -33,6 +34,7 @@ interface Props {
     plans: Plan[];
     userRole: string;
     activeSession?: ActiveSessionInfo | null;
+    coachClients?: { id: string; name: string }[];
 }
 
 const TEMPLATE_ICONS: Record<string, string> = {
@@ -51,8 +53,9 @@ const PREBUILT_TEMPLATES = Object.values(PLAN_TEMPLATES).map((template) => ({
     icon: TEMPLATE_ICONS[template.id] ?? "GYM",
 }));
 
-export function PlansClient({ plans, userRole, activeSession = null }: Props) {
+export function PlansClient({ plans, userRole, activeSession = null, coachClients = [] }: Props) {
     const isCoach = isCoachRole(userRole);
+    const router = useRouter();
     const searchParams = useSearchParams();
     const highlightedPlanId = searchParams.get("highlight");
     const [tab, setTab] = useState<"mine" | "templates" | "code">("mine");
@@ -68,6 +71,10 @@ export function PlansClient({ plans, userRole, activeSession = null }: Props) {
     const [copiedId, setCopiedId] = useState<string | null>(null);
     const [localPlans, setLocalPlans] = useState(plans);
     const [visibilitySavingId, setVisibilitySavingId] = useState<string | null>(null);
+    const [assignPlan, setAssignPlan] = useState<{ id: string; name: string } | null>(null);
+    const [assignClientId, setAssignClientId] = useState("");
+    const [assignBusy, setAssignBusy] = useState(false);
+    const [assignError, setAssignError] = useState<string | null>(null);
 
     const activePlan = localPlans.find((p) => p.isActive);
     const [localActiveSession, setLocalActiveSession] = useState(activeSession);
@@ -102,6 +109,52 @@ export function PlansClient({ plans, userRole, activeSession = null }: Props) {
             alert("Connection error");
         } finally {
             setVisibilitySavingId(null);
+        }
+    };
+
+    const openAssignModal = (plan: Plan, e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setAssignPlan({ id: plan.id, name: plan.name });
+        setAssignClientId(coachClients[0]?.id ?? "");
+        setAssignError(null);
+    };
+
+    const closeAssignModal = () => {
+        if (assignBusy) return;
+        setAssignPlan(null);
+        setAssignClientId("");
+        setAssignError(null);
+    };
+
+    const confirmAssignPlan = async () => {
+        if (!assignPlan || !assignClientId) return;
+        setAssignBusy(true);
+        setAssignError(null);
+        try {
+            const res = await fetch("/api/coach/clients/plan", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ clientId: assignClientId, planId: assignPlan.id }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error ?? "Could not assign plan");
+
+            const clientName = coachClients.find((c) => c.id === assignClientId)?.name ?? "Client";
+            if (!data.cloned) {
+                setLocalPlans((prev) => prev.map((plan) => (
+                    plan.id === assignPlan.id
+                        ? { ...plan, assignedClient: { id: assignClientId, name: clientName }, type: "COACH_ASSIGNED" }
+                        : plan
+                )));
+            }
+            setAssignPlan(null);
+            setAssignClientId("");
+            router.refresh();
+        } catch (err) {
+            setAssignError(err instanceof Error ? err.message : "Could not assign plan");
+        } finally {
+            setAssignBusy(false);
         }
     };
 
@@ -159,6 +212,63 @@ export function PlansClient({ plans, userRole, activeSession = null }: Props) {
                 }}
                 onConfirm={confirmDeletePlan}
             />
+
+            {assignPlan && (
+                <ModalOverlay onClose={closeAssignModal}>
+                    <div
+                        className="bg-surface-card w-full sm:max-w-md rounded-t-[2rem] sm:rounded-3xl border border-surface-border shadow-glow-brand-lg overflow-hidden animate-slide-up"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between gap-4 px-5 py-4 border-b border-surface-border">
+                            <div className="min-w-0">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">Assign plan</p>
+                                <h3 className="text-lg font-black text-fg truncate">{assignPlan.name}</h3>
+                            </div>
+                            <button type="button" onClick={closeAssignModal} disabled={assignBusy} className="btn-icon shrink-0">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="p-5 space-y-4">
+                            <div>
+                                <label className="text-[10px] font-bold uppercase tracking-widest text-fg-subtle">Client</label>
+                                <select
+                                    className="input w-full mt-1.5"
+                                    value={assignClientId}
+                                    onChange={(e) => setAssignClientId(e.target.value)}
+                                    disabled={assignBusy}
+                                >
+                                    {coachClients.map((client) => (
+                                        <option key={client.id} value={client.id}>{client.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            {assignError && (
+                                <p className="text-xs font-medium text-danger">{assignError}</p>
+                            )}
+                        </div>
+                        <div className="px-5 py-4 border-t border-surface-border flex gap-2">
+                            <button type="button" onClick={closeAssignModal} disabled={assignBusy} className="btn-secondary flex-1">
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => void confirmAssignPlan()}
+                                disabled={assignBusy || !assignClientId}
+                                className="btn-primary flex-1 inline-flex items-center justify-center gap-2"
+                            >
+                                {assignBusy ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        Assigning…
+                                    </>
+                                ) : (
+                                    "Assign plan"
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </ModalOverlay>
+            )}
 
             {/* Header */}
             <div className="flex items-center justify-between">
@@ -289,7 +399,26 @@ export function PlansClient({ plans, userRole, activeSession = null }: Props) {
                                                             Assigned to {plan.assignedClient.name}
                                                         </Link>
                                                     ) : (
-                                                        <span className="text-fg-muted">Not assigned</span>
+                                                        <span className="inline-flex flex-wrap items-center gap-2">
+                                                            <span className="text-fg-muted">Not assigned</span>
+                                                            {coachClients.length > 0 ? (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => openAssignModal(plan, e)}
+                                                                    className="text-[10px] font-bold uppercase tracking-wide text-brand-400 hover:text-brand-300 px-2 py-0.5 rounded-md bg-brand-500/10 hover:bg-brand-500/15 transition-colors"
+                                                                >
+                                                                    Assign now
+                                                                </button>
+                                                            ) : (
+                                                                <Link
+                                                                    href="/coach/invites"
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                    className="text-[10px] font-bold uppercase tracking-wide text-brand-400 hover:text-brand-300 px-2 py-0.5 rounded-md bg-brand-500/10 hover:bg-brand-500/15 transition-colors"
+                                                                >
+                                                                    Assign now
+                                                                </Link>
+                                                            )}
+                                                        </span>
                                                     )
                                                 ) : (
                                                     <>

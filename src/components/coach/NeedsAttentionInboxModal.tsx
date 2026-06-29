@@ -341,7 +341,7 @@ function AttentionItemCard({
                         </>
                     )}
 
-                    {(item.category === "falling_behind" || item.category === "setup_needed") && (
+                    {(item.category === "setup_needed") && (
                         <>
                             <Link href={item.href} className="btn-secondary btn-sm text-[10px] font-black uppercase tracking-widest">
                                 Open client

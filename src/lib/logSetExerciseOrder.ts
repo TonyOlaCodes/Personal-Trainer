@@ -8,7 +8,7 @@ import {
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
 import { ensureLogSetExerciseNameColumn } from "@/lib/logSetExerciseName";
 
-const REPAIR_VERSION = 1;
+const REPAIR_VERSION = 2;
 
 let columnReady = false;
 let readyPromise: Promise<void> | null = null;
@@ -120,12 +120,36 @@ function findScheduleWorkout(
 
 function resolveOrderFromSchedule(
     exerciseId: string,
+    exerciseName: string | null | undefined,
+    scheduleWorkout: ScheduleWorkoutSnapshot | null,
+    fallbackIndex: number
+): number {
+    return resolveOrderFromScheduleWorkout(
+        exerciseId,
+        exerciseName,
+        scheduleWorkout,
+        fallbackIndex
+    );
+}
+
+export function resolveOrderFromScheduleWorkout(
+    exerciseId: string,
+    exerciseName: string | null | undefined,
     scheduleWorkout: ScheduleWorkoutSnapshot | null,
     fallbackIndex: number
 ): number {
     const scheduleExercises = scheduleWorkout?.exercises ?? [];
     const byId = scheduleExercises.findIndex((row) => row.id === exerciseId);
     if (byId >= 0) return byId;
+
+    const normalizedName = exerciseName?.trim().toLowerCase();
+    if (normalizedName) {
+        const byName = scheduleExercises.findIndex(
+            (row) => row.name.trim().toLowerCase() === normalizedName
+        );
+        if (byName >= 0) return byName;
+    }
+
     return 1000 + fallbackIndex;
 }
 
@@ -148,11 +172,12 @@ export async function repairLogSetExerciseOrders() {
                 select: {
                     id: true,
                     exerciseId: true,
+                    exerciseName: true,
                     exerciseOrder: true,
                     setNumber: true,
-                    exercise: { select: { order: true, isCustom: true } },
+                    exercise: { select: { order: true, isCustom: true, name: true } },
                 },
-                orderBy: [{ exercise: { order: "asc" } }, { setNumber: "asc" }],
+                orderBy: [{ exerciseOrder: "asc" }, { setNumber: "asc" }],
             },
         },
     });
@@ -174,12 +199,16 @@ export async function repairLogSetExerciseOrders() {
             if (seenExerciseIds.has(set.exerciseId)) continue;
             seenExerciseIds.add(set.exerciseId);
 
-            if (typeof set.exerciseOrder === "number" && set.exerciseOrder >= 0) continue;
-
             const fallbackIndex = appearanceIndex++;
+            const resolvedName = set.exerciseName?.trim() || set.exercise.name?.trim() || null;
             const order = set.exercise.isCustom
                 ? 1000 + fallbackIndex
-                : resolveOrderFromSchedule(set.exerciseId, scheduleWorkout, fallbackIndex);
+                : resolveOrderFromSchedule(
+                    set.exerciseId,
+                    resolvedName,
+                    scheduleWorkout,
+                    fallbackIndex
+                );
 
             for (const row of log.sets) {
                 if (row.exerciseId === set.exerciseId) {

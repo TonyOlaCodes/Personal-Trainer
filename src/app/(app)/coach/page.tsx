@@ -11,6 +11,7 @@ import { dedupeCoachPlansByName, normalizePlanIdForPicker } from "@/lib/coachPla
 import { getActiveSessionsForClients } from "@/lib/coachChat";
 import { loadCoachDashboardInsights } from "@/lib/coachDashboardInsights";
 import { getWeekNumber, parseLogDate, toDateKey } from "@/lib/utils";
+import { loadNicknameMap, pickDisplayName } from "@/lib/userNicknames";
 
 export const metadata = { title: "Coach Dashboard" };
 
@@ -159,13 +160,17 @@ export default async function CoachDashboardPage() {
         : [];
     const weekCheckInByUserId = new Map(weekCheckIns.map((row) => [row.userId, row.id]));
 
+    const clientNicknameMap = await loadNicknameMap(coach.id, clientIds);
+    const clientLabel = (client: { id: string; name: string | null; email: string }) =>
+        pickDisplayName(client.name, client.email, clientNicknameMap.get(client.id), "Unnamed Client");
+
     const insights = await loadCoachDashboardInsights({
         coachId: coach.id,
         clients: coach.clients.map((client) => {
             const extra = extraDataByClientId.get(client.id);
             return {
                 id: client.id,
-                name: client.name || "Unnamed Client",
+                name: clientLabel(client),
                 isDeleted: false,
                 isDeactivated: false,
                 email: client.email,
@@ -190,7 +195,7 @@ export default async function CoachDashboardPage() {
                         const extra = extraDataByClientId.get(c.id);
                         return {
                             id: c.id,
-                            name: c.name || "Unnamed Client",
+                            name: clientLabel(c),
                             email: c.email,
                             avatarUrl: c.avatarUrl,
                             lastActiveAt: c.lastActiveAt?.toISOString() ?? null,
@@ -227,7 +232,7 @@ export default async function CoachDashboardPage() {
                     })}
                     recentCheckIns={recentCheckIns.map(ci => ({
                         id: ci.id,
-                        clientName: ci.user.name || "Client",
+                        clientName: clientLabel(ci.user),
                         week: ci.weekNumber,
                         date: ci.createdAt.toISOString(),
                         status: ci.coachResponse ? "Responded" : "Pending",
@@ -235,7 +240,7 @@ export default async function CoachDashboardPage() {
                     pendingReviews={pendingReviews.map((ci) => ({
                         id: ci.id,
                         clientId: ci.user.id,
-                        clientName: ci.user.name || "Client",
+                        clientName: clientLabel(ci.user),
                         avatarUrl: ci.user.avatarUrl,
                         week: ci.weekNumber,
                         date: ci.createdAt.toISOString(),

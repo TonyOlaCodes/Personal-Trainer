@@ -53,6 +53,24 @@ interface ActiveLogSet {
     videoUrl?: string | null;
 }
 
+function sortWorkoutExercises(exercises: Exercise[]): Exercise[] {
+    return exercises
+        .slice()
+        .map((exercise, index) => ({ exercise, index }))
+        .sort((a, b) => {
+            const orderA = a.exercise.order ?? a.index;
+            const orderB = b.exercise.order ?? b.index;
+            if (orderA !== orderB) return orderA - orderB;
+            return a.index - b.index;
+        })
+        .map(({ exercise }) => exercise);
+}
+
+function resolvePersistedExerciseOrderValue(exercise: Exercise | undefined, listIndex: number): number | undefined {
+    if (typeof exercise?.order === "number" && exercise.order >= 0) return exercise.order;
+    return listIndex >= 0 ? listIndex : undefined;
+}
+
 function buildInitialLogs(exercises: Exercise[]): Record<string, SetLog[]> {
     const initialLogs: Record<string, SetLog[]> = {};
     exercises.forEach((ex) => {
@@ -169,7 +187,7 @@ function restoreSessionState(
 
     return {
         logs: Object.keys(restored).length > 0 ? restored : buildInitialLogs(fallbackExercises),
-        exercises: mergedExercises.length > 0 ? mergedExercises : fallbackExercises,
+        exercises: sortWorkoutExercises(mergedExercises.length > 0 ? mergedExercises : fallbackExercises),
         startTime,
         activeLogId: active.id,
     };
@@ -182,6 +200,7 @@ interface Props {
     clientId?: string;
     clientName?: string;
     lastWorkoutLogSets?: Array<{
+        exerciseId: string;
         exerciseName: string;
         setNumber: number;
         weightKg: number | null;
@@ -241,7 +260,7 @@ export function WorkoutLogClient({
         }
         return {
             logs: buildInitialLogs(workout.exercises),
-            exercises: workout.exercises,
+            exercises: sortWorkoutExercises(workout.exercises),
             startTime: Date.now(),
             activeLogId: null as string | null,
         };
@@ -278,28 +297,31 @@ export function WorkoutLogClient({
     const modalOpen = Boolean(previewExercise) || isSubstituting !== null || isAddingExercise || showFinishModal;
     useScrollLock(modalOpen);
 
-    const findLastCompletedSet = (exerciseName: string, setNumber: number) =>
+    const findLastCompletedSet = (exerciseId: string, exerciseName: string, setNumber: number) =>
         lastWorkoutLogSets.find(
             (s) =>
-                s.exerciseName.toLowerCase() === exerciseName.toLowerCase() &&
                 s.setNumber === setNumber
+                && (
+                    s.exerciseId === exerciseId
+                    || s.exerciseName.toLowerCase() === exerciseName.toLowerCase()
+                )
         );
 
-    const getWeightPlaceholder = (exerciseName: string, setNumber: number, weightTargetKg?: number | null) => {
+    const getWeightPlaceholder = (exerciseId: string, exerciseName: string, setNumber: number, weightTargetKg?: number | null) => {
         if (weightTargetKg != null && weightTargetKg > 0) {
             return weightTargetKg.toString();
         }
-        const lastSet = findLastCompletedSet(exerciseName, setNumber);
+        const lastSet = findLastCompletedSet(exerciseId, exerciseName, setNumber);
         if (lastSet?.weightKg != null && lastSet.weightKg > 0) {
             return lastSet.weightKg.toString();
         }
         return "";
     };
 
-    const getRepsPlaceholder = (exerciseName: string, setNumber: number, planReps?: string) => {
+    const getRepsPlaceholder = (exerciseId: string, exerciseName: string, setNumber: number, planReps?: string) => {
         const planned = parseInt(planReps || "", 10);
         if (planned > 0) return String(planned);
-        const lastSet = findLastCompletedSet(exerciseName, setNumber);
+        const lastSet = findLastCompletedSet(exerciseId, exerciseName, setNumber);
         if (lastSet?.reps != null && lastSet.reps > 0) {
             return String(lastSet.reps);
         }
@@ -322,15 +344,15 @@ export function WorkoutLogClient({
     };
 
     const getUnifiedSetValues = (ex: Exercise, sets: SetLog[]) => {
-        const weightPlaceholder = getWeightPlaceholder(ex.name, 1, ex.weightTargetKg);
-        const repsPlaceholder = getRepsPlaceholder(ex.name, 1, ex.reps);
+        const weightPlaceholder = getWeightPlaceholder(ex.id, ex.name, 1, ex.weightTargetKg);
+        const repsPlaceholder = getRepsPlaceholder(ex.id, ex.name, 1, ex.reps);
         const weightKg = sets.find((s) => s.weightKg.trim() !== "")?.weightKg ?? "";
         const reps = sets.find((s) => s.reps > 0)?.reps ?? 0;
         return { weightKg, reps, weightPlaceholder, repsPlaceholder };
     };
 
-    const getRpePlaceholder = (exerciseName: string, setNumber: number) => {
-        const lastSet = findLastCompletedSet(exerciseName, setNumber);
+    const getRpePlaceholder = (exerciseId: string, exerciseName: string, setNumber: number) => {
+        const lastSet = findLastCompletedSet(exerciseId, exerciseName, setNumber);
         if (lastSet?.rpe != null) return String(lastSet.rpe);
         return "";
     };
@@ -437,7 +459,7 @@ export function WorkoutLogClient({
                 return sets.map((s) => ({
                     exerciseId: exId,
                     exerciseName: exInfo?.name || "Unknown",
-                    exerciseOrder: exOrder >= 0 ? exOrder : undefined,
+                    exerciseOrder: resolvePersistedExerciseOrderValue(exInfo, exOrder),
                     setNumber: s.setNumber,
                     reps: s.reps,
                     isWarmup: s.isWarmup,
@@ -492,7 +514,7 @@ export function WorkoutLogClient({
             return sets.map(s => ({
                 exerciseId: exId,
                 exerciseName: exInfo?.name || "Unknown",
-                exerciseOrder: exOrder >= 0 ? exOrder : undefined,
+                exerciseOrder: resolvePersistedExerciseOrderValue(exInfo, exOrder),
                 setNumber: s.setNumber,
                 reps: s.reps,
                 weightKg: s.weightKg ? parseFloat(s.weightKg) : undefined,
@@ -704,7 +726,7 @@ export function WorkoutLogClient({
             return sets.map(s => ({
                 exerciseId: exId,
                 exerciseName: exInfo?.name || "Unknown",
-                exerciseOrder: exOrder >= 0 ? exOrder : undefined,
+                exerciseOrder: resolvePersistedExerciseOrderValue(exInfo, exOrder),
                 setNumber: s.setNumber,
                 reps: s.reps || undefined,
                 weightKg: s.weightKg ? parseFloat(s.weightKg) : undefined,
@@ -1041,9 +1063,9 @@ export function WorkoutLogClient({
                                 )}
 
                                 {logs[ex.id]?.map((set, sIdx) => {
-                                    const weightPlaceholder = getWeightPlaceholder(ex.name, set.setNumber, ex.weightTargetKg);
-                                    const repsPlaceholder = getRepsPlaceholder(ex.name, set.setNumber, ex.reps);
-                                    const rpePlaceholder = getRpePlaceholder(ex.name, set.setNumber);
+                                    const weightPlaceholder = getWeightPlaceholder(ex.id, ex.name, set.setNumber, ex.weightTargetKg);
+                                    const repsPlaceholder = getRepsPlaceholder(ex.id, ex.name, set.setNumber, ex.reps);
+                                    const rpePlaceholder = getRpePlaceholder(ex.id, ex.name, set.setNumber);
                                     const displayWeight = isIndividualSets
                                         ? (set.weightKg || (sessionActive ? "" : weightPlaceholder))
                                         : (unified.weightKg || (sessionActive ? "" : unified.weightPlaceholder));

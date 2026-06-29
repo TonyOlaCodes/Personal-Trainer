@@ -9,6 +9,7 @@ import { dedupeCoachPlansByName } from "@/lib/coachPlans";
 import { isInactiveAccount } from "@/lib/userDeactivation";
 import { isClientRole, isCoachRole } from "@/lib/roles";
 import { getFreeUserAccessLiaisonId } from "@/lib/accessRequest";
+import { loadNicknameMap, pickDisplayName } from "@/lib/userNicknames";
 import { ChatClient } from "./ChatClient";
 
 export const metadata = { title: "Chat" };
@@ -173,6 +174,21 @@ export default async function ChatPage() {
                 ...conversation,
                 checkInDue: filterFlags[conversation.userId]?.checkInDue ?? false,
                 missedWorkout: filterFlags[conversation.userId]?.missedWorkout ?? false,
+            }));
+        }
+    }
+
+    if (conversations.length > 0) {
+        const nicknameMap = await loadNicknameMap(user.id, conversations.map((c) => c.userId));
+        if (nicknameMap.size > 0) {
+            conversations = conversations.map((conversation) => ({
+                ...conversation,
+                name: pickDisplayName(
+                    conversation.name,
+                    conversation.email,
+                    nicknameMap.get(conversation.userId),
+                    conversation.name
+                ),
             }));
         }
     }

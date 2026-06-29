@@ -13,6 +13,7 @@ import { getAchievementSummary, type AchievementDisplayItem } from "@/lib/achiev
 import { getWorkoutStreak } from "@/lib/workoutAdherenceStreak";
 import { resolveLogSetExerciseName } from "@/lib/logSetExerciseName";
 import { isInactiveAccount } from "@/lib/userDeactivation";
+import { getNickname, loadNicknameMap, pickDisplayName } from "@/lib/userNicknames";
 
 export { getWorkoutStreak };
 
@@ -205,6 +206,8 @@ export interface PublicProfilePlan {
 export interface BuiltPublicProfile {
     id: string;
     name: string;
+    /** Their chosen profile name — unchanged by your private nickname. */
+    chosenName: string;
     username: string;
     avatarUrl?: string | null;
     bannerUrl?: string | null;
@@ -299,18 +302,23 @@ async function getPersonalRecordsForProfile(userId: string, pinned: string[]): P
     return records;
 }
 
-async function getCoachedBy(coachId: string | null): Promise<PublicProfileCoachedBy | null> {
+async function getCoachedBy(
+    coachId: string | null,
+    viewerId: string
+): Promise<PublicProfileCoachedBy | null> {
     if (!coachId) return null;
 
     const coach = await prisma.user.findUnique({
         where: { id: coachId },
-        select: { id: true, name: true, avatarUrl: true, isDeleted: true },
+        select: { id: true, name: true, email: true, avatarUrl: true, isDeleted: true },
     });
     if (!coach || coach.isDeleted) return null;
 
+    const nickname = viewerId !== coach.id ? await getNickname(viewerId, coach.id) : null;
+
     return withResolvedAvatar({
         id: coach.id,
-        name: coach.name ?? "Coach",
+        name: pickDisplayName(coach.name, coach.email, nickname, "Coach"),
         avatarUrl: coach.avatarUrl,
     });
 }
@@ -326,21 +334,26 @@ async function getMutualCoach(viewerId: string, targetCoachId: string | null): P
 
     const coach = await prisma.user.findUnique({
         where: { id: targetCoachId },
-        select: { id: true, name: true, avatarUrl: true, isDeleted: true },
+        select: { id: true, name: true, email: true, avatarUrl: true, isDeleted: true },
     });
     if (!coach || coach.isDeleted) return null;
+
+    const nickname = await getNickname(viewerId, coach.id);
 
     return {
         ...withResolvedAvatar({
             id: coach.id,
-            name: coach.name ?? "Coach",
+            name: pickDisplayName(coach.name, coach.email, nickname, "Coach"),
             avatarUrl: coach.avatarUrl,
         }),
         label: "Mutual coach",
     };
 }
 
-async function getPublicCoachClients(coachId: string): Promise<PublicProfileCoachClient[]> {
+async function getPublicCoachClients(
+    coachId: string,
+    viewerId: string
+): Promise<PublicProfileCoachClient[]> {
     const clients = await prisma.user.findMany({
         where: {
             coachId,
@@ -348,14 +361,21 @@ async function getPublicCoachClients(coachId: string): Promise<PublicProfileCoac
             isDeactivated: false,
             NOT: { email: { endsWith: "@deleted.local" } },
         },
-        select: { id: true, name: true, avatarUrl: true },
+        select: { id: true, name: true, email: true, avatarUrl: true },
         orderBy: { name: "asc" },
     });
+
+    const nicknameMap = await loadNicknameMap(viewerId, clients.map((client) => client.id));
 
     return clients.map((client) =>
         withResolvedAvatar({
             id: client.id,
-            name: client.name?.trim() || "Client",
+            name: pickDisplayName(
+                client.name,
+                client.email,
+                nicknameMap.get(client.id),
+                "Client"
+            ),
             avatarUrl: client.avatarUrl,
         })
     );
@@ -395,14 +415,19 @@ export async function buildPublicProfileData(
 
     if (!target || target.isDeleted) return null;
 
+    const chosenName = target.name?.trim() || "Athlete";
+    const nickname = viewerId !== targetUserId
+        ? await getNickname(viewerId, targetUserId)
+        : null;
+    const displayName = pickDisplayName(chosenName, null, nickname, chosenName);
     const bannerUrl = bannerRows[0]?.bannerUrl ?? null;
     const trainingGoal = target.goal ? (TRAINING_GOAL_LABELS[target.goal] ?? target.goal) : null;
-    const displayName = target.name ?? "Athlete";
     const presence = target.lastActiveAt ? getPresenceIndicator(target.lastActiveAt) : null;
 
     const base = withResolvedAvatar({
         id: target.id,
         name: displayName,
+        chosenName,
         avatarUrl: target.avatarUrl,
         role: target.role,
         experienceLevel: target.experienceLevel ?? null,
@@ -410,13 +435,13 @@ export async function buildPublicProfileData(
         bannerUrl,
     });
 
-    const coachedBy = await getCoachedBy(target.coachId);
+    const coachedBy = await getCoachedBy(target.coachId, viewerId);
     const isCoachProfile = isCoachRole(target.role);
 
     if (viewMode === "limited") {
         return {
             ...base,
-            username: formatPublicUsername(displayName, target.id),
+            username: formatPublicUsername(chosenName, target.id),
             joinDate: formatJoinDate(target.createdAt),
             trainingGoal: null,
             bio: null,
@@ -470,7 +495,7 @@ export async function buildPublicProfileData(
         getPublicPlansForUser(targetUserId),
         buildPublicActivityFeed(targetUserId),
         getMutualCoach(viewerId, target.coachId),
-        isCoachProfile ? getPublicCoachClients(targetUserId) : Promise.resolve([]),
+        isCoachProfile ? getPublicCoachClients(targetUserId, viewerId) : Promise.resolve([]),
     ]);
 
     streak = streakValue;
@@ -496,7 +521,7 @@ export async function buildPublicProfileData(
 
     return {
         ...base,
-        username: formatPublicUsername(displayName, target.id),
+        username: formatPublicUsername(chosenName, target.id),
         joinDate: formatJoinDate(target.createdAt),
         trainingGoal,
         bio: target.bio?.trim() ? target.bio.trim() : null,

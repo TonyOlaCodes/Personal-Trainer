@@ -10,6 +10,8 @@ import { toDateKey } from "@/lib/utils";
 import { cleanupStaleInProgressSessions } from "@/lib/workoutSessionCleanup";
 import { resolveLogSetExerciseName } from "@/lib/logSetExerciseName";
 import { logSetDisplayOrderBy } from "@/lib/logSetGrouping";
+import { serializePlanWeeksForSchedule, resolveScheduleWeeksForDate } from "@/lib/planScheduleHistory";
+import { resolveOrderFromScheduleWorkout } from "@/lib/logSetExerciseOrder";
 
 export interface ClientCalendarPayload {
     activePlan: {
@@ -22,7 +24,7 @@ export interface ClientCalendarPayload {
                 dayOfWeek: number | null;
                 name: string;
                 id: string;
-                exercises: Array<{ name: string; sets: number; reps: string }>;
+                exercises: Array<{ id: string; name: string; sets: number; reps: string; order: number }>;
             }>;
         }>;
     } | null;
@@ -113,6 +115,28 @@ export async function loadClientCalendarData(userId: string): Promise<ClientCale
     ]);
     const excusedMissedWorkoutKeys = [...getExcusedMissedWorkoutKeys(clientActions)];
 
+    const serializedWeeks = activePlan
+        ? serializePlanWeeksForSchedule(
+            activePlan.weeks.map((week) => ({
+                weekNumber: week.weekNumber,
+                workouts: week.workouts.map((workout) => ({
+                    id: workout.id,
+                    name: workout.name,
+                    dayNumber: workout.dayNumber,
+                    dayOfWeek: (workout as { dayOfWeek?: number | null }).dayOfWeek ?? null,
+                    exercises: workout.exercises.map((exercise) => ({
+                        id: exercise.id,
+                        name: exercise.name,
+                        sets: exercise.sets,
+                        reps: exercise.reps,
+                    })),
+                })),
+            }))
+        )
+        : [];
+
+    const scheduleRevisionList = scheduleRevisions;
+
     return {
         activePlan: activePlan
             ? {
@@ -126,31 +150,68 @@ export async function loadClientCalendarData(userId: string): Promise<ClientCale
                           name: wd.name,
                           id: wd.id,
                           exercises: wd.exercises.map((ex) => ({
+                              id: ex.id,
                               name: ex.name,
                               sets: ex.sets,
                               reps: ex.reps,
+                              order: ex.order,
                           })),
                       })),
                   })),
               }
             : null,
         planStartedAt: userPlan?.startedAt ? userPlan.startedAt.toISOString() : null,
-        loggedDates: completedLogs.map((l) => ({
-            id: l.id,
-            date: toDateKey(l.loggedAt),
-            workoutName: l.workout.name,
-            workoutId: l.workoutId,
-            duration: (l as { duration?: number | null }).duration ?? null,
-            sets: l.sets.map((s) => ({
-                exerciseId: s.exerciseId,
-                exerciseName: resolveLogSetExerciseName(s),
-                exerciseOrder: (s as { exerciseOrder?: number | null }).exerciseOrder ?? s.exercise.order ?? null,
-                setNumber: s.setNumber,
-                reps: s.reps,
-                weightKg: s.weightKg,
-                rpe: (s as { rpe?: number | null }).rpe ?? null,
-            })),
-        })),
+        loggedDates: completedLogs.map((l) => {
+            const loggedAt = l.loggedAt;
+            const scheduleWeeks = resolveScheduleWeeksForDate(
+                serializedWeeks,
+                scheduleRevisionList,
+                loggedAt,
+                new Date()
+            );
+            const scheduleWorkout = scheduleWeeks
+                .flatMap((week) => week.workouts)
+                .find((workout) => workout.id === l.workoutId) ?? null;
+
+            const orderByExerciseId = new Map<string, number>();
+            let appearanceIndex = 0;
+
+            for (const set of l.sets) {
+                if (orderByExerciseId.has(set.exerciseId)) continue;
+                const persisted = (set as { exerciseOrder?: number | null }).exerciseOrder;
+                if (typeof persisted === "number" && persisted >= 0) {
+                    orderByExerciseId.set(set.exerciseId, persisted);
+                    continue;
+                }
+                const order = set.exercise.isCustom
+                    ? 1000 + appearanceIndex
+                    : resolveOrderFromScheduleWorkout(
+                        set.exerciseId,
+                        resolveLogSetExerciseName(set),
+                        scheduleWorkout,
+                        appearanceIndex
+                    );
+                orderByExerciseId.set(set.exerciseId, order);
+                appearanceIndex += 1;
+            }
+
+            return {
+                id: l.id,
+                date: toDateKey(loggedAt),
+                workoutName: l.workout.name,
+                workoutId: l.workoutId,
+                duration: (l as { duration?: number | null }).duration ?? null,
+                sets: l.sets.map((s) => ({
+                    exerciseId: s.exerciseId,
+                    exerciseName: resolveLogSetExerciseName(s),
+                    exerciseOrder: orderByExerciseId.get(s.exerciseId) ?? s.exercise.order ?? null,
+                    setNumber: s.setNumber,
+                    reps: s.reps,
+                    weightKg: s.weightKg,
+                    rpe: (s as { rpe?: number | null }).rpe ?? null,
+                })),
+            };
+        }),
         inProgressSessions: inProgressLogs.map((l) => ({
             id: l.id,
             date: toDateKey(l.loggedAt),

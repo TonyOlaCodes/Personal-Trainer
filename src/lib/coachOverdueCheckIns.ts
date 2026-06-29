@@ -10,6 +10,7 @@ import { getLocalTimeParts } from "@/lib/coachNotificationSchedule";
 import { formatCheckInDueDate, formatCheckInWeekLabel, getIsoWeekYear } from "@/lib/checkInLabels";
 import { getWeekNumber, parseLogDate } from "@/lib/utils";
 import { isInactiveAccount } from "@/lib/userDeactivation";
+import { loadNicknameMap, pickDisplayName } from "@/lib/userNicknames";
 
 export interface OverdueCheckInClient {
     id: string;
@@ -118,7 +119,19 @@ export async function getOverdueCheckInClientsForCoach(coachId: string): Promise
         return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
     });
 
-    return overdue;
+    const nicknameMap = await loadNicknameMap(coachId, overdue.map((row) => row.id));
+    if (nicknameMap.size === 0) return overdue;
+
+    const clientById = new Map(clients.map((client) => [client.id, client]));
+    return overdue.map((row) => {
+        const nick = nicknameMap.get(row.id);
+        if (!nick) return row;
+        const client = clientById.get(row.id);
+        return {
+            ...row,
+            name: pickDisplayName(client?.name, client?.email, nick, row.name),
+        };
+    });
 }
 
 export function getCoachCheckInWeekNumber(referenceDate = new Date()): number {

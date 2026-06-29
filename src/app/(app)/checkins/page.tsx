@@ -14,6 +14,7 @@ import { withResolvedCheckInMedia } from "@/lib/uploadUrls";
 import { formatErrorDetails } from "@/lib/ensureAppSchema";
 import { canAccessCheckIns } from "@/lib/roles";
 import { getOverdueCheckInClientsForCoach } from "@/lib/coachOverdueCheckIns";
+import { loadNicknameMap, pickDisplayName } from "@/lib/userNicknames";
 
 export const metadata = { title: "Check-ins" };
 
@@ -75,7 +76,7 @@ export default async function CheckInsPage() {
             checkIns = isCoach
                 ? await prisma.checkIn.findMany({
                     where: { user: { coachId: user.id } },
-                    include: { user: { select: { name: true, email: true, targetWeightKg: true, hiddenGoals: true } } },
+                    include: { user: { select: { id: true, name: true, email: true, targetWeightKg: true, hiddenGoals: true } } },
                     orderBy: { createdAt: "desc" },
                 })
                 : await prisma.checkIn.findMany({
@@ -95,6 +96,17 @@ export default async function CheckInsPage() {
             : await getBodyweightAverageSinceLastCheckIn(user.id, todayDate, user.createdAt);
         const checkInSchedule = isCoach ? null : await getUserCheckInSchedule(user.id);
         const overdueClients = isCoach ? await getOverdueCheckInClientsForCoach(user.id) : [];
+        const coachNicknameMap = isCoach
+            ? await loadNicknameMap(
+                user.id,
+                [
+                    ...checkIns.map((c: { user?: { id: string } | null }) => c.user?.id).filter(Boolean) as string[],
+                    ...overdueClients.map((c) => c.id),
+                ]
+            )
+            : new Map<string, string>();
+        const coachClientLabel = (client: { id: string; name: string | null; email: string | null }, fallback: string) =>
+            pickDisplayName(client.name, client.email, coachNicknameMap.get(client.id), fallback);
         const checkInDueState = checkInSchedule
             ? await getEffectiveCheckInDueStateForUser(user.id, checkInSchedule, new Date())
             : {
@@ -140,7 +152,14 @@ export default async function CheckInsPage() {
                             sideImageUrl: c.sideImageUrl,
                             videoUrl: c.videoUrl,
                             coachVideoUrl: c.coachVideoUrl,
-                            user: c.user ? { name: c.user.name, email: c.user.email, targetWeightKg: c.user.targetWeightKg, hiddenGoals: c.user.hiddenGoals ?? [] } : undefined,
+                            user: c.user ? {
+                                name: isCoach
+                                    ? coachClientLabel(c.user, c.user.name || c.user.email || "Client")
+                                    : c.user.name,
+                                email: c.user.email,
+                                targetWeightKg: c.user.targetWeightKg,
+                                hiddenGoals: c.user.hiddenGoals ?? [],
+                            } : undefined,
                         }))}
                         isCoach={isCoach}
                         userRole={user.role}

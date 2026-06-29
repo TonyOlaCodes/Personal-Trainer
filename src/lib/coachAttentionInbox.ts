@@ -1,23 +1,15 @@
 import { prisma } from "@/lib/prisma";
 import { APP_TIMEZONE } from "@/lib/appTimezone";
 import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
-import {
-    computeWeeklyCompliance,
-    getMondayStart,
-    type CalendarComplianceInput,
-} from "@/lib/calendarCompliance";
 import { getLocalTimeParts, shiftDateKey } from "@/lib/coachNotificationSchedule";
 import { getUnreadCountsByPeer } from "@/lib/chatUnread";
 import {
     buildCheckInAlertKey,
-    buildFallingBehindAlertKey,
     buildMissedWorkoutAlertKey,
     buildPendingReviewAlertKey,
     buildSetupNeededAlertKey,
     buildUnreadMessageAlertKey,
-    CLIENT_APP_INACTIVE_DAYS,
     getCoachAttentionActions,
-    getExcusedMissedWorkoutKeysForClient,
     isDismissedAlertCurrentlyHidden,
     type CoachAttentionActionRow,
     type CoachAttentionActionType,
@@ -34,6 +26,7 @@ import {
     resolveCoachClientCheckInDueState,
 } from "@/lib/coachOverdueCheckIns";
 import { parseLogDate, toDateKey } from "@/lib/utils";
+import { loadNicknameMap } from "@/lib/userNicknames";
 
 export interface CoachAttentionInboxItem {
     id: string;
@@ -103,12 +96,9 @@ function isAlertDismissed(
 }
 
 const MISSED_LOOKBACK_DAYS = 7;
-const INACTIVE_DAYS = CLIENT_APP_INACTIVE_DAYS;
-const LOW_COMPLIANCE_PERCENT = 50;
 
 export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAttentionInboxItem[]> {
     const { today, todayKey, weekNumber } = getCoachAppToday();
-    const weekStart = getMondayStart(today);
     const lookbackStart = shiftDateKey(todayKey, -MISSED_LOOKBACK_DAYS);
 
     const [clients, actions, pendingReviews] = await Promise.all([
@@ -196,7 +186,6 @@ export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAtt
     const revisionsByPlanId = await loadPlanScheduleRevisionsByPlanIds(planIds);
 
     const items: CoachAttentionInboxItem[] = [];
-    const inactiveCutoff = Date.now() - INACTIVE_DAYS * 86400000;
 
     const now = new Date();
 
@@ -310,50 +299,6 @@ export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAtt
             }
         }
 
-        const weekLogDates = client.workoutLogs
-            .filter((log) => log.loggedAt >= weekStart)
-            .map((log) => toDateKey(log.loggedAt));
-
-        const complianceInput: CalendarComplianceInput = {
-            activePlan: activeUserPlan ? { weeks: activeUserPlan.plan.weeks } : null,
-            planStartedAt: activePlan?.startedAt.toISOString() ?? null,
-            loggedDates: weekLogDates.map((date) => ({ date })),
-            scheduleRevisions: activeUserPlan?.scheduleRevisions,
-            excusedMissedWorkoutKeys: getExcusedMissedWorkoutKeysForClient(actions, client.id),
-        };
-        const compliance = computeWeeklyCompliance(complianceInput, today, {
-            excludeTodayUntilLogged: true,
-        });
-
-        const isInactive = client.lastActiveAt
-            ? client.lastActiveAt.getTime() < inactiveCutoff
-            : true;
-        const lowCompliance =
-            compliance.percent != null && compliance.percent < LOW_COMPLIANCE_PERCENT;
-
-        if (isInactive || lowCompliance) {
-            const alertKey = buildFallingBehindAlertKey(client.id, weekNumber);
-            if (!isAlertDismissed(actions, alertKey, clientLastActiveAt, now)) {
-                items.push({
-                    id: alertKey,
-                    category: "falling_behind",
-                    clientId: client.id,
-                    clientName,
-                    issueType: ISSUE_LABELS.falling_behind,
-                    dateKey: todayKey,
-                    dateLabel: "This week",
-                    explanation: isInactive
-                        ? `No app activity in ${INACTIVE_DAYS}+ days — client may need a check-in.`
-                        : `Only ${compliance.percent}% of planned workouts done this week (below ${LOW_COMPLIANCE_PERCENT}%).`,
-                    status: getItemStatus(actions, alertKey, clientLastActiveAt, now),
-                    urgent: isInactive,
-                    weekNumber,
-                    href: `/coach/client/${client.id}`,
-                    chatHref,
-                });
-            }
-        }
-
         const unread = unreadCounts[client.id] ?? 0;
         if (unread > 0) {
             const alertKey = buildUnreadMessageAlertKey(client.id);
@@ -408,7 +353,13 @@ export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAtt
         return b.dateKey.localeCompare(a.dateKey);
     });
 
-    return items;
+    const nicknameMap = await loadNicknameMap(coachId, items.map((item) => item.clientId));
+    if (nicknameMap.size === 0) return items;
+
+    return items.map((item) => {
+        const nick = nicknameMap.get(item.clientId);
+        return nick ? { ...item, clientName: nick } : item;
+    });
 }
 
 export async function loadCoachAttentionInboxOpenOnly(coachId: string) {

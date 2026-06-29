@@ -24,9 +24,15 @@ import {
     type PlanScheduleRevisionRecord,
 } from "@/lib/planSchedule";
 import { groupLogSetsByExercise, formatLoggedWeight } from "@/lib/logSetGrouping";
+import { serializePlanWeeksForSchedule } from "@/lib/planScheduleHistory";
+import {
+    resolvePlannedWorkoutWithExercisesForDate,
+    sortPlannedExercises,
+} from "@/lib/plannedWorkoutResolve";
+import { getPreviousExercisePerformance } from "@/lib/exercisePerformance";
 
 /* ─────────────────────────── Types ─────────────────────────── */
-interface PlanExercise { name: string; sets: number; reps: string; }
+interface PlanExercise { id: string; name: string; sets: number; reps: string; order?: number; }
 interface PlanWorkout { dayNumber: number; dayOfWeek?: number | null; name: string; id: string; exercises: PlanExercise[]; }
 interface PlanWeek { weekNumber: number; workouts: PlanWorkout[]; }
 interface ActivePlan { id?: string; name: string; weeks: PlanWeek[]; }
@@ -230,26 +236,66 @@ export function CalendarClient({
         return getPlanProgramWeekNumber(planWeekCount, diffDays);
     }, [planStartedAt, planWeekCount]);
 
-    const resolvePlannedWorkoutForDate = useCallback((date: Date, dateKey?: string): PlanWorkout | null => {
-        const planned = getPlannedWorkoutForDate(activeUserPlan, date, { today: todayDate });
-        if (planned) {
-            for (const week of activePlan?.weeks ?? []) {
-                const match = week.workouts.find((workout) => workout.id === planned.id);
-                if (match) return match;
-            }
+    const serializedPlanWeeks = useMemo(
+        () => (activePlan
+            ? serializePlanWeeksForSchedule(
+                activePlan.weeks.map((week) => ({
+                    weekNumber: week.weekNumber,
+                    workouts: week.workouts.map((workout) => ({
+                        id: workout.id,
+                        name: workout.name,
+                        dayNumber: workout.dayNumber,
+                        dayOfWeek: workout.dayOfWeek ?? null,
+                        exercises: workout.exercises.map((exercise) => ({
+                            id: exercise.id,
+                            name: exercise.name,
+                            sets: exercise.sets,
+                            reps: exercise.reps,
+                        })),
+                    })),
+                }))
+            )
+            : []),
+        [activePlan]
+    );
 
-            const snapshotExercises = (planned as PlanWorkout & { exercises?: PlanExercise[] }).exercises;
+    const resolvePlannedWorkoutForDate = useCallback((date: Date, dateKey?: string): PlanWorkout | null => {
+        if (!planStartedAt || serializedPlanWeeks.length === 0) {
+            const key = dateKey ?? toDateKey(date);
+            if (planStartedAt && planWeekCount > 1 && isDateAfterPlanEnd(planStartedAt, planWeekCount, key)) {
+                return null;
+            }
+            if (logMap[key]?.length) return null;
+            const historical = historicalMissedByDate.get(key);
+            if (!historical) return null;
             return {
-                id: planned.id,
-                name: planned.name,
-                dayNumber: planned.dayNumber,
-                dayOfWeek: planned.dayOfWeek ?? null,
-                exercises: snapshotExercises ?? [],
+                id: historical.workoutId,
+                name: historical.workoutName,
+                dayNumber: 0,
+                dayOfWeek: null,
+                exercises: [],
+            };
+        }
+
+        const resolved = resolvePlannedWorkoutWithExercisesForDate({
+            startedAt: planStartedAt,
+            weeks: serializedPlanWeeks,
+            scheduleRevisions,
+            date,
+            today: todayDate,
+        });
+        if (resolved) {
+            return {
+                id: resolved.id,
+                name: resolved.name,
+                dayNumber: resolved.dayNumber,
+                dayOfWeek: resolved.dayOfWeek,
+                exercises: sortPlannedExercises(resolved.exercises),
             };
         }
 
         const key = dateKey ?? toDateKey(date);
-        if (planStartedAt && planWeekCount > 1 && isDateAfterPlanEnd(planStartedAt, planWeekCount, key)) {
+        if (planWeekCount > 1 && isDateAfterPlanEnd(planStartedAt, planWeekCount, key)) {
             return null;
         }
         if (logMap[key]?.length) return null;
@@ -264,7 +310,7 @@ export function CalendarClient({
             dayOfWeek: null,
             exercises: [],
         };
-    }, [activePlan?.weeks, activeUserPlan, todayDate, historicalMissedByDate, logMap, planStartedAt, planWeekCount]);
+    }, [serializedPlanWeeks, scheduleRevisions, planStartedAt, todayDate, historicalMissedByDate, logMap, planWeekCount]);
 
     /* ─── Calendar Generation ─── */
     const firstDay = new Date(view.year, view.month, 1);
@@ -344,27 +390,12 @@ export function CalendarClient({
         return Math.round(sets.reduce((acc, s) => acc + ((s.reps || 0) * (s.weightKg || 1)), 0)); // weight 1 if bodyweight
     };
 
-    const getPreviousPerformance = (exerciseName: string, beforeDate: Date) => {
-        const beforeKey = toDateKey(beforeDate);
-        const prevLogs = loggedDates.filter((l) => l.date < beforeKey);
-        for (const log of prevLogs) {
-            const exSets = log.sets.filter(s => s.exerciseName.toLowerCase() === exerciseName.toLowerCase());
-            if (exSets.length > 0) {
-                const working = exSets.filter((s) => (s.weightKg || 0) > 0 && (s.reps || 0) > 0);
-                if (working.length === 0) continue;
-                const maxWeight = Math.max(...working.map((s) => s.weightKg || 0));
-                const atMaxWeight = working.filter((s) => s.weightKg === maxWeight);
-                const bestSet = atMaxWeight.reduce((best, s) =>
-                    (s.reps || 0) > (best.reps || 0) ? s : best, atMaxWeight[0]);
-                return {
-                    weight: maxWeight,
-                    reps: bestSet.reps,
-                    date: log.date
-                };
-            }
-        }
-        return null;
-    };
+    const getPreviousPerformance = (exercise: PlanExercise, beforeDate: Date) =>
+        getPreviousExercisePerformance(loggedDates, {
+            exerciseId: exercise.id,
+            exerciseName: exercise.name,
+            beforeDateKey: toDateKey(beforeDate),
+        });
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fade-in">
@@ -647,7 +678,7 @@ export function CalendarClient({
                                                         <div>
                                                             <span className="text-xs font-black text-fg group-hover:text-brand-400 transition-colors uppercase italic tracking-tighter">{exName}</span>
                                                             {(() => {
-                                                                const prev = getPreviousPerformance(exName, selectedDate);
+                                                                const prev = getPreviousPerformance({ id: exerciseGroup.exerciseId, name: exName, sets: 0, reps: "" }, selectedDate);
                                                                 if (!prev) return null;
                                                                 return (
                                                                     <p className="text-[8px] font-black text-brand-400/60 uppercase tracking-widest mt-0.5">
@@ -741,12 +772,12 @@ export function CalendarClient({
                                         <Hash className="w-3 h-3 text-brand-400" /> TARGETS
                                     </p>
                                     <div className="space-y-3">
-                                        {selectedPlanned.exercises.map((ex, i) => (
-                                            <div key={i} className="flex items-center justify-between py-2.5 px-3 bg-surface-muted/10 rounded-xl border border-surface-border/40 hover:bg-brand-950/10 transition-colors group">
+                                        {sortPlannedExercises(selectedPlanned.exercises).map((ex) => (
+                                            <div key={ex.id} className="flex items-center justify-between py-2.5 px-3 bg-surface-muted/10 rounded-xl border border-surface-border/40 hover:bg-brand-950/10 transition-colors group">
                                                 <div className="flex flex-col">
                                                     <span className="text-xs font-bold text-fg leading-tight group-hover:text-brand-400 transition-colors lowercase italic">{ex.name}</span>
                                                     {(() => {
-                                                        const prev = getPreviousPerformance(ex.name, selectedDate);
+                                                        const prev = getPreviousPerformance(ex, selectedDate);
                                                         if (!prev) return null;
                                                         return (
                                                             <p className="text-[8px] font-black text-brand-400/60 uppercase tracking-widest mt-1">

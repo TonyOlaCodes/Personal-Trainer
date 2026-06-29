@@ -5,6 +5,7 @@ import { getPlannedWorkoutForDate, activeWorkoutWhere } from "@/lib/planSchedule
 import { loadPlanScheduleRevisionsByPlanIds } from "@/lib/planScheduleHistory";
 import { parseLogDate } from "@/lib/utils";
 import { isInactiveAccount } from "@/lib/userDeactivation";
+import { loadNicknameMap, pickDisplayName } from "@/lib/userNicknames";
 
 export interface MissedWorkoutYesterdayRow {
     clientId: string;
@@ -148,7 +149,18 @@ export async function getMissedWorkoutsYesterdayForCoach(
         a.clientName.localeCompare(b.clientName, undefined, { sensitivity: "base" })
     );
 
-    return missed;
+    const nicknameMap = await loadNicknameMap(coachId, missed.map((row) => row.clientId));
+    if (nicknameMap.size === 0) return missed;
+
+    return missed.map((row) => {
+        const nick = nicknameMap.get(row.clientId);
+        if (!nick) return row;
+        const client = clients.find((c) => c.id === row.clientId);
+        return {
+            ...row,
+            clientName: pickDisplayName(client?.name, client?.email, nick, row.clientName),
+        };
+    });
 }
 
 export function buildMissedWorkoutCalendarHref(row: Pick<MissedWorkoutYesterdayRow, "clientId" | "dateKey">): string {

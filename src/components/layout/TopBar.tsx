@@ -300,7 +300,14 @@ export function TopBar({ title, subtitle, showToday = false, streak, hideSearch 
                         </button>
 
                         {showNotifications && (
-                            <div className="absolute right-0 top-full mt-2 z-50 w-[min(calc(100vw-2rem),24rem)] bg-surface-elevated border border-surface-border rounded-2xl shadow-modal overflow-hidden animate-slide-up sm:w-96">
+                            <>
+                            <button
+                                type="button"
+                                className="fixed inset-0 z-40 bg-black/40 md:hidden"
+                                aria-label="Close notifications"
+                                onClick={() => setShowNotifications(false)}
+                            />
+                            <div className="fixed left-1/2 top-[4.25rem] z-50 w-[calc(100vw-2rem)] max-w-sm max-h-[min(calc(100dvh-5.5rem),28rem)] -translate-x-1/2 bg-surface-elevated border border-surface-border rounded-2xl shadow-modal overflow-hidden animate-slide-up flex flex-col md:absolute md:left-auto md:right-0 md:top-full md:translate-x-0 md:mt-2 md:w-96 md:max-h-[min(70vh,28rem)]">
                                 <div className="p-4 border-b border-surface-border bg-surface-card flex items-center justify-between">
                                     <h3 className="text-sm font-bold text-fg">Notifications</h3>
                                     {unreadCount > 0 && (
@@ -309,7 +316,7 @@ export function TopBar({ title, subtitle, showToday = false, streak, hideSearch 
                                         </span>
                                     )}
                                 </div>
-                                <div className="max-h-[min(70vh,28rem)] overflow-y-auto overscroll-contain no-scrollbar">
+                                <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain no-scrollbar">
                                     {notifications.length === 0 ? (
                                         <div className="p-8 text-center">
                                             <p className="text-sm text-fg-muted">No notifications yet.</p>
@@ -390,10 +397,11 @@ export function TopBar({ title, subtitle, showToday = false, streak, hideSearch 
                                         );
                                     })}
                                 </div>
-                                <div className="p-2 bg-surface-card text-center border-t border-surface-border">
+                                <div className="p-2 bg-surface-card text-center border-t border-surface-border shrink-0">
                                     <button onClick={markAllRead} className="text-xs font-bold text-brand-400 hover:text-brand-300 transition-colors uppercase tracking-widest p-2">Mark all read</button>
                                 </div>
                             </div>
+                            </>
                         )}
                     </div>
 

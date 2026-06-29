@@ -8,6 +8,8 @@ import { getBodyweightSummary } from "@/lib/bodyweight";
 import { getBodyweightAverageSinceLastCheckIn } from "@/lib/checkInPeriodSummary";
 import { getWorkoutsTargetFromUserPlan } from "@/lib/planTrainingTarget";
 import { getPlannedWorkoutForDate } from "@/lib/planSchedule";
+import { loadPlanScheduleRevisions, serializePlanWeeksForSchedule } from "@/lib/planScheduleHistory";
+import { resolvePlannedWorkoutWithExercisesForDate, sortPlannedExercises } from "@/lib/plannedWorkoutResolve";
 import { withResolvedCheckInMedia } from "@/lib/uploadUrls";
 import { DashboardClient } from "./DashboardClient";
 import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
@@ -109,23 +111,61 @@ export default async function DashboardPage() {
 
         const todayWorkoutPlanned = getPlannedWorkoutForDate(activeUserPlanLike, today, { today });
 
+        const [scheduleRevisions] = await Promise.all([
+            activePlan ? loadPlanScheduleRevisions(activePlan.id) : Promise.resolve([]),
+        ]);
+
+        const serializedWeeks = activePlan
+            ? serializePlanWeeksForSchedule(
+                activePlan.weeks.map((week) => ({
+                    weekNumber: week.weekNumber,
+                    workouts: week.workouts.map((workout) => ({
+                        id: workout.id,
+                        name: workout.name,
+                        dayNumber: workout.dayNumber,
+                        dayOfWeek: (workout as { dayOfWeek?: number | null }).dayOfWeek ?? null,
+                        exercises: workout.exercises.map((exercise) => ({
+                            id: exercise.id,
+                            name: exercise.name,
+                            sets: exercise.sets,
+                            reps: exercise.reps,
+                        })),
+                    })),
+                }))
+            )
+            : [];
+
+        const todayWorkoutResolved = activeUserPlan && serializedWeeks.length > 0
+            ? resolvePlannedWorkoutWithExercisesForDate({
+                startedAt: activeUserPlan.startedAt,
+                weeks: serializedWeeks,
+                scheduleRevisions,
+                date: today,
+                today,
+            })
+            : null;
+
         const todayWorkoutFromPlan = todayWorkoutPlanned && activePlan
             ? activePlan.weeks.flatMap((week) => week.workouts).find((w) => w.id === todayWorkoutPlanned.id) ?? null
             : null;
 
-        const todayWorkout = todayWorkoutFromPlan
+        const todayWorkout = todayWorkoutResolved
             ? {
-                id: todayWorkoutFromPlan.id,
-                name: todayWorkoutFromPlan.name,
-                notes: (todayWorkoutFromPlan as { notes?: string | null }).notes ?? null,
-                exercises: todayWorkoutFromPlan.exercises.map((ex) => ({
-                    id: ex.id,
-                    name: ex.name,
-                    sets: ex.sets,
-                    reps: ex.reps,
-                    weightTargetKg: ex.weightTargetKg,
-                    muscleGroup: ex.muscleGroup ?? null,
-                })),
+                id: todayWorkoutResolved.id,
+                name: todayWorkoutResolved.name,
+                notes: (todayWorkoutFromPlan as { notes?: string | null } | null)?.notes ?? null,
+                exercises: sortPlannedExercises(todayWorkoutResolved.exercises).map((ex) => {
+                    const full = todayWorkoutFromPlan?.exercises.find((row) => row.id === ex.id);
+                    return {
+                        id: ex.id,
+                        name: ex.name,
+                        sets: ex.sets,
+                        reps: ex.reps,
+                        order: ex.order,
+                        weightTargetKg: full?.weightTargetKg ?? null,
+                        muscleGroup: full?.muscleGroup ?? null,
+                    };
+                }),
             }
             : null;
 

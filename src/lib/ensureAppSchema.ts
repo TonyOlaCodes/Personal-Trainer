@@ -20,6 +20,7 @@ import { ensurePlanMissedSessionHistoryTable } from "@/lib/planMissedSessionHist
 import { ensureGeneralPremiumRole } from "@/lib/ensureGeneralPremiumRole";
 import { ensureLogSetExerciseNamesReady } from "@/lib/logSetExerciseName";
 import { ensureLogSetExerciseOrdersReady } from "@/lib/logSetExerciseOrder";
+import { ensureUserNicknamesTable } from "@/lib/userNicknames";
 
 let appSchemaReady = false;
 let appSchemaPromise: Promise<void> | null = null;
@@ -55,6 +56,7 @@ export async function ensureAppSchema() {
             ensureGeneralPremiumRole(),
             ensureLogSetExerciseNamesReady(),
             ensureLogSetExerciseOrdersReady(),
+            ensureUserNicknamesTable(),
         ]);
         appSchemaReady = true;
     })();

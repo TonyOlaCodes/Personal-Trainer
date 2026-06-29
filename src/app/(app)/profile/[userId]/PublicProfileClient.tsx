@@ -69,6 +69,7 @@ interface PublicProfileCoachClient {
 interface ProfilePayload {
     id: string;
     name: string;
+    chosenName: string;
     username: string;
     avatarUrl?: string | null;
     bannerUrl?: string | null;
@@ -98,6 +99,8 @@ interface ViewerPayload {
     isLimitedView: boolean;
     canMessage: boolean;
     canCopyPlans: boolean;
+    canSetNickname?: boolean;
+    nickname?: string | null;
 }
 
 const EXP_LABELS: Record<string, string> = {
@@ -176,6 +179,9 @@ export function PublicProfileClient({ userId }: Props) {
     const [showAchievements, setShowAchievements] = useState(false);
     const [allAchievements, setAllAchievements] = useState<AchievementDisplayItem[] | null>(null);
     const [achievementsLoading, setAchievementsLoading] = useState(false);
+    const [nicknameDraft, setNicknameDraft] = useState("");
+    const [nicknameSaving, setNicknameSaving] = useState(false);
+    const [nicknameMessage, setNicknameMessage] = useState<string | null>(null);
 
     useEffect(() => {
         let cancelled = false;
@@ -201,6 +207,7 @@ export function PublicProfileClient({ userId }: Props) {
                 if (!cancelled) {
                     setProfile(data.profile);
                     setViewer(data.viewer);
+                    setNicknameDraft(data.viewer?.nickname ?? "");
                     setError(null);
                 }
             } catch {
@@ -243,6 +250,36 @@ export function PublicProfileClient({ userId }: Props) {
             void openAchievements();
         }
     }, [searchParams, openAchievements]);
+
+    const saveNickname = useCallback(async () => {
+        if (!viewer || viewer.isSelf) return;
+        setNicknameSaving(true);
+        setNicknameMessage(null);
+        try {
+            const res = await fetch(`/api/users/${userId}/nickname`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ nickname: nicknameDraft.trim() || null }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                setNicknameMessage(data.error ?? "Could not save nickname");
+                return;
+            }
+            setProfile((current) => current
+                ? { ...current, name: data.displayName, chosenName: data.chosenName ?? current.chosenName }
+                : current);
+            setViewer((current) => current
+                ? { ...current, nickname: data.nickname ?? null }
+                : current);
+            setNicknameDraft(data.nickname ?? "");
+            setNicknameMessage("Saved — only you see this nickname.");
+        } catch {
+            setNicknameMessage("Connection error");
+        } finally {
+            setNicknameSaving(false);
+        }
+    }, [nicknameDraft, userId, viewer]);
 
     if (loading) {
         return (
@@ -357,6 +394,11 @@ export function PublicProfileClient({ userId }: Props) {
                                 {profile.name}
                             </h1>
                             <p className="text-sm font-bold text-fg-subtle">@{profile.username}</p>
+                            {!viewer.isSelf && viewer.nickname && (
+                                <p className="text-xs text-fg-muted">
+                                    Their name: {profile.chosenName}
+                                </p>
+                            )}
                             {!isLimited && (
                                 <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">
                                     {roleLabels[profile.role] ?? profile.role}
@@ -427,6 +469,40 @@ export function PublicProfileClient({ userId }: Props) {
                         <p className="text-sm text-fg-muted leading-relaxed mt-4 max-w-2xl mx-auto sm:mx-0 text-center sm:text-left">
                             {profile.bio}
                         </p>
+                    )}
+
+                    {!viewer.isSelf && viewer.canSetNickname && (
+                        <div className="mt-5 p-4 rounded-2xl border border-surface-border bg-surface-muted/30 space-y-3">
+                            <div>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">
+                                    Private nickname
+                                </p>
+                                <p className="text-xs text-fg-muted mt-1">
+                                    Only you see this. Leave blank to use their chosen name ({profile.chosenName}).
+                                </p>
+                            </div>
+                            <div className="flex flex-col sm:flex-row gap-2">
+                                <input
+                                    type="text"
+                                    value={nicknameDraft}
+                                    onChange={(e) => setNicknameDraft(e.target.value)}
+                                    placeholder={profile.chosenName}
+                                    maxLength={40}
+                                    className="input flex-1 h-10 text-sm"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => void saveNickname()}
+                                    disabled={nicknameSaving}
+                                    className="btn-primary h-10 px-4 text-xs font-black uppercase tracking-widest shrink-0 disabled:opacity-60"
+                                >
+                                    {nicknameSaving ? "Saving…" : "Save nickname"}
+                                </button>
+                            </div>
+                            {nicknameMessage && (
+                                <p className="text-xs font-bold text-fg-muted">{nicknameMessage}</p>
+                            )}
+                        </div>
                     )}
 
                     {!isLimited && profile.personalRecords.length > 0 && (

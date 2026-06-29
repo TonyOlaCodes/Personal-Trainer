@@ -17,6 +17,7 @@ import { dedupeCoachPlansByName } from "@/lib/coachPlans";
 import { getUserPinnedExercises } from "@/lib/pinnedExercises";
 import { getActiveSessionsForClients } from "@/lib/coachChat";
 import { resolveLogSetExerciseName } from "@/lib/logSetExerciseName";
+import { getNickname, pickDisplayName } from "@/lib/userNicknames";
 
 export const metadata = { title: "Client Details" };
 
@@ -51,6 +52,11 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             target.isDeleted ||
             target.isDeactivated ||
             target.email.endsWith("@deleted.local");
+
+        const clientNickname = isInactiveClient ? null : await getNickname(actor.id, target.id);
+        const clientDisplayName = isInactiveClient
+            ? "Inactive account"
+            : pickDisplayName(target.name, target.email, clientNickname, target.name || "Client");
 
         const checkInWeekNumber = getWeekNumber(new Date());
 
@@ -181,7 +187,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                         readOnly={isInactiveClient}
                         client={{
                             id: target.id,
-                            name: isInactiveClient ? "Inactive account" : target.name,
+                            name: clientDisplayName,
                             email: isInactiveClient ? "View only" : target.email,
                             role: target.role,
                             assignedCoachName: actor.role === "SUPER_ADMIN" ? target.coach?.name ?? target.coach?.email ?? null : null,

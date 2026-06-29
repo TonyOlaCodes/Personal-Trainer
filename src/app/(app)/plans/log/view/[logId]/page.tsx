@@ -11,6 +11,7 @@ import { WorkoutFeelingEditor } from "@/components/shared/WorkoutFeelingEditor";
 import { BackButton } from "@/components/shared/BackButton";
 import { defaultHomeForRole } from "@/lib/roles";
 import { canEditWorkoutLog, canViewWorkoutLog } from "@/lib/userProfile";
+import { getNickname, pickDisplayName } from "@/lib/userNicknames";
 import { groupLogSetsByExercise, logSetDisplayOrderBy, formatLoggedWeight } from "@/lib/logSetGrouping";
 import { resolveLogSetExerciseName } from "@/lib/logSetExerciseName";
 
@@ -43,6 +44,13 @@ export default async function LogViewPage({ params }: { params: Promise<{ logId:
 
     const isOwner = log.user.id === actor.id;
     const canEdit = await canEditWorkoutLog(actor, log);
+    const athleteNickname = isOwner ? null : await getNickname(actor.id, log.user.id);
+    const athleteDisplayName = pickDisplayName(
+        log.user.name,
+        log.user.email,
+        athleteNickname,
+        log.user.name || "Athlete"
+    );
 
     const groupedExercises = groupLogSetsByExercise(log.sets, (set) => resolveLogSetExerciseName(set));
 
@@ -57,7 +65,7 @@ export default async function LogViewPage({ params }: { params: Promise<{ logId:
                     <div className="flex items-center gap-3">
                         <div className="flex items-center gap-2">
                             <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Origin:</span>
-                            <span className="text-[10px] font-black uppercase tracking-widest text-brand-400 italic">{log.user.name}</span>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-brand-400 italic">{athleteDisplayName}</span>
                         </div>
                         {canEdit && (
                             <Suspense fallback={null}>

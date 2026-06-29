@@ -83,8 +83,10 @@ export default async function PlansPage() {
 
     let plans;
 
+    let coachClients: { id: string; name: string }[] = [];
+
     if (isCoachRole(user.role)) {
-        const [created, assigneesByPlanId] = await Promise.all([
+        const [created, assigneesByPlanId, clients] = await Promise.all([
             prisma.plan.findMany({
                 where: { creatorId: user.id },
                 include: {
@@ -100,7 +102,22 @@ export default async function PlansPage() {
                 orderBy: { updatedAt: "desc" },
             }),
             getActiveAssigneesByPlanIdForCoach(user.id),
+            prisma.user.findMany({
+                where: {
+                    coachId: user.id,
+                    isDeleted: false,
+                    isDeactivated: false,
+                    NOT: { email: { endsWith: "@deleted.local" } },
+                },
+                select: { id: true, name: true, email: true },
+                orderBy: { name: "asc" },
+            }),
         ]);
+
+        coachClients = clients.map((client) => ({
+            id: client.id,
+            name: client.name?.trim() || client.email || "Client",
+        }));
 
         plans = created.map((plan) => ({
             id: plan.id,
@@ -145,7 +162,12 @@ export default async function PlansPage() {
             <TopBar title="Plans" subtitle="Manage your workout programmes" />
             <div className="p-6 max-w-5xl mx-auto">
                 <Suspense fallback={<div className="min-h-[200px] animate-pulse rounded-xl bg-surface-muted" />}>
-                    <PlansClient plans={plans} userRole={user.role} activeSession={activeSession} />
+                    <PlansClient
+                        plans={plans}
+                        userRole={user.role}
+                        activeSession={activeSession}
+                        coachClients={coachClients}
+                    />
                 </Suspense>
             </div>
         </>

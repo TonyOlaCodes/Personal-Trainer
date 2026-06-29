@@ -112,6 +112,7 @@ export default async function WorkoutLogPage({
 
     const seenSetKeys = new Set<string>();
     const lastWorkoutLogSets: Array<{
+        exerciseId: string;
         exerciseName: string;
         setNumber: number;
         weightKg: number | null;
@@ -122,10 +123,11 @@ export default async function WorkoutLogPage({
     for (const set of recentCompletedSets) {
         const exerciseName = resolveLogSetExerciseName(set);
         if (!exerciseName || exerciseName === "Unknown") continue;
-        const key = `${exerciseName.toLowerCase()}::${set.setNumber}`;
+        const key = `${set.exerciseId}::${set.setNumber}`;
         if (seenSetKeys.has(key)) continue;
         seenSetKeys.add(key);
         lastWorkoutLogSets.push({
+            exerciseId: set.exerciseId,
             exerciseName,
             setNumber: set.setNumber,
             weightKg: set.weightKg,

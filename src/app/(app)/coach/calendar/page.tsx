@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { CoachCalendarClient } from "./CoachCalendarClient";
 import { loadClientCalendarData } from "@/lib/clientCalendarData";
+import { loadNicknameMap, pickDisplayName } from "@/lib/userNicknames";
 
 export const metadata = { title: "Client Calendar" };
 
@@ -46,9 +47,10 @@ export default async function CoachCalendarPage({
 
     const params = await searchParams;
     const initialDateKey = params.date?.match(/^\d{4}-\d{2}-\d{2}$/) ? params.date : null;
+    const clientNicknameMap = await loadNicknameMap(coach.id, coach.clients.map((c) => c.id));
     const clientOptions = coach.clients.map((c) => ({
         id: c.id,
-        name: c.name || "Unnamed Client",
+        name: pickDisplayName(c.name, null, clientNicknameMap.get(c.id), c.name || "Unnamed Client"),
         hasActivePlan: c.plans.length > 0,
     }));
 

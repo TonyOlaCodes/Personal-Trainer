@@ -15,7 +15,7 @@ function MobileMain({ children }: { children: React.ReactNode }) {
             className={cn(
                 "w-full max-w-full min-w-0 md:pb-0",
                 isChat
-                    ? "max-md:h-dvh max-md:overflow-hidden max-md:pb-0"
+                    ? "h-dvh max-h-dvh overflow-hidden pb-0"
                     : cn("min-h-screen", keyboardOpen ? "pb-0" : "pb-20")
             )}
         >

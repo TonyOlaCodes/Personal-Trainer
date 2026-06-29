@@ -8,6 +8,7 @@ import {
     getProfileViewMode,
 } from "@/lib/userProfile";
 import { recordProfileView } from "@/lib/achievements";
+import { getNickname } from "@/lib/userNicknames";
 
 export async function GET(
     _req: Request,
@@ -64,6 +65,8 @@ export async function GET(
             !isLimitedView &&
             (await canDirectMessage(viewer, targetUserId));
 
+        const viewerNickname = isSelf ? null : await getNickname(viewer.id, targetUserId);
+
         return NextResponse.json({
             profile,
             viewer: {
@@ -73,6 +76,8 @@ export async function GET(
                 isLimitedView,
                 canMessage,
                 canCopyPlans: !isSelf && canViewFull,
+                canSetNickname: !isSelf,
+                nickname: viewerNickname,
             },
         });
     } catch (error) {

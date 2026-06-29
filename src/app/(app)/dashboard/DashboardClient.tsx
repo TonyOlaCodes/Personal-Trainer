@@ -24,6 +24,7 @@ interface Exercise {
     name: string;
     sets: number;
     reps: string;
+    order?: number;
     weightTargetKg?: number | null;
     muscleGroup?: string | null;
 }
@@ -487,11 +488,11 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
 
         setStartingWorkout(true);
         try {
-            const flattenedSets = todayWorkout.exercises.flatMap((ex, exOrder) =>
+            const flattenedSets = todayWorkout.exercises.flatMap((ex) =>
                 Array.from({ length: ex.sets }, (_, i) => ({
                     exerciseId: ex.id,
                     exerciseName: ex.name,
-                    exerciseOrder: exOrder,
+                    exerciseOrder: ex.order ?? 0,
                     setNumber: i + 1,
                     reps: 0,
                     isWarmup: false,

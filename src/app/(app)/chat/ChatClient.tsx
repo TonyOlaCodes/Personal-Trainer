@@ -291,7 +291,7 @@ export function ChatClient({
         return () => mq.removeEventListener("change", update);
     }, []);
 
-    useScrollLock(isHydrated && !isMdUp);
+    useScrollLock(isHydrated);
 
     useEffect(() => {
         const mq = window.matchMedia("(max-width: 639px)");
@@ -1247,7 +1247,7 @@ export function ChatClient({
 
     /* ─── Conversation list (inside main chat panel) ── */
     const renderConversationPanel = () => (
-        <div className="flex-1 flex flex-col bg-surface-card min-h-0 w-full">
+        <div className="flex flex-1 flex-col bg-surface-card min-h-0 h-full overflow-hidden w-full">
             {/* Tab Switcher */}
             <div className="p-3 border-b border-surface-border">
                 <div className="flex gap-1 bg-surface-muted p-1 rounded-xl">
@@ -1481,11 +1481,10 @@ export function ChatClient({
         <div
             className={cn(
                 "flex flex-col overflow-hidden bg-surface animate-fade-in w-full max-w-full",
-                "max-md:fixed max-md:inset-x-0 max-md:top-0 max-md:z-40",
+                "fixed inset-x-0 top-0 z-30 md:left-[var(--sidebar-width)] md:right-0 md:bottom-0 md:z-auto md:h-dvh md:max-h-dvh",
                 keyboardOpen
-                    ? "max-md:h-dvh"
-                    : "max-md:h-[calc(100dvh-5rem-env(safe-area-inset-bottom,0px))]",
-                "md:static md:z-auto md:h-[calc(100dvh-4rem)] md:bottom-auto"
+                    ? "bottom-0"
+                    : "bottom-[calc(3.75rem+env(safe-area-inset-bottom,0px))]"
             )}
             onClick={() => closeMessageActions()}
         >
@@ -1499,11 +1498,11 @@ export function ChatClient({
             )}
 
             {/* Chat panels — split on desktop, single pane on mobile */}
-            <div className="flex-1 flex flex-col md:flex-row min-w-0 min-h-0 overflow-hidden w-full">
+            <div className="flex-1 flex flex-col md:flex-row min-w-0 min-h-0 overflow-hidden w-full h-full">
                 {showSidebar && (
                     <div
                         className={cn(
-                            "flex flex-col min-h-0 overflow-hidden shrink-0 bg-surface-card",
+                            "flex flex-col min-h-0 h-full overflow-hidden shrink-0 bg-surface-card",
                             !isMdUp && "flex-1 w-full",
                             isMdUp && "w-full max-w-sm border-r border-surface-border md:w-80"
                         )}
@@ -1512,7 +1511,7 @@ export function ChatClient({
                     </div>
                 )}
                 {showThreadPanel && (
-                <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
+                <div className="flex-1 flex flex-col min-w-0 min-h-0 h-full overflow-hidden">
                 {showThreadContent ? (
                 <>
                 {/* ── Header ── */}
@@ -2095,7 +2094,7 @@ export function ChatClient({
                         <p className="text-[10px] text-fg-subtle mt-0.5">This user&apos;s account has been deleted. You cannot send new messages.</p>
                     </div>
                 ) : (
-                    <div className="px-4 sm:px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-surface-border bg-surface-card shrink-0">
+                    <div className="px-4 sm:px-5 py-3 border-t border-surface-border bg-surface-card shrink-0">
                         {isCoachUser && tab === "direct" && selectedConv && !selectedConv.isDeleted && (
                             <div className="mb-2">
                                 <CoachChatTools
