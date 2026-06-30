@@ -26,7 +26,7 @@ interface Props {
     alignToAppShell?: boolean;
 }
 
-const PREVIEW_LIMIT = 5;
+const PREVIEW_LIMIT = 3;
 
 export { PREVIEW_LIMIT };
 
@@ -127,7 +127,7 @@ export function RecentSessionsListModal({
                     )}
                 </div>
 
-                <div className="px-5 py-3 border-t border-surface-border shrink-0">
+                <div className="px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pb-3 border-t border-surface-border shrink-0">
                     <p className="text-[10px] text-fg-subtle text-center font-bold uppercase tracking-widest">
                         {sessions.length} session{sessions.length !== 1 ? "s" : ""}
                     </p>

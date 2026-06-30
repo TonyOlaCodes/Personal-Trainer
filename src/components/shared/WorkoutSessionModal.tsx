@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Activity, ChevronLeft, ChevronRight, Dumbbell, Loader2, MessageSquare, Trash2, X } from "lucide-react";
+import { Activity, ChevronLeft, ChevronRight, Loader2, MessageSquare, Trash2, X } from "lucide-react";
 import { ModalOverlay } from "@/components/shared/ModalOverlay";
 import { cn, formatDate, calculateOneRM } from "@/lib/utils";
 import { isCardio } from "@/components/shared/ExerciseAutocomplete";
@@ -179,7 +179,7 @@ export function WorkoutSessionModal({
     return (
         <ModalOverlay alignToAppShell={alignToAppShell} className="bg-black/60 backdrop-blur-none sm:p-6 p-0">
             <div
-                className="w-full sm:max-w-3xl max-h-[92vh] bg-surface-card border border-surface-border rounded-t-3xl sm:rounded-2xl shadow-modal overflow-hidden animate-slide-up"
+                className="w-full sm:max-w-3xl h-[calc(100dvh_-_5rem)] max-h-[calc(100dvh_-_5rem)] sm:h-auto sm:max-h-[92vh] bg-surface-card border border-surface-border rounded-t-3xl sm:rounded-2xl shadow-modal overflow-hidden animate-slide-up flex flex-col"
                 onClick={(e) => e.stopPropagation()}
             >
                 <div className="p-5 border-b border-surface-border flex items-start justify-between gap-4">
@@ -235,7 +235,7 @@ export function WorkoutSessionModal({
                     </button>
                 </div>
 
-                <div className="overflow-y-auto overscroll-contain max-h-[calc(92vh-88px)] p-5 space-y-5 pb-24 sm:pb-5">
+                <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-5 space-y-5 pb-[calc(6rem+env(safe-area-inset-bottom,0px))] sm:pb-5">
                     {loading ? (
                         <div className="p-12 text-center">
                             <Loader2 className="w-6 h-6 mx-auto animate-spin text-brand-400" />
@@ -248,16 +248,20 @@ export function WorkoutSessionModal({
                         </div>
                     ) : session ? (
                         <>
-                            <div className="grid sm:grid-cols-3 gap-3">
+                            <div className="grid sm:grid-cols-2 gap-3">
                                 <div className="stat-card">
-                                    <Activity className="w-4 h-4 text-brand-400 mb-1" />
-                                    <p className="stat-value">{groupedSets.length}</p>
-                                    <p className="stat-label">Exercises</p>
-                                </div>
-                                <div className="stat-card">
-                                    <Dumbbell className="w-4 h-4 text-success mb-1" />
-                                    <p className="stat-value">{session.sets.filter(s => s.isCompleted).length}</p>
-                                    <p className="stat-label">Completed Sets</p>
+                                    <Activity className="w-4 h-4 text-brand-400 mb-2" />
+                                    <div className="flex items-center justify-center gap-6">
+                                        <div>
+                                            <p className="stat-value">{groupedSets.length}</p>
+                                            <p className="stat-label">Exercises</p>
+                                        </div>
+                                        <div className="h-8 w-px bg-surface-border" />
+                                        <div>
+                                            <p className="stat-value">{session.sets.filter(s => s.isCompleted).length}</p>
+                                            <p className="stat-label">Completed Sets</p>
+                                        </div>
+                                    </div>
                                 </div>
                                 <div className="stat-card">
                                     <MessageSquare className="w-4 h-4 text-warning mb-1" />
@@ -282,6 +286,36 @@ export function WorkoutSessionModal({
                                             <span className="text-xl leading-none">{workoutFeelingEmoji(session.feeling)}</span>
                                         </div>
                                     ) : null}
+                                </div>
+                            )}
+
+                            <div className="space-y-3">
+                                <h4 className="text-[10px] font-black uppercase tracking-widest text-brand-400">Coach Notes</h4>
+                                {session.coachNotes.length === 0 ? (
+                                    <p className="text-sm text-fg-muted">No coach notes yet.</p>
+                                ) : session.coachNotes.map((coachNote) => (
+                                    <div key={coachNote.id} className="card p-4 bg-brand-950/10 border-brand-500/15">
+                                        <div className="flex items-center justify-between gap-3 mb-1">
+                                            <p className="text-xs font-black text-fg">{coachNote.coachName || "Coach"}</p>
+                                            <p className="text-[10px] text-fg-subtle font-bold uppercase tracking-widest">{formatDate(coachNote.createdAt)}</p>
+                                        </div>
+                                        <p className="text-sm text-fg-muted whitespace-pre-wrap">{coachNote.text}</p>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {canAddCoachNote && (
+                                <div className="card p-4 border-brand-500/20 bg-brand-500/5 space-y-3">
+                                    <textarea
+                                        className="input min-h-24 text-sm"
+                                        placeholder="Add feedback for this session..."
+                                        value={note}
+                                        onChange={(e) => setNote(e.target.value)}
+                                    />
+                                    <button onClick={addNote} disabled={savingNote || !note.trim()} className="btn-primary w-full">
+                                        {savingNote ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}
+                                        Add Feedback
+                                    </button>
                                 </div>
                             )}
 
@@ -333,36 +367,6 @@ export function WorkoutSessionModal({
                                 ))}
                             </div>
 
-                            <div className="space-y-3">
-                                <h4 className="text-[10px] font-black uppercase tracking-widest text-brand-400">Coach Notes</h4>
-                                {session.coachNotes.length === 0 ? (
-                                    <p className="text-sm text-fg-muted">No coach notes yet.</p>
-                                ) : session.coachNotes.map((coachNote) => (
-                                    <div key={coachNote.id} className="card p-4 bg-brand-950/10 border-brand-500/15">
-                                        <div className="flex items-center justify-between gap-3 mb-1">
-                                            <p className="text-xs font-black text-fg">{coachNote.coachName || "Coach"}</p>
-                                            <p className="text-[10px] text-fg-subtle font-bold uppercase tracking-widest">{formatDate(coachNote.createdAt)}</p>
-                                        </div>
-                                        <p className="text-sm text-fg-muted whitespace-pre-wrap">{coachNote.text}</p>
-                                    </div>
-                                ))}
-                            </div>
-
-                            {canAddCoachNote && (
-                                <div className="card p-4 border-brand-500/20 bg-brand-500/5 space-y-3">
-                                    <textarea
-                                        className="input min-h-24 text-sm"
-                                        placeholder="Add feedback for this session..."
-                                        value={note}
-                                        onChange={(e) => setNote(e.target.value)}
-                                    />
-                                    <button onClick={addNote} disabled={savingNote || !note.trim()} className="btn-primary w-full">
-                                        {savingNote ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}
-                                        Add Feedback
-                                    </button>
-                                </div>
-                            )}
-
                             {canDelete && (
                                 <button
                                     type="button"
@@ -379,7 +383,7 @@ export function WorkoutSessionModal({
                 </div>
 
                 {showSessionNav && session && !loading && !error && (
-                    <div className="border-t border-surface-border bg-surface-card p-4 flex items-center justify-between gap-3 shrink-0">
+                    <div className="border-t border-surface-border bg-surface-card p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-4 flex items-center justify-between gap-3 shrink-0">
                         <button
                             type="button"
                             disabled={!hasOlder}
