@@ -823,14 +823,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                         {greeting()}, {user.name?.split(" ")[0] ?? "Athlete"}
                     </h2>
                     <div className="flex items-center gap-3 mt-1">
-                        {activePlan ? (
-                            <Link
-                                href={planPreviewHref}
-                                className="text-sm text-fg-muted font-medium hover:text-brand-400 transition-colors"
-                            >
-                                Active plan: <span className="text-fg">{activePlan.name}</span>
-                            </Link>
-                        ) : (
+                        {!activePlan && (
                             <p className="text-sm text-fg-muted font-medium">
                                 No active plan — pick one to get started.
                             </p>
