@@ -783,13 +783,20 @@ export function WorkoutLogClient({
         });
     };
 
-    const handleInitiateFinish = () => {
-        if (isCoachForClient) return;
+    const hasCompletedSet = () => {
         const flattenedSets = Object.entries(logs).flatMap(([exId, sets]) =>
             sets.map(s => ({ ...s, exerciseId: exId }))
         );
-        if (!flattenedSets.some(s => s.isCompleted)) {
+        return flattenedSets.some(s => s.isCompleted);
+    };
+
+    const handleInitiateFinish = () => {
+        if (!hasCompletedSet()) {
             alert("Finish at least one set!");
+            return;
+        }
+        if (isCoachForClient) {
+            handleSubmit({ duration: Math.floor(elapsed / 60), notes: "", feeling: null });
             return;
         }
         setManualDurationMinutes(Math.floor(elapsed / 60).toString());
@@ -797,7 +804,7 @@ export function WorkoutLogClient({
         setShowFinishModal(true);
     };
 
-    const handleSubmit = async () => {
+    const handleSubmit = async (override?: { duration?: number; notes?: string; feeling?: number | null }) => {
         setSaving(true);
         const flattenedSets = Object.entries(logs).flatMap(([exId, sets]) => {
             const exInfo = activeExercises.find(e => e.id === exId);
@@ -817,15 +824,17 @@ export function WorkoutLogClient({
         });
 
         try {
-            const finalDuration = parseInt(manualDurationMinutes) || Math.floor(elapsed / 60);
+            const finalDuration = override?.duration ?? (parseInt(manualDurationMinutes) || Math.floor(elapsed / 60));
+            const finalNotes = override ? override.notes : workoutNotes.trim() || undefined;
+            const finalFeeling = override ? override.feeling ?? undefined : finishFeeling ?? undefined;
             const res = await fetch("/api/logs", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     workoutId: workout.id,
                     duration: finalDuration,
-                    notes: workoutNotes.trim() || undefined,
-                    feeling: finishFeeling ?? undefined,
+                    notes: finalNotes,
+                    feeling: finalFeeling,
                     status: "COMPLETED",
                     loggedAt: toLoggedAtIso(logDate),
                     sets: flattenedSets,
@@ -941,12 +950,21 @@ export function WorkoutLogClient({
                 </div>
                 {sessionActive ? (
                     isCoachForClient ? (
-                        <button
-                            onClick={handleExitSession}
-                            className="btn-secondary btn-sm px-4"
-                        >
-                            Exit
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={handleExitSession}
+                                className="btn-secondary btn-sm px-3"
+                            >
+                                Exit
+                            </button>
+                            <button
+                                onClick={handleInitiateFinish}
+                                disabled={saving}
+                                className="btn-primary btn-sm px-3 shadow-glow-brand"
+                            >
+                                {saving ? "Saving..." : "Finish"}
+                            </button>
+                        </div>
                     ) : (
                         <button onClick={handleInitiateFinish} disabled={saving} className="btn-primary btn-sm px-4 shadow-glow-brand">
                             Finish
@@ -1482,7 +1500,7 @@ export function WorkoutLogClient({
                             <button onClick={() => setShowFinishModal(false)} className="btn-secondary h-12 flex-1" disabled={saving}>
                                 Back
                             </button>
-                            <button onClick={handleSubmit} className="btn-primary h-12 flex-[2] shadow-glow-brand" disabled={saving}>
+                            <button onClick={() => handleSubmit()} className="btn-primary h-12 flex-[2] shadow-glow-brand" disabled={saving}>
                                 {saving ? "Saving..." : "Save Session"}
                             </button>
                         </div>
