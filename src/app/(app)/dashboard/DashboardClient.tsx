@@ -808,6 +808,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                 }))}
                 initialSessionId={sessionsExplorerInitialId}
                 canDelete
+                canEditSession
                 onDeleted={() => {
                     setSessionsExplorerOpen(false);
                     setSessionsExplorerInitialId(null);

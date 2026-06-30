@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Activity, ChevronLeft, ChevronRight, Loader2, MessageSquare, Trash2, X } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { Activity, ChevronLeft, ChevronRight, Edit3, Loader2, MessageSquare, Trash2, X } from "lucide-react";
 import { ModalOverlay } from "@/components/shared/ModalOverlay";
-import { cn, formatDate, calculateOneRM } from "@/lib/utils";
+import { cn, formatDate, calculateOneRM, parseLogDate, toDateKey } from "@/lib/utils";
+import { appendReturnTo } from "@/lib/navigation";
 import { isCardio } from "@/components/shared/ExerciseAutocomplete";
 import { WorkoutFeelingEditor } from "@/components/shared/WorkoutFeelingEditor";
 import { workoutFeelingEmoji } from "@/lib/workoutFeeling";
@@ -30,6 +32,8 @@ interface CoachNote {
 
 interface SessionData {
     id: string;
+    workoutId: string;
+    userId: string;
     workoutName: string;
     clientName?: string | null;
     loggedAt: string;
@@ -49,6 +53,8 @@ interface Props {
     canAddCoachNote?: boolean;
     canDelete?: boolean;
     canEditFeeling?: boolean;
+    canEditSession?: boolean;
+    editClientId?: string;
     onDeleted?: () => void;
     alignToAppShell?: boolean;
 }
@@ -62,15 +68,20 @@ export function WorkoutSessionModal({
     canAddCoachNote = false,
     canDelete = false,
     canEditFeeling = false,
+    canEditSession = false,
+    editClientId,
     onDeleted,
     alignToAppShell = false,
 }: Props) {
+    const router = useRouter();
+    const pathname = usePathname();
     const [session, setSession] = useState<SessionData | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const [note, setNote] = useState("");
     const [savingNote, setSavingNote] = useState(false);
     const [deleting, setDeleting] = useState(false);
+    const [editing, setEditing] = useState(false);
 
     useEffect(() => {
         if (!sessionId) return;
@@ -173,6 +184,33 @@ export function WorkoutSessionModal({
             }
         } finally {
             setSavingNote(false);
+        }
+    };
+
+    const editSession = async () => {
+        if (!session || editing || deleting) return;
+        setEditing(true);
+        try {
+            const res = await fetch(`/api/logs/${session.id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ status: "IN_PROGRESS" }),
+            });
+            if (!res.ok) {
+                setError("Failed to reopen session.");
+                return;
+            }
+
+            const params = new URLSearchParams({
+                date: toDateKey(parseLogDate(session.loggedAt)),
+            });
+            if (editClientId) params.set("clientId", editClientId);
+            router.push(appendReturnTo(`/plans/log/${session.workoutId}?${params.toString()}`, pathname));
+            router.refresh();
+        } catch {
+            setError("Failed to reopen session.");
+        } finally {
+            setEditing(false);
         }
     };
 
@@ -368,14 +406,42 @@ export function WorkoutSessionModal({
                             </div>
 
                             {canDelete && (
+                                <div className="grid sm:grid-cols-2 gap-3">
+                                    {canEditSession && (
+                                        <button
+                                            type="button"
+                                            onClick={editSession}
+                                            disabled={editing || deleting}
+                                            className="btn-primary w-full"
+                                        >
+                                            {editing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Edit3 className="w-4 h-4" />}
+                                            {editing ? "Reopening..." : "Edit Session"}
+                                        </button>
+                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={deleteSession}
+                                        disabled={editing || deleting}
+                                        className={cn(
+                                            "btn-secondary w-full text-danger hover:bg-danger/10 hover:border-danger/30",
+                                            !canEditSession && "sm:col-span-2"
+                                        )}
+                                    >
+                                        {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                                        {deleting ? "Deleting..." : "Delete Session"}
+                                    </button>
+                                </div>
+                            )}
+
+                            {!canDelete && canEditSession && (
                                 <button
                                     type="button"
-                                    onClick={deleteSession}
-                                    disabled={deleting}
-                                    className="btn-secondary w-full text-danger hover:bg-danger/10 hover:border-danger/30"
+                                    onClick={editSession}
+                                    disabled={editing || deleting}
+                                    className="btn-primary w-full"
                                 >
-                                    {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                                    {deleting ? "Deleting..." : "Delete Session"}
+                                    {editing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Edit3 className="w-4 h-4" />}
+                                    {editing ? "Reopening..." : "Edit Session"}
                                 </button>
                             )}
                         </>

@@ -468,6 +468,8 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                 sessions={logs}
                 initialSessionId={sessionsInitialId}
                 canAddCoachNote={canEdit}
+                canEditSession={canEdit}
+                editClientId={client.id}
                 alignToAppShell
             />
             {readOnly && (

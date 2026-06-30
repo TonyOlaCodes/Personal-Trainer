@@ -16,6 +16,8 @@ interface Props {
     canAddCoachNote?: boolean;
     canDelete?: boolean;
     canEditFeeling?: boolean;
+    canEditSession?: boolean;
+    editClientId?: string;
     onDeleted?: () => void;
     /** When true, loads the user's complete workout history when the explorer opens. */
     fetchHistoryOnOpen?: boolean;
@@ -45,6 +47,8 @@ export function RecentSessionsExplorer({
     canAddCoachNote = false,
     canDelete = false,
     canEditFeeling = false,
+    canEditSession = false,
+    editClientId,
     onDeleted,
     fetchHistoryOnOpen = false,
     historyUserId,
@@ -138,6 +142,8 @@ export function RecentSessionsExplorer({
                 canAddCoachNote={canAddCoachNote}
                 canDelete={canDelete}
                 canEditFeeling={canEditFeeling || canDelete}
+                canEditSession={canEditSession}
+                editClientId={editClientId}
                 onDeleted={onDeleted}
                 alignToAppShell={alignToAppShell}
             />
