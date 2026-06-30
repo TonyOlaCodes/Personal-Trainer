@@ -1481,7 +1481,7 @@ export function ChatClient({
         <div
             className={cn(
                 "flex flex-col overflow-hidden bg-surface animate-fade-in min-w-0 max-w-full",
-                "fixed inset-x-0 top-0 z-30 h-dvh max-h-dvh",
+                "fixed inset-x-0 top-0 z-30",
                 "md:static md:z-auto md:w-full md:h-dvh md:max-h-dvh",
                 keyboardOpen
                     ? "bottom-0"
