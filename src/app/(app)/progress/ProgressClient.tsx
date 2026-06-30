@@ -441,7 +441,7 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
             <section>
                 <h2 className="text-xs font-black text-fg-subtle uppercase tracking-[0.2em] mb-5 flex items-center gap-2">
                     <Flame className="w-4 h-4 text-brand-400" />
-                    Weekly Pulse
+                    Weekly Overview
                 </h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     {/* Consistency Ring */}
