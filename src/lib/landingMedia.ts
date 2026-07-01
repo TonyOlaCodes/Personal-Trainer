@@ -33,9 +33,9 @@ export function landingMediaUrl(category: LandingMediaCategory, filename: string
 /** Current files in `public/landing/` — update when assets change. */
 export const LANDING_MEDIA_FILES = {
     videos: {
-        deadlift: "deadlift.mov",
-        benchPress: "benchpress.MOV",
-        squat: "squat.MOV",
+        deadlift: "web/deadlift.mp4",
+        benchPress: "web/benchpress.mp4",
+        squat: "web/squat.mp4",
     },
     transformations: {
         before: "transform_before.jpg",

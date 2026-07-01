@@ -18,7 +18,7 @@ export function LandingLiftsSection() {
                 </div>
 
                 <div className="grid md:grid-cols-3 gap-4 sm:gap-6">
-                    {LANDING_LIFTS.map((lift) => (
+                    {LANDING_LIFTS.map((lift, index) => (
                         <article
                             key={lift.id}
                             className="card overflow-hidden border-surface-border/60 group hover:border-brand-500/30 transition-colors"
@@ -26,6 +26,7 @@ export function LandingLiftsSection() {
                             <LandingMediaVideo
                                 category="videos"
                                 filename={lift.video}
+                                priority={index === 0}
                                 className="aspect-[4/5] sm:aspect-[3/4]"
                                 overlayClassName="bg-gradient-to-t from-surface via-transparent to-black/20 group-hover:via-surface/10 transition-colors"
                             />
