@@ -151,9 +151,9 @@ function CoachedByCard({ coach }: { coach: PublicProfileCoachedBy }) {
     return (
         <Link
             href={getPublicProfileHref(coach.id)}
-            className="card p-4 flex items-center gap-4 hover:border-brand-500/30 transition-colors"
+            className="mt-4 inline-flex items-center gap-3 rounded-2xl border border-surface-border bg-surface-muted/40 px-3 py-2.5 hover:border-brand-500/30 transition-colors max-w-full"
         >
-            <div className="w-12 h-12 rounded-2xl bg-gradient-brand flex items-center justify-center text-sm font-black text-white overflow-hidden shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-gradient-brand flex items-center justify-center text-xs font-black text-white overflow-hidden shrink-0">
                 {coach.avatarUrl ? (
                     <img src={resolveUploadUrl(coach.avatarUrl)} alt={coach.name} className="w-full h-full object-cover" />
                 ) : (
@@ -428,6 +428,12 @@ export function PublicProfileClient({ userId }: Props) {
                         )}
                     </div>
 
+                    {profile.coachedBy && (
+                        <div className="flex justify-center sm:justify-start">
+                            <CoachedByCard coach={profile.coachedBy} />
+                        </div>
+                    )}
+
                     {isLimited && (
                         <p className="text-sm text-fg-muted text-center sm:text-left mt-4 leading-relaxed">
                             This account is private. Only basic profile info is visible.
@@ -547,8 +553,6 @@ export function PublicProfileClient({ userId }: Props) {
                     </div>
                 </div>
             </div>
-
-            {profile.coachedBy && <CoachedByCard coach={profile.coachedBy} />}
 
             {!isLimited && isCoachProfile && (
                 <SectionCard title="Clients" icon={Users}>
