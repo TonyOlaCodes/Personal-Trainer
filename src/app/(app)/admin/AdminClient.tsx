@@ -3,7 +3,7 @@
 import { useMemo, useState, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Users, Dumbbell, Ticket, Shield, Copy, Check, ChevronRight, Plus, Trash2, UserX, RotateCcw, ArrowUpDown, Megaphone, UserPlus } from "lucide-react";
+import { Users, Dumbbell, Ticket, Shield, Copy, Check, ChevronRight, Plus, Trash2, UserX, RotateCcw, ArrowUpDown, Megaphone, UserPlus, AlertTriangle, Loader2, X } from "lucide-react";
 import { cn, formatDate, getInitials, roleLabels, roleBadgeClass } from "@/lib/utils";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { getAccessCodeStatus } from "@/lib/accessCodeStatus";
@@ -11,6 +11,7 @@ import { PLAN_TEMPLATES } from "@/lib/templates";
 import { AdminAnnouncementsPanel } from "./AdminAnnouncementsPanel";
 import { AdminCoachCodeRequestsPanel } from "./AdminCoachCodeRequestsPanel";
 import { DeletePlanConfirmModal } from "@/components/shared/DeletePlanConfirmModal";
+import { ModalOverlay } from "@/components/shared/ModalOverlay";
 
 interface AdminUser {
     id: string;
@@ -101,6 +102,7 @@ const CODE_FILTER_OPTIONS: { key: CodeFilter; label: string }[] = [
     { key: "REDEEMED", label: "Redeemed" },
     { key: "EXPIRED", label: "Expired" },
 ];
+const ACCOUNT_DELETE_CONFIRM_WORD = "DELETE";
 type UserSortField = "createdAt" | "role" | "name" | "status";
 type SortDir = "asc" | "desc";
 
@@ -249,6 +251,8 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
     const [promotingId, setPromotingId] = useState<string | null>(null);
     const [confirmingUser, setConfirmingUser] = useState<{ id: string, email: string, role: string } | null>(null);
     const [confirmEmail, setConfirmEmail] = useState("");
+    const [accountPendingDelete, setAccountPendingDelete] = useState<AdminUser | null>(null);
+    const [accountDeleteConfirmText, setAccountDeleteConfirmText] = useState("");
     const [selectedCoachId, setSelectedCoachId] = useState<string>("NONE");
     const [accountActionId, setAccountActionId] = useState<string | null>(null);
 
@@ -410,6 +414,40 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
         setAccountActionId(null);
     };
 
+    const closeAccountDeleteConfirm = () => {
+        if (accountPendingDelete && accountActionId === accountPendingDelete.id) return;
+        setAccountPendingDelete(null);
+        setAccountDeleteConfirmText("");
+    };
+
+    const confirmDeleteAccount = async () => {
+        if (!accountPendingDelete || accountDeleteConfirmText !== ACCOUNT_DELETE_CONFIRM_WORD) return;
+
+        setAccountActionId(accountPendingDelete.id);
+        const res = await fetch("/api/admin/users/account", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: accountPendingDelete.id, action: "delete" }),
+        });
+
+        if (res.ok) {
+            setUsers(prev => prev.map(u => u.id === accountPendingDelete.id ? {
+                ...u,
+                role: "FREE",
+                isDeactivated: true,
+                isDeleted: true,
+                coachId: null,
+                coachName: null,
+            } : u));
+            setAccountPendingDelete(null);
+            setAccountDeleteConfirmText("");
+        } else {
+            const data = await res.json().catch(() => null);
+            alert(data?.error || "Failed to delete account.");
+        }
+        setAccountActionId(null);
+    };
+
     const activeUsers = users.filter((u) => !u.isDeleted);
 
     const stats = [
@@ -432,6 +470,86 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
                 }}
                 onConfirm={confirmDeletePlan}
             />
+
+            <ModalOverlay
+                open={accountPendingDelete !== null}
+                onClose={closeAccountDeleteConfirm}
+            >
+                <div
+                    className="bg-surface-card w-full sm:max-w-md rounded-t-[2rem] sm:rounded-3xl border border-surface-border shadow-glow-brand-lg overflow-hidden animate-slide-up"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="flex items-center justify-between gap-4 px-5 py-4 border-b border-surface-border">
+                        <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-10 h-10 rounded-xl bg-danger/10 flex items-center justify-center shrink-0">
+                                <AlertTriangle className="w-5 h-5 text-danger" />
+                            </div>
+                            <div className="min-w-0">
+                                <p className="text-sm font-black text-fg truncate">Delete account?</p>
+                                <p className="text-xs text-fg-muted truncate">{accountPendingDelete?.email}</p>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={closeAccountDeleteConfirm}
+                            disabled={Boolean(accountPendingDelete && accountActionId === accountPendingDelete.id)}
+                            className="btn-icon shrink-0"
+                            aria-label="Close"
+                        >
+                            <X className="w-5 h-5" />
+                        </button>
+                    </div>
+
+                    <div className="p-5 space-y-4">
+                        <p className="text-sm text-fg-muted leading-relaxed">
+                            This permanently deletes the login account and anonymizes the local user record. This cannot be undone.
+                        </p>
+                        <label className="block space-y-2">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">
+                                Type &quot;{ACCOUNT_DELETE_CONFIRM_WORD}&quot; to confirm delete account
+                            </span>
+                            <input
+                                type="text"
+                                value={accountDeleteConfirmText}
+                                onChange={(e) => setAccountDeleteConfirmText(e.target.value.toUpperCase())}
+                                placeholder={ACCOUNT_DELETE_CONFIRM_WORD}
+                                disabled={Boolean(accountPendingDelete && accountActionId === accountPendingDelete.id)}
+                                autoComplete="off"
+                                autoFocus
+                                className="input h-11 font-mono font-bold tracking-widest uppercase"
+                            />
+                        </label>
+
+                        <div className="flex flex-col-reverse sm:flex-row gap-2 pt-1">
+                            <button
+                                type="button"
+                                onClick={closeAccountDeleteConfirm}
+                                disabled={Boolean(accountPendingDelete && accountActionId === accountPendingDelete.id)}
+                                className="btn-secondary flex-1 h-11"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => void confirmDeleteAccount()}
+                                disabled={
+                                    !accountPendingDelete ||
+                                    accountActionId === accountPendingDelete.id ||
+                                    accountDeleteConfirmText !== ACCOUNT_DELETE_CONFIRM_WORD
+                                }
+                                className="btn-primary flex-1 h-11 inline-flex items-center justify-center gap-2 bg-danger hover:bg-danger/90 border-danger/30"
+                            >
+                                {accountPendingDelete && accountActionId === accountPendingDelete.id ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                    <Trash2 className="w-4 h-4" />
+                                )}
+                                {accountPendingDelete && accountActionId === accountPendingDelete.id ? "Deleting..." : "Delete account"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </ModalOverlay>
 
             {/* Stats */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -567,7 +685,10 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
                                                     {u.isDeactivated ? "Reactivate" : "Deactivate"}
                                                 </button>
                                                 <button
-                                                    onClick={() => updateAccountStatus(u, "delete")}
+                                                    onClick={() => {
+                                                        setAccountPendingDelete(u);
+                                                        setAccountDeleteConfirmText("");
+                                                    }}
                                                     disabled={accountActionId === u.id}
                                                     className="btn-secondary btn-sm text-[10px] font-black uppercase tracking-widest h-8 border-danger/30 text-danger hover:bg-danger hover:text-white"
                                                 >
