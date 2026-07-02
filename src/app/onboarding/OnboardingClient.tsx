@@ -25,8 +25,8 @@ import {
     USERNAME_MAX_LENGTH,
     WORKOUT_DURATION_OPTIONS,
     experienceFromSlider,
+    getAgeFromDateOfBirth,
     getDefaultDateOfBirthInputValue,
-    getMaxDateOfBirthInputValue,
     isEligibleDateOfBirth,
 } from "@/lib/onboardingProfile";
 
@@ -120,6 +120,7 @@ export function OnboardingPage() {
     const [membershipLabel, setMembershipLabel] = useState("");
     const [coachCodeRequested, setCoachCodeRequested] = useState(false);
     const [requestCodeMessage, setRequestCodeMessage] = useState("");
+    const [dobContinueAttempted, setDobContinueAttempted] = useState(false);
     const [prefilled, setPrefilled] = useState(false);
 
     useEffect(() => {
@@ -239,6 +240,10 @@ export function OnboardingPage() {
 
     const handleContinue = async () => {
         if (step === 1) {
+            if (!isEligibleDateOfBirth(form.dateOfBirth)) {
+                setDobContinueAttempted(true);
+                return;
+            }
             const code = form.secretCode?.trim();
             if (code) {
                 const valid = await validateAccessCode();
@@ -322,10 +327,11 @@ export function OnboardingPage() {
         form.firstName.trim() &&
         form.gender &&
         form.dateOfBirth &&
-        isEligibleDateOfBirth(form.dateOfBirth) &&
         form.username.length <= USERNAME_MAX_LENGTH
     );
     const dobEligible = isEligibleDateOfBirth(form.dateOfBirth);
+    const dobAge = getAgeFromDateOfBirth(form.dateOfBirth);
+    const showDobError = dobContinueAttempted && !dobEligible;
     const canContinueStep2 = Boolean(form.goal && form.experienceLevel);
     const experienceMeta = EXPERIENCE_SLIDER_LABELS[form.experienceSlider] ?? EXPERIENCE_SLIDER_LABELS[1];
 
@@ -470,12 +476,19 @@ export function OnboardingPage() {
                                 <label className="label">Date of birth *</label>
                                 <input
                                     type="date"
-                                    className={cn("input", !dobEligible && "border-danger focus:border-danger focus:ring-danger/40")}
+                                    className={cn("input", showDobError && "border-danger focus:border-danger focus:ring-danger/40")}
                                     value={form.dateOfBirth}
-                                    max={getMaxDateOfBirthInputValue()}
-                                    onChange={(e) => update("dateOfBirth", e.target.value)}
+                                    onChange={(e) => {
+                                        update("dateOfBirth", e.target.value);
+                                        if (isEligibleDateOfBirth(e.target.value)) setDobContinueAttempted(false);
+                                    }}
                                 />
-                                {!dobEligible && (
+                                {dobAge !== null && (
+                                    <p className="text-[10px] text-fg-subtle mt-1.5 font-semibold">
+                                        You are {dobAge}
+                                    </p>
+                                )}
+                                {showDobError && (
                                     <p className="text-[10px] text-danger mt-1.5 font-semibold">
                                         Must be at least 13.
                                     </p>
