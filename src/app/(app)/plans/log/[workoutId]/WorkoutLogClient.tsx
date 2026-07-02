@@ -250,6 +250,22 @@ function isDirectVideo(url: string) {
     return /\.(mp4|webm|ogg)(\?.*)?$/i.test(url);
 }
 
+function formatTargetWeight(weight?: number | null) {
+    if (weight == null || weight <= 0) return "";
+    return Number.isInteger(weight) ? String(weight) : weight.toFixed(1).replace(/\.0$/, "");
+}
+
+function getExerciseTargetSummary(ex: Exercise, cardio: boolean) {
+    const parts = [`${ex.sets} ${cardio ? "rounds" : "sets"}`];
+    const reps = ex.reps?.trim();
+    const targetWeight = formatTargetWeight(ex.weightTargetKg);
+
+    if (reps) parts.push(`${reps} ${cardio ? "mins" : "reps"}`);
+    if (targetWeight) parts.push(`${targetWeight} kg`);
+
+    return parts.join(" / ");
+}
+
 export function WorkoutLogClient({
     workout,
     exerciseMedia = {},
@@ -1011,6 +1027,7 @@ export function WorkoutLogClient({
                         const media = exerciseMedia[ex.name];
                         const hasPreview = !!(media?.videoUrl || media?.instructions);
                         const cardio = isCardio(ex.name, ex.muscleGroup);
+                        const targetSummary = getExerciseTargetSummary(ex, cardio);
 
                         return (
                         <div key={ex.id} id={`exercise-${ex.id}`} className="card p-4 space-y-4 animate-slide-up">
@@ -1047,6 +1064,13 @@ export function WorkoutLogClient({
                                 </div>
 
                                 {ex.notes && <p className="text-xs text-fg-muted -mt-1">{ex.notes}</p>}
+
+                                {targetSummary && (
+                                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-fg-muted">
+                                        <span className="font-black uppercase tracking-wider text-brand-400/80">Target</span>
+                                        <span className="font-semibold text-fg">{targetSummary}</span>
+                                    </div>
+                                )}
 
                                 {sessionActive && (
                                     <div className="flex items-center gap-2 pt-1">
@@ -1110,11 +1134,13 @@ export function WorkoutLogClient({
                                 </div>
 
                                 {logs[ex.id]?.map((set, sIdx) => {
-                                    const weightPlaceholder = getWeightPlaceholder(ex.id, ex.name, set.setNumber);
-                                    const repsPlaceholder = getRepsPlaceholder(ex.id, ex.name, set.setNumber);
+                                    const lastWeightPlaceholder = getWeightPlaceholder(ex.id, ex.name, set.setNumber);
+                                    const lastRepsPlaceholder = getRepsPlaceholder(ex.id, ex.name, set.setNumber);
+                                    const weightPlaceholder = lastWeightPlaceholder || formatTargetWeight(ex.weightTargetKg);
+                                    const repsPlaceholder = lastRepsPlaceholder || ex.reps?.trim() || "";
                                     const rpePlaceholder = getRpePlaceholder(ex.id, ex.name, set.setNumber);
-                                    const displayWeight = set.weightKg || (sessionActive ? "" : weightPlaceholder);
-                                    const displayReps = set.reps > 0 ? set.reps : (sessionActive ? "" : repsPlaceholder);
+                                    const displayWeight = set.weightKg || (sessionActive ? "" : lastWeightPlaceholder);
+                                    const displayReps = set.reps > 0 ? set.reps : (sessionActive ? "" : lastRepsPlaceholder);
                                     const weightNum = parseFloat(String(displayWeight)) || 0;
                                     const repsNum = typeof displayReps === "number" ? displayReps : parseInt(String(displayReps), 10) || 0;
                                     const est1RM = !cardio && !set.isWarmup && weightNum > 0 && repsNum > 0 ? calculateOneRM(weightNum, repsNum) : null;
