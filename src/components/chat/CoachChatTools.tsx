@@ -176,7 +176,7 @@ export function CoachChatTools({ conversations, coachPlans, selectedClientId, on
                     onClick={openBroadcast}
                     disabled={activeClients.length === 0}
                     className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-warning/10 text-warning hover:bg-warning/20 transition-colors disabled:opacity-40"
-                    title="Broadcast to clients"
+                    title="Broadcast to assigned clients"
                 >
                     <Megaphone className="w-3.5 h-3.5" />
                     Broadcast
@@ -195,7 +195,7 @@ export function CoachChatTools({ conversations, coachPlans, selectedClientId, on
                                 <h3 className="text-lg font-black text-fg truncate">
                                     {modal === "plan" && "Send Workout Plan"}
                                     {modal === "checkin" && "Request Check-In"}
-                                    {modal === "broadcast" && "Broadcast to Clients"}
+                                    {modal === "broadcast" && "Broadcast to Assigned Clients"}
                                 </h3>
                             </div>
                             <button type="button" onClick={closeModal} className="btn-icon shrink-0">
@@ -259,7 +259,7 @@ export function CoachChatTools({ conversations, coachPlans, selectedClientId, on
                                                     : "border-surface-border text-fg-muted hover:bg-surface-muted"
                                             )}
                                         >
-                                            All clients ({activeClients.length})
+                                            All assigned ({activeClients.length})
                                         </button>
                                         <button
                                             type="button"
