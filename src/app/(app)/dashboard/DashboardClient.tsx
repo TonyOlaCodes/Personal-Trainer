@@ -124,26 +124,37 @@ interface Props {
 const TODAY_EXERCISE_PREVIEW = 3;
 const PREMIUM_ROLES = new Set(["PREMIUM", "GENERAL_PREMIUM", "COACH", "SUPER_ADMIN"]);
 
-function buildBodyweightSparklinePoints(history: Array<{ date: string; weightKg: number }>) {
-    if (history.length === 0) return "";
+function buildBodyweightSparkline(
+    history: Array<{ date: string; weightKg: number }>,
+    targetWeightKg?: number | null
+) {
+    if (history.length === 0) return { points: "", goalY: null as number | null };
 
     const width = 240;
     const height = 58;
     const paddingX = 8;
     const paddingY = 8;
-    const min = Math.min(...history.map((entry) => entry.weightKg));
-    const max = Math.max(...history.map((entry) => entry.weightKg));
+    const weights = history.map((entry) => entry.weightKg);
+    if (targetWeightKg != null && targetWeightKg > 0) weights.push(targetWeightKg);
+    const min = Math.min(...weights);
+    const max = Math.max(...weights);
     const range = Math.max(max - min, 0.1);
     const usableWidth = width - paddingX * 2;
     const usableHeight = height - paddingY * 2;
 
-    return history.map((entry, index) => {
+    const getY = (weightKg: number) => paddingY + (1 - (weightKg - min) / range) * usableHeight;
+    const points = history.map((entry, index) => {
         const x = history.length === 1
             ? width / 2
             : paddingX + (index / (history.length - 1)) * usableWidth;
-        const y = paddingY + (1 - (entry.weightKg - min) / range) * usableHeight;
+        const y = getY(entry.weightKg);
         return `${x.toFixed(1)},${y.toFixed(1)}`;
     }).join(" ");
+
+    return {
+        points,
+        goalY: targetWeightKg != null && targetWeightKg > 0 ? getY(targetWeightKg) : null,
+    };
 }
 
 export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDay, todayCompleted, activeSession, recentLogs, avgDurationMin, currentCheckin, checkInDueState, checkInPanel, bodyweight }: Props) {
@@ -446,7 +457,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
     const renderDailyMetrics = () => {
         if (!isBodyweightEnabled) return null;
 
-        const bodyweightSparklinePoints = buildBodyweightSparklinePoints(bodyweightHistory);
+        const bodyweightSparkline = buildBodyweightSparkline(bodyweightHistory, user.targetWeightKg);
         const canOpenBodyweightProgress = isPremium && isBodyweightEnabled;
         const bodyweightChart = isBodyweightEnabled ? (
             <div
@@ -467,10 +478,22 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                     </span>
                 </div>
                 <div className="mt-3 h-16">
-                    {bodyweightSparklinePoints ? (
+                    {bodyweightSparkline.points ? (
                         <svg viewBox="0 0 240 58" className="h-full w-full overflow-visible" role="img" aria-label="Recent bodyweight trend">
+                            {bodyweightSparkline.goalY !== null && (
+                                <line
+                                    x1="8"
+                                    x2="232"
+                                    y1={bodyweightSparkline.goalY}
+                                    y2={bodyweightSparkline.goalY}
+                                    stroke="rgba(239, 68, 68, 0.9)"
+                                    strokeWidth="2"
+                                    strokeDasharray="4 4"
+                                    strokeLinecap="round"
+                                />
+                            )}
                             <polyline
-                                points={bodyweightSparklinePoints}
+                                points={bodyweightSparkline.points}
                                 fill="none"
                                 stroke="rgba(255, 255, 255, 0.18)"
                                 strokeWidth="8"
@@ -478,7 +501,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                                 strokeLinejoin="round"
                             />
                             <polyline
-                                points={bodyweightSparklinePoints}
+                                points={bodyweightSparkline.points}
                                 fill="none"
                                 stroke="rgba(129, 140, 248, 0.95)"
                                 strokeWidth="4"
