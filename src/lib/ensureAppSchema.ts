@@ -21,6 +21,8 @@ import { ensureGeneralPremiumRole } from "@/lib/ensureGeneralPremiumRole";
 import { ensureLogSetExerciseNamesReady } from "@/lib/logSetExerciseName";
 import { ensureLogSetExerciseOrdersReady } from "@/lib/logSetExerciseOrder";
 import { ensureUserNicknamesTable } from "@/lib/userNicknames";
+import { ensureOnboardingProfileColumns } from "@/lib/onboardingProfile";
+import { ensureCoachCodeRequestTables } from "@/lib/coachCodeRequest";
 
 let appSchemaReady = false;
 let appSchemaPromise: Promise<void> | null = null;
@@ -57,6 +59,8 @@ export async function ensureAppSchema() {
             ensureLogSetExerciseNamesReady(),
             ensureLogSetExerciseOrdersReady(),
             ensureUserNicknamesTable(),
+            ensureOnboardingProfileColumns(),
+            ensureCoachCodeRequestTables(),
         ]);
         appSchemaReady = true;
     })();

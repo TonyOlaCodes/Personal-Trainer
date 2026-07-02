@@ -315,8 +315,8 @@ export default function LandingPageClient() {
             <div className="absolute inset-0 bg-gradient-to-t from-surface/95 via-surface/40 to-surface/20 pointer-events-none" />
             <div className="relative">
             <h2 className="heading-1 mb-3 sm:mb-4">Ready to get started?</h2>
-            <p className="subheading mb-6 sm:mb-8 max-w-xl mx-auto">
-              Create a free account and start logging workouts today. If you&apos;re working with a coach, you can redeem your access code during onboarding or later in Settings.
+            <p className="subheading mb-6 sm:mb-8">
+              Create a free account and start logging workouts today.
             </p>
             {!isLoaded ? (
               <div className="h-12 w-48 bg-surface-muted animate-pulse rounded-xl mx-auto" />

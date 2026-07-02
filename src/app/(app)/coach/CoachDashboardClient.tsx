@@ -18,6 +18,7 @@ import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { getPresenceIndicator, formatLastActiveText } from "@/lib/userPresence";
 import { PendingReviewsModal, type PendingReviewItem } from "@/components/shared/PendingReviewsModal";
 import { NeedsAttentionInboxModal } from "@/components/coach/NeedsAttentionInboxModal";
+import { CoachCodeRequestsPanel } from "@/components/coach/CoachCodeRequestsPanel";
 import { StreakBadge } from "@/components/shared/StreakBadge";
 import { formatCoachPlanLabel } from "@/lib/coachPlans";
 import {
@@ -573,6 +574,8 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                 onClose={() => setShowAttentionInbox(false)}
                 onUpdated={() => router.refresh()}
             />
+
+            <CoachCodeRequestsPanel />
 
             {/* Actionable stat cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

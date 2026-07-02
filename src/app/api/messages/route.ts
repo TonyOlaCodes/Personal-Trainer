@@ -24,6 +24,10 @@ import {
     markMessagesSeen,
 } from "@/lib/messageReadReceipts";
 import { tryAssignAccessLiaison } from "@/lib/accessRequest";
+import {
+    markCoachCodeDispatchMessaged,
+    tryClaimCoachCodeRequestOnEngagement,
+} from "@/lib/coachCodeRequest";
 import { triggerAchievementSync } from "@/lib/achievements";
 
 // GET messages
@@ -297,6 +301,11 @@ export async function POST(req: Request) {
 
     if (!isGeneral && receiverId && user.role === "SUPER_ADMIN") {
         await tryAssignAccessLiaison(receiverId, user.id);
+    }
+
+    if (!isGeneral && receiverId && ["COACH", "SUPER_ADMIN"].includes(user.role)) {
+        await markCoachCodeDispatchMessaged(user.id, receiverId);
+        await tryClaimCoachCodeRequestOnEngagement(user.id, receiverId);
     }
 
     triggerAchievementSync(user.id);

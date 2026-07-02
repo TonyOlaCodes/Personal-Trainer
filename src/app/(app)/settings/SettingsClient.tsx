@@ -828,42 +828,6 @@ export function SettingsClient({ user }: Props) {
                                 />
                             </div>
 
-                            {/* Daily Calories */}
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-fg-subtle uppercase tracking-widest px-1">Daily Calories</label>
-                                <input
-                                    type="number" step="1"
-                                    className="input h-12 text-sm font-bold"
-                                    placeholder="e.g. 2500"
-                                    value={targetCalories}
-                                    onChange={(e) => setTargetCalories(e.target.value)}
-                                />
-                            </div>
-
-                            {/* Daily Steps */}
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-fg-subtle uppercase tracking-widest px-1">Daily Steps</label>
-                                <input
-                                    type="number" step="1"
-                                    className="input h-12 text-sm font-bold"
-                                    placeholder="e.g. 10000"
-                                    value={targetSteps}
-                                    onChange={(e) => setTargetSteps(e.target.value)}
-                                />
-                            </div>
-
-                            {/* Sleep Goal */}
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-fg-subtle uppercase tracking-widest px-1">Sleep Goal (hours)</label>
-                                <input
-                                    type="number" step="0.1"
-                                    className="input h-12 text-sm font-bold"
-                                    placeholder="e.g. 8"
-                                    value={targetSleepHours}
-                                    onChange={(e) => setTargetSleepHours(e.target.value)}
-                                />
-                            </div>
-
                             {/* Goal Visibility settings */}
                             <div className="col-span-full border-t border-surface-border/50 pt-6 space-y-4">
                                 <div>
@@ -874,9 +838,6 @@ export function SettingsClient({ user }: Props) {
                                 <div className="grid sm:grid-cols-2 gap-4">
                                     {[
                                         { key: "weight", label: "Bodyweight Goal & Trend", desc: "Show weight card and weight charts." },
-                                        { key: "calories", label: "Calorie Intake Goal", desc: "Show calorie tracking card and logs." },
-                                        { key: "steps", label: "Daily Steps Goal", desc: "Show steps target card and log inputs." },
-                                        { key: "sleep", label: "Nightly Sleep Goal", desc: "Show sleep duration card and logs." },
                                     ].map((goalOpt) => {
                                         const isHidden = hiddenGoals.includes(goalOpt.key);
                                         return (
@@ -927,9 +888,6 @@ export function SettingsClient({ user }: Props) {
                                     {goal && <span className="px-3 py-1 rounded-full bg-brand-400/10 border border-brand-400/20 text-xs font-bold text-brand-300">{GOAL_LABELS[goal] ?? goal}</span>}
                                     {experience && <span className="px-3 py-1 rounded-full bg-success/10 border border-success/20 text-xs font-bold text-success">{EXP_LABELS[experience] ?? experience}</span>}
                                     {trainingDays && <span className="px-3 py-1 rounded-full bg-surface-muted border border-surface-border text-xs font-bold text-fg-muted">{trainingDays}x / week</span>}
-                                    {targetCalories && <span className="px-3 py-1 rounded-full bg-surface-muted border border-surface-border text-xs font-bold text-fg-muted">{Number(targetCalories).toLocaleString()} kcal</span>}
-                                    {targetSteps && <span className="px-3 py-1 rounded-full bg-surface-muted border border-surface-border text-xs font-bold text-fg-muted">{Number(targetSteps).toLocaleString()} steps</span>}
-                                    {targetSleepHours && <span className="px-3 py-1 rounded-full bg-surface-muted border border-surface-border text-xs font-bold text-fg-muted">{targetSleepHours}h sleep</span>}
                                 </div>
                             </div>
                         )}

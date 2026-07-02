@@ -69,6 +69,11 @@ model User {
   clerkId           String   @unique
   email             String   @unique
   name              String?
+  firstName         String?
+  lastName          String?
+  username          String?  @unique
+  gender            String?
+  dateOfBirth       DateTime?
   avatarUrl         String?
   role              Role     @default(FREE)
   isDeactivated     Boolean  @default(false)
@@ -98,6 +103,7 @@ model User {
   notifyOnWorkoutFeedback Boolean @default(true)
   notifyOnMissedCheckIn   Boolean @default(true)
   notifyOnMissedWorkout   Boolean @default(true)
+  notifyOnCommunityChat   Boolean @default(false)
   notificationTimezone    String  @default("Europe/Dublin")
   notifyOnWorkoutTime     String?
   notifyOnCheckInTime     String?
@@ -135,6 +141,7 @@ model User {
   // Relations
   accessLiaisonId     String?
   accessRequestSentAt DateTime?
+  coachCodeRequestSentAt DateTime?
   coachId           String?
   coach             User?    @relation("CoachClients", fields: [coachId], references: [id])
   accessLiaison     User?    @relation("AccessLiaison", fields: [accessLiaisonId], references: [id])

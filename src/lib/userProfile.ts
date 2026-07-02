@@ -236,7 +236,9 @@ function formatJoinDate(createdAt: Date): string {
 }
 
 /** Public handle derived from display name — never exposes email. */
-export function formatPublicUsername(name: string, userId: string): string {
+export function formatPublicUsername(name: string, userId: string, customUsername?: string | null): string {
+    const custom = customUsername?.trim().toLowerCase();
+    if (custom) return custom.replace(/[^a-z0-9_]/g, "").slice(0, 24) || `athlete${userId.slice(-6).toLowerCase()}`;
     const slug = name
         .trim()
         .toLowerCase()
@@ -395,6 +397,7 @@ export async function buildPublicProfileData(
             select: {
                 id: true,
                 name: true,
+                username: true,
                 avatarUrl: true,
                 role: true,
                 bio: true,
@@ -442,7 +445,7 @@ export async function buildPublicProfileData(
     if (viewMode === "limited") {
         return {
             ...base,
-            username: formatPublicUsername(chosenName, target.id),
+            username: formatPublicUsername(chosenName, target.id, target.username),
             joinDate: formatJoinDate(target.createdAt),
             trainingGoal: null,
             bio: null,
@@ -522,7 +525,7 @@ export async function buildPublicProfileData(
 
     return {
         ...base,
-        username: formatPublicUsername(chosenName, target.id),
+        username: formatPublicUsername(chosenName, target.id, target.username),
         joinDate: formatJoinDate(target.createdAt),
         trainingGoal,
         bio: target.bio?.trim() ? target.bio.trim() : null,

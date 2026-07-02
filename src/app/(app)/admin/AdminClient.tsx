@@ -1,13 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import Link from "next/link";
-import { Users, Dumbbell, Ticket, Shield, Copy, Check, ChevronRight, Plus, Trash2, UserX, RotateCcw, ArrowUpDown, Megaphone } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { Users, Dumbbell, Ticket, Shield, Copy, Check, ChevronRight, Plus, Trash2, UserX, RotateCcw, ArrowUpDown, Megaphone, UserPlus } from "lucide-react";
 import { cn, formatDate, getInitials, roleLabels, roleBadgeClass } from "@/lib/utils";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { getAccessCodeStatus } from "@/lib/accessCodeStatus";
 import { PLAN_TEMPLATES } from "@/lib/templates";
 import { AdminAnnouncementsPanel } from "./AdminAnnouncementsPanel";
+import { AdminCoachCodeRequestsPanel } from "./AdminCoachCodeRequestsPanel";
 import { DeletePlanConfirmModal } from "@/components/shared/DeletePlanConfirmModal";
 
 interface AdminUser {
@@ -90,7 +92,7 @@ interface Props {
     userRole: string;
 }
 
-type Tab = "users" | "coaches" | "plans" | "codes" | "announcements";
+type Tab = "users" | "coaches" | "plans" | "codes" | "code-requests" | "announcements";
 type CodeFilter = "ALL" | "UNREDEEMED" | "REDEEMED" | "EXPIRED";
 
 const CODE_FILTER_OPTIONS: { key: CodeFilter; label: string }[] = [
@@ -214,9 +216,24 @@ function codeStatusInput(code: AdminCode) {
 }
 
 export function AdminClient({ users: initialUsers, coaches, plans: initialPlans, codes: initialCodes, userRole }: Props) {
+    const searchParams = useSearchParams();
     const [tab, setTab] = useState<Tab>("users");
     const [users, setUsers] = useState<AdminUser[]>(initialUsers);
     const [userSortField, setUserSortField] = useState<UserSortField>("createdAt");
+
+    useEffect(() => {
+        const requestedTab = searchParams.get("tab");
+        if (
+            requestedTab === "users" ||
+            requestedTab === "coaches" ||
+            requestedTab === "plans" ||
+            requestedTab === "codes" ||
+            requestedTab === "code-requests" ||
+            requestedTab === "announcements"
+        ) {
+            setTab(requestedTab);
+        }
+    }, [searchParams]);
     const [userSortDir, setUserSortDir] = useState<SortDir>("desc");
     const [plansList, setPlansList] = useState<AdminPlan[]>(initialPlans);
     const [codes, setCodes] = useState<AdminCode[]>(initialCodes.map(normalizeCode));
@@ -434,6 +451,7 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
                     { id: "coaches", label: "Coaches", icon: Shield },
                     { id: "plans", label: "Plans", icon: Dumbbell },
                     { id: "codes", label: "Codes", icon: Ticket },
+                    { id: "code-requests", label: "Requests", icon: UserPlus },
                     { id: "announcements", label: "Announce", icon: Megaphone },
                 ].map((t) => (
                     <button
@@ -975,6 +993,16 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
                         </div>
                     </div>
                 </div>
+            )}
+
+            {tab === "code-requests" && (
+                <AdminCoachCodeRequestsPanel
+                    coaches={coaches.map((coach) => ({
+                        id: coach.id,
+                        name: coach.name,
+                        email: coach.email,
+                    }))}
+                />
             )}
 
             {tab === "announcements" && (

@@ -1,5 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { AdminClient } from "./AdminClient";
@@ -128,7 +129,8 @@ export default async function AdminPage() {
         <>
             <TopBar title="Admin Panel" subtitle="Full platform management" />
             <div className="p-6 max-w-6xl mx-auto">
-                <AdminClient
+                <Suspense fallback={<div className="card p-8 text-sm text-fg-muted">Loading admin panel...</div>}>
+                    <AdminClient
                     userRole={user.role}
                     users={adminUsers}
                     coaches={activeCoaches.map((c) => ({
@@ -218,7 +220,8 @@ export default async function AdminPage() {
                         createdAt: c.createdAt.toISOString(),
                         expiresAt: c.expiresAt?.toISOString() ?? null,
                     }))}
-                />
+                    />
+                </Suspense>
             </div>
         </>
     );

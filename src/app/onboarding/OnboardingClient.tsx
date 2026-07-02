@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Zap, ChevronRight, ChevronLeft, SkipForward, Check, Loader2 } from "lucide-react";
+import { Zap, ChevronRight, ChevronLeft, Check, Loader2, User } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { BrandLogo } from "@/components/shared/BrandLogo";
 import {
@@ -17,34 +18,32 @@ import {
     metricBodyFromForm,
     parseOptionalFloat,
 } from "@/lib/units";
-import { useClerk } from "@clerk/nextjs";
+import { useClerk, useUser } from "@clerk/nextjs";
 import { defaultHomeForRole } from "@/lib/roles";
-
-// ── Step 1 data ─────────────────────────────────────────────────────────────
-const goals = [
-    { id: "GAIN_MUSCLE", label: "Build Muscle", emoji: "💪", desc: "Gain size and strength" },
-    { id: "LOSE_WEIGHT", label: "Lose Weight", emoji: "🔥", desc: "Shed body fat" },
-    { id: "RECOMPOSITION", label: "Recomp", emoji: "⚡", desc: "Lose fat, gain muscle" },
-    { id: "STRENGTH", label: "Strength", emoji: "🏋️", desc: "Increase max lifts" },
-];
-const experienceLevels = [
-    { id: "BEGINNER", label: "Beginner", desc: "< 1 year training" },
-    { id: "INTERMEDIATE", label: "Intermediate", desc: "1-3 years training" },
-    { id: "ADVANCED", label: "Advanced", desc: "3+ years training" },
-];
-const trainingDayOptions = [2, 3, 4, 5, 6];
+import {
+    EXPERIENCE_SLIDER_LABELS,
+    GENDER_OPTIONS,
+    ONBOARDING_GOAL_OPTIONS,
+    WORKOUT_DURATION_OPTIONS,
+    experienceFromSlider,
+} from "@/lib/onboardingProfile";
 
 interface FormData {
-    // Step 1
+    firstName: string;
+    lastName: string;
+    username: string;
+    gender: string;
+    dateOfBirth: string;
+    secretCode: string;
     goal: string;
     trainingDaysPerWeek: number;
     experienceLevel: string;
+    experienceSlider: number;
     trainingLocation: string;
+    sessionLengthMin: number | null;
     hasInjuries: boolean;
     injuryDetails: string;
-    // Step 2
     unitSystem: UnitSystem;
-    age: string;
     heightCm: string;
     heightFt: string;
     heightIn: string;
@@ -52,59 +51,97 @@ interface FormData {
     weightLbs: string;
     targetWeightKg: string;
     targetWeightLbs: string;
-    cardioPreference: string;
-    dietAwareness: boolean;
     targetCalories: string;
     targetSteps: string;
     targetSleepHours: string;
-    secretCode?: string;
 }
 
-const defaultForm: FormData = {
-    goal: "",
-    trainingDaysPerWeek: 4,
-    experienceLevel: "",
-    trainingLocation: "GYM",
-    hasInjuries: false,
-    injuryDetails: "",
-    age: "",
-    unitSystem: "METRIC",
-    heightCm: "",
-    heightFt: "",
-    heightIn: "",
-    weightKg: "",
-    weightLbs: "",
-    targetWeightKg: "",
-    targetWeightLbs: "",
-    cardioPreference: "",
-    dietAwareness: false,
-    targetCalories: "",
-    targetSteps: "",
-    targetSleepHours: "",
-    secretCode: "",
+const TOTAL_STEPS = 3;
+
+const GOAL_LABELS: Record<string, string> = {
+    GAIN_MUSCLE: "Build Muscle",
+    LOSE_WEIGHT: "Lose Fat",
+    RECOMPOSITION: "Body Recomposition",
+    STRENGTH: "Get Stronger",
 };
 
-const TOTAL_STEPS = 3; // S1 required, S2 optional, S3 confirm
+const EXPERIENCE_LABELS: Record<string, string> = {
+    BEGINNER: "Beginner",
+    INTERMEDIATE: "Intermediate",
+    ADVANCED: "Advanced",
+};
 
 export function OnboardingPage() {
     const router = useRouter();
     const { signOut } = useClerk();
+    const { user: clerkUser, isLoaded } = useUser();
     const [step, setStep] = useState(1);
-    const [form, setForm] = useState<FormData>(defaultForm);
+    const [showSummary, setShowSummary] = useState(false);
+    const [form, setForm] = useState<FormData>({
+        firstName: "",
+        lastName: "",
+        username: "",
+        gender: "",
+        dateOfBirth: "",
+        secretCode: "",
+        goal: "",
+        trainingDaysPerWeek: 5,
+        experienceLevel: "",
+        experienceSlider: 1,
+        trainingLocation: "GYM",
+        sessionLengthMin: null,
+        hasInjuries: false,
+        injuryDetails: "",
+        unitSystem: "METRIC",
+        heightCm: "",
+        heightFt: "",
+        heightIn: "",
+        weightKg: "",
+        weightLbs: "",
+        targetWeightKg: "",
+        targetWeightLbs: "",
+        targetCalories: "",
+        targetSteps: "",
+        targetSleepHours: "",
+    });
     const [saving, setSaving] = useState(false);
     const [exiting, setExiting] = useState(false);
     const [codeStatus, setCodeStatus] = useState<"idle" | "checking" | "valid" | "error">("idle");
     const [codeMessage, setCodeMessage] = useState("");
     const [coachName, setCoachName] = useState("");
     const [membershipLabel, setMembershipLabel] = useState("");
+    const [coachCodeRequested, setCoachCodeRequested] = useState(false);
+    const [requestingCode, setRequestingCode] = useState(false);
+    const [requestCodeMessage, setRequestCodeMessage] = useState("");
+    const [prefilled, setPrefilled] = useState(false);
 
-    const progress = (step / TOTAL_STEPS) * 100;
+    useEffect(() => {
+        if (!isLoaded || !clerkUser || prefilled) return;
+        setForm((prev) => ({
+            ...prev,
+            firstName: clerkUser.firstName?.trim() || prev.firstName,
+            lastName: clerkUser.lastName?.trim() || prev.lastName,
+        }));
+        setPrefilled(true);
+    }, [clerkUser, isLoaded, prefilled]);
+
+    const progress = ((step - 1 + (showSummary ? 1 : 0)) / TOTAL_STEPS) * 100;
 
     const update = (key: keyof FormData, value: unknown) => {
         if (key === "secretCode") {
             setCodeStatus("idle");
             setCodeMessage("");
             setCoachName("");
+            setMembershipLabel("");
+        }
+        if (key === "experienceSlider") {
+            const sliderValue = Number(value);
+            setForm((prev) => ({
+                ...prev,
+                experienceSlider: sliderValue,
+                experienceLevel: experienceFromSlider(sliderValue),
+            }));
+            return;
         }
         setForm((prev) => ({ ...prev, [key]: value }));
     };
@@ -145,30 +182,33 @@ export function OnboardingPage() {
         });
     };
 
-    const handleSkipOptional = () => {
-        setCodeStatus("idle");
-        setCodeMessage("");
-        setCoachName("");
-        setForm((prev) => ({ ...prev, secretCode: "" }));
-        setStep(3);
-    };
-
     const handleExitSetup = async () => {
         setExiting(true);
         await signOut({ redirectUrl: "/?view=landing" });
     };
 
-    const handleContinue = async () => {
-        if (step !== 2) {
-            setStep((s) => s + 1);
-            return;
+    const handleRequestCoachCode = async () => {
+        setRequestingCode(true);
+        setRequestCodeMessage("");
+        try {
+            const res = await fetch("/api/coach-code-request", { method: "POST" });
+            const data = await res.json();
+            if (!res.ok) {
+                setRequestCodeMessage(data.error || "Could not send request.");
+                return;
+            }
+            setCoachCodeRequested(true);
+            setRequestCodeMessage("Request sent. An admin or coach will reach out shortly.");
+        } catch {
+            setRequestCodeMessage("Could not send request. Try again.");
+        } finally {
+            setRequestingCode(false);
         }
+    };
 
+    const validateAccessCode = async () => {
         const code = form.secretCode?.trim();
-        if (!code) {
-            setStep(3);
-            return;
-        }
+        if (!code) return true;
 
         setCodeStatus("checking");
         setCodeMessage("");
@@ -182,7 +222,7 @@ export function OnboardingPage() {
             if (!res.ok) {
                 setCodeStatus("error");
                 setCodeMessage(data.error || "Invalid code");
-                return;
+                return false;
             }
 
             setCodeStatus("valid");
@@ -195,10 +235,32 @@ export function OnboardingPage() {
                         ? "Coach invite confirmed."
                         : "Code looks good."
             );
-            setStep(3);
+            return true;
         } catch {
             setCodeStatus("error");
             setCodeMessage("Could not check code. Try again.");
+            return false;
+        }
+    };
+
+    const handleContinue = async () => {
+        if (step === 1) {
+            const code = form.secretCode?.trim();
+            if (code) {
+                const valid = await validateAccessCode();
+                if (!valid) return;
+            }
+            setStep(2);
+            return;
+        }
+
+        if (step === 2) {
+            setStep(3);
+            return;
+        }
+
+        if (step === 3 && !showSummary) {
+            setShowSummary(true);
         }
     };
 
@@ -207,10 +269,27 @@ export function OnboardingPage() {
         try {
             const bodyMetrics = metricBodyFromForm(form);
             const payload = {
-                ...form,
+                firstName: form.firstName.trim(),
+                lastName: form.lastName.trim() || undefined,
+                username: form.username.trim() || undefined,
+                gender: form.gender,
+                dateOfBirth: form.dateOfBirth,
+                goal: form.goal,
+                trainingDaysPerWeek: form.trainingDaysPerWeek,
+                experienceLevel: form.experienceLevel,
+                trainingLocation: form.trainingLocation,
+                sessionLengthMin: form.sessionLengthMin,
+                hasInjuries: form.hasInjuries,
+                injuryDetails: form.injuryDetails,
+                unitSystem: form.unitSystem,
                 heightCm: bodyMetrics.heightCm != null ? String(bodyMetrics.heightCm) : "",
                 weightKg: bodyMetrics.weightKg != null ? String(bodyMetrics.weightKg) : "",
                 targetWeightKg: bodyMetrics.targetWeightKg != null ? String(bodyMetrics.targetWeightKg) : "",
+                targetCalories: form.targetCalories,
+                targetSteps: form.targetSteps,
+                targetSleepHours: form.targetSleepHours,
+                secretCode: form.secretCode?.trim() || undefined,
+                coachCodeRequested,
             };
 
             const res = await fetch("/api/user/onboarding", {
@@ -232,12 +311,28 @@ export function OnboardingPage() {
         }
     };
 
+    const stepTitle =
+        step === 1 ? "Your Profile" : step === 2 ? "Training" : showSummary ? "You're ready to train!" : "Body Details";
+
+    const coachStatusLabel = codeStatus === "valid"
+        ? membershipLabel === "General Premium"
+            ? "General Premium Connected ✓"
+            : coachName
+                ? "Coach Connected ✓"
+                : "Access Code Applied ✓"
+        : coachCodeRequested
+            ? "Coach Code Requested"
+            : "Using Free Plan";
+
+    const canContinueStep1 = Boolean(form.firstName.trim() && form.gender && form.dateOfBirth);
+    const canContinueStep2 = Boolean(form.goal && form.experienceLevel);
+    const experienceMeta = EXPERIENCE_SLIDER_LABELS[form.experienceSlider] ?? EXPERIENCE_SLIDER_LABELS[1];
+
     return (
         <div className="min-h-screen bg-surface flex flex-col items-center justify-center p-6">
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[400px] bg-brand-600/8 rounded-full blur-3xl pointer-events-none" />
 
             <div className="relative w-full max-w-xl">
-                {/* Logo */}
                 <div className="flex items-center justify-center gap-2 mb-8">
                     <div className="w-8 h-8 rounded-xl bg-gradient-brand flex items-center justify-center shadow-glow-sm">
                         <Zap className="w-4 h-4 text-white" />
@@ -245,7 +340,6 @@ export function OnboardingPage() {
                     <BrandLogo className="text-lg" />
                 </div>
 
-                {/* Progress bar */}
                 <div className="mb-6">
                     <div className="flex justify-between text-xs text-fg-muted mb-2">
                         <span>Step {step} of {TOTAL_STEPS}</span>
@@ -266,23 +360,156 @@ export function OnboardingPage() {
                     </div>
                 </div>
 
-                {/* Card */}
                 <div className="card-elevated p-8 animate-slide-up">
-                    {/* ── Step 1: Required Info ─────────────────────────── */}
+                    <div className="mb-6">
+                        <h2 className="heading-2 mb-1">{stepTitle}</h2>
+                        {step === 1 && <p className="subheading">Tell us who you are so we can personalize your account.</p>}
+                        {step === 2 && <p className="subheading">Help us understand how you like to train.</p>}
+                        {step === 3 && !showSummary && <p className="subheading">Optional body details to fine-tune your experience.</p>}
+                        {step === 3 && showSummary && (
+                            <p className="subheading">
+                                Your profile is ready. Head to your dashboard to start training — you can redeem a coach code anytime in Settings.
+                            </p>
+                        )}
+                    </div>
+
                     {step === 1 && (
                         <div className="space-y-6">
-                            <div>
-                                <h2 className="heading-2 mb-1">Tell us about yourself</h2>
-                                <p className="subheading">This helps us personalise your experience.</p>
+                            <div className="flex items-center gap-4 p-4 rounded-2xl bg-surface-muted border border-surface-border">
+                                {clerkUser?.imageUrl ? (
+                                    <Image
+                                        src={clerkUser.imageUrl}
+                                        alt=""
+                                        width={56}
+                                        height={56}
+                                        className="rounded-full object-cover"
+                                    />
+                                ) : (
+                                    <div className="w-14 h-14 rounded-full bg-brand-950/60 border border-brand-700/40 flex items-center justify-center">
+                                        <User className="w-6 h-6 text-brand-300" />
+                                    </div>
+                                )}
+                                <div className="min-w-0">
+                                    <p className="text-sm font-semibold truncate">
+                                        {[form.firstName, form.lastName].filter(Boolean).join(" ") || "Your profile"}
+                                    </p>
+                                    <p className="text-xs text-fg-muted truncate">{clerkUser?.primaryEmailAddress?.emailAddress}</p>
+                                </div>
                             </div>
 
-                            {/* Goal */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="label">First name *</label>
+                                    <input
+                                        className="input"
+                                        value={form.firstName}
+                                        onChange={(e) => update("firstName", e.target.value)}
+                                        placeholder="First name"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="label">Last name</label>
+                                    <input
+                                        className="input"
+                                        value={form.lastName}
+                                        onChange={(e) => update("lastName", e.target.value)}
+                                        placeholder="Optional"
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="label">Username</label>
+                                <input
+                                    className="input font-mono"
+                                    value={form.username}
+                                    onChange={(e) => update("username", e.target.value.toLowerCase())}
+                                    placeholder="Optional — letters, numbers, underscores"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="label">Gender *</label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {GENDER_OPTIONS.map((option) => (
+                                        <button
+                                            key={option.id}
+                                            type="button"
+                                            onClick={() => update("gender", option.id)}
+                                            className={cn(
+                                                "py-3 rounded-xl border text-sm font-medium transition-all",
+                                                form.gender === option.id
+                                                    ? "border-brand-600 bg-brand-950/60 text-brand-300"
+                                                    : "border-surface-border bg-surface-muted text-fg-muted hover:border-brand-700/50"
+                                            )}
+                                        >
+                                            {option.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="label">Date of birth *</label>
+                                <input
+                                    type="date"
+                                    className="input"
+                                    value={form.dateOfBirth}
+                                    onChange={(e) => update("dateOfBirth", e.target.value)}
+                                />
+                            </div>
+
+                            <div className="pt-4 border-t border-surface-border/50 space-y-3">
+                                <label className="label flex items-center gap-2">
+                                    <Zap className="w-3 h-3 text-brand-400" />
+                                    Coach access code
+                                </label>
+                                <input
+                                    type="text"
+                                    className={cn(
+                                        "input font-mono uppercase tracking-wider",
+                                        codeStatus === "error" && "border-danger focus:border-danger focus:ring-danger/40",
+                                        codeStatus === "valid" && "border-success focus:border-success focus:ring-success/40"
+                                    )}
+                                    placeholder="Optional — enter if you have one"
+                                    value={form.secretCode}
+                                    onChange={(e) => update("secretCode", e.target.value)}
+                                />
+                                {codeMessage ? (
+                                    <p className={cn("text-[10px] font-semibold", codeStatus === "error" ? "text-danger" : "text-success")}>
+                                        {codeMessage}
+                                    </p>
+                                ) : (
+                                    <p className="text-[10px] text-fg-subtle">
+                                        Have a coach invite or premium code? Enter it here to unlock full training features.
+                                    </p>
+                                )}
+                                <div className="flex flex-wrap items-center gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={handleRequestCoachCode}
+                                        disabled={requestingCode || coachCodeRequested}
+                                        className="text-xs font-semibold text-brand-400 hover:text-brand-300 disabled:opacity-60"
+                                    >
+                                        {requestingCode ? "Sending..." : coachCodeRequested ? "Request sent" : "Don't have a code? Request one"}
+                                    </button>
+                                    {requestCodeMessage && (
+                                        <p className="text-[10px] text-success font-semibold">{requestCodeMessage}</p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {step === 2 && (
+                        <div className="space-y-6">
                             <div>
                                 <label className="label">Your primary goal</label>
                                 <div className="grid grid-cols-2 gap-3">
-                                    {goals.map((g) => (
+                                    {ONBOARDING_GOAL_OPTIONS.map((g) => (
                                         <button
                                             key={g.id}
+                                            type="button"
                                             onClick={() => update("goal", g.id)}
                                             className={cn(
                                                 "text-left p-4 rounded-xl border transition-all duration-200",
@@ -299,61 +526,77 @@ export function OnboardingPage() {
                                 </div>
                             </div>
 
-                            {/* Training days */}
                             <div>
-                                <label className="label">Training days per week</label>
-                                <div className="flex gap-2">
-                                    {trainingDayOptions.map((d) => (
+                                <div className="flex items-center justify-between mb-2">
+                                    <label className="label mb-0">Training days per week</label>
+                                    <span className="text-sm font-bold text-brand-300">{form.trainingDaysPerWeek} days per week</span>
+                                </div>
+                                <input
+                                    type="range"
+                                    min={2}
+                                    max={6}
+                                    step={1}
+                                    value={form.trainingDaysPerWeek}
+                                    onChange={(e) => update("trainingDaysPerWeek", Number(e.target.value))}
+                                    className="w-full accent-brand-500 h-2"
+                                />
+                                <div className="flex justify-between text-[10px] text-fg-subtle px-0.5 mt-1">
+                                    {[2, 3, 4, 5, 6].map((d) => <span key={d}>{d}</span>)}
+                                </div>
+                            </div>
+
+                            <div>
+                                <div className="flex items-center justify-between mb-2">
+                                    <label className="label mb-0">Experience level</label>
+                                    <span className="text-sm font-bold text-brand-300">{experienceMeta.label}</span>
+                                </div>
+                                <input
+                                    type="range"
+                                    min={0}
+                                    max={2}
+                                    step={1}
+                                    value={form.experienceSlider}
+                                    onChange={(e) => update("experienceSlider", Number(e.target.value))}
+                                    className="w-full accent-brand-500 h-2"
+                                />
+                                <p className="text-xs text-fg-muted mt-2">{experienceMeta.desc}</p>
+                            </div>
+
+                            <div>
+                                <label className="label">Typical workout duration</label>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                    {WORKOUT_DURATION_OPTIONS.map((option) => (
                                         <button
-                                            key={d}
-                                            onClick={() => update("trainingDaysPerWeek", d)}
+                                            key={option.value}
+                                            type="button"
+                                            onClick={() => update("sessionLengthMin", option.value)}
                                             className={cn(
-                                                "flex-1 py-2.5 rounded-xl text-sm font-semibold border transition-all",
-                                                form.trainingDaysPerWeek === d
+                                                "py-2.5 rounded-xl border text-sm font-semibold transition-all",
+                                                form.sessionLengthMin === option.value
                                                     ? "border-brand-600 bg-brand-950/60 text-brand-300"
                                                     : "border-surface-border bg-surface-muted text-fg-muted hover:border-brand-700/50"
                                             )}
                                         >
-                                            {d}
+                                            {option.label}
                                         </button>
                                     ))}
                                 </div>
+                                <button
+                                    type="button"
+                                    onClick={() => update("sessionLengthMin", null)}
+                                    className="mt-2 text-xs text-fg-muted hover:text-brand-300"
+                                >
+                                    Skip duration
+                                </button>
                             </div>
 
-                            {/* Experience */}
-                            <div>
-                                <label className="label">Experience level</label>
-                                <div className="space-y-2">
-                                    {experienceLevels.map((e) => (
-                                        <button
-                                            key={e.id}
-                                            onClick={() => update("experienceLevel", e.id)}
-                                            className={cn(
-                                                "w-full flex items-center justify-between p-3.5 rounded-xl border text-sm transition-all",
-                                                form.experienceLevel === e.id
-                                                    ? "border-brand-600 bg-brand-950/60"
-                                                    : "border-surface-border bg-surface-muted hover:border-brand-700/50"
-                                            )}
-                                        >
-                                            <div className="text-left">
-                                                <p className="font-medium">{e.label}</p>
-                                                <p className="text-xs text-fg-muted">{e.desc}</p>
-                                            </div>
-                                            {form.experienceLevel === e.id && (
-                                                <Check className="w-4 h-4 text-brand-400" />
-                                            )}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Location */}
                             <div>
                                 <label className="label">Training location</label>
                                 <div className="grid grid-cols-2 gap-3">
                                     {["GYM", "HOME"].map((loc) => (
                                         <button
                                             key={loc}
+                                            type="button"
                                             onClick={() => update("trainingLocation", loc)}
                                             className={cn(
                                                 "py-3 rounded-xl border text-sm font-semibold transition-all",
@@ -368,13 +611,13 @@ export function OnboardingPage() {
                                 </div>
                             </div>
 
-                            {/* Injuries */}
                             <div>
                                 <label className="label">Any injuries or limitations?</label>
                                 <div className="grid grid-cols-2 gap-3 mb-3">
-                                    {[{ v: false, l: "No injuries" }, { v: true, l: "Yes, I have some" }].map((opt) => (
+                                    {[{ v: false, l: "None" }, { v: true, l: "Yes" }].map((opt) => (
                                         <button
                                             key={String(opt.v)}
+                                            type="button"
                                             onClick={() => update("hasInjuries", opt.v)}
                                             className={cn(
                                                 "py-3 rounded-xl border text-sm font-medium transition-all",
@@ -399,15 +642,8 @@ export function OnboardingPage() {
                         </div>
                     )}
 
-                    {/* ── Step 2: Optional Info ─────────────────────────── */}
-                    {step === 2 && (
+                    {step === 3 && !showSummary && (
                         <div className="space-y-6">
-                            <div>
-                                <h2 className="heading-2 mb-1">Optional details</h2>
-                                <p className="subheading">Help us fine-tune your programme. You can skip this.</p>
-                            </div>
-
-                            {/* Unit system */}
                             <div>
                                 <label className="label">Units</label>
                                 <div className="grid grid-cols-2 gap-3">
@@ -433,32 +669,15 @@ export function OnboardingPage() {
                                 </div>
                             </div>
 
-                            {/* Body stats */}
                             <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="label">Age</label>
-                                    <div className="relative">
-                                        <input
-                                            type="number"
-                                            className="input pr-10"
-                                            placeholder="e.g. 25"
-                                            value={form.age}
-                                            onChange={(e) => update("age", e.target.value)}
-                                        />
-                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-fg-subtle">
-                                            yrs
-                                        </span>
-                                    </div>
-                                </div>
-
                                 {form.unitSystem === "METRIC" ? (
                                     <>
                                         {[
                                             { key: "heightCm" as const, label: "Height", ph: "e.g. 178", unit: "cm" },
-                                            { key: "weightKg" as const, label: "Current Weight", ph: "e.g. 80", unit: "kg" },
-                                            { key: "targetWeightKg" as const, label: "Target Weight", ph: "e.g. 90", unit: "kg" },
+                                            { key: "weightKg" as const, label: "Current weight", ph: "e.g. 80", unit: "kg" },
+                                            { key: "targetWeightKg" as const, label: "Target weight", ph: "Optional", unit: "kg" },
                                         ].map((f) => (
-                                            <div key={f.key}>
+                                            <div key={f.key} className={f.key === "heightCm" ? "" : ""}>
                                                 <label className="label">{f.label}</label>
                                                 <div className="relative">
                                                     <input
@@ -490,9 +709,7 @@ export function OnboardingPage() {
                                                         value={form.heightFt}
                                                         onChange={(e) => update("heightFt", e.target.value)}
                                                     />
-                                                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-fg-subtle">
-                                                        ft
-                                                    </span>
+                                                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-fg-subtle">ft</span>
                                                 </div>
                                                 <div className="relative">
                                                     <input
@@ -504,15 +721,13 @@ export function OnboardingPage() {
                                                         value={form.heightIn}
                                                         onChange={(e) => update("heightIn", e.target.value)}
                                                     />
-                                                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-fg-subtle">
-                                                        in
-                                                    </span>
+                                                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-fg-subtle">in</span>
                                                 </div>
                                             </div>
                                         </div>
                                         {[
-                                            { key: "weightLbs" as const, label: "Current Weight", ph: "e.g. 175", unit: "lbs" },
-                                            { key: "targetWeightLbs" as const, label: "Target Weight", ph: "e.g. 190", unit: "lbs" },
+                                            { key: "weightLbs" as const, label: "Current weight", ph: "e.g. 175", unit: "lbs" },
+                                            { key: "targetWeightLbs" as const, label: "Target weight", ph: "Optional", unit: "lbs" },
                                         ].map((f) => (
                                             <div key={f.key}>
                                                 <label className="label">{f.label}</label>
@@ -535,7 +750,6 @@ export function OnboardingPage() {
                                 )}
                             </div>
 
-                            {/* Daily targets */}
                             <div className="pt-4 border-t border-surface-border/50">
                                 <label className="label">Daily targets (optional)</label>
                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -563,63 +777,53 @@ export function OnboardingPage() {
                                     ))}
                                 </div>
                             </div>
-
-                            {/* Access code */}
-                            <div className="pt-4 border-t border-surface-border/50">
-                                <label className="label flex items-center gap-2">
-                                    <Zap className="w-3 h-3 text-brand-400" />
-                                    Access Code (Optional)
-                                </label>
-                                <input
-                                    type="text"
-                                    className={cn(
-                                        "input font-mono uppercase tracking-wider",
-                                        codeStatus === "error" && "border-danger focus:border-danger focus:ring-danger/40",
-                                        codeStatus === "valid" && "border-success focus:border-success focus:ring-success/40"
-                                    )}
-                                    placeholder="Enter access code..."
-                                    value={form.secretCode}
-                                    onChange={(e) => update("secretCode", e.target.value)}
-                                />
-                                {codeMessage ? (
-                                    <p className={cn("text-[10px] mt-1.5 font-semibold", codeStatus === "error" ? "text-danger" : "text-success")}>
-                                        {codeMessage}
-                                    </p>
-                                ) : (
-                                    <p className="text-[10px] text-fg-subtle mt-1.5">
-                                        Enter a coach invite or General Premium code to unlock full training features.
-                                    </p>
-                                )}
-                            </div>
                         </div>
                     )}
 
-                    {/* ── Step 3: Confirm ───────────────────────────────── */}
-                    {step === 3 && (
-                        <div className="space-y-6 text-center">
+                    {step === 3 && showSummary && (
+                        <div className="space-y-6">
                             <div className="w-16 h-16 bg-gradient-brand rounded-2xl flex items-center justify-center mx-auto shadow-glow-brand animate-pulse-brand">
                                 <Check className="w-8 h-8 text-white" />
                             </div>
-                            <div>
-                                <h2 className="heading-2 mb-2">You&apos;re all set!</h2>
-                                <p className="subheading">
-                                    Your profile is ready. Let&apos;s take you to your dashboard and get you training.
-                                </p>
-                                {membershipLabel === "General Premium" ? (
-                                    <p className="mt-3 text-sm text-success font-semibold">
-                                        You&apos;re joining as a General Premium member — full training access, train at your own pace.
-                                    </p>
-                                ) : coachName ? (
-                                    <p className="mt-3 text-sm text-brand-300 font-semibold">
-                                        Your coach is {coachName}.
-                                    </p>
-                                ) : null}
-                            </div>
+
                             <div className="text-left card p-4 space-y-2">
-                                <p className="text-sm"><span className="text-fg-muted">Goal:</span> <span className="font-medium">{form.goal.replace("_", " ")}</span></p>
-                                <p className="text-sm"><span className="text-fg-muted">Training days:</span> <span className="font-medium">{form.trainingDaysPerWeek}x/week</span></p>
-                                <p className="text-sm"><span className="text-fg-muted">Experience:</span> <span className="font-medium">{form.experienceLevel}</span></p>
-                                <p className="text-sm"><span className="text-fg-muted">Location:</span> <span className="font-medium">{form.trainingLocation}</span></p>
+                                <p className="text-sm">
+                                    <span className="text-fg-muted">Name:</span>{" "}
+                                    <span className="font-medium">{[form.firstName, form.lastName].filter(Boolean).join(" ")}</span>
+                                </p>
+                                <p className="text-sm">
+                                    <span className="text-fg-muted">Goal:</span>{" "}
+                                    <span className="font-medium">{GOAL_LABELS[form.goal] ?? form.goal}</span>
+                                </p>
+                                <p className="text-sm">
+                                    <span className="text-fg-muted">Training days:</span>{" "}
+                                    <span className="font-medium">{form.trainingDaysPerWeek}x/week</span>
+                                </p>
+                                <p className="text-sm">
+                                    <span className="text-fg-muted">Experience:</span>{" "}
+                                    <span className="font-medium">{EXPERIENCE_LABELS[form.experienceLevel] ?? form.experienceLevel}</span>
+                                </p>
+                                <p className="text-sm">
+                                    <span className="text-fg-muted">Location:</span>{" "}
+                                    <span className="font-medium">{form.trainingLocation === "GYM" ? "Gym" : "Home"}</span>
+                                </p>
+                                {form.sessionLengthMin && (
+                                    <p className="text-sm">
+                                        <span className="text-fg-muted">Workout duration:</span>{" "}
+                                        <span className="font-medium">
+                                            {form.sessionLengthMin >= 90 ? "90+ min" : `${form.sessionLengthMin} min`}
+                                        </span>
+                                    </p>
+                                )}
+                                <p className="text-sm pt-2 border-t border-surface-border/50">
+                                    <span className="text-fg-muted">Coach status:</span>{" "}
+                                    <span className={cn(
+                                        "font-semibold",
+                                        coachStatusLabel.includes("✓") ? "text-success" : coachCodeRequested ? "text-brand-300" : "text-fg-muted"
+                                    )}>
+                                        {coachStatusLabel}
+                                    </span>
+                                </p>
                                 {(() => {
                                     const body = metricBodyFromForm(form);
                                     if (!body.heightCm && !body.weightKg && !body.targetWeightKg) return null;
@@ -650,10 +854,16 @@ export function OnboardingPage() {
                         </div>
                     )}
 
-                    {/* Navigation buttons */}
                     <div className="flex items-center justify-between mt-8 pt-6 border-t border-surface-border">
                         <button
-                            onClick={() => setStep((s) => s - 1)}
+                            type="button"
+                            onClick={() => {
+                                if (step === 3 && showSummary) {
+                                    setShowSummary(false);
+                                    return;
+                                }
+                                setStep((s) => Math.max(1, s - 1));
+                            }}
                             disabled={step === 1}
                             className="btn-ghost disabled:opacity-0"
                         >
@@ -662,33 +872,29 @@ export function OnboardingPage() {
                         </button>
 
                         <div className="flex gap-2">
-                            {step === 2 && (
+                            {step === 3 && showSummary ? (
                                 <button
-                                    onClick={handleSkipOptional}
-                                    className="btn-ghost text-fg-muted"
-                                >
-                                    <SkipForward className="w-4 h-4" />
-                                    Skip
-                                </button>
-                            )}
-
-                            {step < 3 ? (
-                                <button
-                                    onClick={handleContinue}
-                                    disabled={(step === 1 && (!form.goal || !form.experienceLevel)) || codeStatus === "checking"}
-                                    className="btn-primary"
-                                >
-                                    {codeStatus === "checking" ? "Checking..." : "Continue"}
-                                    {codeStatus === "checking" ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
-                                </button>
-                            ) : (
-                                <button
+                                    type="button"
                                     onClick={handleSubmit}
                                     disabled={saving}
                                     className="btn-primary"
                                 >
                                     {saving ? "Saving..." : "Go to Dashboard"}
                                     <ChevronRight className="w-4 h-4" />
+                                </button>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={handleContinue}
+                                    disabled={
+                                        (step === 1 && !canContinueStep1) ||
+                                        (step === 2 && !canContinueStep2) ||
+                                        codeStatus === "checking"
+                                    }
+                                    className="btn-primary"
+                                >
+                                    {codeStatus === "checking" ? "Checking..." : "Continue"}
+                                    {codeStatus === "checking" ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
                                 </button>
                             )}
                         </div>
