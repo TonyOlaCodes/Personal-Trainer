@@ -65,12 +65,6 @@ export async function ensureOnboardingProfileColumns() {
         ADD COLUMN IF NOT EXISTS "notifyOnCommunityChat" BOOLEAN NOT NULL DEFAULT false
     `;
 
-    await prisma.$executeRawUnsafe(`
-        CREATE UNIQUE INDEX IF NOT EXISTS "users_username_key"
-        ON "users" ("username")
-        WHERE "username" IS NOT NULL
-    `);
-
     onboardingProfileColumnsReady = true;
 }
 
