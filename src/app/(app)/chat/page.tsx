@@ -172,7 +172,7 @@ export default async function ChatPage() {
         }));
 
         if (user.role === "COACH") {
-            const filterFlags = await getCoachClientFilterFlags(peerIds);
+            const filterFlags = await getCoachClientFilterFlags(peerIds, user.id);
             conversations = conversations.map((conversation) => ({
                 ...conversation,
                 checkInDue: filterFlags[conversation.userId]?.checkInDue ?? false,

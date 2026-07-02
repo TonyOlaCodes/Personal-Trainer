@@ -1,9 +1,12 @@
 import { prisma } from "@/lib/prisma";
-import { getEffectiveCheckInDueStateForUser } from "@/lib/coachAttentionActions";
+import {
+    getCoachAttentionActions,
+    getEffectiveCheckInDueStateForUser,
+    isMissedWorkoutExcused,
+} from "@/lib/coachAttentionActions";
 import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
-import { getPlannedWorkoutForDate, activeWorkoutWhere } from "@/lib/planSchedule";
-import { shiftDateKey } from "@/lib/coachNotificationSchedule";
-import { getWeekNumber, toDateKey } from "@/lib/utils";
+import { getMissedWorkoutsYesterdayForCoach } from "@/lib/coachMissedWorkoutsYesterday";
+import { getWeekNumber } from "@/lib/utils";
 import { isInactiveAccount } from "@/lib/userDeactivation";
 
 export type CoachClientFilterFlags = {
@@ -12,18 +15,15 @@ export type CoachClientFilterFlags = {
 };
 
 export async function getCoachClientFilterFlags(
-    clientIds: string[]
+    clientIds: string[],
+    coachId?: string
 ): Promise<Record<string, CoachClientFilterFlags>> {
     if (clientIds.length === 0) return {};
 
     const today = new Date();
     today.setHours(12, 0, 0, 0);
-    const todayKey = toDateKey(today);
-    const yesterdayKey = shiftDateKey(todayKey, -1);
-    const [y, m, d] = yesterdayKey.split("-").map(Number);
-    const dayStart = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
-    const dayEnd = new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999));
     const weekNumber = getWeekNumber(today);
+    const clientIdSet = new Set(clientIds);
 
     const clients = await prisma.user.findMany({
         where: { id: { in: clientIds } },
@@ -37,36 +37,21 @@ export async function getCoachClientFilterFlags(
                 select: { id: true },
                 take: 1,
             },
-            plans: {
-                where: { isActive: true },
-                take: 1,
-                select: {
-                    startedAt: true,
-                    plan: {
-                        select: {
-                            weeks: {
-                                where: { weekNumber },
-                                select: {
-                                    workouts: {
-                                        where: activeWorkoutWhere(),
-                                        orderBy: { dayNumber: "asc" },
-                                        select: { id: true, name: true, dayNumber: true, dayOfWeek: true },
-                                    },
-                                },
-                            },
-                        },
-                    },
-                },
-            },
-            workoutLogs: {
-                where: {
-                    status: "COMPLETED",
-                    loggedAt: { gte: dayStart, lte: dayEnd },
-                },
-                select: { workoutId: true },
-            },
         },
     });
+    const missedClientIds = new Set<string>();
+
+    if (coachId) {
+        const [missedWorkouts, attentionActions] = await Promise.all([
+            getMissedWorkoutsYesterdayForCoach(coachId),
+            getCoachAttentionActions(coachId),
+        ]);
+        for (const row of missedWorkouts) {
+            if (!clientIdSet.has(row.clientId)) continue;
+            if (isMissedWorkoutExcused(attentionActions, row.clientId, row.dateKey, row.workoutId)) continue;
+            missedClientIds.add(row.clientId);
+        }
+    }
 
     const result: Record<string, CoachClientFilterFlags> = {};
 
@@ -83,19 +68,7 @@ export async function getCoachClientFilterFlags(
             checkInDue = dueState.isDueToday || dueState.isOverdue;
         }
 
-        let missedWorkout = false;
-        const userPlan = client.plans[0] ?? null;
-        const plannedWorkout = getPlannedWorkoutForDate(
-            userPlan
-                ? { startedAt: userPlan.startedAt, plan: userPlan.plan }
-                : null,
-            new Date(Date.UTC(y, m - 1, d, 12, 0, 0, 0))
-        );
-        if (plannedWorkout) {
-            missedWorkout = !client.workoutLogs.some((log) => log.workoutId === plannedWorkout.id);
-        }
-
-        result[client.id] = { checkInDue, missedWorkout };
+        result[client.id] = { checkInDue, missedWorkout: missedClientIds.has(client.id) };
     }));
 
     return result;

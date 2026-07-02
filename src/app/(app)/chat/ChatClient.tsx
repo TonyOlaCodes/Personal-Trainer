@@ -556,7 +556,7 @@ export function ChatClient({
                     setConversationPresence((prev) => ({ ...prev, ...data.presence }));
                 }
                 if (isCoachUser && data.activeSessions) {
-                    setActiveSessions((prev) => ({ ...prev, ...data.activeSessions }));
+                    setActiveSessions(data.activeSessions);
                 }
             } catch {
                 // ignore polling errors
@@ -845,7 +845,7 @@ export function ChatClient({
                     case "unread":
                         return unread > 0;
                     case "online":
-                        return presence.level === "online";
+                        return presence.level === "online" || Boolean(session);
                     case "inWorkout":
                         return Boolean(session);
                     case "missedWorkout":
