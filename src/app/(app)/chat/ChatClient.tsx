@@ -178,6 +178,7 @@ export function ChatClient({
     const [stagedMedia, setStagedMedia] = useState<{ url: string; type: "IMAGE" | "VIDEO" } | null>(null);
     const [sending, setSending] = useState(false);
     const [uploading, setUploading] = useState(false);
+    const [accessRequestReplyOptionUsedFor, setAccessRequestReplyOptionUsedFor] = useState<string | null>(null);
 
     // Feature state
     const [replyTo, setReplyTo] = useState<Message | null>(null);
@@ -238,12 +239,18 @@ export function ChatClient({
 
     const showAccessRequestReplyOptions = useMemo(() => {
         if (currentUserRole !== "SUPER_ADMIN" || tab !== "direct" || !selectedConv || selectedConv.isDeleted) return false;
-        return messages.some(
-            (message) =>
-                message.actionType === "ACCESS_REQUEST"
-                && message.sender.id === selectedConv.userId
+        if (accessRequestReplyOptionUsedFor === selectedConv.userId) return false;
+
+        const latestDirectMessage = [...messages]
+            .reverse()
+            .find((message) => !message.isGeneral);
+
+        return Boolean(
+            latestDirectMessage
+                && latestDirectMessage.actionType === "ACCESS_REQUEST"
+                && latestDirectMessage.sender.id === selectedConv.userId
         );
-    }, [currentUserRole, tab, selectedConv, messages]);
+    }, [currentUserRole, tab, selectedConv, messages, accessRequestReplyOptionUsedFor]);
 
     const messagesScrollRef = useRef<HTMLDivElement>(null);
     const fileRef = useRef<HTMLInputElement>(null);
@@ -918,6 +925,7 @@ export function ChatClient({
     };
 
     const handleAccessRequestReplyOption = (text: string) => {
+        if (selectedConv) setAccessRequestReplyOptionUsedFor(selectedConv.userId);
         draftInputRef.current = text;
         setInput(text);
         setReplyTo(null);
