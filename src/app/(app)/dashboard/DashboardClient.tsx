@@ -534,6 +534,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
     };
 
     const shouldPrioritizeCheckIn = Boolean(checkInPanel && !currentCheckin && checkInDueState.isDueToday);
+    const hasDailyMetricsEnabled = !["calories", "steps", "sleep"].every((key) => user.hiddenGoals?.includes(key));
     const metricsBeforeWorkout = Boolean(todayCompleted || !todayWorkout);
     const checkInDueLabelState = {
         ...checkInDueState,
@@ -541,7 +542,10 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
         nextDueDate: checkInDueState.nextDueDate ?? null,
     };
 
-    const renderDailyMetrics = () => (
+    const renderDailyMetrics = () => {
+        if (!hasDailyMetricsEnabled) return null;
+
+        return (
         <>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
                 <div className="flex items-center gap-2">
@@ -719,7 +723,8 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                 })}
             </div>
         </>
-    );
+        );
+    };
 
     const renderCheckInWidget = () => {
         if (!checkInPanel) return null;
