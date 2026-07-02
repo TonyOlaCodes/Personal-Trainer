@@ -9,6 +9,9 @@ import { resolveUploadUrl } from "@/lib/uploadUrls";
 interface CoachCodeRequestItem {
     id: string;
     status: string;
+    displayStatus: "PENDING" | "DISPATCHED" | "HANDLED";
+    statusLabel: string;
+    statusDetail: string;
     createdAt: string;
     user: {
         id: string;
@@ -133,6 +136,7 @@ export function AdminCoachCodeRequestsPanel({ coaches }: Props) {
                 requests.map((request) => {
                     const label = request.user.name?.trim() || request.user.email;
                     const coachChoices = coaches.filter((coach) => coach.id !== request.user.id);
+                    const canAct = request.displayStatus === "PENDING";
 
                     return (
                         <div key={request.id} className="card p-5 space-y-4">
@@ -154,20 +158,25 @@ export function AdminCoachCodeRequestsPanel({ coaches }: Props) {
                                 </div>
                                 <span className={cn(
                                     "px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border",
-                                    request.status === "PENDING"
+                                    request.displayStatus === "PENDING"
                                         ? "bg-warning-500/10 text-warning border-warning/20"
+                                        : request.displayStatus === "HANDLED"
+                                            ? "bg-success/10 text-success border-success/20"
                                         : "bg-brand-500/10 text-brand-300 border-brand/20"
                                 )}>
-                                    {request.status.replace("_", " ")}
+                                    {request.statusLabel}
                                 </span>
                             </div>
+                            {request.statusDetail && (
+                                <p className="text-xs font-semibold text-fg-muted">{request.statusDetail}</p>
+                            )}
 
                             <div className="flex flex-wrap gap-2">
                                 <Link href={`/chat?with=${request.user.id}`} className="btn-secondary text-xs">
                                     <MessageCircle className="w-3.5 h-3.5" />
                                     Message user
                                 </Link>
-                                {request.status === "PENDING" && (
+                                {canAct && (
                                     <button
                                         type="button"
                                         onClick={() => handleSelf(request.id)}
@@ -180,7 +189,7 @@ export function AdminCoachCodeRequestsPanel({ coaches }: Props) {
                                 )}
                             </div>
 
-                            {request.status === "PENDING" && coachChoices.length > 0 && (
+                            {canAct && coachChoices.length > 0 && (
                                 <div className="border-t border-surface-border/50 pt-4 space-y-3">
                                     <p className="text-xs font-black uppercase tracking-widest text-fg-subtle">Dispatch to coaches</p>
                                     <div className="flex flex-wrap gap-2">

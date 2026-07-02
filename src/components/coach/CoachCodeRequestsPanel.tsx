@@ -3,12 +3,15 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Loader2, MessageCircle, X } from "lucide-react";
-import { formatDate, getInitials } from "@/lib/utils";
+import { cn, formatDate, getInitials } from "@/lib/utils";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
 
 interface CoachCodeRequestItem {
     dispatchId: string;
     requestId: string;
+    displayStatus: "PENDING" | "DISPATCHED" | "HANDLED";
+    statusLabel: string;
+    statusDetail: string;
     createdAt: string;
     user: {
         id: string;
@@ -66,37 +69,53 @@ export function CoachCodeRequestsPanel() {
 
             {requests.map((request) => {
                 const label = request.user.name?.trim() || request.user.email;
+                const canAct = request.displayStatus === "DISPATCHED";
                 return (
                     <div key={request.dispatchId} className="p-4 rounded-2xl bg-surface-muted border border-surface-border space-y-3">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full overflow-hidden bg-brand-500/10 border border-surface-border flex items-center justify-center shrink-0">
-                                {request.user.avatarUrl ? (
-                                    // eslint-disable-next-line @next/next/no-img-element
-                                    <img src={resolveUploadUrl(request.user.avatarUrl)} alt={label} className="w-full h-full object-cover" />
-                                ) : (
-                                    <span className="text-[10px] font-black text-brand-400">{getInitials(label)}</span>
-                                )}
+                        <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-10 h-10 rounded-full overflow-hidden bg-brand-500/10 border border-surface-border flex items-center justify-center shrink-0">
+                                    {request.user.avatarUrl ? (
+                                        // eslint-disable-next-line @next/next/no-img-element
+                                        <img src={resolveUploadUrl(request.user.avatarUrl)} alt={label} className="w-full h-full object-cover" />
+                                    ) : (
+                                        <span className="text-[10px] font-black text-brand-400">{getInitials(label)}</span>
+                                    )}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <p className="font-semibold truncate">{label}</p>
+                                    <p className="text-xs text-fg-muted truncate">{request.user.email}</p>
+                                    <p className="text-[10px] text-fg-subtle mt-1">Requested {formatDate(request.createdAt)}</p>
+                                </div>
                             </div>
-                            <div className="min-w-0 flex-1">
-                                <p className="font-semibold truncate">{label}</p>
-                                <p className="text-xs text-fg-muted truncate">{request.user.email}</p>
-                                <p className="text-[10px] text-fg-subtle mt-1">Requested {formatDate(request.createdAt)}</p>
-                            </div>
+                            <span className={cn(
+                                "px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border shrink-0",
+                                request.displayStatus === "HANDLED"
+                                    ? "bg-success/10 text-success border-success/20"
+                                    : "bg-brand-500/10 text-brand-300 border-brand/20"
+                            )}>
+                                {request.statusLabel}
+                            </span>
                         </div>
+                        {request.statusDetail && (
+                            <p className="text-xs font-semibold text-fg-muted">{request.statusDetail}</p>
+                        )}
                         <div className="flex flex-wrap gap-2">
                             <Link href={`/chat?with=${request.user.id}`} className="btn-primary text-xs">
                                 <MessageCircle className="w-3.5 h-3.5" />
                                 Message user
                             </Link>
-                            <button
-                                type="button"
-                                onClick={() => handleIgnore(request.dispatchId)}
-                                disabled={ignoringId === request.dispatchId}
-                                className="btn-ghost text-xs"
-                            >
-                                {ignoringId === request.dispatchId ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
-                                Ignore
-                            </button>
+                            {canAct && (
+                                <button
+                                    type="button"
+                                    onClick={() => handleIgnore(request.dispatchId)}
+                                    disabled={ignoringId === request.dispatchId}
+                                    className="btn-ghost text-xs"
+                                >
+                                    {ignoringId === request.dispatchId ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
+                                    Ignore
+                                </button>
+                            )}
                         </div>
                     </div>
                 );

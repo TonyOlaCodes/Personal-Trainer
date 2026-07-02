@@ -3,9 +3,11 @@ import { createNotification } from "@/lib/notifications";
 import { NOTIFICATION_TYPES } from "@/lib/notificationTypes";
 import { ensureOnboardingProfileColumns } from "@/lib/onboardingProfile";
 import { isCoachRole } from "@/lib/roles";
+import { membershipLabel } from "@/lib/membership";
 
 export type CoachCodeRequestStatus = "PENDING" | "DISPATCHED" | "CLAIMED" | "RESOLVED" | "DISMISSED";
 export type CoachCodeRequestDispatchStatus = "PENDING" | "MESSAGED" | "IGNORED" | "CLAIMED";
+export type CoachCodeRequestDisplayStatus = "PENDING" | "DISPATCHED" | "HANDLED";
 
 let coachCodeRequestTablesReady = false;
 
@@ -41,6 +43,56 @@ export async function ensureCoachCodeRequestTables() {
 
 function createId(prefix: string) {
     return `${prefix}_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
+}
+
+function personLabel(name: string | null | undefined, email: string | null | undefined, fallback: string) {
+    return name?.trim() || email || fallback;
+}
+
+function resolveRequestDisplayStatus(input: {
+    status: CoachCodeRequestStatus;
+    userRole: string;
+    coachName?: string | null;
+    coachEmail?: string | null;
+    claimedByName?: string | null;
+    claimedByEmail?: string | null;
+    claimedByRole?: string | null;
+}) {
+    const coachName = personLabel(input.coachName, input.coachEmail, "");
+    const handlerName = personLabel(input.claimedByName, input.claimedByEmail, "");
+
+    if (input.userRole !== "FREE") {
+        return {
+            displayStatus: "HANDLED" as CoachCodeRequestDisplayStatus,
+            statusLabel: "Handled",
+            statusDetail: coachName
+                ? `Coach: ${coachName}`
+                : `${membershipLabel(input.userRole)} access granted`,
+        };
+    }
+
+    if (input.status === "CLAIMED") {
+        const handlerRole = input.claimedByRole === "COACH" ? "Coach" : "Admin";
+        return {
+            displayStatus: "HANDLED" as CoachCodeRequestDisplayStatus,
+            statusLabel: "Handled",
+            statusDetail: handlerName ? `${handlerRole}: ${handlerName}` : "Access not granted yet",
+        };
+    }
+
+    if (input.status === "DISPATCHED") {
+        return {
+            displayStatus: "DISPATCHED" as CoachCodeRequestDisplayStatus,
+            statusLabel: "Dispatched",
+            statusDetail: "Sent to coaches",
+        };
+    }
+
+    return {
+        displayStatus: "PENDING" as CoachCodeRequestDisplayStatus,
+        statusLabel: "Pending",
+        statusDetail: "Nobody has handled this yet",
+    };
 }
 
 export async function getCoachCodeRequestStatus(userId: string) {
@@ -167,6 +219,12 @@ export async function listPendingCoachCodeRequestsForAdmin() {
             userName: string | null;
             userEmail: string;
             userAvatarUrl: string | null;
+            userRole: string;
+            coachName: string | null;
+            coachEmail: string | null;
+            claimedByName: string | null;
+            claimedByEmail: string | null;
+            claimedByRole: string | null;
         }>
     >`
         SELECT
@@ -176,26 +234,48 @@ export async function listPendingCoachCodeRequestsForAdmin() {
             u.id as "userId",
             u.name as "userName",
             u.email as "userEmail",
-            u."avatarUrl" as "userAvatarUrl"
+            u."avatarUrl" as "userAvatarUrl",
+            u.role as "userRole",
+            coach.name as "coachName",
+            coach.email as "coachEmail",
+            handler.name as "claimedByName",
+            handler.email as "claimedByEmail",
+            handler.role as "claimedByRole"
         FROM "coach_code_requests" r
         JOIN "users" u ON u.id = r."userId"
+        LEFT JOIN "users" coach ON coach.id = u."coachId"
+        LEFT JOIN "users" handler ON handler.id = r."claimedById"
         WHERE r.status IN ('PENDING', 'DISPATCHED', 'CLAIMED')
           AND u."isDeleted" = false
           AND u."isDeactivated" = false
         ORDER BY r."createdAt" DESC
     `;
 
-    return rows.map((row) => ({
-        id: row.id,
-        status: row.status,
-        createdAt: row.createdAt.toISOString(),
-        user: {
-            id: row.userId,
-            name: row.userName,
-            email: row.userEmail,
-            avatarUrl: row.userAvatarUrl,
-        },
-    }));
+    return rows.map((row) => {
+        const display = resolveRequestDisplayStatus({
+            status: row.status,
+            userRole: row.userRole,
+            coachName: row.coachName,
+            coachEmail: row.coachEmail,
+            claimedByName: row.claimedByName,
+            claimedByEmail: row.claimedByEmail,
+            claimedByRole: row.claimedByRole,
+        });
+
+        return {
+            id: row.id,
+            status: row.status,
+            ...display,
+            createdAt: row.createdAt.toISOString(),
+            user: {
+                id: row.userId,
+                name: row.userName,
+                email: row.userEmail,
+                avatarUrl: row.userAvatarUrl,
+                role: row.userRole,
+            },
+        };
+    });
 }
 
 export async function adminHandleCoachCodeRequestSelf(adminId: string, requestId: string) {
@@ -319,6 +399,9 @@ export async function listCoachCodeRequestsForCoach(coachId: string) {
             userName: string | null;
             userEmail: string;
             userAvatarUrl: string | null;
+            userRole: string;
+            coachName: string | null;
+            coachEmail: string | null;
         }>
     >`
         SELECT
@@ -330,10 +413,14 @@ export async function listCoachCodeRequestsForCoach(coachId: string) {
             u.id as "userId",
             u.name as "userName",
             u.email as "userEmail",
-            u."avatarUrl" as "userAvatarUrl"
+            u."avatarUrl" as "userAvatarUrl",
+            u.role as "userRole",
+            coach.name as "coachName",
+            coach.email as "coachEmail"
         FROM "coach_code_request_dispatches" d
         JOIN "coach_code_requests" r ON r.id = d."requestId"
         JOIN "users" u ON u.id = r."userId"
+        LEFT JOIN "users" coach ON coach.id = u."coachId"
         WHERE d."coachId" = ${coachId}
           AND d.status = 'PENDING'
           AND r.status = 'DISPATCHED'
@@ -342,19 +429,30 @@ export async function listCoachCodeRequestsForCoach(coachId: string) {
         ORDER BY r."createdAt" DESC
     `;
 
-    return rows.map((row) => ({
-        dispatchId: row.dispatchId,
-        dispatchStatus: row.dispatchStatus,
-        requestId: row.requestId,
-        requestStatus: row.requestStatus,
-        createdAt: row.createdAt.toISOString(),
-        user: {
-            id: row.userId,
-            name: row.userName,
-            email: row.userEmail,
-            avatarUrl: row.userAvatarUrl,
-        },
-    }));
+    return rows.map((row) => {
+        const display = resolveRequestDisplayStatus({
+            status: row.requestStatus,
+            userRole: row.userRole,
+            coachName: row.coachName,
+            coachEmail: row.coachEmail,
+        });
+
+        return {
+            dispatchId: row.dispatchId,
+            dispatchStatus: row.dispatchStatus,
+            requestId: row.requestId,
+            requestStatus: row.requestStatus,
+            ...display,
+            createdAt: row.createdAt.toISOString(),
+            user: {
+                id: row.userId,
+                name: row.userName,
+                email: row.userEmail,
+                avatarUrl: row.userAvatarUrl,
+                role: row.userRole,
+            },
+        };
+    });
 }
 
 export async function coachIgnoreCoachCodeRequest(coachId: string, dispatchId: string) {
