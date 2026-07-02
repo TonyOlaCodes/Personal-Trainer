@@ -311,7 +311,7 @@ export function OnboardingPage() {
     };
 
     const stepTitle =
-        step === 1 ? "Your Profile" : step === 2 ? "Training" : showSummary ? "You're ready to train!" : "Body Details";
+        step === 1 ? "Your Profile" : step === 2 ? "Training" : showSummary ? "You're ready to train!" : "Optional Details";
 
     const coachStatusLabel = codeStatus === "valid"
         ? membershipLabel === "General Premium"

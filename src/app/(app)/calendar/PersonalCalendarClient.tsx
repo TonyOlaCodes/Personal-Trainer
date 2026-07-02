@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { CalendarClient, type CalendarView } from "./CalendarClient";
 import { CalendarComplianceSummary } from "@/components/calendar/CalendarComplianceSummary";
 import type { ClientCalendarPayload } from "@/lib/clientCalendarData";
@@ -49,27 +48,16 @@ export function PersonalCalendarClient({ calendar }: Props) {
         [calendar]
     );
 
-    if (!calendar.activePlan) {
-        return (
-            <div className="card p-10 text-center space-y-4 border-dashed animate-fade-in">
-                <p className="text-sm text-fg-muted font-bold">
-                    You don&apos;t have an active training plan yet.
-                </p>
-                <Link href="/plans" className="btn-primary inline-flex">
-                    Browse Plans
-                </Link>
-            </div>
-        );
-    }
-
     return (
         <div className="space-y-6 animate-fade-in">
-            <CalendarComplianceSummary
-                complianceInput={complianceInput}
-                calendarView={calendarView}
-                now={now}
-                excludeTodayUntilLogged
-            />
+            {calendar.activePlan && (
+                <CalendarComplianceSummary
+                    complianceInput={complianceInput}
+                    calendarView={calendarView}
+                    now={now}
+                    excludeTodayUntilLogged
+                />
+            )}
 
             <CalendarClient
                 activePlan={calendar.activePlan}

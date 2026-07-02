@@ -919,7 +919,7 @@ export function CalendarClient({
                                     href={isCoachView && coachView ? `/coach/client/${coachView.clientId}` : "/plans"}
                                     className="text-[10px] font-black text-brand-400 uppercase tracking-widest hover:underline pt-4"
                                 >
-                                    {isCoachView && coachView ? "View Client Profile" : "View Full Plan"}
+                                    {isCoachView && coachView ? "View Client Profile" : activePlan ? "View Full Plan" : "Choose a Plan"}
                                 </Link>
                                 {isCoachView && coachView && planId && (
                                     <Link
