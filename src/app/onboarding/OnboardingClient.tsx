@@ -35,6 +35,7 @@ const GENDER_CHOICES = [
     { id: "FEMALE", symbol: "♀" },
     { id: "PREFER_NOT_TO_SAY", symbol: "🤐" },
 ] as const;
+const DEFAULT_EXPERIENCE_SLIDER = 1;
 
 interface FormData {
     firstName: string;
@@ -94,8 +95,8 @@ export function OnboardingPage() {
         secretCode: "",
         goal: "",
         trainingDaysPerWeek: 5,
-        experienceLevel: "",
-        experienceSlider: 1,
+        experienceLevel: experienceFromSlider(DEFAULT_EXPERIENCE_SLIDER),
+        experienceSlider: DEFAULT_EXPERIENCE_SLIDER,
         trainingLocation: "GYM",
         sessionLengthMin: null,
         hasInjuries: false,
@@ -275,7 +276,7 @@ export function OnboardingPage() {
                 dateOfBirth: form.dateOfBirth,
                 goal: form.goal,
                 trainingDaysPerWeek: form.trainingDaysPerWeek,
-                experienceLevel: form.experienceLevel,
+                experienceLevel: form.experienceLevel || experienceFromSlider(form.experienceSlider),
                 trainingLocation: form.trainingLocation,
                 sessionLengthMin: form.sessionLengthMin,
                 hasInjuries: form.hasInjuries,
@@ -332,7 +333,7 @@ export function OnboardingPage() {
     const dobEligible = isEligibleDateOfBirth(form.dateOfBirth);
     const dobAge = getAgeFromDateOfBirth(form.dateOfBirth);
     const showDobError = dobContinueAttempted && !dobEligible;
-    const canContinueStep2 = Boolean(form.goal && form.experienceLevel);
+    const canContinueStep2 = Boolean(form.goal);
     const experienceMeta = EXPERIENCE_SLIDER_LABELS[form.experienceSlider] ?? EXPERIENCE_SLIDER_LABELS[1];
 
     return (
