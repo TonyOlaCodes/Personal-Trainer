@@ -129,6 +129,10 @@ const CHAT_MEDIA_THUMB =
     "w-[104px] h-[104px] sm:w-[120px] sm:h-[120px] object-cover rounded-xl shrink-0";
 const LAST_CHAT_TAB_KEY = "lastChatTab";
 const LAST_CHAT_CONVERSATION_KEY = "lastChatConversationId";
+const ACCESS_REQUEST_REPLY_OPTIONS = [
+    "Would you like coached premium, with a coach supporting you?",
+    "Would you like general premium, where you manage everything yourself?",
+];
 
 function findConversation(conversations: Conversation[], userId: string | null | undefined) {
     if (!userId) return null;
@@ -231,6 +235,15 @@ export function ChatClient({
         if (!canViewLastOnline || !selectedConv) return null;
         return getPresenceIndicator(resolveLastActive(selectedConv.userId));
     }, [canViewLastOnline, selectedConv, resolveLastActive, conversationPresence]);
+
+    const showAccessRequestReplyOptions = useMemo(() => {
+        if (currentUserRole !== "SUPER_ADMIN" || tab !== "direct" || !selectedConv || selectedConv.isDeleted) return false;
+        return messages.some(
+            (message) =>
+                message.actionType === "ACCESS_REQUEST"
+                && message.sender.id === selectedConv.userId
+        );
+    }, [currentUserRole, tab, selectedConv, messages]);
 
     const messagesScrollRef = useRef<HTMLDivElement>(null);
     const fileRef = useRef<HTMLInputElement>(null);
@@ -900,6 +913,14 @@ export function ChatClient({
         const lastAt = input.lastIndexOf("@");
         const before = input.slice(0, lastAt);
         setInput(`${before}@${user.name} `);
+        setShowMentionDropdown(false);
+        inputRef.current?.focus();
+    };
+
+    const handleAccessRequestReplyOption = (text: string) => {
+        draftInputRef.current = text;
+        setInput(text);
+        setReplyTo(null);
         setShowMentionDropdown(false);
         inputRef.current?.focus();
     };
@@ -2165,6 +2186,21 @@ export function ChatClient({
                                     >
                                         <AtSign className="w-3 h-3 text-brand-400" />
                                         {u.name}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+
+                        {showAccessRequestReplyOptions && (
+                            <div className="mb-2 flex flex-wrap gap-2">
+                                {ACCESS_REQUEST_REPLY_OPTIONS.map((option) => (
+                                    <button
+                                        key={option}
+                                        type="button"
+                                        onClick={() => handleAccessRequestReplyOption(option)}
+                                        className="px-3 py-2 rounded-xl border border-brand-500/25 bg-brand-500/10 text-brand-300 hover:bg-brand-500/15 text-xs font-bold transition-colors text-left"
+                                    >
+                                        {option}
                                     </button>
                                 ))}
                             </div>
