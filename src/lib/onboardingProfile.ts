@@ -5,9 +5,10 @@ let onboardingProfileColumnsReady = false;
 export const GENDER_OPTIONS = [
     { id: "MALE", label: "Male" },
     { id: "FEMALE", label: "Female" },
-    { id: "NON_BINARY", label: "Non-binary" },
     { id: "PREFER_NOT_TO_SAY", label: "Prefer not to say" },
 ] as const;
+
+export const USERNAME_MAX_LENGTH = 20;
 
 export type GenderOption = (typeof GENDER_OPTIONS)[number]["id"];
 
@@ -47,7 +48,7 @@ export function normalizeUsername(raw?: string | null): string | null {
     const trimmed = raw?.trim().toLowerCase() ?? "";
     if (!trimmed) return null;
     const cleaned = trimmed.replace(/[^a-z0-9_]/g, "");
-    if (cleaned.length < 3 || cleaned.length > 24) return null;
+    if (!cleaned || cleaned.length > USERNAME_MAX_LENGTH) return null;
     return cleaned;
 }
 

@@ -1,5 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+import { bootstrapClerkUser } from "@/lib/apiAuth";
 import { prisma } from "@/lib/prisma";
 import { ensureAppSchema } from "@/lib/ensureAppSchema";
 import { getUserDeactivationStatusByClerkId } from "@/lib/userDeactivation";
@@ -14,6 +15,8 @@ export default async function OnboardingServerPage() {
     if (!userId) {
         redirect("/sign-in");
     }
+
+    await bootstrapClerkUser(userId);
 
     const user = await prisma.user.findUnique({
         where: { clerkId: userId },

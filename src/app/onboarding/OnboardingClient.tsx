@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Zap, ChevronRight, ChevronLeft, Check, Loader2, User } from "lucide-react";
 import Link from "next/link";
-import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { BrandLogo } from "@/components/shared/BrandLogo";
 import {
@@ -22,11 +21,17 @@ import { useClerk, useUser } from "@clerk/nextjs";
 import { defaultHomeForRole } from "@/lib/roles";
 import {
     EXPERIENCE_SLIDER_LABELS,
-    GENDER_OPTIONS,
     ONBOARDING_GOAL_OPTIONS,
+    USERNAME_MAX_LENGTH,
     WORKOUT_DURATION_OPTIONS,
     experienceFromSlider,
 } from "@/lib/onboardingProfile";
+
+const GENDER_CHOICES = [
+    { id: "MALE", symbol: "♂" },
+    { id: "FEMALE", symbol: "♀" },
+    { id: "PREFER_NOT_TO_SAY", label: "Prefer not to say" },
+] as const;
 
 interface FormData {
     firstName: string;
@@ -324,7 +329,12 @@ export function OnboardingPage() {
             ? "Coach Code Requested"
             : "Using Free Plan";
 
-    const canContinueStep1 = Boolean(form.firstName.trim() && form.gender && form.dateOfBirth);
+    const canContinueStep1 = Boolean(
+        form.firstName.trim() &&
+        form.gender &&
+        form.dateOfBirth &&
+        form.username.length <= USERNAME_MAX_LENGTH
+    );
     const canContinueStep2 = Boolean(form.goal && form.experienceLevel);
     const experienceMeta = EXPERIENCE_SLIDER_LABELS[form.experienceSlider] ?? EXPERIENCE_SLIDER_LABELS[1];
 
@@ -377,12 +387,14 @@ export function OnboardingPage() {
                         <div className="space-y-6">
                             <div className="flex items-center gap-4 p-4 rounded-2xl bg-surface-muted border border-surface-border">
                                 {clerkUser?.imageUrl ? (
-                                    <Image
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img
                                         src={clerkUser.imageUrl}
                                         alt=""
                                         width={56}
                                         height={56}
-                                        className="rounded-full object-cover"
+                                        className="w-14 h-14 rounded-full object-cover shrink-0"
+                                        referrerPolicy="no-referrer"
                                     />
                                 ) : (
                                     <div className="w-14 h-14 rounded-full bg-brand-950/60 border border-brand-700/40 flex items-center justify-center">
@@ -423,29 +435,45 @@ export function OnboardingPage() {
                                 <input
                                     className="input font-mono"
                                     value={form.username}
+                                    maxLength={USERNAME_MAX_LENGTH + 1}
                                     onChange={(e) => update("username", e.target.value.toLowerCase())}
-                                    placeholder="Optional — letters, numbers, underscores"
                                 />
+                                {form.username.length > USERNAME_MAX_LENGTH && (
+                                    <p className="text-[10px] text-danger mt-1.5 font-semibold">
+                                        Maximum {USERNAME_MAX_LENGTH} characters.
+                                    </p>
+                                )}
                             </div>
 
                             <div>
                                 <label className="label">Gender *</label>
-                                <div className="grid grid-cols-2 gap-2">
-                                    {GENDER_OPTIONS.map((option) => (
-                                        <button
-                                            key={option.id}
-                                            type="button"
-                                            onClick={() => update("gender", option.id)}
-                                            className={cn(
-                                                "py-3 rounded-xl border text-sm font-medium transition-all",
-                                                form.gender === option.id
-                                                    ? "border-brand-600 bg-brand-950/60 text-brand-300"
-                                                    : "border-surface-border bg-surface-muted text-fg-muted hover:border-brand-700/50"
-                                            )}
-                                        >
-                                            {option.label}
-                                        </button>
-                                    ))}
+                                <div className="grid grid-cols-3 gap-2">
+                                    {GENDER_CHOICES.map((option) => {
+                                        const selected = form.gender === option.id;
+                                        const isMale = option.id === "MALE";
+                                        const isFemale = option.id === "FEMALE";
+
+                                        return (
+                                            <button
+                                                key={option.id}
+                                                type="button"
+                                                onClick={() => update("gender", option.id)}
+                                                className={cn(
+                                                    "py-3 rounded-xl border text-sm font-medium transition-all",
+                                                    selected && isMale && "border-sky-500 bg-sky-500/10 text-sky-400",
+                                                    selected && isFemale && "border-pink-500 bg-pink-500/10 text-pink-400",
+                                                    selected && option.id === "PREFER_NOT_TO_SAY" && "border-brand-600 bg-brand-950/60 text-brand-300",
+                                                    !selected && "border-surface-border bg-surface-muted text-fg-muted hover:border-brand-700/50"
+                                                )}
+                                            >
+                                                {"symbol" in option ? (
+                                                    <span className="text-xl leading-none">{option.symbol}</span>
+                                                ) : (
+                                                    <span className="text-[11px] leading-tight px-1">{option.label}</span>
+                                                )}
+                                            </button>
+                                        );
+                                    })}
                                 </div>
                             </div>
 
@@ -460,10 +488,7 @@ export function OnboardingPage() {
                             </div>
 
                             <div className="pt-4 border-t border-surface-border/50 space-y-3">
-                                <label className="label flex items-center gap-2">
-                                    <Zap className="w-3 h-3 text-brand-400" />
-                                    Coach access code
-                                </label>
+                                <label className="label">Coach access code (Optional)</label>
                                 <input
                                     type="text"
                                     className={cn(
@@ -471,7 +496,6 @@ export function OnboardingPage() {
                                         codeStatus === "error" && "border-danger focus:border-danger focus:ring-danger/40",
                                         codeStatus === "valid" && "border-success focus:border-success focus:ring-success/40"
                                     )}
-                                    placeholder="Optional — enter if you have one"
                                     value={form.secretCode}
                                     onChange={(e) => update("secretCode", e.target.value)}
                                 />
@@ -479,11 +503,7 @@ export function OnboardingPage() {
                                     <p className={cn("text-[10px] font-semibold", codeStatus === "error" ? "text-danger" : "text-success")}>
                                         {codeMessage}
                                     </p>
-                                ) : (
-                                    <p className="text-[10px] text-fg-subtle">
-                                        Have a coach invite or premium code? Enter it here to unlock full training features.
-                                    </p>
-                                )}
+                                ) : null}
                                 <div className="flex flex-wrap items-center gap-3">
                                     <button
                                         type="button"

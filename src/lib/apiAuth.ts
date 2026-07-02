@@ -1,13 +1,47 @@
-import { auth } from "@clerk/nextjs/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import type { User } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { anonymizeDeletedUserAccount } from "@/lib/accountDeletion";
 import { getUserDeactivationStatusByClerkId, isInactiveAccount } from "@/lib/userDeactivation";
 import { isClientRole, isCoachRole, parseTeamCoachId } from "@/lib/roles";
 import { canViewFullProfile, canViewUserProfile } from "@/lib/userProfile";
 import { ensureAccessRequestColumns } from "@/lib/accessRequest";
 
 export { defaultHomeForRole, isCoachRole, isClientRole, parseTeamCoachId } from "@/lib/roles";
+
+/** Ensures a Prisma user row exists for the signed-in Clerk account (e.g. before onboarding completes). */
+export async function bootstrapClerkUser(clerkId: string): Promise<User | null> {
+    const existing = await prisma.user.findUnique({ where: { clerkId } });
+    if (existing) return existing;
+
+    const clerkUser = await currentUser();
+    if (!clerkUser || clerkUser.id !== clerkId) return null;
+
+    const email = clerkUser.emailAddresses[0]?.emailAddress;
+    if (!email) return null;
+
+    if (email !== "unknown@example.com") {
+        const staleEmailUser = await prisma.user.findUnique({ where: { email } });
+        if (staleEmailUser && staleEmailUser.clerkId !== clerkId) {
+            await anonymizeDeletedUserAccount(prisma, staleEmailUser);
+        }
+    }
+
+    const name = clerkUser.firstName
+        ? `${clerkUser.firstName} ${clerkUser.lastName ?? ""}`.trim()
+        : null;
+
+    return prisma.user.create({
+        data: {
+            clerkId,
+            email,
+            name,
+            avatarUrl: clerkUser.imageUrl,
+            role: "FREE",
+        },
+    });
+}
 
 export async function requireAuthUser(req?: Request): Promise<
     | { user: User; error: null }
@@ -18,7 +52,10 @@ export async function requireAuthUser(req?: Request): Promise<
         return { user: null, error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
     }
 
-    const user = await prisma.user.findUnique({ where: { clerkId: userId } });
+    let user = await prisma.user.findUnique({ where: { clerkId: userId } });
+    if (!user) {
+        user = await bootstrapClerkUser(userId);
+    }
     if (!user) {
         return { user: null, error: NextResponse.json({ error: "User not found" }, { status: 404 }) };
     }

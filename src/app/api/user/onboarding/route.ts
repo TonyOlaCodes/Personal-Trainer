@@ -26,7 +26,7 @@ const genderValues = GENDER_OPTIONS.map((option) => option.id);
 const schema = z.object({
     firstName: z.string().min(1).max(80),
     lastName: z.string().max(80).optional(),
-    username: z.string().max(24).optional(),
+    username: z.string().max(20).optional(),
     gender: z.enum(genderValues as [string, ...string[]]),
     dateOfBirth: z.string().min(1),
     goal: z.enum(["GAIN_MUSCLE", "LOSE_WEIGHT", "RECOMPOSITION", "STRENGTH"]),
@@ -69,7 +69,7 @@ export async function POST(req: Request) {
         const normalizedUsername = normalizeUsername(d.username);
         if (d.username?.trim() && !normalizedUsername) {
             return NextResponse.json(
-                { error: "Username must be 3–24 characters and use letters, numbers, or underscores." },
+                { error: "Username must be 20 characters or fewer." },
                 { status: 400 }
             );
         }
