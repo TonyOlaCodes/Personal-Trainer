@@ -14,7 +14,6 @@ import { withResolvedCheckInMedia } from "@/lib/uploadUrls";
 import { DashboardClient } from "./DashboardClient";
 import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
 import { getEffectiveCheckInDueStateForUser } from "@/lib/coachAttentionActions";
-import { getDailyMetricsSummary } from "@/lib/dailyMetrics";
 import { ensureAppSchema, formatErrorDetails } from "@/lib/ensureAppSchema";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
 import { SafeFallback, rethrowNextInternalErrors } from "@/components/shared/SafeFallback";
@@ -208,10 +207,9 @@ export default async function DashboardPage() {
             }
         }
 
-        const [bodyweight, bodyweightHistory, dailyMetrics] = await Promise.all([
+        const [bodyweight, bodyweightHistory] = await Promise.all([
             getBodyweightSummary(user.id, todayDate),
             getBodyweightHistory(user.id, 14),
-            getDailyMetricsSummary(user.id, todayDate),
         ]);
         const checkInSchedule = await getUserCheckInSchedule(user.id);
         const checkInDueState = await getEffectiveCheckInDueStateForUser(user.id, checkInSchedule, new Date());
@@ -305,16 +303,6 @@ export default async function DashboardPage() {
                                 latestPreviousWeightKg: bodyweight?.latestPrevious?.weightKg ?? null,
                                 latestDate: bodyweight?.latest?.date ?? null,
                                 history: bodyweightHistory,
-                            }}
-                            dailyMetrics={{
-                                selectedDate: todayDate,
-                                calories: dailyMetrics?.selected?.calories ?? null,
-                                steps: dailyMetrics?.selected?.steps ?? null,
-                                sleepHours: dailyMetrics?.selected?.sleepHours ?? null,
-                                latestCalories: dailyMetrics?.latest?.calories ?? null,
-                                latestSteps: dailyMetrics?.latest?.steps ?? null,
-                                latestSleepHours: dailyMetrics?.latest?.sleepHours ?? null,
-                                targets: dailyMetrics?.targets ?? { targetCalories: null, targetSteps: null, targetSleepHours: null },
                             }}
                         />
                 </div>

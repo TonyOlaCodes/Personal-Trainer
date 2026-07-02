@@ -10,7 +10,7 @@ import {
     TrendingUp, TrendingDown, Loader2,
     Dumbbell, Activity, Search, ChevronRight,
     Scale, Zap, BarChart2,
-    Flame, ArrowUpRight, ArrowDownRight, X, Utensils, Footprints, Moon,
+    Flame, ArrowUpRight, ArrowDownRight, X,
     Pin, Minus
 } from "lucide-react";
 import Link from "next/link";
@@ -401,44 +401,6 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
     const consistencyPct = (data?.consistency?.target ?? 0) > 0
         ? Math.min(Math.round(((data?.consistency?.thisWeek ?? 0) / (data?.consistency?.target ?? 4)) * 100), 100) : 0;
 
-    const formatHabitValue = (value: number | null | undefined, unit: string) => {
-        if (value === null || value === undefined) return "--";
-        const formatted = unit === "hrs" ? value.toFixed(1) : Math.round(value).toLocaleString();
-        return `${formatted}${unit === "hrs" ? "h" : ""}`;
-    };
-    const habitCards = [
-        {
-            key: "calories",
-            label: "Calories",
-            icon: Utensils,
-            unit: "kcal",
-            color: "text-warning",
-            bg: "bg-warning/10",
-            border: "border-warning/20",
-            metric: data.dailyMetrics?.calories,
-        },
-        {
-            key: "steps",
-            label: "Steps",
-            icon: Footprints,
-            unit: "steps",
-            color: "text-success",
-            bg: "bg-success/10",
-            border: "border-success/20",
-            metric: data.dailyMetrics?.steps,
-        },
-        {
-            key: "sleep",
-            label: "Sleep",
-            icon: Moon,
-            unit: "hrs",
-            color: "text-brand-400",
-            bg: "bg-brand-500/10",
-            border: "border-brand-500/20",
-            metric: data.dailyMetrics?.sleep,
-        },
-    ].filter(card => !hiddenGoals?.includes(card.key));
-
     return (
         <div className="relative">
             {freeAccessOverlay}
@@ -685,129 +647,8 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                             </AreaChart>
                         </ResponsiveContainer>
                     </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-5">
-                        {habitCards.map(({ key, label, icon: Icon, unit, color, bg, border, metric }) => {
-                            const current = metric?.current ?? null;
-                            const target = metric?.target ?? null;
-                            const weeklyAverage = metric?.weeklyAverage ?? null;
-                            const previousAverage = metric?.previousWeeklyAverage ?? null;
-                            const change = weeklyAverage !== null && previousAverage !== null
-                                ? Math.round((weeklyAverage - previousAverage) * 10) / 10
-                                : null;
-                            const isUp = (change ?? 0) >= 0;
-
-                            return (
-                                <div key={key} className={cn("rounded-2xl border p-4 bg-surface-muted/30", border)}>
-                                    <div className="flex items-center justify-between gap-3 mb-3">
-                                        <div className="flex items-center gap-2">
-                                            <div className={cn("w-8 h-8 rounded-xl flex items-center justify-center", bg)}>
-                                                <Icon className={cn("w-4 h-4", color)} />
-                                            </div>
-                                            <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest">{label}</p>
-                                        </div>
-                                        {change !== null && (
-                                            <span className={cn(
-                                                "inline-flex items-center gap-1 text-[10px] font-black",
-                                                isUp ? "text-success" : "text-danger"
-                                            )}>
-                                                {isUp ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-                                                {change > 0 ? "+" : ""}{unit === "hrs" ? change.toFixed(1) : Math.round(change).toLocaleString()}
-                                            </span>
-                                        )}
-                                    </div>
-                                    <div className="flex items-end justify-between gap-3">
-                                        <div>
-                                            <p className="text-2xl font-black text-fg leading-none">
-                                                {formatHabitValue(current, unit)}
-                                                {unit !== "hrs" && unit !== "steps" && <span className="text-[10px] font-bold text-fg-muted ml-1">{unit}</span>}
-                                            </p>
-                                            <p className="text-[10px] font-bold text-fg-muted mt-1">Latest log</p>
-                                        </div>
-                                        <div className="text-right">
-                                            <p className="text-[9px] font-black text-fg-subtle uppercase tracking-widest">Avg</p>
-                                            <p className="text-xs font-black text-fg">{formatHabitValue(weeklyAverage, unit)}</p>
-                                        </div>
-                                    </div>
-                                    <div className="mt-3 pt-3 border-t border-surface-border/60 flex items-center justify-between">
-                                        <span className="text-[9px] font-black text-fg-subtle uppercase tracking-widest">Goal</span>
-                                        <span className={cn("text-xs font-black", target ? color : "text-fg-muted")}>
-                                            {formatHabitValue(target, unit)}
-                                            {target && unit === "kcal" ? " kcal" : target && unit === "steps" ? " steps" : ""}
-                                        </span>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
                 </section>
-            ) : (
-                habitCards.length > 0 && (
-                    <section className="card p-5 sm:p-6">
-                        <div className="flex items-center gap-3 mb-5 pb-4 border-b border-surface-border/50">
-                            <Activity className="w-5 h-5 text-brand-400" />
-                            <div>
-                                <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-0.5">Daily Metrics Trend</p>
-                                <h3 className="text-lg font-black text-fg tracking-tight">Habit Targets</h3>
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                            {habitCards.map(({ key, label, icon: Icon, unit, color, bg, border, metric }) => {
-                                const current = metric?.current ?? null;
-                                const target = metric?.target ?? null;
-                                const weeklyAverage = metric?.weeklyAverage ?? null;
-                                const previousAverage = metric?.previousWeeklyAverage ?? null;
-                                const change = weeklyAverage !== null && previousAverage !== null
-                                    ? Math.round((weeklyAverage - previousAverage) * 10) / 10
-                                    : null;
-                                const isUp = (change ?? 0) >= 0;
-
-                                return (
-                                    <div key={key} className={cn("rounded-2xl border p-4 bg-surface-muted/30", border)}>
-                                        <div className="flex items-center justify-between gap-3 mb-3">
-                                            <div className="flex items-center gap-2">
-                                                <div className={cn("w-8 h-8 rounded-xl flex items-center justify-center", bg)}>
-                                                    <Icon className={cn("w-4 h-4", color)} />
-                                                </div>
-                                                <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest">{label}</p>
-                                            </div>
-                                            {change !== null && (
-                                                <span className={cn(
-                                                    "inline-flex items-center gap-1 text-[10px] font-black",
-                                                    isUp ? "text-success" : "text-danger"
-                                                )}>
-                                                    {isUp ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-                                                    {change > 0 ? "+" : ""}{unit === "hrs" ? change.toFixed(1) : Math.round(change).toLocaleString()}
-                                                </span>
-                                            )}
-                                        </div>
-                                        <div className="flex items-end justify-between gap-3">
-                                            <div>
-                                                <p className="text-2xl font-black text-fg leading-none">
-                                                    {formatHabitValue(current, unit)}
-                                                    {unit !== "hrs" && unit !== "steps" && <span className="text-[10px] font-bold text-fg-muted ml-1">{unit}</span>}
-                                                </p>
-                                                <p className="text-[10px] font-bold text-fg-muted mt-1">Latest log</p>
-                                            </div>
-                                            <div className="text-right">
-                                                <p className="text-[9px] font-black text-fg-subtle uppercase tracking-widest">Avg</p>
-                                                <p className="text-xs font-black text-fg">{formatHabitValue(weeklyAverage, unit)}</p>
-                                            </div>
-                                        </div>
-                                        <div className="mt-3 pt-3 border-t border-surface-border/60 flex items-center justify-between">
-                                            <span className="text-[9px] font-black text-fg-subtle uppercase tracking-widest">Goal</span>
-                                            <span className={cn("text-xs font-black", target ? color : "text-fg-muted")}>
-                                                {formatHabitValue(target, unit)}
-                                                {target && unit === "kcal" ? " kcal" : target && unit === "steps" ? " steps" : ""}
-                                            </span>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </section>
-                )
-            )}
+            ) : null}
 
 
 

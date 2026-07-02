@@ -8,7 +8,7 @@ import { RecentSessionsExplorer, PREVIEW_LIMIT } from "@/components/shared/Recen
 import { ReturnLink } from "@/components/shared/ReturnLink";
 import { ActiveSessionBanner } from "@/components/shared/ActiveSessionBanner";
 import { CheckInsClient } from "@/app/(app)/checkins/CheckInsClient";
-import { Dumbbell, ChevronRight, Clock, Flame, Activity, Calendar, Ticket, Check, Edit3, Trash2, Scale, Utensils, Footprints, Moon, AlertCircle, X } from "lucide-react";
+import { Dumbbell, ChevronRight, Clock, Flame, Activity, Calendar, Ticket, Check, Edit3, Trash2, Scale, AlertCircle, X } from "lucide-react";
 import { formatCheckInDueSubtitle, formatCheckInPeriodTitle } from "@/lib/checkInLabels";
 import { formatDate, formatRelative, cn, toDateKey, parseLogDate, toLoggedAtIso } from "@/lib/utils";
 import { appendReturnTo } from "@/lib/navigation";
@@ -119,20 +119,6 @@ interface Props {
         latestDate: string | null;
         history: Array<{ date: string; weightKg: number }>;
     };
-    dailyMetrics: {
-        selectedDate: string;
-        calories: number | null;
-        steps: number | null;
-        sleepHours: number | null;
-        latestCalories: number | null;
-        latestSteps: number | null;
-        latestSleepHours: number | null;
-        targets: {
-            targetCalories: number | null;
-            targetSteps: number | null;
-            targetSleepHours: number | null;
-        };
-    };
 }
 
 const TODAY_EXERCISE_PREVIEW = 3;
@@ -160,7 +146,7 @@ function buildBodyweightSparklinePoints(history: Array<{ date: string; weightKg:
     }).join(" ");
 }
 
-export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDay, todayCompleted, activeSession, recentLogs, avgDurationMin, currentCheckin, checkInDueState, checkInPanel, bodyweight, dailyMetrics }: Props) {
+export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDay, todayCompleted, activeSession, recentLogs, avgDurationMin, currentCheckin, checkInDueState, checkInPanel, bodyweight }: Props) {
     const router = useRouter();
     const currentPath = useCurrentPath();
     const now = useCurrentDate();
@@ -183,29 +169,6 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
     );
     const [weightMsg, setWeightMsg] = useState("");
     const [savingWeight, setSavingWeight] = useState(false);
-    const [calories, setCalories] = useState(
-        dailyMetrics.selectedDate === todayDate && dailyMetrics.calories ? String(dailyMetrics.calories) : ""
-    );
-    const [steps, setSteps] = useState(
-        dailyMetrics.selectedDate === todayDate && dailyMetrics.steps ? String(dailyMetrics.steps) : ""
-    );
-    const [sleepHours, setSleepHours] = useState(
-        dailyMetrics.selectedDate === todayDate && dailyMetrics.sleepHours ? dailyMetrics.sleepHours.toString() : ""
-    );
-    const [caloriesLogged, setCaloriesLogged] = useState(
-        dailyMetrics.selectedDate === todayDate && Boolean(dailyMetrics.calories)
-    );
-    const [stepsLogged, setStepsLogged] = useState(
-        dailyMetrics.selectedDate === todayDate && Boolean(dailyMetrics.steps)
-    );
-    const [sleepLogged, setSleepLogged] = useState(
-        dailyMetrics.selectedDate === todayDate && Boolean(dailyMetrics.sleepHours)
-    );
-    const [latestCalories, setLatestCalories] = useState(dailyMetrics.latestCalories);
-    const [latestSteps, setLatestSteps] = useState(dailyMetrics.latestSteps);
-    const [latestSleepHours, setLatestSleepHours] = useState(dailyMetrics.latestSleepHours);
-    const [metricsMsg, setMetricsMsg] = useState("");
-    const [savingMetrics, setSavingMetrics] = useState(false);
     const [localActiveSession, setLocalActiveSession] = useState(activeSession);
     const [sessionsExplorerOpen, setSessionsExplorerOpen] = useState(false);
     const [sessionsExplorerInitialId, setSessionsExplorerInitialId] = useState<string | null>(null);
@@ -230,13 +193,6 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
             setWeight("");
             setWeightLogged(false);
             setWeightMsg("");
-            setCalories("");
-            setSteps("");
-            setSleepHours("");
-            setCaloriesLogged(false);
-            setStepsLogged(false);
-            setSleepLogged(false);
-            setMetricsMsg("");
         }
 
         router.refresh();
@@ -317,39 +273,6 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
         };
     }, [weightDate]);
 
-    useEffect(() => {
-        let cancelled = false;
-        async function loadDailyMetrics() {
-            setSavingMetrics(true);
-            setMetricsMsg("");
-            try {
-                const res = await fetch(`/api/daily-metrics?date=${weightDate}`);
-                const data = await res.json();
-                if (!res.ok || cancelled) return;
-                setCalories(data.selected?.calories ? String(data.selected.calories) : "");
-                setSteps(data.selected?.steps ? String(data.selected.steps) : "");
-                setSleepHours(data.selected?.sleepHours ? data.selected.sleepHours.toString() : "");
-                setCaloriesLogged(data.selected?.calories !== null && data.selected?.calories !== undefined);
-                setStepsLogged(data.selected?.steps !== null && data.selected?.steps !== undefined);
-                setSleepLogged(data.selected?.sleepHours !== null && data.selected?.sleepHours !== undefined);
-                setLatestCalories(data.latest?.calories ?? null);
-                setLatestSteps(data.latest?.steps ?? null);
-                setLatestSleepHours(data.latest?.sleepHours ?? null);
-            } catch (e) {
-                console.error(e);
-                if (!cancelled) setMetricsMsg("Could not load daily targets");
-            } finally {
-                if (!cancelled) setSavingMetrics(false);
-            }
-        }
-
-        loadDailyMetrics();
-
-        return () => {
-            cancelled = true;
-        };
-    }, [weightDate]);
-
     async function handleUpdateWeight(val: string) {
         if (!val || savingWeight) return;
         const parsedWeight = Math.round(Number(val) * 100) / 100;
@@ -388,52 +311,6 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
         }
     }
 
-    async function handleUpdateDailyMetric(key: "calories" | "steps" | "sleepHours", val: string) {
-        if (savingMetrics) return;
-
-        const nextCalories = key === "calories" ? val : calories;
-        const nextSteps = key === "steps" ? val : steps;
-        const nextSleepHours = key === "sleepHours" ? val : sleepHours;
-
-        if (!nextCalories && !nextSteps && !nextSleepHours) return;
-
-        const payload = {
-            date: weightDate,
-            calories: nextCalories ? Number(nextCalories) : null,
-            steps: nextSteps ? Number(nextSteps) : null,
-            sleepHours: nextSleepHours ? Number(nextSleepHours) : null,
-        };
-
-        setSavingMetrics(true);
-        setMetricsMsg("");
-        try {
-            const res = await fetch("/api/daily-metrics", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload)
-            });
-            const data = await res.json();
-            if (res.ok) {
-                setCalories(data.selected?.calories ? String(data.selected.calories) : "");
-                setSteps(data.selected?.steps ? String(data.selected.steps) : "");
-                setSleepHours(data.selected?.sleepHours ? data.selected.sleepHours.toString() : "");
-                setCaloriesLogged(data.selected?.calories !== null && data.selected?.calories !== undefined);
-                setStepsLogged(data.selected?.steps !== null && data.selected?.steps !== undefined);
-                setSleepLogged(data.selected?.sleepHours !== null && data.selected?.sleepHours !== undefined);
-                setLatestCalories(data.latest?.calories ?? payload.calories);
-                setLatestSteps(data.latest?.steps ?? payload.steps);
-                setLatestSleepHours(data.latest?.sleepHours ?? payload.sleepHours);
-            } else {
-                setMetricsMsg(data.error ?? "Could not save daily targets");
-            }
-        } catch (e) {
-            console.error(e);
-            setMetricsMsg("Could not save daily targets");
-        } finally {
-            setSavingMetrics(false);
-        }
-    }
-
     const isWeightDateToday = weightDate === todayDate;
 
     const bodyweightStatus = () => {
@@ -450,15 +327,6 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
             return isWeightDateToday ? "Logged today" : "Logged";
         }
         return "Tap to log weight";
-    };
-
-    const dailyMetricStatus = (key: string, logged: boolean) => {
-        if (metricsMsg) return metricsMsg;
-        if (logged) return isWeightDateToday ? "Logged today" : "Logged";
-        if (key === "calories") return "Tap to log calories";
-        if (key === "steps") return "Add daily steps";
-        if (key === "sleepHours") return "Track your sleep";
-        return "Tap to log";
     };
 
     const greeting = () => {
@@ -566,7 +434,6 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
     };
 
     const shouldPrioritizeCheckIn = Boolean(checkInPanel && !currentCheckin && checkInDueState.isDueToday);
-    const hasDailyMetricsEnabled = !["calories", "steps", "sleep"].every((key) => user.hiddenGoals?.includes(key));
     const isBodyweightEnabled = !user.hiddenGoals?.includes("weight");
     const isPremium = PREMIUM_ROLES.has(user.role);
     const metricsBeforeWorkout = Boolean(todayCompleted || !todayWorkout);
@@ -577,7 +444,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
     };
 
     const renderDailyMetrics = () => {
-        if (!hasDailyMetricsEnabled && !isBodyweightEnabled) return null;
+        if (!isBodyweightEnabled) return null;
 
         const bodyweightSparklinePoints = buildBodyweightSparklinePoints(bodyweightHistory);
         const canOpenBodyweightProgress = isPremium && isBodyweightEnabled;
@@ -633,7 +500,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
                 <div className="flex items-center gap-2">
                     <Activity className="w-4 h-4 text-brand-400" />
-                    <h3 className="text-sm font-black uppercase tracking-widest text-fg">Daily Metrics</h3>
+                    <h3 className="text-sm font-black uppercase tracking-widest text-fg">Bodyweight</h3>
                 </div>
                 <div className="flex items-center gap-2">
                     <button
@@ -667,7 +534,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                 </div>
             </div>
 
-            <div id="weekly-metrics" className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+            <div id="weekly-metrics" className="grid grid-cols-1 gap-2">
                 {!user.hiddenGoals?.includes("weight") && (
                     <div className={cn(
                         "card p-2.5 sm:p-3 flex items-center gap-2 transition-all relative overflow-hidden group",
@@ -714,96 +581,6 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                         )}
                     </div>
                 )}
-
-                {[
-                    {
-                        key: "calories" as const,
-                        label: "Calories",
-                        unit: "kcal",
-                        icon: Utensils,
-                        value: calories,
-                        setValue: setCalories,
-                        logged: caloriesLogged,
-                        latest: latestCalories,
-                        target: dailyMetrics.targets.targetCalories,
-                        step: "1",
-                    },
-                    {
-                        key: "steps" as const,
-                        label: "Steps",
-                        unit: "steps",
-                        icon: Footprints,
-                        value: steps,
-                        setValue: setSteps,
-                        logged: stepsLogged,
-                        latest: latestSteps,
-                        target: dailyMetrics.targets.targetSteps,
-                        step: "1",
-                    },
-                    {
-                        key: "sleepHours" as const,
-                        label: "Sleep",
-                        unit: "hrs",
-                        icon: Moon,
-                        value: sleepHours,
-                        setValue: setSleepHours,
-                        logged: sleepLogged,
-                        latest: latestSleepHours,
-                        target: dailyMetrics.targets.targetSleepHours,
-                        step: "0.1",
-                    },
-                ]
-                .filter(m => {
-                    const matchKey = m.key === "sleepHours" ? "sleep" : m.key;
-                    return !user.hiddenGoals?.includes(matchKey);
-                })
-                .map((metric) => {
-                    const Icon = metric.icon;
-                    return (
-                        <div
-                            key={metric.key}
-                            className={cn(
-                                "card p-2.5 sm:p-3 flex items-center gap-2 transition-all relative overflow-hidden",
-                                metric.logged
-                                    ? "bg-success/10 border-success/30 shadow-glow-success-sm"
-                                    : "bg-surface-muted/10 border-brand-500/10 hover:border-brand-500/30"
-                            )}
-                        >
-                            <div className={cn(
-                                "w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center shrink-0",
-                                metric.logged ? "bg-success/15" : "bg-brand-500/5"
-                            )}>
-                                {metric.logged ? <Check className="w-3.5 h-3.5 text-success" /> : <Icon className="w-3.5 h-3.5 text-brand-400" />}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                                <p className={cn(
-                                    "text-[8px] font-black tracking-widest uppercase",
-                                    metric.logged ? "text-success" : "text-fg-subtle"
-                                )}>
-                                    {metric.label}
-                                </p>
-                                <div className="flex items-baseline gap-1">
-                                    <input
-                                        type="number"
-                                        step={metric.step}
-                                        value={metric.value}
-                                        onChange={(e) => metric.setValue(e.target.value)}
-                                        onBlur={(e) => handleUpdateDailyMetric(metric.key, e.target.value)}
-                                        className="w-14 sm:w-16 bg-transparent text-base sm:text-lg font-black text-fg focus:outline-none focus:text-brand-400 transition-colors"
-                                        placeholder={metric.latest ? metric.latest.toString() : metric.target ? metric.target.toString() : "--"}
-                                    />
-                                    <span className="text-[9px] font-semibold text-fg-muted uppercase">{metric.unit}</span>
-                                </div>
-                                <p className={cn(
-                                    "text-[9px] font-bold mt-0.5 truncate",
-                                    metric.logged ? "text-success" : "text-fg-subtle"
-                                )}>
-                                    {dailyMetricStatus(metric.key, metric.logged)}
-                                </p>
-                            </div>
-                        </div>
-                    );
-                })}
             </div>
             {bodyweightChart && (
                 canOpenBodyweightProgress ? (

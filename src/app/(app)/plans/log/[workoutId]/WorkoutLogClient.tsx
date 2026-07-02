@@ -1009,7 +1009,7 @@ export function WorkoutLogClient({
 
                     {scheduledDayLabel && (
                         <div className="card p-3 border-brand-500/30 bg-brand-950/20 text-center">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">Logging for</p>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">Logging for this date</p>
                             <p className="text-sm font-bold text-fg mt-0.5">{scheduledDayLabel}</p>
                         </div>
                     )}
