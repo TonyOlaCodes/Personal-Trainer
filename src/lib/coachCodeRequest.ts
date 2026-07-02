@@ -182,7 +182,7 @@ export async function listPendingCoachCodeRequestsForAdmin() {
         WHERE r.status IN ('PENDING', 'DISPATCHED', 'CLAIMED')
           AND u."isDeleted" = false
           AND u."isDeactivated" = false
-        ORDER BY r."createdAt" ASC
+        ORDER BY r."createdAt" DESC
     `;
 
     return rows.map((row) => ({
@@ -339,7 +339,7 @@ export async function listCoachCodeRequestsForCoach(coachId: string) {
           AND r.status = 'DISPATCHED'
           AND u."isDeleted" = false
           AND u."isDeactivated" = false
-        ORDER BY r."createdAt" ASC
+        ORDER BY r."createdAt" DESC
     `;
 
     return rows.map((row) => ({
