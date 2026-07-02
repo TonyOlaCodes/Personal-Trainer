@@ -9,7 +9,7 @@ import { resolveUploadUrl } from "@/lib/uploadUrls";
 interface CoachCodeRequestItem {
     id: string;
     status: string;
-    displayStatus: "PENDING" | "DISPATCHED" | "HANDLED";
+    displayStatus: "PENDING" | "DISPATCHED" | "HANDLING" | "ASSIGNED";
     statusLabel: string;
     statusDetail: string;
     createdAt: string;
@@ -124,7 +124,7 @@ export function AdminCoachCodeRequestsPanel({ coaches }: Props) {
             <div>
                 <h3 className="heading-3 mb-1">Coach Code Requests</h3>
                 <p className="text-sm text-fg-muted">
-                    Review onboarding requests from free users who need a coach access code. Handle them yourself or dispatch to coaches.
+                    Review access-code requests. Handling means someone is talking to them; assigned means they got access.
                 </p>
             </div>
 
@@ -136,7 +136,18 @@ export function AdminCoachCodeRequestsPanel({ coaches }: Props) {
                 requests.map((request) => {
                     const label = request.user.name?.trim() || request.user.email;
                     const coachChoices = coaches.filter((coach) => coach.id !== request.user.id);
-                    const canAct = request.displayStatus === "PENDING";
+                    const canHandleSelf = request.displayStatus === "PENDING";
+                    const canDispatch = request.displayStatus !== "ASSIGNED";
+                    const dispatchTitle = request.displayStatus === "HANDLING"
+                        ? "Redispatch to coaches"
+                        : request.displayStatus === "DISPATCHED"
+                            ? "Send to more coaches"
+                            : "Dispatch to coaches";
+                    const dispatchButtonLabel = request.displayStatus === "HANDLING"
+                        ? "Redispatch selected coaches"
+                        : request.displayStatus === "DISPATCHED"
+                            ? "Send to selected coaches"
+                            : "Dispatch selected coaches";
 
                     return (
                         <div key={request.id} className="card p-5 space-y-4">
@@ -160,8 +171,10 @@ export function AdminCoachCodeRequestsPanel({ coaches }: Props) {
                                     "px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border",
                                     request.displayStatus === "PENDING"
                                         ? "bg-warning-500/10 text-warning border-warning/20"
-                                        : request.displayStatus === "HANDLED"
+                                        : request.displayStatus === "ASSIGNED"
                                             ? "bg-success/10 text-success border-success/20"
+                                            : request.displayStatus === "HANDLING"
+                                                ? "bg-warning/10 text-warning border-warning/20"
                                         : "bg-brand-500/10 text-brand-300 border-brand/20"
                                 )}>
                                     {request.statusLabel}
@@ -176,7 +189,7 @@ export function AdminCoachCodeRequestsPanel({ coaches }: Props) {
                                     <MessageCircle className="w-3.5 h-3.5" />
                                     Message user
                                 </Link>
-                                {canAct && (
+                                {canHandleSelf && (
                                     <button
                                         type="button"
                                         onClick={() => handleSelf(request.id)}
@@ -189,9 +202,9 @@ export function AdminCoachCodeRequestsPanel({ coaches }: Props) {
                                 )}
                             </div>
 
-                            {canAct && coachChoices.length > 0 && (
+                            {canDispatch && coachChoices.length > 0 && (
                                 <div className="border-t border-surface-border/50 pt-4 space-y-3">
-                                    <p className="text-xs font-black uppercase tracking-widest text-fg-subtle">Dispatch to coaches</p>
+                                    <p className="text-xs font-black uppercase tracking-widest text-fg-subtle">{dispatchTitle}</p>
                                     <div className="flex flex-wrap gap-2">
                                         {coachChoices.map((coach) => {
                                             const selected = (selectedCoaches[request.id] ?? []).includes(coach.id);
@@ -219,7 +232,7 @@ export function AdminCoachCodeRequestsPanel({ coaches }: Props) {
                                         className="btn-primary text-xs"
                                     >
                                         {dispatchingId === request.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                                        Dispatch selected coaches
+                                        {dispatchButtonLabel}
                                     </button>
                                 </div>
                             )}

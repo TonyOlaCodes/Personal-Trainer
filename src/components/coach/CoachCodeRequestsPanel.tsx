@@ -9,7 +9,7 @@ import { resolveUploadUrl } from "@/lib/uploadUrls";
 interface CoachCodeRequestItem {
     dispatchId: string;
     requestId: string;
-    displayStatus: "PENDING" | "DISPATCHED" | "HANDLED";
+    displayStatus: "PENDING" | "DISPATCHED" | "HANDLING" | "ASSIGNED";
     statusLabel: string;
     statusDetail: string;
     createdAt: string;
@@ -63,7 +63,7 @@ export function CoachCodeRequestsPanel() {
             <div>
                 <h3 className="heading-3 mb-1">Coach Code Requests</h3>
                 <p className="text-sm text-fg-muted">
-                    These users requested a coach access code. Message them to help — the first coach to engage can claim the request.
+                    These users requested a coach access code. Message them if you can help.
                 </p>
             </div>
 
@@ -90,8 +90,10 @@ export function CoachCodeRequestsPanel() {
                             </div>
                             <span className={cn(
                                 "px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border shrink-0",
-                                request.displayStatus === "HANDLED"
+                                request.displayStatus === "ASSIGNED"
                                     ? "bg-success/10 text-success border-success/20"
+                                    : request.displayStatus === "HANDLING"
+                                        ? "bg-warning/10 text-warning border-warning/20"
                                     : "bg-brand-500/10 text-brand-300 border-brand/20"
                             )}>
                                 {request.statusLabel}

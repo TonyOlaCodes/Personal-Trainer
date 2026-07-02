@@ -7,7 +7,7 @@ import { membershipLabel } from "@/lib/membership";
 
 export type CoachCodeRequestStatus = "PENDING" | "DISPATCHED" | "CLAIMED" | "RESOLVED" | "DISMISSED";
 export type CoachCodeRequestDispatchStatus = "PENDING" | "MESSAGED" | "IGNORED" | "CLAIMED";
-export type CoachCodeRequestDisplayStatus = "PENDING" | "DISPATCHED" | "HANDLED";
+export type CoachCodeRequestDisplayStatus = "PENDING" | "DISPATCHED" | "HANDLING" | "ASSIGNED";
 
 let coachCodeRequestTablesReady = false;
 
@@ -63,8 +63,8 @@ function resolveRequestDisplayStatus(input: {
 
     if (input.userRole !== "FREE") {
         return {
-            displayStatus: "HANDLED" as CoachCodeRequestDisplayStatus,
-            statusLabel: "Handled",
+            displayStatus: "ASSIGNED" as CoachCodeRequestDisplayStatus,
+            statusLabel: "Assigned",
             statusDetail: coachName
                 ? `Coach: ${coachName}`
                 : `${membershipLabel(input.userRole)} access granted`,
@@ -74,8 +74,8 @@ function resolveRequestDisplayStatus(input: {
     if (input.status === "CLAIMED") {
         const handlerRole = input.claimedByRole === "COACH" ? "Coach" : "Admin";
         return {
-            displayStatus: "HANDLED" as CoachCodeRequestDisplayStatus,
-            statusLabel: "Handled",
+            displayStatus: "HANDLING" as CoachCodeRequestDisplayStatus,
+            statusLabel: "Handling",
             statusDetail: handlerName ? `${handlerRole}: ${handlerName}` : "Access not granted yet",
         };
     }
@@ -320,14 +320,15 @@ export async function adminDispatchCoachCodeRequest(adminId: string, requestId: 
         throw new Error("Select at least one coach");
     }
 
-    const rows = await prisma.$queryRaw<Array<{ id: string; userId: string; status: CoachCodeRequestStatus }>>`
-        SELECT id, "userId", status
-        FROM "coach_code_requests"
-        WHERE id = ${requestId}
+    const rows = await prisma.$queryRaw<Array<{ id: string; userId: string; status: CoachCodeRequestStatus; userRole: string }>>`
+        SELECT r.id, r."userId", r.status, u.role as "userRole"
+        FROM "coach_code_requests" r
+        JOIN "users" u ON u.id = r."userId"
+        WHERE r.id = ${requestId}
         LIMIT 1
     `;
     const request = rows[0];
-    if (!request || request.status !== "PENDING") {
+    if (!request || !["PENDING", "DISPATCHED", "CLAIMED"].includes(request.status) || request.userRole !== "FREE") {
         throw new Error("Request is no longer available for dispatch");
     }
 
@@ -355,7 +356,9 @@ export async function adminDispatchCoachCodeRequest(adminId: string, requestId: 
     await prisma.$transaction(async (tx) => {
         await tx.$executeRaw`
             UPDATE "coach_code_requests"
-            SET "status" = 'DISPATCHED', "updatedAt" = ${now}
+            SET "status" = 'DISPATCHED',
+                "claimedById" = NULL,
+                "updatedAt" = ${now}
             WHERE id = ${requestId}
         `;
 
@@ -364,7 +367,8 @@ export async function adminDispatchCoachCodeRequest(adminId: string, requestId: 
             await tx.$executeRaw`
                 INSERT INTO "coach_code_request_dispatches" ("id", "requestId", "coachId", "status", "createdAt")
                 VALUES (${dispatchId}, ${requestId}, ${coach.id}, 'PENDING', ${now})
-                ON CONFLICT ("requestId", "coachId") DO NOTHING
+                ON CONFLICT ("requestId", "coachId") DO UPDATE SET
+                    "status" = 'PENDING'
             `;
         }
     });
