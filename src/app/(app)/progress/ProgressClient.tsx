@@ -170,6 +170,7 @@ function isWeightChangeTowardGoal(
 
 export function ProgressClient({ userRole, hiddenGoals }: Props) {
     const isPremium = ["PREMIUM", "GENERAL_PREMIUM", "COACH", "SUPER_ADMIN"].includes(userRole);
+    const showFreeAccessLock = !isPremium;
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [selectedExercise, setSelectedExercise] = useState<string>("");
@@ -201,11 +202,6 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
     }, []);
 
     const loadStats = useCallback(async (options?: { silent?: boolean }) => {
-        if (!isPremium) {
-            setLoading(false);
-            return;
-        }
-
         if (!options?.silent) setLoading(true);
 
         try {
@@ -251,13 +247,13 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
         } finally {
             setLoading(false);
         }
-    }, [isPremium, persistPinnedExercises]);
+    }, [persistPinnedExercises]);
 
     useEffect(() => {
         void loadStats();
     }, [loadStats]);
 
-    useWorkoutStatsRefresh(isPremium, loadStats);
+    useWorkoutStatsRefresh(true, loadStats);
 
     const weeklyVolumes = useMemo(() => data?.volumes?.weekly ?? [], [data]);
     const activeWeekIndex = selectedWeekIndex ?? Math.max(0, weeklyVolumes.length - 1);
@@ -362,17 +358,6 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
 
     if (!isHydrated) return null;
 
-    if (!isPremium) {
-        return (
-            <div className="p-4 sm:p-10">
-                <PremiumLockScreen
-                    title="Progress Analytics"
-                    description="Advanced progress tracking is available to Premium members. Upgrade for strength charts, PR tracking, and session history."
-                />
-            </div>
-        );
-    }
-
     if (loading) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[500px] gap-4">
@@ -382,13 +367,33 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
         );
     }
 
+    const freeAccessOverlay = showFreeAccessLock ? (
+        <div className="absolute inset-0 z-20 flex items-start justify-center px-4 pt-6 sm:pt-10">
+            <div className="sticky top-24 w-full max-w-xl">
+                <PremiumLockScreen
+                    title="Progress Analytics"
+                    description="Your real progress is waiting underneath. Enter an access code or request full access to unlock the charts, PRs, and session history."
+                />
+            </div>
+        </div>
+    ) : null;
+
     if (!data || data.totalWorkouts === 0) {
         return (
-            <div className="p-12 text-center card max-w-2xl mx-auto mt-12 bg-surface-muted/30">
-                <Dumbbell className="w-12 h-12 text-brand-400/40 mx-auto mb-4" />
-                <h3 className="heading-3 mb-2">Build Your First Data Point</h3>
-                <p className="text-sm text-fg-muted mb-6">Complete a workout to see your progress come to life.</p>
-                <Link href="/dashboard" className="btn-primary mx-auto">Go to Today&apos;s Workout</Link>
+            <div className="relative p-4 sm:p-10 min-h-[640px]">
+                {freeAccessOverlay}
+                <div
+                    className={cn(
+                        "p-12 text-center card max-w-2xl mx-auto mt-12 bg-surface-muted/30 transition-all duration-300",
+                        showFreeAccessLock && "pointer-events-none select-none blur-sm opacity-60"
+                    )}
+                    aria-hidden={showFreeAccessLock}
+                >
+                    <Dumbbell className="w-12 h-12 text-brand-400/40 mx-auto mb-4" />
+                    <h3 className="heading-3 mb-2">Build Your First Data Point</h3>
+                    <p className="text-sm text-fg-muted mb-6">Complete a workout to see your progress come to life.</p>
+                    <Link href="/dashboard" className="btn-primary mx-auto">Go to Today&apos;s Workout</Link>
+                </div>
             </div>
         );
     }
@@ -435,7 +440,15 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
     ].filter(card => !hiddenGoals?.includes(card.key));
 
     return (
-        <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8 animate-fade-in mb-24 lg:mb-12">
+        <div className="relative">
+            {freeAccessOverlay}
+            <div
+                className={cn(
+                    "p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8 animate-fade-in mb-24 lg:mb-12 transition-all duration-300",
+                    showFreeAccessLock && "pointer-events-none select-none blur-sm opacity-60"
+                )}
+                aria-hidden={showFreeAccessLock}
+            >
 
             {/* ── WEEKLY PULSE ── */}
             <section>
@@ -1115,6 +1128,7 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                     </div>
                 </div>
             )}
+            </div>
         </div>
     );
 }
