@@ -17,6 +17,7 @@ import {
     type SocialLinks,
 } from "@/lib/profilePrivacy";
 import { getPublicProfileHref } from "@/lib/profileNavigation";
+import { siteConfig } from "@/lib/site";
 
 interface Props {
     user: {
@@ -429,7 +430,7 @@ export function SettingsClient({ user }: Props) {
         }
     };
 
-    const supportEmail = process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? "tonyolajide@gmail.com";
+    const supportEmail = process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? siteConfig.contactEmail;
 
     return (
         <>

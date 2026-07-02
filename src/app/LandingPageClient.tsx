@@ -8,14 +8,12 @@ import {
   BarChart3,
   MessageSquare,
   Shield,
-  ChevronRight,
   Check,
   Dumbbell,
   Target,
   TrendingUp,
   ArrowRight,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { landingMediaSlot } from "@/lib/landingMedia";
 import { siteConfig } from "@/lib/site";
 import { BrandLogo } from "@/components/shared/BrandLogo";
@@ -81,8 +79,6 @@ const plans = [
       "Calendar view",
       "Multiple plans saved",
     ],
-    cta: "Start Free",
-    href: "/sign-up",
     highlight: false,
   },
   {
@@ -98,8 +94,8 @@ const plans = [
       "Direct coach chat",
       "General community chat",
     ],
-    cta: "Get Access Code",
-    href: "/sign-up",
+    helperText:
+      "Premium is unlocked using an access code provided by your coach after you create your account.",
     highlight: true,
   },
 ];
@@ -107,7 +103,7 @@ const plans = [
 export default function LandingPageClient() {
   const { isLoaded, isSignedIn } = useAuth();
   return (
-    <div className="min-h-screen bg-surface text-fg overflow-hidden landing-dumbbell-cursor">
+    <div className="min-h-screen bg-surface text-fg overflow-hidden landing-page">
       <LandingVideoWarmup />
 
       {/* ─── Navbar ───────────────────────────────── */}
@@ -128,7 +124,7 @@ export default function LandingPageClient() {
             ) : !isSignedIn ? (
               <>
                 <SignInButton mode="modal" fallbackRedirectUrl="/onboarding">
-                  <button className="btn-ghost text-sm hidden sm:flex">Sign In</button>
+                  <button className="btn-ghost text-sm">Sign In</button>
                 </SignInButton>
                 <SignUpButton mode="modal" fallbackRedirectUrl="/onboarding">
                   <button className="btn-primary btn-sm">Get Started</button>
@@ -164,16 +160,16 @@ export default function LandingPageClient() {
           <div className="max-w-3xl mx-auto text-center animate-fade-in">
             <div className="badge-brand mb-4 sm:mb-6 mx-auto w-max text-[10px] sm:text-xs">
               <Zap className="w-3 h-3" />
-              Premium Fitness Coaching
+              {siteConfig.motto}
             </div>
 
             <h1 className="text-[1.75rem] leading-[1.1] sm:text-5xl xl:text-7xl font-extrabold tracking-tight mb-4 sm:mb-6 sm:leading-[1.05]">
-              Train with purpose.<br />
-              <span className="text-gradient">Track every session.</span>
+              Train smarter.<br />
+              <span className="text-gradient">Track everything.</span>
             </h1>
 
             <p className="text-[0.9375rem] sm:text-xl text-fg-muted max-w-xl mx-auto mb-6 sm:mb-10 text-balance leading-relaxed">
-              A platform for athletes and coaches — plans, logging, check-ins, and messaging in one place.
+              Use it on your own with built-in plans and logging — or connect with a coach when you want more.
             </p>
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-2.5 sm:gap-4 max-w-xs sm:max-w-none mx-auto">
@@ -268,11 +264,11 @@ export default function LandingPageClient() {
             <p className="subheading">Premium is unlocked via a coach-provided access code.</p>
           </div>
 
-          <div className="grid sm:grid-cols-2 gap-4 sm:gap-6">
+          <div className="grid sm:grid-cols-2 gap-4 sm:gap-6 items-stretch">
             {plans.map((p) => (
               <div
                 key={p.name}
-                className={`relative rounded-2xl p-5 sm:p-8 border ${p.highlight
+                className={`relative flex flex-col h-full rounded-2xl p-5 sm:p-8 border ${p.highlight
                   ? "border-brand-600/60 bg-surface-card shadow-glow-sm"
                   : "card"
                   }`}
@@ -286,7 +282,7 @@ export default function LandingPageClient() {
                 <p className="text-3xl sm:text-4xl font-extrabold mb-1">{p.price}</p>
                 <p className="text-fg-subtle text-[10px] sm:text-xs mb-3 sm:mb-4">{p.period}</p>
                 <p className="text-xs sm:text-sm text-fg-muted mb-4 sm:mb-6">{p.desc}</p>
-                <ul className="space-y-2 sm:space-y-2.5 mb-6 sm:mb-8">
+                <ul className="space-y-2 sm:space-y-2.5 flex-1">
                   {p.features.map((f) => (
                     <li key={f} className="flex items-start gap-2 sm:gap-2.5 text-xs sm:text-sm">
                       <Check className="w-4 h-4 text-success mt-0.5 flex-shrink-0" />
@@ -294,20 +290,10 @@ export default function LandingPageClient() {
                     </li>
                   ))}
                 </ul>
-                {!isLoaded ? (
-                  <div className="h-11 w-full bg-surface-muted animate-pulse rounded-xl" />
-                ) : !isSignedIn ? (
-                  <SignUpButton mode="modal" fallbackRedirectUrl="/onboarding">
-                    <button className={cn("w-full h-11 rounded-xl font-bold flex items-center justify-center gap-2 transition-all", p.highlight ? "btn-primary" : "btn-secondary")}>
-                      {p.cta}
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
-                  </SignUpButton>
-                ) : (
-                  <Link href="/dashboard" className={cn("w-full h-11 rounded-xl font-bold flex items-center justify-center gap-2 transition-all", p.highlight ? "btn-primary" : "btn-secondary")}>
-                    Go to Dashboard
-                    <ChevronRight className="w-4 h-4" />
-                  </Link>
+                {"helperText" in p && p.helperText && (
+                  <p className="mt-5 sm:mt-6 pt-4 sm:pt-5 border-t border-surface-border/40 text-[11px] sm:text-xs text-fg-subtle leading-relaxed">
+                    {p.helperText}
+                  </p>
                 )}
               </div>
             ))}
@@ -329,15 +315,15 @@ export default function LandingPageClient() {
             <div className="absolute inset-0 bg-gradient-to-t from-surface/95 via-surface/40 to-surface/20 pointer-events-none" />
             <div className="relative">
             <h2 className="heading-1 mb-3 sm:mb-4">Ready to get started?</h2>
-            <p className="subheading mb-6 sm:mb-8">
-              Create a free account and start logging workouts today.
+            <p className="subheading mb-6 sm:mb-8 max-w-xl mx-auto">
+              Create a free account and start logging workouts today. If you&apos;re working with a coach, you can redeem your access code during onboarding or later in Settings.
             </p>
             {!isLoaded ? (
               <div className="h-12 w-48 bg-surface-muted animate-pulse rounded-xl mx-auto" />
             ) : !isSignedIn ? (
               <SignUpButton mode="modal" fallbackRedirectUrl="/onboarding">
                 <button className="btn-primary sm:btn-lg mx-auto w-max">
-                  Get Started — it&apos;s free
+                  Get Started • It&apos;s Free
                   <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
                 </button>
               </SignUpButton>

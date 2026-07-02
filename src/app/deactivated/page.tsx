@@ -2,6 +2,7 @@
 
 import { useClerk } from "@clerk/nextjs";
 import { AlertCircle, LogOut } from "lucide-react";
+import { siteConfig } from "@/lib/site";
 
 export default function DeactivatedPage() {
     const { signOut } = useClerk();
@@ -16,7 +17,7 @@ export default function DeactivatedPage() {
                     <h2 className="text-xl font-black text-fg uppercase tracking-tight">Account Deactivated</h2>
                     <p className="text-sm text-fg-muted leading-relaxed">
                         Your account has been deactivated by your coach or administrator. Contact{" "}
-                        <a href="mailto:tonyolajide@gmail.com" className="text-brand-400 underline">tonyolajide@gmail.com</a>{" "}
+                        <a href={`mailto:${siteConfig.contactEmail}`} className="text-brand-400 underline">{siteConfig.contactEmail}</a>{" "}
                         for help.
                     </p>
                 </div>

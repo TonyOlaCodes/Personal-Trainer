@@ -42,7 +42,8 @@ export const LANDING_MEDIA_FILES = {
         after: "tranform_after.jpg",
     },
     photos: {
-        celebration: "celebration.png",
+        celebration: "celebration.webp",
+        ogShare: "og-share.png",
     },
     screenshots: {},
     icons: {},

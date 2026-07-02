@@ -31,7 +31,7 @@ export const siteConfig = {
         "coach client app",
     ],
     locale: "en_GB",
-    contactEmail: "tonyolajide@gmail.com",
+    contactEmail: "support@tolgcoaching.com",
 } as const;
 
 export function siteUrl(): string {

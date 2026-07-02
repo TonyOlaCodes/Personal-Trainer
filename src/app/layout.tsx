@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { dark } from "@clerk/themes";
 import { siteConfig, siteUrl } from "@/lib/site";
+import { landingMediaSlot } from "@/lib/landingMedia";
 import "./globals.css";
 
 const inter = Inter({
@@ -31,11 +32,20 @@ export const metadata: Metadata = {
     siteName: siteConfig.name,
     title: `${siteConfig.name} — ${siteConfig.tagline}`,
     description: siteConfig.description,
+    images: [
+      {
+        url: landingMediaSlot("photos", "ogShare"),
+        width: 1200,
+        height: 630,
+        alt: `${siteConfig.name} — ${siteConfig.tagline}`,
+      },
+    ],
   },
   twitter: {
-    card: "summary",
+    card: "summary_large_image",
     title: `${siteConfig.name} — ${siteConfig.tagline}`,
     description: siteConfig.shortDescription,
+    images: [landingMediaSlot("photos", "ogShare")],
   },
   robots: {
     index: true,

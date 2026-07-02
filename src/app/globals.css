@@ -312,16 +312,11 @@
   animation: arrowPulse 2.2s ease-in-out infinite;
 }
 
-/* Landing page — custom dumbbell cursor */
-.landing-dumbbell-cursor,
-.landing-dumbbell-cursor * {
-  cursor: url("/landing/icons/dumbbell-cursor.svg") 16 16, auto !important;
-}
-
-.landing-dumbbell-cursor .heading-1 {
+/* Landing page section typography */
+.landing-page .heading-1 {
   @apply text-2xl sm:text-4xl;
 }
 
-.landing-dumbbell-cursor .subheading {
+.landing-page .subheading {
   @apply text-xs sm:text-sm;
 }

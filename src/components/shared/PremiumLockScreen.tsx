@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Lock, Ticket, Mail } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { siteConfig } from "@/lib/site";
 
 interface Props {
     title?: string;
@@ -78,7 +79,7 @@ export function PremiumLockScreen({
 
             <div className="pt-6 border-t border-surface-border">
                 <p className="text-xs text-fg-subtle mb-3">Want to upgrade or work with a coach?</p>
-                <a href="mailto:tonyolajide@gmail.com" className="btn-ghost btn-sm mx-auto text-brand-400 hover:text-brand-300">
+                <a href={`mailto:${siteConfig.contactEmail}`} className="btn-ghost btn-sm mx-auto text-brand-400 hover:text-brand-300">
                     <Mail className="w-4 h-4" />
                     Book Free Consultation
                 </a>

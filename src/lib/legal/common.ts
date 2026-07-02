@@ -1,6 +1,6 @@
 import { siteConfig } from "@/lib/site";
 
-export const LEGAL_LAST_UPDATED = "25 June 2026";
+export const LEGAL_LAST_UPDATED = "2 July 2026";
 
 export const LEGAL_DISCLAIMER =
     "This document is provided as a practical template for TOLGcoaching. It should be reviewed by qualified legal counsel before commercial launch or reliance.";
