@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Lock, Ticket, Mail } from "lucide-react";
+import { Lock, Ticket } from "lucide-react";
+import { GainAccessModal } from "@/components/shared/GainAccessModal";
 import { cn } from "@/lib/utils";
-import { siteConfig } from "@/lib/site";
 
 interface Props {
     title?: string;
@@ -17,6 +17,7 @@ export function PremiumLockScreen({
     const [code, setCode] = useState("");
     const [codeStatus, setCodeStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
     const [codeMsg, setCodeMsg] = useState("");
+    const [showGainAccess, setShowGainAccess] = useState(false);
 
     const redeemCode = async () => {
         setCodeStatus("loading");
@@ -79,11 +80,15 @@ export function PremiumLockScreen({
 
             <div className="pt-6 border-t border-surface-border">
                 <p className="text-xs text-fg-subtle mb-3">Want to upgrade or work with a coach?</p>
-                <a href={`mailto:${siteConfig.contactEmail}`} className="btn-ghost btn-sm mx-auto text-brand-400 hover:text-brand-300">
-                    <Mail className="w-4 h-4" />
-                    Book Free Consultation
-                </a>
+                <button
+                    type="button"
+                    onClick={() => setShowGainAccess(true)}
+                    className="btn-ghost btn-sm mx-auto text-brand-400 hover:text-brand-300"
+                >
+                    Gain access
+                </button>
             </div>
+            <GainAccessModal open={showGainAccess} onClose={() => setShowGainAccess(false)} />
         </div>
     );
 }
