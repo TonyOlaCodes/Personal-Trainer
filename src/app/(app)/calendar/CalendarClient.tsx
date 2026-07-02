@@ -838,7 +838,7 @@ export function CalendarClient({
                                                 <PlayCircle className="w-4 h-4 mr-2 group-hover:rotate-12 transition-transform" />
                                             )}
                                             {resumeSession
-                                                ? "Resume Session"
+                                                ? "Resume Workout"
                                                 : selectedDateKey < todayKey
                                                     ? "Log Workout"
                                                     : "Start Workout"}
@@ -875,7 +875,7 @@ export function CalendarClient({
                                         ) : (
                                             <PlayCircle className="w-4 h-4 mr-2 group-hover:rotate-12 transition-transform" />
                                         )}
-                                        {resumeSession ? "Resume Session" : "View Workout"}
+                                        {resumeSession ? "Resume Workout" : "View Workout"}
                                     </ReturnLink>
                                 ) : (
                                     <ReturnLink
@@ -890,7 +890,7 @@ export function CalendarClient({
                                         ) : (
                                             <PlayCircle className="w-5 h-5 mr-3 group-hover:rotate-12 transition-transform" />
                                         )}
-                                        {resumeSession ? "Resume Session" : "View Workout"}
+                                        {resumeSession ? "Resume Workout" : "View Workout"}
                                     </ReturnLink>
                                 )}
                             </div>

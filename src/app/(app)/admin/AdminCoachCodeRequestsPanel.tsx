@@ -9,6 +9,10 @@ import { resolveUploadUrl } from "@/lib/uploadUrls";
 interface CoachCodeRequestItem {
     id: string;
     status: string;
+    dispatches: Array<{
+        coachId: string;
+        status: "PENDING" | "MESSAGED" | "IGNORED" | "CLAIMED";
+    }>;
     displayStatus: "PENDING" | "DISPATCHED" | "HANDLING" | "ASSIGNED";
     statusLabel: string;
     statusDetail: string;
@@ -59,6 +63,10 @@ export function AdminCoachCodeRequestsPanel({ coaches }: Props) {
     }, [loadRequests]);
 
     const toggleCoach = (requestId: string, coachId: string) => {
+        const request = requests.find((item) => item.id === requestId);
+        const ignored = request?.dispatches.some((dispatch) => dispatch.coachId === coachId && dispatch.status === "IGNORED");
+        if (ignored) return;
+
         setSelectedCoaches((prev) => {
             const current = prev[requestId] ?? [];
             const next = current.includes(coachId)
@@ -87,7 +95,13 @@ export function AdminCoachCodeRequestsPanel({ coaches }: Props) {
     };
 
     const handleDispatch = async (requestId: string) => {
-        const coachIds = selectedCoaches[requestId] ?? [];
+        const request = requests.find((item) => item.id === requestId);
+        const ignoredCoachIds = new Set(
+            request?.dispatches
+                .filter((dispatch) => dispatch.status === "IGNORED")
+                .map((dispatch) => dispatch.coachId) ?? []
+        );
+        const coachIds = (selectedCoaches[requestId] ?? []).filter((coachId) => !ignoredCoachIds.has(coachId));
         if (coachIds.length === 0) {
             alert("Select at least one coach.");
             return;
@@ -208,19 +222,27 @@ export function AdminCoachCodeRequestsPanel({ coaches }: Props) {
                                     <div className="flex flex-wrap gap-2">
                                         {coachChoices.map((coach) => {
                                             const selected = (selectedCoaches[request.id] ?? []).includes(coach.id);
+                                            const dispatch = request.dispatches.find((item) => item.coachId === coach.id);
+                                            const ignored = dispatch?.status === "IGNORED";
                                             return (
                                                 <button
                                                     key={coach.id}
                                                     type="button"
+                                                    disabled={ignored}
                                                     onClick={() => toggleCoach(request.id, coach.id)}
                                                     className={cn(
-                                                        "px-3 py-1.5 rounded-full text-xs font-semibold border transition-all",
-                                                        selected
+                                                        "px-3 py-1.5 rounded-full text-xs font-semibold border transition-all inline-flex items-center gap-1.5 disabled:cursor-not-allowed",
+                                                        ignored
+                                                            ? "border-danger/30 bg-danger/10 text-danger"
+                                                            : selected
                                                             ? "border-brand-600 bg-brand-950/60 text-brand-300"
                                                             : "border-surface-border bg-surface-muted text-fg-muted"
                                                     )}
                                                 >
                                                     {coach.name?.trim() || coach.email}
+                                                    {ignored && (
+                                                        <span className="text-[9px] font-black uppercase tracking-wider">Ignored</span>
+                                                    )}
                                                 </button>
                                             );
                                         })}

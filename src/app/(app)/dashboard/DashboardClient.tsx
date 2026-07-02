@@ -990,7 +990,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                                 {startingWorkout
                                     ? "Starting..."
                                     : localActiveSession?.workoutId === todayWorkout.id
-                                        ? "Resume Workout Session"
+                                        ? "Resume Workout"
                                         : "Start Workout"}
                             </button>
                         </div>

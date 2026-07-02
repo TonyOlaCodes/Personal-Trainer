@@ -993,7 +993,7 @@ export function WorkoutLogClient({
                         className="btn-primary btn-sm px-3 sm:px-4 shadow-glow-brand shrink-0 text-[10px] sm:text-xs font-black uppercase tracking-wider flex items-center gap-1.5"
                     >
                         <Flame className="w-3.5 h-3.5" />
-                        {isStarting ? "..." : "Start"}
+                        {isCheckingSession ? "..." : isStarting ? "..." : "Start"}
                     </button>
                 )}
             </div>
@@ -1470,7 +1470,7 @@ export function WorkoutLogClient({
                     className="btn-primary w-full max-w-2xl mx-auto h-14 text-sm font-black uppercase tracking-widest shadow-glow-brand flex items-center justify-center gap-2"
                 >
                     <Flame className="w-4.5 h-4.5" />
-                    {isStarting ? "Starting..." : "Start Workout"}
+                    {isCheckingSession ? "Checking..." : isStarting ? "Starting..." : "Start Workout"}
                 </button>
             </div>
             )}

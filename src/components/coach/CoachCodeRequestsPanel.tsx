@@ -8,6 +8,7 @@ import { resolveUploadUrl } from "@/lib/uploadUrls";
 
 interface CoachCodeRequestItem {
     dispatchId: string;
+    dispatchStatus: "PENDING" | "MESSAGED" | "IGNORED" | "CLAIMED";
     requestId: string;
     displayStatus: "PENDING" | "DISPATCHED" | "HANDLING" | "ASSIGNED";
     statusLabel: string;
@@ -69,9 +70,16 @@ export function CoachCodeRequestsPanel() {
 
             {requests.map((request) => {
                 const label = request.user.name?.trim() || request.user.email;
-                const canAct = request.displayStatus === "DISPATCHED";
+                const ignored = request.dispatchStatus === "IGNORED";
+                const canAct = request.displayStatus === "DISPATCHED" && !ignored;
                 return (
-                    <div key={request.dispatchId} className="p-4 rounded-2xl bg-surface-muted border border-surface-border space-y-3">
+                    <div
+                        key={request.dispatchId}
+                        className={cn(
+                            "p-4 rounded-2xl bg-surface-muted border border-surface-border space-y-3",
+                            ignored && "border-danger/30 bg-danger/5"
+                        )}
+                    >
                         <div className="flex items-start justify-between gap-3">
                             <div className="flex items-center gap-3 min-w-0">
                                 <div className="w-10 h-10 rounded-full overflow-hidden bg-brand-500/10 border border-surface-border flex items-center justify-center shrink-0">
@@ -90,20 +98,29 @@ export function CoachCodeRequestsPanel() {
                             </div>
                             <span className={cn(
                                 "px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border shrink-0",
-                                request.displayStatus === "ASSIGNED"
+                                ignored
+                                    ? "bg-danger/10 text-danger border-danger/20"
+                                    : request.displayStatus === "ASSIGNED"
                                     ? "bg-success/10 text-success border-success/20"
                                     : request.displayStatus === "HANDLING"
                                         ? "bg-warning/10 text-warning border-warning/20"
                                     : "bg-brand-500/10 text-brand-300 border-brand/20"
                             )}>
-                                {request.statusLabel}
+                                {ignored ? "Ignored" : request.statusLabel}
                             </span>
                         </div>
-                        {request.statusDetail && (
+                        {ignored ? (
+                            <p className="text-xs font-semibold text-danger">You ignored this request, so it cannot be handled from here.</p>
+                        ) : request.statusDetail && (
                             <p className="text-xs font-semibold text-fg-muted">{request.statusDetail}</p>
                         )}
                         <div className="flex flex-wrap gap-2">
-                            <Link href={`/chat?with=${request.user.id}`} className="btn-primary text-xs">
+                            <Link
+                                href={`/chat?with=${request.user.id}`}
+                                className={cn("text-xs", ignored ? "btn-secondary pointer-events-none opacity-50" : "btn-primary")}
+                                aria-disabled={ignored}
+                                tabIndex={ignored ? -1 : undefined}
+                            >
                                 <MessageCircle className="w-3.5 h-3.5" />
                                 Message user
                             </Link>

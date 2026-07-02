@@ -9,6 +9,11 @@ export type CoachCodeRequestStatus = "PENDING" | "DISPATCHED" | "CLAIMED" | "RES
 export type CoachCodeRequestDispatchStatus = "PENDING" | "MESSAGED" | "IGNORED" | "CLAIMED";
 export type CoachCodeRequestDisplayStatus = "PENDING" | "DISPATCHED" | "HANDLING" | "ASSIGNED";
 
+type CoachCodeRequestDispatchSummary = {
+    coachId: string;
+    status: CoachCodeRequestDispatchStatus;
+};
+
 let coachCodeRequestTablesReady = false;
 
 export async function ensureCoachCodeRequestTables() {
@@ -251,6 +256,30 @@ export async function listPendingCoachCodeRequestsForAdmin() {
         ORDER BY r."createdAt" DESC
     `;
 
+    const dispatchRows = await prisma.$queryRaw<
+        Array<{
+            requestId: string;
+            coachId: string;
+            status: CoachCodeRequestDispatchStatus;
+        }>
+    >`
+        SELECT d."requestId", d."coachId", d.status
+        FROM "coach_code_request_dispatches" d
+        JOIN "coach_code_requests" r ON r.id = d."requestId"
+        JOIN "users" u ON u.id = r."userId"
+        WHERE r.status IN ('PENDING', 'DISPATCHED', 'CLAIMED')
+          AND u."isDeleted" = false
+          AND u."isDeactivated" = false
+    `;
+    const requestIds = new Set(rows.map((row) => row.id));
+    const dispatchesByRequestId = new Map<string, CoachCodeRequestDispatchSummary[]>();
+    for (const dispatch of dispatchRows) {
+        if (!requestIds.has(dispatch.requestId)) continue;
+        const current = dispatchesByRequestId.get(dispatch.requestId) ?? [];
+        current.push({ coachId: dispatch.coachId, status: dispatch.status });
+        dispatchesByRequestId.set(dispatch.requestId, current);
+    }
+
     return rows.map((row) => {
         const display = resolveRequestDisplayStatus({
             status: row.status,
@@ -265,6 +294,7 @@ export async function listPendingCoachCodeRequestsForAdmin() {
         return {
             id: row.id,
             status: row.status,
+            dispatches: dispatchesByRequestId.get(row.id) ?? [],
             ...display,
             createdAt: row.createdAt.toISOString(),
             user: {
@@ -332,9 +362,21 @@ export async function adminDispatchCoachCodeRequest(adminId: string, requestId: 
         throw new Error("Request is no longer available for dispatch");
     }
 
+    const ignoredDispatches = await prisma.$queryRaw<Array<{ coachId: string }>>`
+        SELECT "coachId"
+        FROM "coach_code_request_dispatches"
+        WHERE "requestId" = ${requestId}
+          AND status = 'IGNORED'
+    `;
+    const ignoredCoachIds = new Set(ignoredDispatches.map((dispatch) => dispatch.coachId));
+    const dispatchableCoachIds = coachIds.filter((coachId) => !ignoredCoachIds.has(coachId));
+    if (dispatchableCoachIds.length === 0) {
+        throw new Error("Selected coach already ignored this request");
+    }
+
     const coaches = await prisma.user.findMany({
         where: {
-            id: { in: coachIds },
+            id: { in: dispatchableCoachIds },
             role: { in: ["COACH", "SUPER_ADMIN"] },
             isDeleted: false,
             isDeactivated: false,
@@ -426,11 +468,13 @@ export async function listCoachCodeRequestsForCoach(coachId: string) {
         JOIN "users" u ON u.id = r."userId"
         LEFT JOIN "users" coach ON coach.id = u."coachId"
         WHERE d."coachId" = ${coachId}
-          AND d.status = 'PENDING'
+          AND d.status IN ('PENDING', 'IGNORED')
           AND r.status = 'DISPATCHED'
           AND u."isDeleted" = false
           AND u."isDeactivated" = false
-        ORDER BY r."createdAt" DESC
+        ORDER BY
+            CASE WHEN d.status = 'PENDING' THEN 0 ELSE 1 END,
+            r."createdAt" DESC
     `;
 
     return rows.map((row) => {
