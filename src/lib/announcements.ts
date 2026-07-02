@@ -152,6 +152,7 @@ async function getTargetUserIds(announcement: Pick<AnnouncementRecord, "targetAu
 
 export async function listAnnouncementsForAdmin() {
     await ensureAnnouncementsTable();
+    await processDueAnnouncementNotifications();
 
     const rows = await prisma.$queryRaw<Array<Record<string, unknown>>>`
         SELECT
@@ -321,13 +322,13 @@ async function getDismissedAt(userId: string, announcementId: string) {
 }
 
 export async function ensureAnnouncementNotificationsSent(announcement: AnnouncementWithAdmin | AnnouncementRecord) {
-    if (announcement.notificationsSentAt) return;
-    if (!isAnnouncementLive(announcement)) return;
+    if (announcement.notificationsSentAt) return false;
+    if (!isAnnouncementLive(announcement)) return false;
 
     const full = "adminName" in announcement
         ? announcement
         : await getAnnouncementById(announcement.id);
-    if (!full) return;
+    if (!full) return false;
 
     const userIds = await getTargetUserIds(full);
     const preview = full.body.length > 100 ? `${full.body.slice(0, 97)}...` : full.body;
@@ -348,6 +349,8 @@ export async function ensureAnnouncementNotificationsSent(announcement: Announce
         SET "notificationsSentAt" = ${new Date()}
         WHERE "id" = ${full.id} AND "notificationsSentAt" IS NULL
     `;
+
+    return true;
 }
 
 export async function processDueAnnouncementNotifications() {
@@ -362,13 +365,16 @@ export async function processDueAnnouncementNotifications() {
           AND (a."expiresAt" IS NULL OR a."expiresAt" > NOW())
     `;
 
+    let sent = 0;
     for (const row of rows) {
         const announcement = {
             ...mapRow(row),
             adminName: String(row.adminName ?? row.adminEmail ?? "Admin"),
         };
-        await ensureAnnouncementNotificationsSent(announcement);
+        if (await ensureAnnouncementNotificationsSent(announcement)) sent++;
     }
+
+    return sent;
 }
 
 export async function getActiveAnnouncementsForUser(user: { id: string; role: string }) {

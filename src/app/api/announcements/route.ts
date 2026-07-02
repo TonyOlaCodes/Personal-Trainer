@@ -4,6 +4,7 @@ import {
     dismissAnnouncement,
     getActiveAnnouncementsForUser,
     getAnnouncementById,
+    processDueAnnouncementNotifications,
     serializeAnnouncement,
     userMatchesAudience,
     isAnnouncementLive,
@@ -16,6 +17,7 @@ export async function GET(req: Request) {
     const user = authResult.user;
     const url = new URL(req.url);
     const announcementId = url.searchParams.get("id");
+    await processDueAnnouncementNotifications();
 
     if (announcementId) {
         const announcement = await getAnnouncementById(announcementId);

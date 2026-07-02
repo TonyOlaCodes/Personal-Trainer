@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { AnnouncementModal, type AnnouncementView } from "@/components/shared/AnnouncementModal";
 
+const ANNOUNCEMENT_POLL_MS = 10000;
+
 function GlobalAnnouncementsInner() {
     const searchParams = useSearchParams();
     const [popup, setPopup] = useState<AnnouncementView | null>(null);
@@ -25,8 +27,20 @@ function GlobalAnnouncementsInner() {
         loadAnnouncements();
         const interval = setInterval(() => {
             if (document.visibilityState === "visible") loadAnnouncements();
-        }, 60000);
-        return () => clearInterval(interval);
+        }, ANNOUNCEMENT_POLL_MS);
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === "visible") loadAnnouncements();
+        };
+
+        window.addEventListener("focus", loadAnnouncements);
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener("focus", loadAnnouncements);
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+        };
     }, [loadAnnouncements]);
 
     useEffect(() => {
