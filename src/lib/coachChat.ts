@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { notifyClientOfCheckInRequest, notifyClientOfCoachBroadcast, notifyClientOfCoachMessage, notifyClientOfMissedWorkout, notifyClientOfPlanAssigned } from "@/lib/notifications";
 import { NOTIFICATION_TYPES, QUICK_REPLY_TEMPLATES } from "@/lib/notificationTypes";
-import { requireCoachCanEditClient } from "@/lib/apiAuth";
 import { assignCoachPlanToClient } from "@/lib/coachPlanAssignment";
 import type { User } from "@prisma/client";
 
@@ -34,6 +33,16 @@ export async function ensureMessageActionColumns() {
 export async function assignPlanToClient(coachId: string, clientId: string, planId: string) {
     const result = await assignCoachPlanToClient({ coachId, clientId, planId });
     return result.plan;
+}
+
+async function requireOwnActiveClient(coach: Pick<User, "id">, clientId: string) {
+    const client = await prisma.user.findUnique({
+        where: { id: clientId },
+        select: { coachId: true, isDeleted: true, isDeactivated: true },
+    });
+    if (!client || client.coachId !== coach.id || client.isDeleted || client.isDeactivated) {
+        throw new Error("Forbidden");
+    }
 }
 
 export async function createCoachDirectMessage(input: {
@@ -102,8 +111,7 @@ export async function createCoachDirectMessage(input: {
 }
 
 export async function sendPlanViaChat(coach: User, clientId: string, planId: string, note?: string) {
-    const editCheck = await requireCoachCanEditClient(coach, clientId);
-    if (editCheck.error) throw new Error("Forbidden");
+    await requireOwnActiveClient(coach, clientId);
 
     const plan = await assignPlanToClient(coach.id, clientId, planId);
 
@@ -128,8 +136,7 @@ export async function sendPlanViaChat(coach: User, clientId: string, planId: str
 }
 
 export async function sendCheckInRequestViaChat(coach: User, clientId: string, note?: string) {
-    const editCheck = await requireCoachCanEditClient(coach, clientId);
-    if (editCheck.error) throw new Error("Forbidden");
+    await requireOwnActiveClient(coach, clientId);
 
     const content = note?.trim()
         || "Your coach requested a check-in. Please submit your weekly check-in when you're ready.";
@@ -153,8 +160,7 @@ export async function sendMissedWorkoutNotifyViaChat(
     clientId: string,
     input?: { message?: string; workoutId?: string | null }
 ) {
-    const editCheck = await requireCoachCanEditClient(coach, clientId);
-    if (editCheck.error) throw new Error("Forbidden");
+    await requireOwnActiveClient(coach, clientId);
 
     const content =
         input?.message?.trim()
@@ -185,23 +191,15 @@ export async function broadcastCoachMessage(
 
     let targetIds = input.clientIds ?? [];
     if (targetIds.length === 0) {
-        targetIds = await getCoachClientIds(coach.id, coach.role);
+        targetIds = await getCoachClientIds(coach.id);
     } else {
-        const where = coach.role === "SUPER_ADMIN"
-            ? {
-                id: { in: targetIds },
-                isDeleted: false,
-                isDeactivated: false,
-                role: { in: ["FREE", "PREMIUM"] as const },
-            }
-            : {
+        const allowed = await prisma.user.findMany({
+            where: {
                 id: { in: targetIds },
                 coachId: coach.id,
                 isDeleted: false,
                 isDeactivated: false,
-            };
-        const allowed = await prisma.user.findMany({
-            where,
+            },
             select: { id: true },
         });
         targetIds = allowed.map((client) => client.id);
@@ -250,20 +248,7 @@ export async function getActiveSessionsForClients(clientIds: string[]) {
     return sessions;
 }
 
-export async function getCoachClientIds(coachId: string, role: string) {
-    if (role === "SUPER_ADMIN") {
-        const users = await prisma.user.findMany({
-            where: {
-                id: { not: coachId },
-                isDeleted: false,
-                isDeactivated: false,
-                role: { in: ["FREE", "PREMIUM"] },
-            },
-            select: { id: true },
-        });
-        return users.map((user) => user.id);
-    }
-
+export async function getCoachClientIds(coachId: string) {
     const clients = await prisma.user.findMany({
         where: {
             coachId,

@@ -71,6 +71,7 @@ export default async function ChatPage() {
         lastActiveAt?: string | null;
         checkInDue?: boolean;
         missedWorkout?: boolean;
+        isCoachClient?: boolean;
     }[] = [];
 
     if (user.role === "PREMIUM") {
@@ -104,7 +105,7 @@ export default async function ChatPage() {
             where: { id: { not: user.id }, isDeleted: false, isDeactivated: false },
             select: {
                 id: true, name: true, email: true, role: true, avatarUrl: true,
-                isDeleted: true, isDeactivated: true, deletedName: true, lastActiveAt: true,
+                coachId: true, isDeleted: true, isDeactivated: true, deletedName: true, lastActiveAt: true,
             },
             orderBy: [{ name: "asc" }],
         });
@@ -117,6 +118,7 @@ export default async function ChatPage() {
             isDeleted: c.isDeleted,
             isDeactivated: c.isDeactivated,
             lastActiveAt: c.lastActiveAt?.toISOString() ?? null,
+            isCoachClient: c.coachId === user.id,
         }));
     } else if (user.role === "COACH") {
         const clients = await prisma.user.findMany({
@@ -135,6 +137,7 @@ export default async function ChatPage() {
             isDeleted: c.isDeleted,
             isDeactivated: c.isDeactivated,
             lastActiveAt: c.lastActiveAt?.toISOString() ?? null,
+            isCoachClient: true,
         }));
     } else if (isClientRole(user.role)) {
         const peerIds = await getDirectMessagePeerIds(user.id);

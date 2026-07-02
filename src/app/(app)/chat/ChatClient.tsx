@@ -84,6 +84,7 @@ interface Conversation {
     lastActiveAt?: string | null;
     checkInDue?: boolean;
     missedWorkout?: boolean;
+    isCoachClient?: boolean;
 }
 
 interface Props {
@@ -2096,10 +2097,10 @@ export function ChatClient({
                     </div>
                 ) : (
                     <div className="px-4 sm:px-5 py-3 border-t border-surface-border bg-surface-card shrink-0">
-                        {isCoachUser && tab === "direct" && selectedConv && !selectedConv.isDeleted && (
+                        {isCoachUser && tab === "direct" && selectedConv?.isCoachClient && !selectedConv.isDeleted && (
                             <div className="mb-2">
                                 <CoachChatTools
-                                    conversations={sortedConversations}
+                                    conversations={sortedConversations.filter((conversation) => conversation.isCoachClient)}
                                     coachPlans={coachPlans}
                                     selectedClientId={selectedConv.userId}
                                     onComplete={fetchMessages}
