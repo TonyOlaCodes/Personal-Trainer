@@ -524,7 +524,7 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
 
             {/* ── BODYWEIGHT TREND ── */}
             {bodyweightData.length > 0 && !hiddenGoals?.includes("weight") ? (
-                <section className="card p-5 sm:p-6">
+                <section id="bodyweight" className="card p-5 sm:p-6 scroll-mt-24">
                     {/* Top bar: title + timeframe toggle */}
                     <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-5">
                         <div className="flex items-center gap-3">

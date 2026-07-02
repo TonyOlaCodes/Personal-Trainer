@@ -584,7 +584,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
             </div>
             {bodyweightChart && (
                 canOpenBodyweightProgress ? (
-                    <Link href="/progress" className="block">
+                    <Link href="/progress#bodyweight" className="block">
                         {bodyweightChart}
                     </Link>
                 ) : (
