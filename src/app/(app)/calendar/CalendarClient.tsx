@@ -31,7 +31,7 @@ import {
 import { getPreviousExercisePerformance } from "@/lib/exercisePerformance";
 
 /* ─────────────────────────── Types ─────────────────────────── */
-interface PlanExercise { id: string; name: string; sets: number; reps: string; order?: number; }
+interface PlanExercise { id: string; name: string; sets: number; reps: string; order?: number; weightTargetKg?: number | null; }
 interface PlanWorkout { dayNumber: number; dayOfWeek?: number | null; name: string; id: string; exercises: PlanExercise[]; }
 interface PlanWeek { weekNumber: number; workouts: PlanWorkout[]; }
 interface ActivePlan { id?: string; name: string; weeks: PlanWeek[]; }
@@ -245,6 +245,7 @@ export function CalendarClient({
                             name: exercise.name,
                             sets: exercise.sets,
                             reps: exercise.reps,
+                            weightTargetKg: exercise.weightTargetKg ?? null,
                         })),
                     })),
                 }))
@@ -403,6 +404,12 @@ export function CalendarClient({
             exerciseName: exercise.name,
             beforeDateKey: toDateKey(beforeDate),
         });
+
+    const formatTargetWeight = (weightKg?: number | null) => {
+        if (weightKg == null || weightKg <= 0) return null;
+        const rounded = Number.isInteger(weightKg) ? weightKg : Math.round(weightKg * 10) / 10;
+        return `${rounded}kg`;
+    };
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fade-in">
@@ -775,25 +782,30 @@ export function CalendarClient({
                                         <Hash className="w-3 h-3 text-brand-400" /> TARGETS
                                     </p>
                                     <div className="space-y-3">
-                                        {sortPlannedExercises(selectedPlanned.exercises).map((ex) => (
-                                            <div key={ex.id} className="flex items-center justify-between py-2.5 px-3 bg-surface-muted/10 rounded-xl border border-surface-border/40 hover:bg-brand-950/10 transition-colors group">
-                                                <div className="flex flex-col">
-                                                    <span className="text-xs font-bold text-fg leading-tight group-hover:text-brand-400 transition-colors lowercase italic">{ex.name}</span>
-                                                    {(() => {
-                                                        const prev = getPreviousPerformance(ex, selectedDate);
-                                                        if (!prev) return null;
-                                                        return (
+                                        {sortPlannedExercises(selectedPlanned.exercises).map((ex) => {
+                                            const targetWeight = formatTargetWeight(ex.weightTargetKg);
+                                            const previous = targetWeight ? null : getPreviousPerformance(ex, selectedDate);
+
+                                            return (
+                                                <div key={ex.id} className="flex items-center justify-between py-2.5 px-3 bg-surface-muted/10 rounded-xl border border-surface-border/40 hover:bg-brand-950/10 transition-colors group">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-xs font-bold text-fg leading-tight group-hover:text-brand-400 transition-colors lowercase italic">{ex.name}</span>
+                                                        {targetWeight ? (
                                                             <p className="text-[8px] font-black text-brand-400/60 uppercase tracking-widest mt-1">
-                                                                Last: {prev.weight}kg x {prev.reps}
+                                                                Target: {targetWeight}
                                                             </p>
-                                                        );
-                                                    })()}
+                                                        ) : previous ? (
+                                                            <p className="text-[8px] font-black text-brand-400/60 uppercase tracking-widest mt-1">
+                                                                Last: {previous.weight}kg x {previous.reps}
+                                                            </p>
+                                                        ) : null}
+                                                    </div>
+                                                    <span className="text-[10px] font-black text-brand-400 bg-brand-400/5 px-2.5 py-1 rounded-lg uppercase tracking-widest border border-brand-400/20">
+                                                        {ex.sets}x{ex.reps}{targetWeight ? ` @ ${targetWeight}` : ""}
+                                                    </span>
                                                 </div>
-                                                <span className="text-[10px] font-black text-brand-400 bg-brand-400/5 px-2.5 py-1 rounded-lg uppercase tracking-widest border border-brand-400/20">
-                                                    {ex.sets}x{ex.reps}
-                                                </span>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 </div>
 

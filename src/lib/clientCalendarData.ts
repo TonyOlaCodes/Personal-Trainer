@@ -24,7 +24,7 @@ export interface ClientCalendarPayload {
                 dayOfWeek: number | null;
                 name: string;
                 id: string;
-                exercises: Array<{ id: string; name: string; sets: number; reps: string; order: number }>;
+                exercises: Array<{ id: string; name: string; sets: number; reps: string; order: number; weightTargetKg: number | null }>;
             }>;
         }>;
     } | null;
@@ -129,6 +129,7 @@ export async function loadClientCalendarData(userId: string): Promise<ClientCale
                         name: exercise.name,
                         sets: exercise.sets,
                         reps: exercise.reps,
+                        weightTargetKg: exercise.weightTargetKg ?? null,
                     })),
                 })),
             }))
@@ -155,6 +156,7 @@ export async function loadClientCalendarData(userId: string): Promise<ClientCale
                               sets: ex.sets,
                               reps: ex.reps,
                               order: ex.order,
+                              weightTargetKg: ex.weightTargetKg ?? null,
                           })),
                       })),
                   })),

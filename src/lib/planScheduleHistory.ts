@@ -4,14 +4,14 @@ import { prisma } from "@/lib/prisma";
 import { APP_TIMEZONE } from "@/lib/appTimezone";
 import { getLocalTimeParts } from "@/lib/coachNotificationSchedule";
 import { parseLogDate, toDateKey } from "@/lib/utils";
-import type { PlanWeekLike, PlanWorkoutLike } from "@/lib/planSchedule";
+import type { PlanWeekLike } from "@/lib/planSchedule";
 
 export type ScheduleWorkoutSnapshot = {
     id: string;
     name: string;
     dayNumber: number;
     dayOfWeek: number | null;
-    exercises?: Array<{ id?: string; name: string; sets: number; reps: string }>;
+    exercises?: Array<{ id?: string; name: string; sets: number; reps: string; weightTargetKg?: number | null }>;
 };
 
 export type ScheduleWeekSnapshot = {
@@ -31,7 +31,7 @@ type WeekSource = {
         name: string;
         dayNumber: number;
         dayOfWeek?: number | null;
-        exercises?: Array<{ id?: string; name: string; sets: number; reps: string }>;
+        exercises?: Array<{ id?: string; name: string; sets: number; reps: string; weightTargetKg?: number | null }>;
     }>;
 };
 
@@ -77,6 +77,7 @@ export function serializePlanWeeksForSchedule(weeks: WeekSource[]): ScheduleWeek
                         name: exercise.name,
                         sets: exercise.sets,
                         reps: exercise.reps,
+                        weightTargetKg: exercise.weightTargetKg ?? null,
                     })),
                 })),
         }));

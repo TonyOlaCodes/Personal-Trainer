@@ -17,6 +17,7 @@ export interface PlannedWorkoutExercise {
     sets: number;
     reps: string;
     order: number;
+    weightTargetKg?: number | null;
 }
 
 export interface ResolvedPlannedWorkout {
@@ -69,6 +70,7 @@ export function resolvePlannedWorkoutWithExercisesForDate(input: {
         sets: exercise.sets,
         reps: exercise.reps,
         order: index,
+        weightTargetKg: exercise.weightTargetKg ?? null,
     }));
 
     return {
