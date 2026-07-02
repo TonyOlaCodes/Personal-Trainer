@@ -12,6 +12,7 @@ import { AdminAnnouncementsPanel } from "./AdminAnnouncementsPanel";
 import { AdminCoachCodeRequestsPanel } from "./AdminCoachCodeRequestsPanel";
 import { DeletePlanConfirmModal } from "@/components/shared/DeletePlanConfirmModal";
 import { ModalOverlay } from "@/components/shared/ModalOverlay";
+import { getPublicProfileHref } from "@/lib/profileNavigation";
 
 interface AdminUser {
     id: string;
@@ -177,10 +178,9 @@ function normalizeCode(code: RawAdminCode): AdminCode {
     };
 }
 
-function ProfileAvatar({ name, email, avatarUrl }: { name?: string | null; email: string; avatarUrl?: string | null }) {
+function ProfileAvatar({ name, email, avatarUrl, userId, disabled = false }: { name?: string | null; email: string; avatarUrl?: string | null; userId?: string; disabled?: boolean }) {
     const label = name || email;
-
-    return (
+    const avatar = (
         <div className="w-9 h-9 rounded-full overflow-hidden bg-brand-500/10 border border-surface-border flex items-center justify-center shrink-0">
             {avatarUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -191,6 +191,14 @@ function ProfileAvatar({ name, email, avatarUrl }: { name?: string | null; email
                 </span>
             )}
         </div>
+    );
+
+    if (!userId || disabled) return avatar;
+
+    return (
+        <Link href={getPublicProfileHref(userId)} className="shrink-0 hover:opacity-85 transition-opacity" title={`Open ${label}'s profile`}>
+            {avatar}
+        </Link>
     );
 }
 
@@ -626,10 +634,16 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
                         {sortedUsers.map((u) => (
                             <div key={u.id} className={cn("flex items-start justify-between gap-4 px-5 py-3.5", (u.isDeactivated || u.isDeleted) && "opacity-60 bg-surface-muted/20")}>
                                 <div className="flex items-start gap-3 min-w-0">
-                                    <ProfileAvatar name={u.name} email={u.email} avatarUrl={u.avatarUrl} />
+                                    <ProfileAvatar name={u.name} email={u.email} avatarUrl={u.avatarUrl} userId={u.id} disabled={u.isDeleted} />
                                     <div className="min-w-0">
                                         <div className="flex flex-wrap items-center gap-2">
-                                            <p className="font-medium text-sm text-fg truncate">{u.name ?? "No name"}</p>
+                                            {u.isDeleted ? (
+                                                <p className="font-medium text-sm text-fg truncate">{u.name ?? "No name"}</p>
+                                            ) : (
+                                                <Link href={getPublicProfileHref(u.id)} className="font-medium text-sm text-fg truncate hover:text-brand-400">
+                                                    {u.name ?? "No name"}
+                                                </Link>
+                                            )}
                                             {(u.isDeleted || u.isDeactivated) && (
                                                 <span className={cn(
                                                     "text-[9px] font-black uppercase tracking-widest border px-2 py-0.5 rounded",
@@ -777,10 +791,12 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
                             <div key={coach.id} className="px-5 py-4">
                                 <div className="flex items-start justify-between gap-4">
                                     <div className="flex items-center gap-3 min-w-0">
-                                        <ProfileAvatar name={coach.name} email={coach.email} avatarUrl={coach.avatarUrl} />
+                                        <ProfileAvatar name={coach.name} email={coach.email} avatarUrl={coach.avatarUrl} userId={coach.id} />
                                         <div className="min-w-0">
                                             <div className="flex flex-wrap items-center gap-2">
-                                                <p className="font-medium text-sm text-fg truncate">{coach.name ?? "No name"}</p>
+                                                <Link href={getPublicProfileHref(coach.id)} className="font-medium text-sm text-fg truncate hover:text-brand-400">
+                                                    {coach.name ?? "No name"}
+                                                </Link>
                                                 {coach.role === "SUPER_ADMIN" && (
                                                     <span className="text-[9px] font-black uppercase tracking-widest border px-2 py-0.5 rounded text-brand-400 bg-brand-500/10 border-brand-500/20">
                                                         Admin
@@ -816,12 +832,12 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
                                                     )}
                                                 >
                                                     <div className="flex items-center gap-2 min-w-0">
-                                                        <ProfileAvatar name={client.name} email={client.email} avatarUrl={client.avatarUrl} />
+                                                        <ProfileAvatar name={client.name} email={client.email} avatarUrl={client.avatarUrl} userId={client.id} disabled={client.isDeleted} />
                                                         <div className="min-w-0">
                                                             {client.isDeleted ? (
                                                                 <p className="text-sm font-medium text-fg truncate">{client.name ?? "No name"}</p>
                                                             ) : (
-                                                                <Link href={`/coach/client/${client.id}`} className="text-sm font-medium text-fg truncate hover:text-brand-400">
+                                                                <Link href={getPublicProfileHref(client.id)} className="text-sm font-medium text-fg truncate hover:text-brand-400">
                                                                     {client.name ?? "No name"}
                                                                 </Link>
                                                             )}
@@ -866,7 +882,7 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
                                 <div className="flex items-start justify-between gap-4">
                                     <div className="min-w-0">
                                         <div className="flex flex-wrap items-center gap-2">
-                                            <Link href={`/plans/create?id=${p.id}&view=true`} className="font-medium text-sm text-fg hover:text-brand-400 truncate">
+                                            <Link href={`/plans/create?id=${p.id}`} className="font-medium text-sm text-fg hover:text-brand-400 truncate">
                                                 {p.name}
                                             </Link>
                                             <button
@@ -891,7 +907,7 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
                                     </div>
                                     <div className="flex items-center gap-2 shrink-0">
                                         <span className="text-xs text-fg-muted">{p.userCount} active {p.userCount === 1 ? "user" : "users"}</span>
-                                        <Link href={`/plans/create?id=${p.id}&view=true`} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-surface-muted">
+                                        <Link href={`/plans/create?id=${p.id}`} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-surface-muted" title="Edit plan">
                                             <ChevronRight className="w-4 h-4 text-fg-subtle" />
                                         </Link>
                                         <button
@@ -928,12 +944,12 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
                                                     )}
                                                 >
                                                     <div className="flex items-center gap-2 min-w-0">
-                                                        <ProfileAvatar name={planUser.name} email={planUser.email} avatarUrl={planUser.avatarUrl} />
+                                                        <ProfileAvatar name={planUser.name} email={planUser.email} avatarUrl={planUser.avatarUrl} userId={planUser.id} disabled={planUser.isDeleted} />
                                                         <div className="min-w-0">
                                                             {planUser.isDeleted ? (
                                                                 <p className="text-sm font-medium text-fg truncate">{planUser.name ?? "No name"}</p>
                                                             ) : (
-                                                                <Link href={`/coach/client/${planUser.id}`} className="text-sm font-medium text-fg truncate hover:text-brand-400">
+                                                                <Link href={getPublicProfileHref(planUser.id)} className="text-sm font-medium text-fg truncate hover:text-brand-400">
                                                                     {planUser.name ?? "No name"}
                                                                 </Link>
                                                             )}
@@ -1092,7 +1108,7 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
                                                     <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
                                                     {c.usedById && c.usedByStatus !== "DELETED" ? (
                                                         <Link 
-                                                            href={`/coach/client/${c.usedById}`}
+                                                            href={getPublicProfileHref(c.usedById)}
                                                             className={cn(
                                                                 "text-[10px] font-black uppercase tracking-widest hover:underline",
                                                                 c.usedByStatus === "DEACTIVATED" ? "text-danger" : "text-success"

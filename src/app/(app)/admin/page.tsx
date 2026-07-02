@@ -192,7 +192,14 @@ export default async function AdminPage() {
                                 accountSortRank(a) - accountSortRank(b) ||
                                 (a.name ?? a.email).localeCompare(b.name ?? b.email)
                             ),
-                    }))).map(({ updatedAt: _updatedAt, creatorId: _creatorId, ...plan }) => plan)}
+                    }))).map((plan) => ({
+                        id: plan.id,
+                        name: plan.name,
+                        type: plan.type,
+                        shareCode: plan.shareCode,
+                        userCount: plan.userCount,
+                        users: plan.users,
+                    }))}
                     codes={recentCodes.map((c) => ({
                         id: c.id,
                         code: c.code,
