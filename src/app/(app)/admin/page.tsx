@@ -49,6 +49,7 @@ export default async function AdminPage() {
                 id: true,
                 name: true,
                 type: true,
+                shareCode: true,
                 creatorId: true,
                 updatedAt: true,
                 userPlans: {
@@ -166,6 +167,7 @@ export default async function AdminPage() {
                         id: p.id,
                         name: p.name,
                         type: p.type,
+                        shareCode: p.shareCode,
                         creatorId: p.creatorId,
                         updatedAt: p.updatedAt,
                         userCount: p.userPlans.filter((assignment) => {

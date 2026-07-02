@@ -31,6 +31,7 @@ interface AdminPlan {
     id: string;
     name: string;
     type: string;
+    shareCode?: string | null;
     userCount: number;
     users: {
         id: string;
@@ -863,10 +864,31 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
                         {plansList.map((p) => (
                             <div key={p.id} className="px-5 py-4">
                                 <div className="flex items-start justify-between gap-4">
-                                    <Link href={`/plans/create?id=${p.id}&view=true`} className="min-w-0 group">
-                                        <p className="font-medium text-sm text-fg group-hover:text-brand-400 truncate">{p.name}</p>
+                                    <div className="min-w-0">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <Link href={`/plans/create?id=${p.id}&view=true`} className="font-medium text-sm text-fg hover:text-brand-400 truncate">
+                                                {p.name}
+                                            </Link>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    if (p.shareCode) void navigator.clipboard.writeText(p.shareCode);
+                                                }}
+                                                disabled={!p.shareCode}
+                                                className={cn(
+                                                    "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 font-mono text-[10px] font-black tracking-widest transition-colors",
+                                                    p.shareCode
+                                                        ? "border-brand-500/20 bg-brand-500/10 text-brand-300 hover:bg-brand-500/20"
+                                                        : "border-surface-border bg-surface-muted text-fg-subtle"
+                                                )}
+                                                title={p.shareCode ? "Copy plan share code" : "No share code"}
+                                            >
+                                                {p.shareCode ?? "No code"}
+                                                {p.shareCode && <Copy className="w-3 h-3" />}
+                                            </button>
+                                        </div>
                                         <p className="text-xs text-fg-muted">{p.type.replace("_", " ")}</p>
-                                    </Link>
+                                    </div>
                                     <div className="flex items-center gap-2 shrink-0">
                                         <span className="text-xs text-fg-muted">{p.userCount} active {p.userCount === 1 ? "user" : "users"}</span>
                                         <Link href={`/plans/create?id=${p.id}&view=true`} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-surface-muted">
