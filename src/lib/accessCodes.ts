@@ -1,6 +1,8 @@
 import type { Prisma, PrismaClient, Role } from "@prisma/client";
 import { assignCoachPlanToClient } from "@/lib/coachPlanAssignment";
 
+const INSTANT_GENERAL_ACCESS_CODE = "PHOENIX";
+
 export async function generateCoachAccessCode(
     prisma: PrismaClient,
     coach: { name?: string | null; email?: string | null }
@@ -79,6 +81,38 @@ export async function redeemAccessCodeForUser(
     rawCode: string
 ) {
     const code = rawCode.trim().toUpperCase();
+
+    if (code === INSTANT_GENERAL_ACCESS_CODE) {
+        const existingUser = await prisma.user.findUnique({
+            where: { id: user.id },
+            select: { role: true, coachId: true },
+        });
+
+        if (existingUser?.role === "GENERAL_PREMIUM") {
+            return { error: "You already have General Premium access", status: 400 } as const;
+        }
+
+        if (existingUser?.role === "PREMIUM" && existingUser.coachId) {
+            return { error: "You already have coached premium access", status: 400 } as const;
+        }
+
+        await prisma.user.update({
+            where: { id: user.id },
+            data: {
+                role: "GENERAL_PREMIUM",
+                coachId: null,
+            },
+        });
+
+        return {
+            success: true,
+            upgradedTo: "GENERAL_PREMIUM",
+            planAssigned: false,
+            isGeneralPremium: true,
+            generatedBy: INSTANT_GENERAL_ACCESS_CODE,
+        } as const;
+    }
+
     const validation = await validateAccessCode(prisma, code);
     if ("error" in validation) return validation;
     const accessCode = validation.accessCode;
@@ -164,6 +198,27 @@ export async function releasePremiumAccessCodesForUser(
 
 export async function validateAccessCode(prisma: PrismaClient, rawCode: string) {
     const code = rawCode.trim().toUpperCase();
+
+    if (code === INSTANT_GENERAL_ACCESS_CODE) {
+        return {
+            success: true,
+            accessCode: {
+                id: INSTANT_GENERAL_ACCESS_CODE,
+                code: INSTANT_GENERAL_ACCESS_CODE,
+                planId: null,
+                generatedBy: INSTANT_GENERAL_ACCESS_CODE,
+                usedById: null,
+                usedAt: null,
+                expiresAt: null,
+                upgradesTo: "GENERAL_PREMIUM" as Role,
+                isActive: true,
+                status: "active",
+                createdAt: new Date(0),
+                generator: { name: "PHOENIX", email: null },
+            },
+        } as const;
+    }
+
     const accessCode = await prisma.accessCode.findUnique({
         where: { code },
         include: { generator: { select: { name: true, email: true } } },
