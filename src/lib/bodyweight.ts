@@ -32,8 +32,8 @@ export async function ensureBodyweightTable() {
 async function runWithRetry<T>(fn: () => Promise<T>): Promise<T> {
     try {
         return await fn();
-    } catch (err: any) {
-        const msg = String(err.message || err);
+    } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
         if (msg.includes("does not exist") || msg.includes("P2010") || msg.includes("relation") || msg.includes("column")) {
             console.warn("[Bodyweight] Table or column missing, resetting ready state and retrying...", err);
             bodyweightTableReady = false;
@@ -87,6 +87,22 @@ export async function getBodyweightSummary(userId: string, date: string) {
             latest: latestEntry[0] ?? null,
             latestPrevious: latestPreviousEntry[0] ?? null,
         };
+    });
+}
+
+export async function getBodyweightHistory(userId: string, limit = 14): Promise<BodyweightEntry[]> {
+    return runWithRetry(async () => {
+        await ensureBodyweightTable();
+
+        const rows = await prisma.$queryRaw<BodyweightEntry[]>`
+            SELECT "loggedDate"::text AS "date", "weightKg"
+            FROM "bodyweight_logs"
+            WHERE "userId" = ${userId}
+            ORDER BY "loggedDate" DESC
+            LIMIT ${limit}
+        `;
+
+        return rows.reverse();
     });
 }
 

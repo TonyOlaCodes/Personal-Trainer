@@ -117,6 +117,7 @@ interface Props {
         latestWeightKg: number | null;
         latestPreviousWeightKg: number | null;
         latestDate: string | null;
+        history: Array<{ date: string; weightKg: number }>;
     };
     dailyMetrics: {
         selectedDate: string;
@@ -135,6 +136,29 @@ interface Props {
 }
 
 const TODAY_EXERCISE_PREVIEW = 3;
+const PREMIUM_ROLES = new Set(["PREMIUM", "GENERAL_PREMIUM", "COACH", "SUPER_ADMIN"]);
+
+function buildBodyweightSparklinePoints(history: Array<{ date: string; weightKg: number }>) {
+    if (history.length === 0) return "";
+
+    const width = 240;
+    const height = 58;
+    const paddingX = 8;
+    const paddingY = 8;
+    const min = Math.min(...history.map((entry) => entry.weightKg));
+    const max = Math.max(...history.map((entry) => entry.weightKg));
+    const range = Math.max(max - min, 0.1);
+    const usableWidth = width - paddingX * 2;
+    const usableHeight = height - paddingY * 2;
+
+    return history.map((entry, index) => {
+        const x = history.length === 1
+            ? width / 2
+            : paddingX + (index / (history.length - 1)) * usableWidth;
+        const y = paddingY + (1 - (entry.weightKg - min) / range) * usableHeight;
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(" ");
+}
 
 export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDay, todayCompleted, activeSession, recentLogs, avgDurationMin, currentCheckin, checkInDueState, checkInPanel, bodyweight, dailyMetrics }: Props) {
     const router = useRouter();
@@ -153,6 +177,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
             : ""
     );
     const [latestWeight, setLatestWeight] = useState(bodyweight.latestWeightKg);
+    const [bodyweightHistory, setBodyweightHistory] = useState(bodyweight.history);
     const [weightLogged, setWeightLogged] = useState(
         bodyweight.selectedDate === todayDate && Boolean(bodyweight.selectedWeightKg)
     );
@@ -343,6 +368,13 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                 setWeight(data.selected?.weightKg ? data.selected.weightKg.toFixed(2) : parsedWeight.toFixed(2));
                 setWeightLogged(true);
                 setLatestWeight(data.latest?.weightKg ?? parsedWeight);
+                setBodyweightHistory((prev) => {
+                    const next = prev.filter((entry) => entry.date !== weightDate);
+                    next.push({ date: weightDate, weightKg: parsedWeight });
+                    return next
+                        .sort((a, b) => a.date.localeCompare(b.date))
+                        .slice(-14);
+                });
                 setWeightMsg("");
                 router.refresh();
             } else {
@@ -535,6 +567,8 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
 
     const shouldPrioritizeCheckIn = Boolean(checkInPanel && !currentCheckin && checkInDueState.isDueToday);
     const hasDailyMetricsEnabled = !["calories", "steps", "sleep"].every((key) => user.hiddenGoals?.includes(key));
+    const isBodyweightEnabled = !user.hiddenGoals?.includes("weight");
+    const isPremium = PREMIUM_ROLES.has(user.role);
     const metricsBeforeWorkout = Boolean(todayCompleted || !todayWorkout);
     const checkInDueLabelState = {
         ...checkInDueState,
@@ -543,7 +577,56 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
     };
 
     const renderDailyMetrics = () => {
-        if (!hasDailyMetricsEnabled) return null;
+        if (!hasDailyMetricsEnabled && !isBodyweightEnabled) return null;
+
+        const bodyweightSparklinePoints = buildBodyweightSparklinePoints(bodyweightHistory);
+        const canOpenBodyweightProgress = isPremium && isBodyweightEnabled;
+        const bodyweightChart = isBodyweightEnabled ? (
+            <div
+                className={cn(
+                    "card p-3 sm:p-4 bg-surface-muted/10 border-brand-500/10",
+                    canOpenBodyweightProgress && "hover:border-brand-500/30 hover:shadow-glow-brand-sm transition-all"
+                )}
+            >
+                <div className="flex items-start justify-between gap-3">
+                    <div>
+                        <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Bodyweight trend</p>
+                        <p className="text-lg font-black text-fg mt-0.5">
+                            {latestWeight ? `${latestWeight.toFixed(1)} kg` : "--"}
+                        </p>
+                    </div>
+                    <span className="text-[9px] font-black uppercase tracking-widest text-brand-400">
+                        {canOpenBodyweightProgress ? "Open progress" : "Preview"}
+                    </span>
+                </div>
+                <div className="mt-3 h-16">
+                    {bodyweightSparklinePoints ? (
+                        <svg viewBox="0 0 240 58" className="h-full w-full overflow-visible" role="img" aria-label="Recent bodyweight trend">
+                            <polyline
+                                points={bodyweightSparklinePoints}
+                                fill="none"
+                                stroke="rgba(255, 255, 255, 0.18)"
+                                strokeWidth="8"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                            />
+                            <polyline
+                                points={bodyweightSparklinePoints}
+                                fill="none"
+                                stroke="rgba(129, 140, 248, 0.95)"
+                                strokeWidth="4"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                            />
+                        </svg>
+                    ) : (
+                        <div className="h-full rounded-xl border border-dashed border-surface-border bg-surface-muted/20 flex items-center justify-center text-[10px] font-bold text-fg-subtle">
+                            Log bodyweight to build the chart
+                        </div>
+                    )}
+                </div>
+            </div>
+        ) : null;
 
         return (
         <>
@@ -722,6 +805,15 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                     );
                 })}
             </div>
+            {bodyweightChart && (
+                canOpenBodyweightProgress ? (
+                    <Link href="/progress" className="block">
+                        {bodyweightChart}
+                    </Link>
+                ) : (
+                    bodyweightChart
+                )
+            )}
         </>
         );
     };

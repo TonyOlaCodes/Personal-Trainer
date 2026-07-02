@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { getDayName, getWeekNumber, isSameCalendarDay, parseLogDate, toDateKey } from "@/lib/utils";
 import { startOfWeek, endOfWeek } from "date-fns";
-import { getBodyweightSummary } from "@/lib/bodyweight";
+import { getBodyweightHistory, getBodyweightSummary } from "@/lib/bodyweight";
 import { getBodyweightAverageSinceLastCheckIn } from "@/lib/checkInPeriodSummary";
 import { getWorkoutsTargetFromUserPlan } from "@/lib/planTrainingTarget";
 import { getPlannedWorkoutForDate } from "@/lib/planSchedule";
@@ -208,8 +208,9 @@ export default async function DashboardPage() {
             }
         }
 
-        const [bodyweight, dailyMetrics] = await Promise.all([
+        const [bodyweight, bodyweightHistory, dailyMetrics] = await Promise.all([
             getBodyweightSummary(user.id, todayDate),
+            getBodyweightHistory(user.id, 14),
             getDailyMetricsSummary(user.id, todayDate),
         ]);
         const checkInSchedule = await getUserCheckInSchedule(user.id);
@@ -303,6 +304,7 @@ export default async function DashboardPage() {
                                 latestWeightKg: bodyweight?.latest?.weightKg ?? user.weightKg ?? null,
                                 latestPreviousWeightKg: bodyweight?.latestPrevious?.weightKg ?? null,
                                 latestDate: bodyweight?.latest?.date ?? null,
+                                history: bodyweightHistory,
                             }}
                             dailyMetrics={{
                                 selectedDate: todayDate,

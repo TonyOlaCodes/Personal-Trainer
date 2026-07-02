@@ -2,8 +2,8 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import {
-    User, Bell, Palette,
-    HelpCircle, LogOut, ChevronRight, Check,
+    User, Bell,
+    HelpCircle, LogOut, ChevronRight,
     Camera, Loader2, Target, ImageIcon, Link2, ArrowLeft,
 } from "lucide-react";
 import { useClerk } from "@clerk/nextjs";
@@ -116,7 +116,6 @@ export function SettingsClient({ user }: Props) {
     const sections = [
         { id: "profile", label: "Profile", icon: User },
         ...(isClientRole(user.role) ? [{ id: "goals", label: "My Goals", icon: Target }] : []),
-        { id: "appearance", label: "Appearance", icon: Palette },
         { id: "notifications", label: "Notifications", icon: Bell },
     ];
 
@@ -259,12 +258,10 @@ export function SettingsClient({ user }: Props) {
     const [secretCode, setSecretCode] = useState("");
     const [redeeming, setRedeeming] = useState(false);
 
-    const [theme, setTheme] = useState(typeof window !== "undefined" ? localStorage.getItem("pt-theme") || "midnight" : "midnight");
-
     useEffect(() => {
-        document.documentElement.setAttribute("data-theme", theme);
-        localStorage.setItem("pt-theme", theme);
-    }, [theme]);
+        document.documentElement.setAttribute("data-theme", "midnight");
+        localStorage.setItem("pt-theme", "midnight");
+    }, []);
 
     const closeCropModal = useCallback(() => {
         setCropState((current) => {
@@ -742,7 +739,6 @@ export function SettingsClient({ user }: Props) {
                                 </div>
                                 <div className="min-w-0">
                                     <h3 className="font-black text-fg tracking-tight">My Goals</h3>
-                                    <p className="text-xs text-fg-muted">Changes save automatically</p>
                                 </div>
                             </div>
                             {(goalSaving || goalSaved) && (
@@ -901,7 +897,7 @@ export function SettingsClient({ user }: Props) {
                             <div>
                                 <h3 className="heading-3">Activity Notifications</h3>
                                 <p className="text-sm text-fg-muted mt-1">
-                                    Choose which in-app alerts you receive. Changes save automatically.
+                                    Choose which in-app alerts you receive.
                                 </p>
                             </div>
                             {(notifSaving || notifSaved) && (
@@ -980,40 +976,6 @@ export function SettingsClient({ user }: Props) {
                             </div>
                         )}
 
-                    </div>
-                )}
-
-                {activeSection === "appearance" && (
-                    <div className="card p-8 space-y-8 animate-slide-up">
-                        <div>
-                            <h3 className="text-xl font-bold text-fg mb-1">Theme Presets</h3>
-                            <p className="text-sm text-fg-muted">Choose a visual style that matches your energy levels.</p>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            {[
-                                { id: "midnight", name: "Midnight Glow", bg: "bg-[#6366f1]" },
-                                { id: "emerald", name: "Electric Emerald", bg: "bg-[#10b981]" },
-                                { id: "solar", name: "Solar Flare", bg: "bg-[#f59e0b]" },
-                                { id: "ocean", name: "Ocean Breeze", bg: "bg-[#06b6d4]" },
-                                { id: "rose", name: "Crimson Peak", bg: "bg-[#f43f5e]" },
-                            ].map((t) => (
-                                <button
-                                    key={t.id}
-                                    onClick={() => setTheme(t.id)}
-                                    className={cn(
-                                        "p-4 rounded-2xl border transition-all text-left flex items-center gap-4 group hover:border-brand-500/50",
-                                        theme === t.id ? "bg-brand-500/10 border-brand-500 shadow-glow-sm" : "bg-surface-muted/50 border-surface-border"
-                                    )}
-                                >
-                                    <div className={cn("w-10 h-10 rounded-xl shrink-0 shadow-sm transition-transform group-hover:scale-105", t.bg)} />
-                                    <div className="flex flex-1 items-center justify-between gap-2">
-                                        <p className="text-sm font-bold text-fg">{t.name}</p>
-                                        {theme === t.id && <Check className="w-4 h-4 text-brand-400 shrink-0" />}
-                                    </div>
-                                </button>
-                            ))}
-                        </div>
                     </div>
                 )}
 
