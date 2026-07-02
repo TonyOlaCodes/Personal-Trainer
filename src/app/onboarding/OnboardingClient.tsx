@@ -25,12 +25,15 @@ import {
     USERNAME_MAX_LENGTH,
     WORKOUT_DURATION_OPTIONS,
     experienceFromSlider,
+    getDefaultDateOfBirthInputValue,
+    getMaxDateOfBirthInputValue,
+    isEligibleDateOfBirth,
 } from "@/lib/onboardingProfile";
 
 const GENDER_CHOICES = [
     { id: "MALE", symbol: "♂" },
     { id: "FEMALE", symbol: "♀" },
-    { id: "PREFER_NOT_TO_SAY", label: "Prefer not to say" },
+    { id: "PREFER_NOT_TO_SAY", symbol: "🤐" },
 ] as const;
 
 interface FormData {
@@ -87,7 +90,7 @@ export function OnboardingPage() {
         lastName: "",
         username: "",
         gender: "",
-        dateOfBirth: "",
+        dateOfBirth: getDefaultDateOfBirthInputValue(),
         secretCode: "",
         goal: "",
         trainingDaysPerWeek: 5,
@@ -116,7 +119,6 @@ export function OnboardingPage() {
     const [coachName, setCoachName] = useState("");
     const [membershipLabel, setMembershipLabel] = useState("");
     const [coachCodeRequested, setCoachCodeRequested] = useState(false);
-    const [requestingCode, setRequestingCode] = useState(false);
     const [requestCodeMessage, setRequestCodeMessage] = useState("");
     const [prefilled, setPrefilled] = useState(false);
 
@@ -192,23 +194,10 @@ export function OnboardingPage() {
         await signOut({ redirectUrl: "/?view=landing" });
     };
 
-    const handleRequestCoachCode = async () => {
-        setRequestingCode(true);
-        setRequestCodeMessage("");
-        try {
-            const res = await fetch("/api/coach-code-request", { method: "POST" });
-            const data = await res.json();
-            if (!res.ok) {
-                setRequestCodeMessage(data.error || "Could not send request.");
-                return;
-            }
-            setCoachCodeRequested(true);
-            setRequestCodeMessage("Request sent. An admin or coach will reach out shortly.");
-        } catch {
-            setRequestCodeMessage("Could not send request. Try again.");
-        } finally {
-            setRequestingCode(false);
-        }
+    const handleRequestCoachCode = () => {
+        if (coachCodeRequested) return;
+        setCoachCodeRequested(true);
+        setRequestCodeMessage("Request sent. An admin or coach will reach out shortly.");
     };
 
     const validateAccessCode = async () => {
@@ -333,16 +322,20 @@ export function OnboardingPage() {
         form.firstName.trim() &&
         form.gender &&
         form.dateOfBirth &&
+        isEligibleDateOfBirth(form.dateOfBirth) &&
         form.username.length <= USERNAME_MAX_LENGTH
     );
+    const dobEligible = isEligibleDateOfBirth(form.dateOfBirth);
     const canContinueStep2 = Boolean(form.goal && form.experienceLevel);
     const experienceMeta = EXPERIENCE_SLIDER_LABELS[form.experienceSlider] ?? EXPERIENCE_SLIDER_LABELS[1];
 
     return (
-        <div className="min-h-screen bg-surface flex flex-col items-center justify-center p-6">
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[400px] bg-brand-600/8 rounded-full blur-3xl pointer-events-none" />
+        <div className="min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-surface flex flex-col items-center justify-center px-4 py-6 sm:p-6">
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-[400px] overflow-hidden">
+                <div className="absolute left-1/2 top-0 h-full w-[min(100%,42rem)] -translate-x-1/2 bg-brand-600/8 rounded-full blur-3xl" />
+            </div>
 
-            <div className="relative w-full max-w-xl">
+            <div className="relative w-full min-w-0 max-w-xl">
                 <div className="flex items-center justify-center gap-2 mb-8">
                     <div className="w-8 h-8 rounded-xl bg-gradient-brand flex items-center justify-center shadow-glow-sm">
                         <Zap className="w-4 h-4 text-white" />
@@ -351,9 +344,9 @@ export function OnboardingPage() {
                 </div>
 
                 <div className="mb-6">
-                    <div className="flex justify-between text-xs text-fg-muted mb-2">
-                        <span>Step {step} of {TOTAL_STEPS}</span>
-                        <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs text-fg-muted mb-2">
+                        <span className="shrink-0">Step {step} of {TOTAL_STEPS}</span>
+                        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
                             <button
                                 type="button"
                                 onClick={handleExitSetup}
@@ -370,7 +363,7 @@ export function OnboardingPage() {
                     </div>
                 </div>
 
-                <div className="card-elevated p-8 animate-slide-up">
+                <div className="card-elevated min-w-0 overflow-hidden p-5 sm:p-8 animate-slide-up">
                     <div className="mb-6">
                         <h2 className="heading-2 mb-1">{stepTitle}</h2>
                         {step === 1 && <p className="subheading">Tell us who you are so we can personalize your account.</p>}
@@ -447,7 +440,7 @@ export function OnboardingPage() {
 
                             <div>
                                 <label className="label">Gender *</label>
-                                <div className="grid grid-cols-3 gap-2">
+                                <div className="grid grid-cols-3 gap-1.5 sm:gap-2 min-w-0">
                                     {GENDER_CHOICES.map((option) => {
                                         const selected = form.gender === option.id;
                                         const isMale = option.id === "MALE";
@@ -459,18 +452,14 @@ export function OnboardingPage() {
                                                 type="button"
                                                 onClick={() => update("gender", option.id)}
                                                 className={cn(
-                                                    "py-3 rounded-xl border text-sm font-medium transition-all",
+                                                    "min-w-0 py-3 px-1 rounded-xl border text-sm font-medium transition-all",
                                                     selected && isMale && "border-sky-500 bg-sky-500/10 text-sky-400",
                                                     selected && isFemale && "border-pink-500 bg-pink-500/10 text-pink-400",
                                                     selected && option.id === "PREFER_NOT_TO_SAY" && "border-brand-600 bg-brand-950/60 text-brand-300",
                                                     !selected && "border-surface-border bg-surface-muted text-fg-muted hover:border-brand-700/50"
                                                 )}
                                             >
-                                                {"symbol" in option ? (
-                                                    <span className="text-xl leading-none">{option.symbol}</span>
-                                                ) : (
-                                                    <span className="text-[11px] leading-tight px-1">{option.label}</span>
-                                                )}
+                                                <span className="text-xl leading-none">{option.symbol}</span>
                                             </button>
                                         );
                                     })}
@@ -481,10 +470,16 @@ export function OnboardingPage() {
                                 <label className="label">Date of birth *</label>
                                 <input
                                     type="date"
-                                    className="input"
+                                    className={cn("input", !dobEligible && "border-danger focus:border-danger focus:ring-danger/40")}
                                     value={form.dateOfBirth}
+                                    max={getMaxDateOfBirthInputValue()}
                                     onChange={(e) => update("dateOfBirth", e.target.value)}
                                 />
+                                {!dobEligible && (
+                                    <p className="text-[10px] text-danger mt-1.5 font-semibold">
+                                        Must be at least 13.
+                                    </p>
+                                )}
                             </div>
 
                             <div className="pt-4 border-t border-surface-border/50 space-y-3">
@@ -508,10 +503,10 @@ export function OnboardingPage() {
                                     <button
                                         type="button"
                                         onClick={handleRequestCoachCode}
-                                        disabled={requestingCode || coachCodeRequested}
+                                        disabled={coachCodeRequested}
                                         className="text-xs font-semibold text-brand-400 hover:text-brand-300 disabled:opacity-60"
                                     >
-                                        {requestingCode ? "Sending..." : coachCodeRequested ? "Request sent" : "Don't have a code? Request one"}
+                                        {coachCodeRequested ? "Request sent" : "Don't have a code? Request one"}
                                     </button>
                                     {requestCodeMessage && (
                                         <p className="text-[10px] text-success font-semibold">{requestCodeMessage}</p>
@@ -874,7 +869,7 @@ export function OnboardingPage() {
                         </div>
                     )}
 
-                    <div className="flex items-center justify-between mt-8 pt-6 border-t border-surface-border">
+                    <div className="flex flex-wrap items-center justify-between gap-3 mt-8 pt-6 border-t border-surface-border">
                         <button
                             type="button"
                             onClick={() => {
@@ -885,13 +880,13 @@ export function OnboardingPage() {
                                 setStep((s) => Math.max(1, s - 1));
                             }}
                             disabled={step === 1}
-                            className="btn-ghost disabled:opacity-0"
+                            className="btn-ghost disabled:opacity-0 shrink-0"
                         >
                             <ChevronLeft className="w-4 h-4" />
                             Back
                         </button>
 
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 shrink-0 ml-auto">
                             {step === 3 && showSummary ? (
                                 <button
                                     type="button"
@@ -920,7 +915,7 @@ export function OnboardingPage() {
                         </div>
                     </div>
 
-                    <p className="mt-6 text-center text-[11px] text-fg-subtle leading-relaxed">
+                    <p className="mt-6 text-center text-[11px] text-fg-subtle leading-relaxed break-words">
                         By continuing, you agree to our{" "}
                         <Link href="/terms" className="text-brand-400 hover:text-brand-300 font-semibold">
                             Terms of Service

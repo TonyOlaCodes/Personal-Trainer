@@ -9,6 +9,7 @@ export const GENDER_OPTIONS = [
 ] as const;
 
 export const USERNAME_MAX_LENGTH = 20;
+export const MIN_USER_AGE = 13;
 
 export type GenderOption = (typeof GENDER_OPTIONS)[number]["id"];
 
@@ -86,6 +87,27 @@ export async function isUsernameAvailable(username: string, excludeUserId?: stri
     return rows.length === 0;
 }
 
+export function getDefaultDateOfBirthInputValue(): string {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+}
+
+export function getMaxDateOfBirthInputValue(minAge = MIN_USER_AGE): string {
+    const today = new Date();
+    const maxDate = new Date(Date.UTC(today.getUTCFullYear() - minAge, today.getUTCMonth(), today.getUTCDate()));
+    const year = maxDate.getUTCFullYear();
+    const month = String(maxDate.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(maxDate.getUTCDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+}
+
+export function isEligibleDateOfBirth(raw?: string | null): boolean {
+    return parseDateOfBirth(raw) !== null;
+}
+
 export function parseDateOfBirth(raw?: string | null): Date | null {
     if (!raw?.trim()) return null;
     const match = raw.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -102,7 +124,7 @@ export function parseDateOfBirth(raw?: string | null): Date | null {
         return null;
     }
     const today = new Date();
-    const minAgeDate = new Date(Date.UTC(today.getUTCFullYear() - 16, today.getUTCMonth(), today.getUTCDate()));
+    const minAgeDate = new Date(Date.UTC(today.getUTCFullYear() - MIN_USER_AGE, today.getUTCMonth(), today.getUTCDate()));
     if (date > minAgeDate) return null;
     if (year < 1900) return null;
     return date;

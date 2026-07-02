@@ -18,7 +18,7 @@ import {
     normalizeUsername,
     parseDateOfBirth,
 } from "@/lib/onboardingProfile";
-import { getCoachCodeRequestStatus } from "@/lib/coachCodeRequest";
+import { getCoachCodeRequestStatus, createCoachCodeRequest } from "@/lib/coachCodeRequest";
 import { z } from "zod";
 
 const genderValues = GENDER_OPTIONS.map((option) => option.id);
@@ -63,7 +63,7 @@ export async function POST(req: Request) {
         const d = parsed.data;
         const dateOfBirth = parseDateOfBirth(d.dateOfBirth);
         if (!dateOfBirth) {
-            return NextResponse.json({ error: "Enter a valid date of birth. You must be at least 16." }, { status: 400 });
+            return NextResponse.json({ error: "Must be at least 13." }, { status: 400 });
         }
 
         const normalizedUsername = normalizeUsername(d.username);
@@ -175,6 +175,16 @@ export async function POST(req: Request) {
             : null;
         const role = finalUser?.role ?? "FREE";
 
+        let coachCodeRequestSent = false;
+        if (savedUserId && d.coachCodeRequested && role === "FREE") {
+            try {
+                await createCoachCodeRequest(savedUserId);
+                coachCodeRequestSent = true;
+            } catch (err) {
+                console.error("[Onboarding] Failed to queue coach code request:", err);
+            }
+        }
+
         const coachCodeRequest = savedUserId ? await getCoachCodeRequestStatus(savedUserId) : null;
 
         if (savedUserId) {
@@ -184,7 +194,7 @@ export async function POST(req: Request) {
         return NextResponse.json({
             success: true,
             role,
-            coachCodeRequested: Boolean(coachCodeRequest?.request || d.coachCodeRequested),
+            coachCodeRequested: Boolean(coachCodeRequest?.request || coachCodeRequestSent || d.coachCodeRequested),
             redirectTo:
                 accessCode && (role === "PREMIUM" || role === "GENERAL_PREMIUM")
                     ? "/dashboard"
