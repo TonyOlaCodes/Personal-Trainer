@@ -466,7 +466,7 @@ export function CalendarClient({
                 <div className="card overflow-hidden shadow-glow-sm border-brand-500/10">
                     <div className="grid grid-cols-7 bg-surface-muted/20 border-b border-surface-border">
                         {DAYS.map(d => (
-                            <div key={d} className="py-3 text-center text-[10px] font-black uppercase tracking-widest text-fg-subtle border-r border-surface-border/50 last:border-r-0">
+                            <div key={d} className="py-2 sm:py-3 text-center text-[10px] font-black uppercase tracking-widest text-fg-subtle border-r border-surface-border/50 last:border-r-0">
                                 {d}
                             </div>
                         ))}
@@ -508,7 +508,7 @@ export function CalendarClient({
                                     key={dateKey} 
                                     onClick={() => setSelectedDateKey(dateKey)}
                                     className={cn(
-                                        "min-h-[110px] sm:min-h-[130px] p-2 border-b border-r border-surface-border/50 last:border-r-0 transition-all group flex flex-col items-start gap-1 relative overflow-hidden",
+                                        "min-h-[92px] sm:min-h-[130px] p-1.5 sm:p-2 border-b border-r border-surface-border/50 last:border-r-0 transition-all group flex flex-col items-start gap-1 relative overflow-hidden",
                                         "cursor-pointer hover:bg-surface-muted/20",
                                         !inCurrentMonth && "bg-surface-muted/10 opacity-55 hover:opacity-80",
                                         selected && "bg-brand-950/20",
@@ -517,9 +517,9 @@ export function CalendarClient({
                                     )}
                                 >
                                     <>
-                                            <div className="w-full flex justify-between items-start mb-1">
+                                            <div className="w-full flex justify-between items-start sm:mb-1">
                                                 <span className={cn(
-                                                    "text-sm font-black flex items-center justify-center w-7 h-7 rounded-lg transition-all",
+                                                    "text-xs sm:text-sm font-black flex items-center justify-center w-6 h-6 sm:w-7 sm:h-7 rounded-lg transition-all",
                                                     isTodayDay ? "bg-brand-400 text-white shadow-glow-brand" : (selected ? "bg-fg text-surface" : "text-fg-subtle group-hover:text-fg"),
                                                     !inCurrentMonth && !isTodayDay && !selected && "text-fg-subtle/60"
                                                 )}>
