@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef, type ReactNode } from "react";
 import {
     LineChart, Line, AreaChart, Area, BarChart, Bar, Cell,
     XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -129,6 +129,39 @@ function VolumeComparisonBadge({
                     <>{sign}{comparison.deltaKg.toLocaleString()} kg vs {vsLabel}</>
                 )}
             </span>
+        </div>
+    );
+}
+
+function LockedProgressPreview({
+    locked,
+    title,
+    description,
+    children,
+}: {
+    locked: boolean;
+    title: string;
+    description: string;
+    children: ReactNode;
+}) {
+    if (!locked) return <>{children}</>;
+
+    return (
+        <div className="relative">
+            <div className="pointer-events-none select-none blur-[5px] opacity-50 saturate-50" aria-hidden>
+                {children}
+            </div>
+            <div className="absolute inset-0 z-20 flex items-start justify-center rounded-2xl bg-surface-base/35 px-4 py-6 backdrop-blur-[1px]">
+                <div className="sticky top-24 w-full max-w-sm">
+                    <PremiumLockScreen
+                        compact
+                        title={title}
+                        description={description}
+                        codeHeading="Input code to unlock"
+                        codeButtonLabel="Unlock"
+                    />
+                </div>
+            </div>
         </div>
     );
 }
@@ -367,30 +400,10 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
         );
     }
 
-    const freeAccessOverlay = showFreeAccessLock ? (
-        <div className="absolute inset-0 z-20 flex items-start justify-center px-4 pt-6 sm:pt-10 bg-surface-base/25 backdrop-blur-[1px]">
-            <div className="sticky top-24 w-full max-w-xl">
-                <PremiumLockScreen
-                    title="Progress Analytics"
-                    description="Your real progress is underneath this lock. Enter an access code or request full access to unlock your charts, PRs, and session history."
-                    codeHeading="Input code to unlock"
-                    codeButtonLabel="Unlock progress"
-                />
-            </div>
-        </div>
-    ) : null;
-
     if (!data || data.totalWorkouts === 0) {
         return (
             <div className="relative p-4 sm:p-10 min-h-[640px]">
-                {freeAccessOverlay}
-                <div
-                    className={cn(
-                        "p-12 text-center card max-w-2xl mx-auto mt-12 bg-surface-muted/30 transition-all duration-300",
-                        showFreeAccessLock && "pointer-events-none select-none blur-[5px] opacity-50 saturate-50"
-                    )}
-                    aria-hidden={showFreeAccessLock}
-                >
+                <div className="p-12 text-center card max-w-2xl mx-auto mt-12 bg-surface-muted/30 transition-all duration-300">
                     <Dumbbell className="w-12 h-12 text-brand-400/40 mx-auto mb-4" />
                     <h3 className="heading-3 mb-2">Build Your First Data Point</h3>
                     <p className="text-sm text-fg-muted mb-6">Complete a workout to see your progress come to life.</p>
@@ -405,14 +418,7 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
 
     return (
         <div className="relative">
-            {freeAccessOverlay}
-            <div
-                className={cn(
-                    "p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8 animate-fade-in mb-24 lg:mb-12 transition-all duration-300",
-                    showFreeAccessLock && "pointer-events-none select-none blur-[5px] opacity-50 saturate-50"
-                )}
-                aria-hidden={showFreeAccessLock}
-            >
+            <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8 animate-fade-in mb-24 lg:mb-12 transition-all duration-300">
 
             {/* ── WEEKLY PULSE ── */}
             <section>
@@ -526,6 +532,11 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
 
             {/* ── BODYWEIGHT TREND ── */}
             {bodyweightData.length > 0 && !hiddenGoals?.includes("weight") ? (
+                <LockedProgressPreview
+                    locked={showFreeAccessLock}
+                    title="Unlock Bodyweight Trends"
+                    description="Your real bodyweight trend is underneath. Unlock access to view the chart clearly."
+                >
                 <section id="bodyweight" className="card p-5 sm:p-6 scroll-mt-24">
                     {/* Top bar: title + timeframe toggle */}
                     <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-5">
@@ -650,12 +661,18 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                         </ResponsiveContainer>
                     </div>
                 </section>
+                </LockedProgressPreview>
             ) : null}
 
 
 
             {/* ── TRAINING VOLUME ── */}
                         {/* ── EXERCISE HISTORY ── */}
+            <LockedProgressPreview
+                locked={showFreeAccessLock}
+                title="Unlock Exercise History"
+                description="Your logged exercise history is underneath. Unlock access to inspect sets, PRs, and progression."
+            >
             <section>
                 <h2 className="text-xs font-black text-fg-subtle uppercase tracking-[0.2em] mb-5 flex items-center gap-2">
                     <Activity className="w-4 h-4 text-brand-400" />
@@ -797,8 +814,14 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                     </div>
                 </div>
             </section>
+            </LockedProgressPreview>
 
             {/* Training Volume */}
+            <LockedProgressPreview
+                locked={showFreeAccessLock}
+                title="Unlock Training Volume"
+                description="Your detailed training volume history is underneath. Unlock access to compare trends over time."
+            >
             <section className="card p-5 sm:p-6">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                     <div className="flex items-center gap-3">
@@ -886,6 +909,7 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                         : `Total kg moved per ${volTimeframe.replace('ly', '').replace('i', 'y')} — latest period highlighted`}
                 </p>
             </section>
+            </LockedProgressPreview>
 
             {/* ── EXERCISE DETAIL MODAL ── */}
             {showExerciseModal && selectedExercise && (
