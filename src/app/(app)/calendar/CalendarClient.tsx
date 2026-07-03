@@ -593,11 +593,7 @@ export function CalendarClient({
                                                             {planned.name.replace(/workout/gi, '').trim()}
                                                         </span>
                                                     </div>
-                                                ) : isAfterPlan ? (
-                                                    <span className="text-[8px] font-black uppercase tracking-widest text-fg-subtle/70 mt-auto">
-                                                        After program
-                                                    </span>
-                                                ) : (
+                                                ) : isAfterPlan ? null : (
                                                     <div className="h-0.5 rounded-full bg-surface-border opacity-30 mt-auto" />
                                                 )}
                                             </div>
