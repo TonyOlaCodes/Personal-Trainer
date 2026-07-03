@@ -70,7 +70,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark app-intro-active" suppressHydrationWarning>
+    <html lang="en" className="dark" suppressHydrationWarning>
       <body className={`${inter.variable} antialiased w-full max-w-full max-md:overflow-x-hidden`}>
         <ClerkProvider
           appearance={{

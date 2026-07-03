@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 
-const FULL_DURATION_MS = 2600;
+const FULL_DURATION_MS = 2700;
 const REDUCED_DURATION_MS = 700;
-const EXIT_DURATION_MS = 720;
+const EXIT_DURATION_MS = 950;
 
 const letters = ["T", "O", "L", "G"];
 
@@ -16,23 +16,19 @@ export function AppIntroSplash() {
     useEffect(() => {
         const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
         const duration = prefersReducedMotion ? REDUCED_DURATION_MS : FULL_DURATION_MS;
-        const root = document.documentElement;
 
         setReducedMotion(prefersReducedMotion);
 
         const leaveTimer = window.setTimeout(() => {
-            root.classList.add("app-intro-revealing");
             setLeaving(true);
         }, Math.max(0, duration - EXIT_DURATION_MS));
         const removeTimer = window.setTimeout(() => {
-            root.classList.remove("app-intro-active", "app-intro-revealing");
             setMounted(false);
         }, duration);
 
         return () => {
             window.clearTimeout(leaveTimer);
             window.clearTimeout(removeTimer);
-            root.classList.remove("app-intro-active", "app-intro-revealing");
         };
     }, []);
 
