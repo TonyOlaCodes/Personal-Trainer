@@ -5,7 +5,6 @@ import { getDirectMessageActivity, getDirectMessagePeerIds } from "@/lib/chatAct
 import { getUnreadCountsByPeer } from "@/lib/chatUnread";
 import { getCoachClientFilterFlags } from "@/lib/chatConversationMeta";
 import { withResolvedAvatar } from "@/lib/uploadUrls";
-import { dedupeCoachPlansByName } from "@/lib/coachPlans";
 import { isInactiveAccount } from "@/lib/userDeactivation";
 import { isClientRole, isCoachRole } from "@/lib/roles";
 import { getFreeUserAccessLiaisonId } from "@/lib/accessRequest";
@@ -148,16 +147,6 @@ export default async function ChatPage() {
         conversations = await loadPeerConversations(mergedPeerIds);
     }
 
-    let coachPlans: { id: string; name: string; type?: string }[] = [];
-    if (isCoachRole(user.role)) {
-        const rawPlans = await prisma.plan.findMany({
-            where: user.role === "COACH" ? { creatorId: user.id } : {},
-            select: { id: true, name: true, type: true, updatedAt: true, creatorId: true },
-            orderBy: { updatedAt: "desc" },
-        });
-        coachPlans = dedupeCoachPlansByName(rawPlans).map(({ id, name, type }) => ({ id, name, type }));
-    }
-
     let initialUnread: Record<string, number> = {};
     if (conversations.length > 0 && (isClientRole(user.role) || isCoachRole(user.role))) {
         const peerIds = conversations.map((conversation) => conversation.userId);
@@ -202,7 +191,6 @@ export default async function ChatPage() {
             currentUserRole={user.role}
             conversations={conversations}
             canUseDirectChat={isClientRole(user.role) || isCoachRole(user.role)}
-            coachPlans={coachPlans}
             initialUnread={initialUnread}
         />
     );

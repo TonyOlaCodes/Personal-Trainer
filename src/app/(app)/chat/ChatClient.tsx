@@ -30,7 +30,6 @@ import { CoachChatTools } from "@/components/chat/CoachChatTools";
 import { useChatUnread } from "@/components/chat/ChatUnreadProvider";
 import { useMobileKeyboardOpen } from "@/hooks/useMobileKeyboardOpen";
 import { useScrollLock } from "@/hooks/useScrollLock";
-import type { CoachPlanRecord } from "@/lib/coachPlans";
 
 /* ─── Types ──────────────────────────────────────────── */
 interface ReplyPreview {
@@ -92,7 +91,6 @@ interface Props {
     currentUserRole: string;
     conversations: Conversation[];
     canUseDirectChat?: boolean;
-    coachPlans?: CoachPlanRecord[];
     initialUnread?: Record<string, number>;
 }
 
@@ -160,7 +158,6 @@ export function ChatClient({
     currentUserRole,
     conversations,
     canUseDirectChat = true,
-    coachPlans = [],
     initialUnread = {},
 }: Props) {
     const isCoachUser = currentUserRole === "COACH" || currentUserRole === "SUPER_ADMIN";
@@ -2130,7 +2127,6 @@ export function ChatClient({
                             <div className="mb-2">
                                 <CoachChatTools
                                     conversations={sortedConversations.filter((conversation) => conversation.isCoachClient)}
-                                    coachPlans={coachPlans}
                                     selectedClientId={selectedConv.userId}
                                     onComplete={fetchMessages}
                                 />

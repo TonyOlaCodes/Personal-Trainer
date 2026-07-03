@@ -1,10 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { ClipboardList, Dumbbell, Megaphone, X } from "lucide-react";
+import { ClipboardList, Megaphone, X } from "lucide-react";
 import { ModalOverlay } from "@/components/shared/ModalOverlay";
 import { cn } from "@/lib/utils";
-import { formatCoachPlanLabel, type CoachPlanRecord } from "@/lib/coachPlans";
 
 interface ConversationOption {
     userId: string;
@@ -14,16 +13,14 @@ interface ConversationOption {
 
 interface Props {
     conversations: ConversationOption[];
-    coachPlans: CoachPlanRecord[];
     selectedClientId?: string | null;
     onComplete?: () => void;
 }
 
-type ModalKind = "plan" | "checkin" | "broadcast" | null;
+type ModalKind = "checkin" | "broadcast" | null;
 
-export function CoachChatTools({ conversations, coachPlans, selectedClientId, onComplete }: Props) {
+export function CoachChatTools({ conversations, selectedClientId, onComplete }: Props) {
     const [modal, setModal] = useState<ModalKind>(null);
-    const [planId, setPlanId] = useState("");
     const [note, setNote] = useState("");
     const [broadcastMode, setBroadcastMode] = useState<"all" | "selected">("all");
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -36,18 +33,10 @@ export function CoachChatTools({ conversations, coachPlans, selectedClientId, on
     const closeModal = () => {
         setModal(null);
         setNote("");
-        setPlanId("");
         setBroadcastText("");
         setBroadcastMode("all");
         setSelectedIds([]);
         setError(null);
-    };
-
-    const openPlan = () => {
-        setPlanId(coachPlans[0]?.id ?? "");
-        setNote("");
-        setError(null);
-        setModal("plan");
     };
 
     const openCheckIn = () => {
@@ -68,31 +57,6 @@ export function CoachChatTools({ conversations, coachPlans, selectedClientId, on
         setSelectedIds((prev) =>
             prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
         );
-    };
-
-    const handleSendPlan = async () => {
-        if (!selectedClientId || !planId) return;
-        setSubmitting(true);
-        setError(null);
-        try {
-            const res = await fetch("/api/coach/chat/send-plan", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    clientId: selectedClientId,
-                    planId,
-                    note: note.trim() || undefined,
-                }),
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(data.error ?? "Failed to send plan");
-            closeModal();
-            onComplete?.();
-        } catch (err) {
-            setError(err instanceof Error ? err.message : "Failed to send plan");
-        } finally {
-            setSubmitting(false);
-        }
     };
 
     const handleRequestCheckIn = async () => {
@@ -149,27 +113,15 @@ export function CoachChatTools({ conversations, coachPlans, selectedClientId, on
         <>
             <div className="flex flex-wrap items-center gap-1.5">
                 {canDirectAction && (
-                    <>
-                        <button
-                            type="button"
-                            onClick={openPlan}
-                            disabled={coachPlans.length === 0}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-brand-500/10 text-brand-400 hover:bg-brand-500/20 transition-colors disabled:opacity-40"
-                            title="Send workout plan"
-                        >
-                            <Dumbbell className="w-3.5 h-3.5" />
-                            Plan
-                        </button>
-                        <button
-                            type="button"
-                            onClick={openCheckIn}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-surface-muted text-fg-muted hover:text-fg hover:bg-surface-elevated transition-colors"
-                            title="Request check-in"
-                        >
-                            <ClipboardList className="w-3.5 h-3.5" />
-                            Check-in
-                        </button>
-                    </>
+                    <button
+                        type="button"
+                        onClick={openCheckIn}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-surface-muted text-fg-muted hover:text-fg hover:bg-surface-elevated transition-colors"
+                        title="Request check-in"
+                    >
+                        <ClipboardList className="w-3.5 h-3.5" />
+                        Check-in
+                    </button>
                 )}
                 <button
                     type="button"
@@ -193,7 +145,6 @@ export function CoachChatTools({ conversations, coachPlans, selectedClientId, on
                             <div className="min-w-0">
                                 <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">Coach Broadcast</p>
                                 <h3 className="text-lg font-black text-fg truncate">
-                                    {modal === "plan" && "Send Workout Plan"}
                                     {modal === "checkin" && "Request Check-In"}
                                     {modal === "broadcast" && "Broadcast to All Clients"}
                                 </h3>
@@ -204,35 +155,6 @@ export function CoachChatTools({ conversations, coachPlans, selectedClientId, on
                         </div>
 
                         <div className="flex-1 overflow-y-auto overscroll-contain p-5 space-y-4 min-h-0">
-                            {modal === "plan" && (
-                                <>
-                                    <div>
-                                        <label className="text-[10px] font-bold uppercase tracking-widest text-fg-subtle">Plan</label>
-                                        <select
-                                            className="input w-full mt-1.5"
-                                            value={planId}
-                                            onChange={(e) => setPlanId(e.target.value)}
-                                        >
-                                            {coachPlans.map((plan) => (
-                                                <option key={plan.id} value={plan.id}>
-                                                    {formatCoachPlanLabel(plan)}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="text-[10px] font-bold uppercase tracking-widest text-fg-subtle">Optional note</label>
-                                        <textarea
-                                            className="input w-full mt-1.5 min-h-[80px] resize-none"
-                                            placeholder="Add a personal note with the plan..."
-                                            value={note}
-                                            onChange={(e) => setNote(e.target.value)}
-                                            maxLength={500}
-                                        />
-                                    </div>
-                                </>
-                            )}
-
                             {modal === "checkin" && (
                                 <div>
                                     <label className="text-[10px] font-bold uppercase tracking-widest text-fg-subtle">Optional note</label>
@@ -320,12 +242,10 @@ export function CoachChatTools({ conversations, coachPlans, selectedClientId, on
                                 type="button"
                                 disabled={
                                     submitting
-                                    || (modal === "plan" && !planId)
                                     || (modal === "broadcast" && (!broadcastText.trim() || (broadcastMode === "selected" && selectedIds.length === 0)))
                                 }
                                 onClick={() => {
-                                    if (modal === "plan") void handleSendPlan();
-                                    else if (modal === "checkin") void handleRequestCheckIn();
+                                    if (modal === "checkin") void handleRequestCheckIn();
                                     else if (modal === "broadcast") void handleBroadcast();
                                 }}
                                 className="btn-primary flex-1"
