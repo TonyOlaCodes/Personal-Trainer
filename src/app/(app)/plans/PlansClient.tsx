@@ -276,7 +276,7 @@ export function PlansClient({ plans, userRole, activeSession = null, coachClient
                     <h2 className="heading-2">Your Plans</h2>
                     <p className="subheading mt-1">
                         {isCoach
-                            ? `${localPlans.length} programme${localPlans.length !== 1 ? "s" : ""} · one client per plan (copies created automatically when needed)`
+                            ? `${localPlans.length} programme${localPlans.length !== 1 ? "s" : ""}`
                             : `${localPlans.length} programme${localPlans.length !== 1 ? "s" : ""} saved`}
                     </p>
                 </div>
