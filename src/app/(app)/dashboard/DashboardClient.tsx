@@ -994,19 +994,6 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                 )}
             </div>
 
-            {user.role === "FREE" && (
-                <div className="card p-6 bg-brand-950/10 border-brand-500/10 flex flex-col sm:flex-row items-center justify-between gap-4 mt-6">
-                    <div>
-                        <h4 className="text-sm font-bold text-fg">Ready for more?</h4>
-                        <p className="text-xs text-fg-muted">Reach out to your coach for an access code to unlock Premium insights, chat, and check-ins.</p>
-                    </div>
-                    <Link href="/settings" className="btn-secondary btn-sm shrink-0 font-bold uppercase tracking-wide text-[10px]">
-                        Redeem Code
-                    </Link>
-                </div>
-            )}
-
-
             {showCheckInPanel && checkInPanel && (
                 <div className="fixed inset-0 z-[60] flex overflow-hidden overscroll-none flex-col md:items-center md:justify-center md:p-6 bg-surface md:bg-black/60 md:backdrop-blur-sm animate-fade-in">
                     <div className="relative flex flex-col w-full h-full md:h-auto md:max-h-[90vh] md:max-w-2xl md:rounded-2xl md:border md:border-surface-border md:shadow-modal bg-surface overflow-hidden">
