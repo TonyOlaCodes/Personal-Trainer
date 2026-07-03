@@ -6,7 +6,7 @@ import { ClientDetailView } from "./ClientDetailView";
 import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
 import { getEffectiveCheckInDueStateForUser } from "@/lib/coachAttentionActions";
 import { formatCheckInDueDate, formatCheckInWeekLabel, getIsoWeekYear } from "@/lib/checkInLabels";
-import { getWeekNumber } from "@/lib/utils";
+import { getDayName, getWeekNumber, isSameCalendarDay, parseLogDate, toDateKey } from "@/lib/utils";
 import { getDailyMetricTargets } from "@/lib/dailyMetrics";
 import { format } from "date-fns";
 import { createExerciseSessionEntry, mergeSetIntoExerciseSession, normalizeExerciseHistory } from "@/lib/exerciseHistory";
@@ -18,6 +18,8 @@ import { getUserPinnedExercises } from "@/lib/pinnedExercises";
 import { getActiveSessionsForClients } from "@/lib/coachChat";
 import { resolveLogSetExerciseName } from "@/lib/logSetExerciseName";
 import { getNickname, pickDisplayName } from "@/lib/userNicknames";
+import { activeWorkoutWhere, getPlannedWorkoutForDate } from "@/lib/planSchedule";
+import { loadPlanScheduleRevisions } from "@/lib/planScheduleHistory";
 
 export const metadata = { title: "Client Details" };
 
@@ -39,7 +41,25 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                     take: 40,
                 },
                 checkIns: { orderBy: { createdAt: "desc" }, take: 5 },
-                plans: { where: { isActive: true }, include: { plan: true }, take: 1 },
+                plans: {
+                    where: { isActive: true },
+                    include: {
+                        plan: {
+                            include: {
+                                weeks: {
+                                    orderBy: { weekNumber: "asc" },
+                                    include: {
+                                        workouts: {
+                                            where: activeWorkoutWhere(),
+                                            orderBy: { dayNumber: "asc" },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                    take: 1,
+                },
                 coach: { select: { name: true, email: true } },
             },
         });
@@ -60,6 +80,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
 
         const checkInWeekNumber = getWeekNumber(new Date());
 
+        const activeUserPlan = target.plans[0] ?? null;
         const [activePlan, availablePlans, checkInSchedule, hasCheckInThisWeek, bodyweightRows, workoutNotesRows, completedLogs, clientMetricTargets, pinnedExercises] = await Promise.all([
             Promise.resolve(target.plans[0]?.plan ?? null),
             prisma.plan.findMany({
@@ -158,6 +179,56 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             ? {}
             : await getActiveSessionsForClients([target.id]);
         const activeSession = activeSessions[target.id] ?? null;
+        const todayDateKey = toDateKey(new Date());
+        const today = parseLogDate(todayDateKey);
+        const scheduleRevisions = activePlan ? await loadPlanScheduleRevisions(activePlan.id) : [];
+        const scheduledTodayWorkout = activeUserPlan && activePlan
+            ? getPlannedWorkoutForDate(
+                {
+                    startedAt: activeUserPlan.startedAt,
+                    plan: {
+                        weeks: activePlan.weeks.map((week) => ({
+                            weekNumber: week.weekNumber,
+                            workouts: week.workouts.map((workout) => ({
+                                id: workout.id,
+                                name: workout.name,
+                                dayNumber: workout.dayNumber,
+                                dayOfWeek: workout.dayOfWeek,
+                            })),
+                        })),
+                    },
+                    scheduleRevisions,
+                },
+                today,
+                { today, dateKey: todayDateKey }
+            )
+            : null;
+        const completedTodayLog = scheduledTodayWorkout
+            ? (completedLogs ?? []).find((log) =>
+                log.workoutId === scheduledTodayWorkout.id
+                && log.status === "COMPLETED"
+                && isSameCalendarDay(log.loggedAt, todayDateKey)
+            ) ?? null
+            : null;
+        const currentWorkout = activeSession
+            ? {
+                id: activeSession.workoutId,
+                name: activeSession.workoutName,
+                status: "IN_PROGRESS" as const,
+                scheduledDay: getDayName(today),
+                href: `/plans/log/view/${activeSession.logId}`,
+            }
+            : scheduledTodayWorkout
+                ? {
+                    id: scheduledTodayWorkout.id,
+                    name: scheduledTodayWorkout.name,
+                    status: completedTodayLog ? "COMPLETED" as const : "NOT_STARTED" as const,
+                    scheduledDay: getDayName(today),
+                    href: completedTodayLog
+                        ? `/plans/log/view/${completedTodayLog.id}`
+                        : `/plans/log/${scheduledTodayWorkout.id}?clientId=${target.id}&date=${todayDateKey}`,
+                }
+                : null;
 
         const checkInDueState = await getEffectiveCheckInDueStateForUser(target.id, checkInSchedule, new Date());
         const awaitingCheckIn =
@@ -204,6 +275,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                             adherenceTrend,
                             lastActiveAt: target.lastActiveAt?.toISOString() || null,
                             activeSession,
+                            currentWorkout,
                             hiddenGoals: target.hiddenGoals ?? [],
                             targetCalories: clientMetricTargets.targetCalories,
                             targetSteps: clientMetricTargets.targetSteps,

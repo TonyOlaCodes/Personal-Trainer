@@ -54,6 +54,13 @@ interface Client {
     adherenceTrend?: "UP" | "DOWN" | "STABLE";
     lastActiveAt?: string | null;
     activeSession?: { workoutName: string; logId: string; workoutId: string } | null;
+    currentWorkout?: {
+        id: string;
+        name: string;
+        status: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED";
+        scheduledDay: string;
+        href: string;
+    } | null;
     hiddenGoals?: string[];
 }
 
@@ -453,6 +460,21 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
         };
     }, [selectedExercise, selectedExerciseHistory]);
 
+    const currentWorkoutMeta = client.currentWorkout
+        ? {
+            label: client.currentWorkout.status === "IN_PROGRESS"
+                ? "In Progress"
+                : client.currentWorkout.status === "COMPLETED"
+                    ? "Completed"
+                    : "Not Started",
+            className: client.currentWorkout.status === "IN_PROGRESS"
+                ? "bg-warning/10 text-warning border-warning/30"
+                : client.currentWorkout.status === "COMPLETED"
+                    ? "bg-success/10 text-success border-success/30"
+                    : "bg-brand-500/10 text-brand-400 border-brand-500/30",
+        }
+        : null;
+
     return (
         <div className="space-y-8 animate-fade-in">
             <RecentSessionsExplorer
@@ -537,6 +559,39 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                     </Link>
                 </div>
             </div>
+
+            {client.currentWorkout && currentWorkoutMeta && (
+                <div className="card p-5 sm:p-6 border-warning/30 bg-warning/5 shadow-glow-warning-sm">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex items-start gap-4 min-w-0">
+                            <div className="w-12 h-12 rounded-2xl bg-warning/10 border border-warning/25 flex items-center justify-center shrink-0">
+                                <Dumbbell className="w-5 h-5 text-warning" />
+                            </div>
+                            <div className="min-w-0">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-warning">Current Workout</p>
+                                <h3 className="text-xl sm:text-2xl font-black text-fg tracking-tight truncate">
+                                    {client.currentWorkout.name}
+                                </h3>
+                                <div className="mt-3 flex flex-wrap items-center gap-2">
+                                    <span className={cn("px-3 py-1 rounded-xl border text-[10px] font-black uppercase tracking-widest", currentWorkoutMeta.className)}>
+                                        {currentWorkoutMeta.label}
+                                    </span>
+                                    <span className="px-3 py-1 rounded-xl border border-surface-border bg-surface-muted text-[10px] font-black uppercase tracking-widest text-fg-muted">
+                                        Scheduled: {client.currentWorkout.scheduledDay}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        <Link
+                            href={client.currentWorkout.href}
+                            className="btn-primary h-11 px-5 inline-flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest shadow-glow-brand lg:shrink-0"
+                        >
+                            View Workout
+                            <ChevronRight className="w-4 h-4" />
+                        </Link>
+                    </div>
+                </div>
+            )}
 
             {/* Active plan summary */}
             <div className="card p-5 sm:p-6 border-brand-500/25 bg-brand-500/5 shadow-glow-brand-sm">
