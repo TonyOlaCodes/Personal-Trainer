@@ -93,7 +93,14 @@ interface Props {
     plans: AdminPlan[];
     codes: AdminCode[];
     userRole: string;
-    maintenanceModeEnabled: boolean;
+    maintenanceModeStatus: MaintenanceModeStatus;
+}
+
+interface MaintenanceModeStatus {
+    enabled: boolean;
+    scheduledAt: string | null;
+    isActive: boolean;
+    isScheduled: boolean;
 }
 
 type Tab = "users" | "coaches" | "plans" | "codes" | "code-requests" | "announcements";
@@ -123,6 +130,26 @@ const USER_SORT_OPTIONS: { id: UserSortField; label: string; defaultDir: SortDir
     { id: "name", label: "Name", defaultDir: "asc" },
     { id: "status", label: "Status", defaultDir: "asc" },
 ];
+
+function toLocalDateTimeInputValue(value: string | null) {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+
+    const pad = (part: number) => String(part).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function formatMaintenanceDate(value: string | null) {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+
+    return new Intl.DateTimeFormat(undefined, {
+        dateStyle: "medium",
+        timeStyle: "short",
+    }).format(date);
+}
 
 function accountSortRank(account: { isDeleted: boolean; isDeactivated: boolean }) {
     if (account.isDeleted) return 2;
@@ -227,7 +254,7 @@ function codeStatusInput(code: AdminCode) {
     };
 }
 
-export function AdminClient({ users: initialUsers, coaches, plans: initialPlans, codes: initialCodes, userRole, maintenanceModeEnabled }: Props) {
+export function AdminClient({ users: initialUsers, coaches, plans: initialPlans, codes: initialCodes, userRole, maintenanceModeStatus }: Props) {
     const searchParams = useSearchParams();
     const [tab, setTab] = useState<Tab>("users");
     const [users, setUsers] = useState<AdminUser[]>(initialUsers);
@@ -265,8 +292,11 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
     const [accountDeleteConfirmText, setAccountDeleteConfirmText] = useState("");
     const [selectedCoachId, setSelectedCoachId] = useState<string>("NONE");
     const [accountActionId, setAccountActionId] = useState<string | null>(null);
-    const [maintenanceEnabled, setMaintenanceEnabled] = useState(maintenanceModeEnabled);
+    const [maintenanceStatus, setMaintenanceStatus] = useState(maintenanceModeStatus);
+    const [maintenanceScheduleInput, setMaintenanceScheduleInput] = useState(() => toLocalDateTimeInputValue(maintenanceModeStatus.scheduledAt));
     const [maintenanceSaving, setMaintenanceSaving] = useState(false);
+    const maintenanceEnabled = maintenanceStatus.enabled;
+    const maintenanceStartLabel = formatMaintenanceDate(maintenanceStatus.scheduledAt);
 
     const sortedUsers = useMemo(
         () => sortAdminUsers(users, userSortField, userSortDir),
@@ -433,18 +463,35 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
     };
 
     const updateMaintenanceMode = async (enabled: boolean) => {
-        if (maintenanceSaving || enabled === maintenanceEnabled) return;
+        if (maintenanceSaving) return;
+
+        const scheduledAt = enabled && maintenanceScheduleInput
+            ? new Date(maintenanceScheduleInput).toISOString()
+            : null;
+
+        if (
+            enabled === maintenanceStatus.enabled
+            && scheduledAt === maintenanceStatus.scheduledAt
+        ) {
+            return;
+        }
 
         setMaintenanceSaving(true);
         try {
             const res = await fetch("/api/admin/maintenance", {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ enabled }),
+                body: JSON.stringify({ enabled, scheduledAt }),
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(data.error ?? "Failed to update maintenance mode");
-            setMaintenanceEnabled(Boolean(data.enabled));
+            setMaintenanceStatus({
+                enabled: Boolean(data.enabled),
+                scheduledAt: typeof data.scheduledAt === "string" ? data.scheduledAt : null,
+                isActive: Boolean(data.isActive),
+                isScheduled: Boolean(data.isScheduled),
+            });
+            setMaintenanceScheduleInput(toLocalDateTimeInputValue(typeof data.scheduledAt === "string" ? data.scheduledAt : null));
         } catch (err) {
             alert(err instanceof Error ? err.message : "Failed to update maintenance mode");
         } finally {
@@ -587,7 +634,7 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
                 "card p-5 border",
                 maintenanceEnabled ? "border-warning/35 bg-warning/5 shadow-glow-warning-sm" : "border-surface-border bg-surface-card"
             )}>
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                     <div className="flex items-start gap-3">
                         <div className={cn(
                             "w-10 h-10 rounded-xl flex items-center justify-center border shrink-0",
@@ -598,35 +645,70 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
                         <div>
                             <h3 className="text-sm font-black uppercase tracking-widest text-fg">Maintenance Mode</h3>
                             <p className="text-xs text-fg-muted mt-1">
-                                {maintenanceEnabled
+                                {maintenanceStatus.isActive
                                     ? "Maintenance mode is active. Only administrators can access the platform."
+                                    : maintenanceStatus.isScheduled
+                                        ? `Scheduled maintenance starts ${maintenanceStartLabel ?? "soon"}. Users will see a warning until then.`
                                     : "Temporarily block non-admin users during planned maintenance."}
                             </p>
+                            {maintenanceEnabled && !maintenanceStatus.isActive && maintenanceStartLabel && (
+                                <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-warning">
+                                    Scheduled for {maintenanceStartLabel}
+                                </p>
+                            )}
                         </div>
                     </div>
 
-                    <div className="inline-flex rounded-xl border border-surface-border bg-surface-muted p-1 lg:shrink-0">
-                        {([
-                            { enabled: false, label: "Off" },
-                            { enabled: true, label: "On" },
-                        ] as const).map((option) => (
+                    <div className="w-full space-y-3 xl:w-auto xl:min-w-[24rem] xl:shrink-0">
+                        <div className="inline-flex rounded-xl border border-surface-border bg-surface-muted p-1">
+                            {([
+                                { enabled: false, label: "Off" },
+                                { enabled: true, label: "On" },
+                            ] as const).map((option) => (
+                                <button
+                                    key={option.label}
+                                    type="button"
+                                    onClick={() => void updateMaintenanceMode(option.enabled)}
+                                    disabled={maintenanceSaving}
+                                    className={cn(
+                                        "min-w-20 rounded-lg px-4 py-2 text-xs font-black uppercase tracking-widest transition-all disabled:opacity-60",
+                                        maintenanceEnabled === option.enabled
+                                            ? option.enabled
+                                                ? "bg-warning text-white shadow-glow-warning-sm"
+                                                : "bg-surface-card text-fg shadow-sm"
+                                            : "text-fg-muted hover:text-fg"
+                                    )}
+                                >
+                                    {maintenanceSaving && maintenanceEnabled !== option.enabled ? "..." : option.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                            <label className="block">
+                                <span className="mb-1 block text-[10px] font-black uppercase tracking-widest text-fg-subtle">
+                                    Scheduled start
+                                </span>
+                                <input
+                                    type="datetime-local"
+                                    value={maintenanceScheduleInput}
+                                    onChange={(e) => setMaintenanceScheduleInput(e.target.value)}
+                                    disabled={maintenanceSaving}
+                                    className="input h-10 text-sm"
+                                />
+                            </label>
                             <button
-                                key={option.label}
                                 type="button"
-                                onClick={() => void updateMaintenanceMode(option.enabled)}
-                                disabled={maintenanceSaving}
-                                className={cn(
-                                    "min-w-20 rounded-lg px-4 py-2 text-xs font-black uppercase tracking-widest transition-all disabled:opacity-60",
-                                    maintenanceEnabled === option.enabled
-                                        ? option.enabled
-                                            ? "bg-warning text-white shadow-glow-warning-sm"
-                                            : "bg-surface-card text-fg shadow-sm"
-                                        : "text-fg-muted hover:text-fg"
-                                )}
+                                onClick={() => void updateMaintenanceMode(true)}
+                                disabled={maintenanceSaving || !maintenanceEnabled}
+                                className="btn-secondary self-end h-10 px-4 text-[10px] font-black uppercase tracking-widest"
                             >
-                                {maintenanceSaving && maintenanceEnabled !== option.enabled ? "..." : option.label}
+                                Save schedule
                             </button>
-                        ))}
+                        </div>
+                        <p className="text-[10px] leading-relaxed text-fg-muted">
+                            Leave the scheduled start blank to turn maintenance on immediately. Pick a future time to warn users first, then block non-admin access automatically.
+                        </p>
                     </div>
                 </div>
             </div>

@@ -2,10 +2,11 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { getMaintenanceMode, setMaintenanceMode } from "@/lib/maintenanceMode";
+import { getMaintenanceStatus, setMaintenanceMode } from "@/lib/maintenanceMode";
 
 const updateSchema = z.object({
     enabled: z.boolean(),
+    scheduledAt: z.string().datetime().nullable().optional(),
 });
 
 async function requireAdmin() {
@@ -24,7 +25,7 @@ export async function GET() {
     const admin = await requireAdmin();
     if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    return NextResponse.json({ enabled: await getMaintenanceMode() });
+    return NextResponse.json(await getMaintenanceStatus());
 }
 
 export async function PATCH(req: Request) {
@@ -32,8 +33,7 @@ export async function PATCH(req: Request) {
     if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const parsed = updateSchema.parse(await req.json());
-    const enabled = await setMaintenanceMode(parsed.enabled);
+    const status = await setMaintenanceMode(parsed.enabled, parsed.scheduledAt ?? null);
 
-    return NextResponse.json({ enabled });
+    return NextResponse.json(status);
 }
-

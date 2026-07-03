@@ -703,15 +703,6 @@ export function PlanCreateClient() {
                         </p>
                     </div>
                     <button
-                        type="button"
-                        onClick={copyCurrentWeek}
-                        className="btn-secondary h-8 px-2.5 gap-1.5 text-[10px] font-black uppercase tracking-wide shrink-0"
-                        title="Copy this week's workouts"
-                    >
-                        <Copy className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">Copy week</span>
-                    </button>
-                    <button
                         onClick={handleNextWeek}
                         className={cn(
                             "btn-icon w-8 h-8 rounded-lg shrink-0 border",

@@ -17,6 +17,29 @@ const PUBLIC_API_DURING_MAINTENANCE = [
     '/api/webhooks/clerk',
 ];
 
+function normalizeMaintenanceValue(value: unknown) {
+    if (value === true || value === 'true') return { enabled: true, scheduledAt: null };
+    if (!value || value === false || value === 'false') return { enabled: false, scheduledAt: null };
+
+    if (typeof value === 'string') {
+        try {
+            return normalizeMaintenanceValue(JSON.parse(value));
+        } catch {
+            return { enabled: false, scheduledAt: null };
+        }
+    }
+
+    if (typeof value === 'object') {
+        const raw = value as { enabled?: unknown; scheduledAt?: unknown };
+        return {
+            enabled: raw.enabled === true || raw.enabled === 'true',
+            scheduledAt: typeof raw.scheduledAt === 'string' && raw.scheduledAt ? raw.scheduledAt : null,
+        };
+    }
+
+    return { enabled: false, scheduledAt: null };
+}
+
 async function loadMaintenanceAccess(clerkId: string | null) {
     const databaseUrl = process.env.DATABASE_URL;
     if (!databaseUrl) return { enabled: false, isAdmin: false };
@@ -39,9 +62,12 @@ async function loadMaintenanceAccess(clerkId: string | null) {
                 `
                 : Promise.resolve([]),
         ]);
+        const state = normalizeMaintenanceValue(settingRows[0]?.value);
+        const scheduledTime = state.scheduledAt ? Date.parse(state.scheduledAt) : NaN;
+        const isScheduledForFuture = state.enabled && Number.isFinite(scheduledTime) && scheduledTime > Date.now();
 
         return {
-            enabled: settingRows[0]?.value === true || settingRows[0]?.value === 'true',
+            enabled: state.enabled && !isScheduledForFuture,
             isAdmin: userRows[0]?.role === 'SUPER_ADMIN',
         };
     } catch {

@@ -14,6 +14,17 @@ import { PresenceHeartbeat } from "@/components/layout/PresenceHeartbeat";
 import { GlobalAnnouncements } from "@/components/shared/GlobalAnnouncements";
 import { ChatUnreadProvider } from "@/components/chat/ChatUnreadProvider";
 import { AppUserProvider } from "@/lib/AppUserContext";
+import { getMaintenanceStatus } from "@/lib/maintenanceMode";
+
+function formatMaintenanceStart(value: string) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "soon";
+
+    return new Intl.DateTimeFormat(undefined, {
+        dateStyle: "medium",
+        timeStyle: "short",
+    }).format(date);
+}
 
 export default async function AppLayout({
     children,
@@ -72,6 +83,12 @@ export default async function AppLayout({
 
     const userRole = user?.role ?? "FREE";
     const showCheckIns = user ? canAccessCheckIns(user.role, user.coachId) : false;
+    const maintenanceStatus = await getMaintenanceStatus();
+    const scheduledMaintenanceAt = userRole !== "SUPER_ADMIN"
+        && maintenanceStatus.isScheduled
+        && maintenanceStatus.scheduledAt
+        ? maintenanceStatus.scheduledAt
+        : null;
 
     if (isCoachRole(userRole)) {
         await deactivateCoachActivePlans(user.id);
@@ -98,6 +115,11 @@ export default async function AppLayout({
                 <Sidebar userRole={userRole} showCheckIns={showCheckIns} initialCollapsed={isSidebarCollapsed} />
 
                 <div className="md:pl-[var(--sidebar-width)] w-full max-w-full min-w-0">
+                    {scheduledMaintenanceAt && (
+                        <div className="border-b border-warning/25 bg-warning/10 px-4 py-3 text-center text-xs font-bold text-fg">
+                            Scheduled maintenance starts {formatMaintenanceStart(scheduledMaintenanceAt)}. The app will be unavailable during maintenance.
+                        </div>
+                    )}
                     <AppMobileFrame userRole={userRole}>
                         {children}
                     </AppMobileFrame>
