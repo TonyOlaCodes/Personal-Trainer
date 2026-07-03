@@ -35,6 +35,7 @@ export interface AchievementDisplayItem {
     id: string;
     title: string;
     description: string;
+    unlockHint: string;
     rarity: AchievementDefinition["rarity"];
     icon: AchievementDefinition["icon"];
     unlocked: boolean;
@@ -61,6 +62,10 @@ export function getAchievementCatalogForRole(role: string): Array<AchievementDef
 export function getTotalAchievementsForRole(role: string): number {
     if (isCoachRole(role)) return TOTAL_COACH_ACHIEVEMENTS;
     return TOTAL_CLIENT_ACHIEVEMENTS;
+}
+
+function getUnlockHint(def: AchievementDefinition | CoachAchievementDefinition): string {
+    return def.unlockHint ?? `Unlock this by: ${def.description}.`;
 }
 
 async function getUserRole(userId: string): Promise<string> {
@@ -362,6 +367,7 @@ function buildClientDisplayList(
             id: def.id,
             title: def.title,
             description: def.description,
+            unlockHint: getUnlockHint(def),
             rarity: def.rarity,
             icon: def.icon,
             unlocked: isUnlocked,
@@ -382,6 +388,7 @@ function buildCoachDisplayList(
             id: def.id,
             title: def.title,
             description: def.description,
+            unlockHint: getUnlockHint(def),
             rarity: def.rarity,
             icon: def.icon,
             unlocked: isUnlocked,

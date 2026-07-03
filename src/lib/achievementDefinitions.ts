@@ -22,6 +22,7 @@ export interface AchievementDefinition {
     id: string;
     title: string;
     description: string;
+    unlockHint?: string;
     rarity: AchievementRarity;
     icon: AchievementIcon;
     /** Counter target; omit for boolean milestones */
@@ -123,6 +124,13 @@ export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
     { id: "prs-100", title: "100 Personal Records", description: "Hit 100 personal records", rarity: "legendary", icon: "zap", target: 100, progressKey: "prCount" },
     { id: "plans-5-created", title: "Created 5 Plans", description: "Build 5 workout plans", rarity: "rare", icon: "folder", target: 5, progressKey: "plansCreated" },
     { id: "messages-10", title: "10 Messages Sent", description: "Send 10 direct messages", rarity: "common", icon: "message", target: 10, progressKey: "messagesSent" },
+    { id: "first-daily-metrics", title: "Daily Targets Logged", description: "Log calories, steps, or sleep once", unlockHint: "Open Dashboard and save at least one daily metric: calories, steps, or sleep.", rarity: "common", icon: "target", target: 1, progressKey: "dailyMetricsLogs" },
+    { id: "daily-metrics-7", title: "One Week of Daily Targets", description: "Log daily targets 7 times", unlockHint: "Use the Dashboard daily metrics card on 7 different log entries.", rarity: "common", icon: "calendar", target: 7, progressKey: "dailyMetricsLogs" },
+    { id: "daily-metrics-30", title: "30 Daily Target Logs", description: "Log daily targets 30 times", unlockHint: "Keep saving calories, steps, or sleep from Dashboard until you reach 30 daily metric logs.", rarity: "rare", icon: "target", target: 30, progressKey: "dailyMetricsLogs" },
+    { id: "sets-100", title: "100 Sets Verified", description: "Complete 100 working sets", unlockHint: "Finish workout sets with reps and weight/time entered, then complete the workout so those sets count.", rarity: "common", icon: "target", target: 100, progressKey: "completedSets" },
+    { id: "training-10-hours", title: "10 Training Hours", description: "Log 10 hours of workout time", unlockHint: "Start and finish workouts in the logger until your completed session time reaches 10 hours.", rarity: "rare", icon: "clock", target: 600, progressKey: "totalTrainingMinutes" },
+    { id: "profile-visits-10", title: "Profile Explorer", description: "Visit 10 athlete profiles", unlockHint: "Open 10 different public athlete profiles from the app.", rarity: "rare", icon: "users", target: 10, progressKey: "profileVisitsMade" },
+    { id: "plans-copied-from-you-5", title: "Plan Worth Sharing", description: "Have 5 copies made from your public plans", unlockHint: "Make useful plans public on your profile. This unlocks when other athletes copy your plans 5 times.", rarity: "epic", icon: "share", target: 5, progressKey: "plansCopiedFromUser" },
 ];
 
 export const TOTAL_ACHIEVEMENTS = ACHIEVEMENT_DEFINITIONS.length;

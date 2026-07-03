@@ -1,8 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import {
     Calendar, ClipboardList, Clock, Copy, Dumbbell, Flame, FolderOpen,
-    MessageSquare, Scale, Share2, Star, Target, TrendingUp, Trophy, Users, Zap, Check,
+    MessageSquare, Scale, Share2, Star, Target, TrendingUp, Trophy, Users, Zap, Check, Info,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -63,15 +64,19 @@ export function AchievementTile({
     const styles = RARITY_STYLES[achievement.rarity];
     const Icon = ICON_MAP[achievement.icon] ?? Trophy;
     const locked = !achievement.unlocked;
+    const [showHint, setShowHint] = useState(false);
 
     return (
-        <div
+        <button
+            type="button"
+            onClick={() => setShowHint((value) => !value)}
             className={cn(
-                "relative flex flex-col items-center text-center gap-2 rounded-2xl border p-2.5 sm:p-3 min-h-[7.5rem] transition-colors",
+                "relative flex flex-col items-center text-center gap-2 rounded-2xl border p-2.5 sm:p-3 min-h-[7.5rem] transition-colors w-full",
                 locked
                     ? LOCKED_TILE_STYLES
                     : cn("border-2", UNLOCKED_TILE_STYLES[achievement.rarity])
             )}
+            aria-expanded={showHint}
         >
             {!locked && (
                 <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-success/15 border border-success/35 flex items-center justify-center">
@@ -97,7 +102,16 @@ export function AchievementTile({
                     {formatProgress(achievement.progress.current, achievement.progress.target)}
                 </p>
             )}
-        </div>
+            <div className="mt-auto flex items-center gap-1 text-[8px] font-black uppercase tracking-widest text-fg-subtle">
+                <Info className="w-3 h-3" />
+                {showHint ? "Hide" : "How"}
+            </div>
+            {showHint && (
+                <p className="text-[9px] leading-snug text-fg-muted border-t border-surface-border/60 pt-2">
+                    {achievement.unlockHint}
+                </p>
+            )}
+        </button>
     );
 }
 
@@ -111,15 +125,19 @@ export function AchievementCard({
     const styles = RARITY_STYLES[achievement.rarity];
     const Icon = ICON_MAP[achievement.icon] ?? Trophy;
     const locked = !achievement.unlocked;
+    const [showHint, setShowHint] = useState(false);
 
     return (
-        <div
+        <button
+            type="button"
+            onClick={() => setShowHint((value) => !value)}
             className={cn(
-                "relative flex gap-3 rounded-2xl border p-3 sm:p-4 transition-colors",
+                "relative flex gap-3 rounded-2xl border p-3 sm:p-4 transition-colors w-full text-left",
                 locked
                     ? LOCKED_CARD_STYLES
                     : cn("border-2", UNLOCKED_CARD_STYLES[achievement.rarity])
             )}
+            aria-expanded={showHint}
         >
             {!locked && (
                 <span className="absolute top-2.5 right-2.5 w-5 h-5 rounded-full bg-success/15 border border-success/35 flex items-center justify-center">
@@ -163,8 +181,18 @@ export function AchievementCard({
                         {formatProgress(achievement.progress.current, achievement.progress.target)}
                     </p>
                 )}
+                <p className="mt-2 inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-brand-400">
+                    <Info className="w-3 h-3" />
+                    {showHint ? "Hide unlock details" : "How to unlock"}
+                </p>
+                {showHint && (
+                    <div className="mt-2 rounded-xl border border-surface-border bg-surface-muted/40 p-3">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle mb-1">How to achieve it</p>
+                        <p className="text-xs text-fg-muted leading-relaxed">{achievement.unlockHint}</p>
+                    </div>
+                )}
             </div>
-        </div>
+        </button>
     );
 }
 

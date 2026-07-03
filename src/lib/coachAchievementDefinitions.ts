@@ -18,6 +18,7 @@ export type CoachAchievementDefinition = {
     id: string;
     title: string;
     description: string;
+    unlockHint?: string;
     rarity: AchievementRarity;
     icon: AchievementIcon;
     target?: number;
@@ -97,6 +98,10 @@ export const COACH_ACHIEVEMENT_DEFINITIONS: CoachAchievementDefinition[] = [
     { id: "coach-one-month", title: "One Month Coaching", description: "Coach for 30 days with at least one client", rarity: "common", icon: "calendar" },
     { id: "coach-six-months", title: "Six Months Coaching", description: "Coach for 6 months with at least one client", rarity: "rare", icon: "calendar" },
     { id: "coach-one-year", title: "One Year Coaching", description: "Coach for one year with at least one client", rarity: "epic", icon: "calendar" },
+    { id: "coach-checkin-video-25", title: "Video Review Specialist", description: "Send video feedback on 25 client check-ins", unlockHint: "Review client check-ins and attach coach video feedback 25 times.", rarity: "epic", icon: "trophy", target: 25, progressKey: "videoCheckInReviews" },
+    { id: "coach-attention-500", title: "Inbox Zero Coach", description: "Handle 500 needs-attention alerts", unlockHint: "Use the coach attention inbox to dismiss, excuse, or resolve 500 client alerts.", rarity: "legendary", icon: "target", target: 500, progressKey: "attentionActions" },
+    { id: "coach-notes-250", title: "Feedback Library", description: "Leave feedback on 250 client workouts", unlockHint: "Open client workout logs or calendar reviews and leave workout notes 250 times.", rarity: "legendary", icon: "message", target: 250, progressKey: "workoutNotes" },
+    { id: "coach-codes-100", title: "Roster Builder", description: "Generate 100 client invite codes", unlockHint: "Create client invite codes from the coach tools until you reach 100 generated codes.", rarity: "legendary", icon: "share", target: 100, progressKey: "accessCodesGenerated" },
 ];
 
 export const TOTAL_COACH_ACHIEVEMENTS = COACH_ACHIEVEMENT_DEFINITIONS.length;
