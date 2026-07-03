@@ -288,6 +288,11 @@ export function CalendarClient({
             return workoutFromLog() ?? workoutFromHistorical();
         }
 
+        if (key < todayKey) {
+            const historicalWorkout = workoutFromLog() ?? workoutFromHistorical();
+            if (historicalWorkout) return historicalWorkout;
+        }
+
         const resolved = resolvePlannedWorkoutWithExercisesForDate({
             startedAt: planStartedAt,
             weeks: serializedPlanWeeks,

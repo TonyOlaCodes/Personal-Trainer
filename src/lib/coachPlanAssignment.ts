@@ -1,6 +1,9 @@
 import type { Plan } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { clonePlanForUser } from "@/lib/planClone";
+import { activeWorkoutWhere } from "@/lib/planWorkouts";
+import { snapshotMissedSessionsForPlanChange } from "@/lib/planMissedSessionHistory";
+import { serializePlanWeeksForSchedule } from "@/lib/planScheduleHistory";
 
 export interface CoachPlanAssignee {
     id: string;
@@ -132,6 +135,33 @@ export async function assignCoachPlanToClient(input: {
     });
 
     await prisma.$transaction(async (tx) => {
+        const previousActive = await tx.userPlan.findFirst({
+            where: { userId: input.clientId, isActive: true },
+            include: {
+                plan: {
+                    include: {
+                        weeks: {
+                            include: {
+                                workouts: {
+                                    where: activeWorkoutWhere(),
+                                    orderBy: { dayNumber: "asc" },
+                                },
+                            },
+                            orderBy: { weekNumber: "asc" },
+                        },
+                    },
+                },
+            },
+        });
+
+        if (previousActive && previousActive.planId !== resolvedPlanId) {
+            await snapshotMissedSessionsForPlanChange(
+                tx,
+                previousActive.planId,
+                serializePlanWeeksForSchedule(previousActive.plan.weeks)
+            );
+        }
+
         await tx.userPlan.updateMany({
             where: { userId: input.clientId },
             data: { isActive: false },
