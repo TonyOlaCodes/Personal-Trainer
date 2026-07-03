@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 const FULL_DURATION_MS = 2600;
 const REDUCED_DURATION_MS = 700;
-const EXIT_DURATION_MS = 420;
+const EXIT_DURATION_MS = 720;
 
 const letters = ["T", "O", "L", "G"];
 
@@ -19,7 +19,6 @@ export function AppIntroSplash() {
         const root = document.documentElement;
 
         setReducedMotion(prefersReducedMotion);
-        root.classList.add("app-intro-active");
 
         const leaveTimer = window.setTimeout(() => {
             root.classList.add("app-intro-revealing");
