@@ -467,6 +467,11 @@ export function OnboardingPage() {
                                                 )}
                                             >
                                                 <span className="text-xl leading-none">{option.symbol}</span>
+                                                {(isMale || isFemale) && (
+                                                    <span className="mt-1 block text-[10px] font-black uppercase tracking-wide">
+                                                        {isMale ? "Male" : "Female"}
+                                                    </span>
+                                                )}
                                             </button>
                                         );
                                     })}
