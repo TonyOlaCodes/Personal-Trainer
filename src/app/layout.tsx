@@ -4,6 +4,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { dark } from "@clerk/themes";
 import { siteConfig, siteUrl } from "@/lib/site";
 import { landingMediaSlot } from "@/lib/landingMedia";
+import { AppIntroSplash } from "@/components/shared/AppIntroSplash";
 import "./globals.css";
 
 const inter = Inter({
@@ -107,6 +108,7 @@ export default function RootLayout({
             },
           }}
         >
+          <AppIntroSplash />
           {children}
         </ClerkProvider>
       </body>
