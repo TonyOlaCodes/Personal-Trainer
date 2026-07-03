@@ -109,7 +109,9 @@ export default function RootLayout({
           }}
         >
           <AppIntroSplash />
-          {children}
+          <div className="app-root-content">
+            {children}
+          </div>
         </ClerkProvider>
       </body>
     </html>

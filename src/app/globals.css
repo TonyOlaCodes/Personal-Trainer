@@ -314,6 +314,27 @@
 .app-intro-splash--leaving {
   opacity: 0;
   visibility: hidden;
+  backdrop-filter: blur(0);
+}
+
+.app-root-content {
+  min-height: 100svh;
+}
+
+.app-intro-active .app-root-content {
+  opacity: 0.01;
+  transform: scale(0.992);
+  filter: blur(8px);
+}
+
+.app-intro-active.app-intro-revealing .app-root-content {
+  opacity: 1;
+  transform: scale(1);
+  filter: blur(0);
+  transition:
+    opacity 520ms ease,
+    transform 620ms cubic-bezier(0.2, 0.86, 0.2, 1),
+    filter 520ms ease;
 }
 
 .app-intro-splash__mark {
@@ -395,6 +416,13 @@
   .app-intro-splash__line,
   .app-intro-splash__tagline {
     animation: none !important;
+  }
+
+  .app-intro-active .app-root-content,
+  .app-intro-active.app-intro-revealing .app-root-content {
+    transform: none;
+    filter: none;
+    transition: opacity 180ms ease;
   }
 }
 
