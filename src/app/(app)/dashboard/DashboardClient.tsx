@@ -520,47 +520,16 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
 
         return (
         <>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-                <div className="flex items-center gap-2">
-                    <Activity className="w-4 h-4 text-brand-400" />
-                    <h3 className="text-sm font-black uppercase tracking-widest text-fg">Bodyweight</h3>
-                </div>
-                <div className="flex items-center gap-2">
-                    <button
-                        type="button"
-                        onClick={() => {
-                            viewingTodayRef.current = true;
-                            setWeightDate(todayDate);
-                        }}
-                        className={cn(
-                            "h-8 px-3 rounded-lg border text-[9px] font-black uppercase tracking-widest transition-all",
-                            isWeightDateToday
-                                ? "border-success/30 bg-success/10 text-success shadow-glow-success-sm"
-                                : "border-surface-border bg-surface-muted/40 text-fg-muted hover:text-fg"
-                        )}
-                    >
-                        Today
-                    </button>
-                    <label className="flex items-center gap-2 rounded-lg border border-surface-border bg-surface-muted/40 px-2.5 py-1.5 text-[11px] font-bold text-fg-muted cursor-pointer hover:border-brand-500/20 transition-all">
-                        <Calendar className="w-3 h-3 text-brand-400" />
-                        <input
-                            type="date"
-                            value={weightDate}
-                            onChange={(e) => {
-                                const next = e.target.value;
-                                viewingTodayRef.current = next === todayDate;
-                                setWeightDate(next);
-                            }}
-                            className="bg-transparent text-fg focus:outline-none cursor-pointer"
-                        />
-                    </label>
-                </div>
+            <div className="flex items-center gap-2 pt-1">
+                <Activity className="w-4 h-4 text-brand-400" />
+                <h3 className="text-sm font-black uppercase tracking-widest text-fg">Bodyweight</h3>
             </div>
 
-            <div id="weekly-metrics" className="grid grid-cols-1 gap-2">
+            <div id="weekly-metrics" className="grid grid-cols-[minmax(0,1fr)_auto] items-stretch gap-2">
+                <div className="flex items-center gap-2">
                 {!user.hiddenGoals?.includes("weight") && (
                     <div className={cn(
-                        "card p-2.5 sm:p-3 flex items-center gap-2 transition-all relative overflow-hidden group",
+                        "card px-2.5 py-2 flex items-center gap-2 transition-all relative overflow-hidden group min-h-[58px]",
                         weightLogged
                             ? "bg-success/10 border-success/30 shadow-glow-success-sm"
                             : "bg-surface-muted/10 border-brand-500/10 hover:border-brand-500/30"
@@ -585,7 +554,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                                     value={weight}
                                     onChange={(e) => setWeight(e.target.value)}
                                     onBlur={(e) => handleUpdateWeight(e.target.value)}
-                                    className="w-14 sm:w-16 bg-transparent text-base sm:text-lg font-black text-fg focus:outline-none focus:text-brand-400 transition-colors"
+                                    className="w-14 bg-transparent text-base font-black text-fg focus:outline-none focus:text-brand-400 transition-colors"
                                     placeholder={latestWeight ? latestWeight.toFixed(2) : "--"}
                                 />
                                 <span className="text-[9px] font-semibold text-fg-muted uppercase">kg</span>
@@ -604,6 +573,37 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                         )}
                     </div>
                 )}
+                </div>
+                <div className="flex flex-col gap-1.5">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            viewingTodayRef.current = true;
+                            setWeightDate(todayDate);
+                        }}
+                        className={cn(
+                            "h-7 rounded-lg border px-2 text-[8px] font-black uppercase tracking-widest transition-all",
+                            isWeightDateToday
+                                ? "border-success/30 bg-success/10 text-success shadow-glow-success-sm"
+                                : "border-surface-border bg-surface-muted/40 text-fg-muted hover:text-fg"
+                        )}
+                    >
+                        Today
+                    </button>
+                    <label className="flex h-7 items-center gap-1.5 rounded-lg border border-surface-border bg-surface-muted/40 px-2 text-[10px] font-bold text-fg-muted cursor-pointer hover:border-brand-500/20 transition-all">
+                        <Calendar className="w-3 h-3 text-brand-400" />
+                        <input
+                            type="date"
+                            value={weightDate}
+                            onChange={(e) => {
+                                const next = e.target.value;
+                                viewingTodayRef.current = next === todayDate;
+                                setWeightDate(next);
+                            }}
+                            className="w-[6.8rem] bg-transparent text-fg focus:outline-none cursor-pointer"
+                        />
+                    </label>
+                </div>
             </div>
             {bodyweightChart && (
                 canOpenBodyweightProgress ? (
