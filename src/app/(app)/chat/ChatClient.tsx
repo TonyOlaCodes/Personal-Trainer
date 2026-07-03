@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
     Send, Image as ImageIcon, Globe, MessageSquare, Star, X, Pencil, Trash2,
     Check, MoreVertical, Reply, Pin, SmilePlus, CheckCheck, ChevronDown, AtSign, Settings,
-    Dumbbell, ClipboardList, Activity, Search, Megaphone, Loader2, Shield
+    Dumbbell, ClipboardList, Activity, Search, Megaphone, Loader2, Shield, Eye
 } from "lucide-react";
 import Link from "next/link";
 import { getInitials, formatRelative, cn, roleLabels, getRoleNameClass } from "@/lib/utils";
@@ -1612,6 +1612,17 @@ export function ChatClient({
                     </div>
 
                     <div className="flex items-center gap-1 shrink-0">
+                    {isCoachUser && tab === "direct" && selectedConv?.isCoachClient && !selectedConv.isDeleted && selectedActiveSession && (
+                        <Link
+                            href={`/plans/log/view/${selectedActiveSession.logId}`}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-success/20 bg-success/10 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider text-success transition-colors hover:bg-success/15"
+                            title={`View ${selectedActiveSession.workoutName}`}
+                        >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">View workout</span>
+                            <span className="sm:hidden">View</span>
+                        </Link>
+                    )}
                     {pinnedMessages.length > 0 && (
                         <button
                             onClick={(e) => { e.stopPropagation(); setShowPinned(!showPinned); }}
