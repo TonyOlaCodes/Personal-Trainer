@@ -343,6 +343,15 @@
   font-weight: 950;
   line-height: 1;
   letter-spacing: 0;
+  opacity: 0;
+  transform:
+    translate3d(calc((var(--intro-index) - 1.5) * 2.1rem), calc((1.5 - var(--intro-index)) * 1rem), 0)
+    rotate(calc((var(--intro-index) - 1.5) * 20deg))
+    scale(0.72);
+  filter: blur(8px);
+}
+
+.app-intro-splash--ready .app-intro-splash__letter {
   animation:
     introLetterLock 1.65s cubic-bezier(0.18, 0.88, 0.22, 1.02) both,
     introLetterGlow 1.8s ease-in-out 0.55s both;
@@ -358,6 +367,11 @@
   border-radius: 999px;
   background: linear-gradient(90deg, transparent, rgba(var(--brand-400), 0.92), rgba(255,255,255,0.82), rgba(var(--brand-400), 0.92), transparent);
   transform-origin: center;
+  opacity: 0;
+  transform: scaleX(0.18);
+}
+
+.app-intro-splash--ready .app-intro-splash__line {
   animation: introLineGrow 1.7s ease-out 0.28s both;
 }
 
@@ -372,29 +386,12 @@
   line-height: 1.6;
   text-align: center;
   text-transform: uppercase;
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.app-intro-splash--ready .app-intro-splash__tagline {
   animation: introTaglineRise 1.65s ease-out 0.2s both;
-}
-
-.app-intro-splash--reduced {
-  transition-duration: 240ms;
-}
-
-.app-intro-splash--reduced .app-intro-splash__letter,
-.app-intro-splash--reduced .app-intro-splash__line,
-.app-intro-splash--reduced .app-intro-splash__tagline {
-  animation: none;
-  opacity: 1;
-  transform: none;
-  filter: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .app-intro-splash,
-  .app-intro-splash__letter,
-  .app-intro-splash__line,
-  .app-intro-splash__tagline {
-    animation: none !important;
-  }
 }
 
 /* Clerk account popovers/modals need explicit colors so browser defaults never

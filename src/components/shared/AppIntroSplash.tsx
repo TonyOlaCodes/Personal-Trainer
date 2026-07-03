@@ -2,33 +2,40 @@
 
 import { useEffect, useState } from "react";
 
-const FULL_DURATION_MS = 2700;
-const REDUCED_DURATION_MS = 700;
+const INTRO_DURATION_MS = 3300;
 const EXIT_DURATION_MS = 950;
 
 const letters = ["T", "O", "L", "G"];
 
 export function AppIntroSplash() {
     const [mounted, setMounted] = useState(true);
+    const [ready, setReady] = useState(false);
     const [leaving, setLeaving] = useState(false);
-    const [reducedMotion, setReducedMotion] = useState(false);
 
     useEffect(() => {
-        const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-        const duration = prefersReducedMotion ? REDUCED_DURATION_MS : FULL_DURATION_MS;
+        let leaveTimer: number | undefined;
+        let removeTimer: number | undefined;
+        let firstFrame = 0;
+        let secondFrame = 0;
 
-        setReducedMotion(prefersReducedMotion);
+        firstFrame = window.requestAnimationFrame(() => {
+            secondFrame = window.requestAnimationFrame(() => {
+                setReady(true);
 
-        const leaveTimer = window.setTimeout(() => {
-            setLeaving(true);
-        }, Math.max(0, duration - EXIT_DURATION_MS));
-        const removeTimer = window.setTimeout(() => {
-            setMounted(false);
-        }, duration);
+                leaveTimer = window.setTimeout(() => {
+                    setLeaving(true);
+                }, INTRO_DURATION_MS - EXIT_DURATION_MS);
+                removeTimer = window.setTimeout(() => {
+                    setMounted(false);
+                }, INTRO_DURATION_MS);
+            });
+        });
 
         return () => {
-            window.clearTimeout(leaveTimer);
-            window.clearTimeout(removeTimer);
+            window.cancelAnimationFrame(firstFrame);
+            window.cancelAnimationFrame(secondFrame);
+            if (leaveTimer) window.clearTimeout(leaveTimer);
+            if (removeTimer) window.clearTimeout(removeTimer);
         };
     }, []);
 
@@ -36,7 +43,7 @@ export function AppIntroSplash() {
 
     return (
         <div
-            className={`app-intro-splash ${leaving ? "app-intro-splash--leaving" : ""} ${reducedMotion ? "app-intro-splash--reduced" : ""}`}
+            className={`app-intro-splash ${ready ? "app-intro-splash--ready" : ""} ${leaving ? "app-intro-splash--leaving" : ""}`}
             role="status"
             aria-label="Loading TOLGcoaching"
         >
