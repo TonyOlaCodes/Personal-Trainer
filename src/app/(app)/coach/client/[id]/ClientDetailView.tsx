@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import {
     Users, Activity, Calendar, MessageSquare,
-    MapPin, Info, Dumbbell, Award, Scale, MoreHorizontal, ChevronRight, CheckCircle2, Edit3, Zap, Settings,
+    MapPin, Info, Dumbbell, Scale, MoreHorizontal, ChevronRight, CheckCircle2, Edit3, Zap,
     Trash2, AlertTriangle, Clock, Search, X, Pin, ClipboardList, Loader2, Plus,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -327,6 +327,18 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
         return bodyweightHistory.filter(h => new Date(h.date) >= cutoff);
     }, [bodyweightHistory, weightTimeframe]);
 
+    const bodyweightPeriodLabel = weightTimeframe === "week"
+        ? "Last 7 days"
+        : weightTimeframe === "month"
+            ? "Last 30 days"
+            : weightTimeframe === "year"
+                ? "Last 365 days"
+                : "All time";
+    const bodyweightPeriodStart = filteredBodyweightHistory[0] ?? null;
+    const bodyweightPeriodEnd = filteredBodyweightHistory[filteredBodyweightHistory.length - 1] ?? null;
+    const bodyweightPeriodChangePercent = bodyweightPeriodStart && bodyweightPeriodEnd && bodyweightPeriodStart.weightKg > 0
+        ? ((bodyweightPeriodEnd.weightKg - bodyweightPeriodStart.weightKg) / bodyweightPeriodStart.weightKg) * 100
+        : null;
     const chartValues = filteredBodyweightHistory.map(r => r.weightKg);
     if (client.targetWeightKg) chartValues.push(client.targetWeightKg);
     const chartMin = chartValues.length > 0 ? Math.floor(Math.min(...chartValues) - 2) : 0;
@@ -474,6 +486,125 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                     : "bg-brand-500/10 text-brand-400 border-brand-500/30",
         }
         : null;
+    const isScheduledToday = client.currentWorkout?.scheduledDay?.toLowerCase() === "today";
+
+    const planAssignmentPanel = canEdit && assigning ? (
+        <div className="mt-5 rounded-2xl border border-surface-border bg-surface-muted/50 p-4 sm:p-5 animate-fade-in">
+            {assignMode === "MENU" && (
+                <div className="space-y-5">
+                    <div className="space-y-1">
+                        <h4 className="text-sm font-black uppercase tracking-widest text-fg">Assign New Plan</h4>
+                        <p className="text-[10px] text-fg-muted font-bold uppercase tracking-widest leading-relaxed">Choose the next plan for this athlete.</p>
+                    </div>
+                    <div className="grid gap-3">
+                        <button
+                            onClick={() => setAssignMode("LIST")}
+                            className="rounded-2xl p-4 flex items-center justify-between border border-brand-500/20 bg-brand-500/5 group transition-all hover:border-brand-500/40"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-brand-500/10 flex items-center justify-center text-brand-400">
+                                    <Calendar className="w-5 h-5" />
+                                </div>
+                                <div className="text-left">
+                                    <p className="text-sm font-black text-fg uppercase tracking-tight group-hover:text-brand-400">Existing Programme</p>
+                                    <p className="text-[9px] text-fg-muted font-bold uppercase tracking-widest italic">From saved plans</p>
+                                </div>
+                            </div>
+                            <ChevronRight className="w-4 h-4 text-fg-subtle" />
+                        </button>
+
+                        <Link
+                            href={`/plans/create?clientId=${client.id}`}
+                            className="rounded-2xl p-4 flex items-center justify-between border border-warning/20 bg-warning/5 group transition-all hover:border-warning/40"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-warning/10 flex items-center justify-center text-warning">
+                                    <Dumbbell className="w-5 h-5" />
+                                </div>
+                                <div className="text-left">
+                                    <p className="text-sm font-black text-fg uppercase tracking-tight group-hover:text-warning">Create New Plan</p>
+                                    <p className="text-[9px] text-fg-muted font-bold uppercase tracking-widest italic">Build from scratch</p>
+                                </div>
+                            </div>
+                            <ChevronRight className="w-4 h-4 text-fg-subtle" />
+                        </Link>
+
+                        <button
+                            onClick={() => setAssignMode("IMPORT")}
+                            className="rounded-2xl p-4 flex items-center justify-between border border-success/20 bg-success/5 group transition-all hover:border-success/40"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-success/10 flex items-center justify-center text-success">
+                                    <Zap className="w-5 h-5" />
+                                </div>
+                                <div className="text-left">
+                                    <p className="text-sm font-black text-fg uppercase tracking-tight group-hover:text-success">Import via Code</p>
+                                    <p className="text-[9px] text-fg-muted font-bold uppercase tracking-widest italic">Deploy via share key</p>
+                                </div>
+                            </div>
+                            <ChevronRight className="w-4 h-4 text-fg-subtle" />
+                        </button>
+                    </div>
+                    <button
+                        onClick={() => setAssigning(false)}
+                        className="w-full py-3 text-[10px] font-black uppercase tracking-widest text-fg-subtle hover:text-fg transition-all"
+                    >
+                        Cancel
+                    </button>
+                </div>
+            )}
+
+            {assignMode === "LIST" && (
+                <div className="space-y-4">
+                    <button onClick={() => setAssignMode("MENU")} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-fg-muted hover:text-fg">
+                        <ChevronRight className="w-3 h-3 rotate-180" /> Back
+                    </button>
+                    <div className="grid gap-2 max-h-[300px] overflow-y-auto no-scrollbar">
+                        {availablePlans.length === 0 ? (
+                            <p className="p-8 text-center text-[10px] font-bold uppercase tracking-widest text-fg-subtle italic">No plans found.</p>
+                        ) : availablePlans.map((p) => (
+                            <button
+                                key={p.id}
+                                onClick={() => updatePlan(p.id)}
+                                disabled={updating}
+                                className="flex items-center justify-between p-4 rounded-xl bg-surface hover:bg-surface-elevated border border-surface-border transition-all group disabled:opacity-60"
+                            >
+                                <span className="font-bold text-sm text-fg group-hover:text-brand-400">{p.name}</span>
+                                <span className="text-[8px] bg-brand-500/10 text-brand-400 px-1.5 py-0.5 rounded uppercase font-black">{p.type}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {assignMode === "IMPORT" && (
+                <div className="space-y-5">
+                    <button onClick={() => setAssignMode("MENU")} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-fg-muted hover:text-fg">
+                        <ChevronRight className="w-3 h-3 rotate-180" /> Back
+                    </button>
+                    <div className="rounded-2xl p-5 bg-surface-card border border-brand-500/20 shadow-glow-brand-sm">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-brand-400 mb-2 block">Plan Share Key</label>
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                            <input
+                                type="text"
+                                placeholder="E.G. ALPHA-99"
+                                className="input flex-1 font-mono uppercase font-black tracking-widest"
+                                value={shareCode}
+                                onChange={(e) => setShareCode(e.target.value)}
+                            />
+                            <button
+                                onClick={handleImport}
+                                disabled={importing || !shareCode}
+                                className="btn-primary h-12 px-6 shadow-glow-brand"
+                            >
+                                {importing ? "..." : "Import"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    ) : null;
 
     return (
         <div className="space-y-8 animate-fade-in">
@@ -596,26 +727,27 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
             {/* Active plan summary */}
             <div className="card p-5 sm:p-6 border-brand-500/25 bg-brand-500/5 shadow-glow-brand-sm">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                    <Link
-                        href={client.activePlan ? `/plans/create?id=${client.activePlan.id}&view=true` : "#"}
-                        className={cn(
-                            "group flex items-start gap-4 min-w-0",
-                            !client.activePlan && "pointer-events-none"
-                        )}
-                    >
+                    <div className="flex items-start gap-4 min-w-0">
                         <div className="w-12 h-12 rounded-2xl bg-brand-500/10 border border-brand-500/25 flex items-center justify-center shrink-0">
                             <Dumbbell className="w-5 h-5 text-brand-400" />
                         </div>
                         <div className="min-w-0">
                             <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">Active Plan</p>
-                            <h3 className="text-xl sm:text-2xl font-black text-fg tracking-tight truncate group-hover:text-brand-300 transition-colors">
+                            <h3 className="text-xl sm:text-2xl font-black text-fg tracking-tight truncate">
                                 {client.activePlan?.name ?? "No plan assigned"}
                             </h3>
-                            <p className="text-xs text-fg-muted mt-1">
-                                {client.activePlan ? "Click to view this client's current programme." : "Deploy a plan before assigning workouts."}
-                            </p>
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                                <p className="text-xs text-fg-muted">
+                                    {client.activePlan ? "Current programme for this client." : "Assign a plan before scheduling workouts."}
+                                </p>
+                                {isScheduledToday && (
+                                    <span className="px-3 py-1 rounded-xl border border-warning/30 bg-warning/10 text-[10px] font-black uppercase tracking-widest text-warning">
+                                        Scheduled: Today
+                                    </span>
+                                )}
+                            </div>
                         </div>
-                    </Link>
+                    </div>
                     <div className="flex flex-col sm:flex-row gap-2 lg:shrink-0">
                         {client.activePlan && (
                             <Link
@@ -635,8 +767,22 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                 {client.activePlan ? "Edit Plan" : "Create Plan"}
                             </Link>
                         )}
+                        {canEdit && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setAssigning(true);
+                                    setAssignMode("MENU");
+                                }}
+                                className="btn-secondary h-11 px-5 inline-flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest"
+                            >
+                                <Plus className="w-4 h-4" />
+                                Assign New Plan
+                            </button>
+                        )}
                     </div>
                 </div>
+                {planAssignmentPanel}
             </div>
 
             {/* Training overview */}
@@ -738,11 +884,28 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                             )}
                         </div>
                         {activeChartTab === "weight" ? (
-                            <div className="text-right">
-                                <p className="text-xl font-black text-fg leading-none">{client.currentWeightKg ? `${client.currentWeightKg.toFixed(1)}kg` : "--"}</p>
+                            <div className="text-right space-y-1">
+                                <div>
+                                    <p className="text-xl font-black text-fg leading-none">{client.currentWeightKg ? `${client.currentWeightKg.toFixed(1)}kg` : "--"}</p>
+                                    <p className="text-[10px] text-fg-subtle font-bold uppercase tracking-widest mt-1">
+                                        Target {client.targetWeightKg ? `${client.targetWeightKg.toFixed(1)}kg` : "--"}
+                                    </p>
+                                </div>
                                 <p className="text-[10px] text-fg-subtle font-bold uppercase tracking-widest mt-1">
-                                    Target {client.targetWeightKg ? `${client.targetWeightKg.toFixed(1)}kg` : "--"}
+                                    Period: {bodyweightPeriodLabel}
                                 </p>
+                                {bodyweightPeriodChangePercent !== null && filteredBodyweightHistory.length > 1 && (
+                                    <p className={cn(
+                                        "text-[10px] font-black uppercase tracking-widest",
+                                        bodyweightPeriodChangePercent > 0
+                                            ? "text-success"
+                                            : bodyweightPeriodChangePercent < 0
+                                                ? "text-danger"
+                                                : "text-fg-muted"
+                                    )}>
+                                        {bodyweightPeriodChangePercent > 0 ? "+" : ""}{bodyweightPeriodChangePercent.toFixed(1)}% since start
+                                    </p>
+                                )}
                             </div>
                         ) : (
                             <div className="text-right">
@@ -1239,202 +1402,6 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
             <div className="grid lg:grid-cols-3 gap-8">
                 {/* Workouts Management Column */}
                 <div className="lg:col-span-2 space-y-6">
-                    {/* Active Programme */}
-                    <div className="space-y-4">
-                        <h3 className="heading-3 px-2 flex items-center gap-2 uppercase tracking-widest text-[11px] font-black text-brand-400">
-                            <Dumbbell className="w-4 h-4" />
-                            Active Programme
-                        </h3>
-                        {client.activePlan ? (
-                            <div className="card p-6 border-brand-800/20 bg-brand-950/10 shadow-glow-brand-sm">
-                                <Link href={`/plans/create?id=${client.activePlan.id}&view=true`} className="group flex items-start justify-between cursor-pointer hover:bg-white/5 p-4 -m-4 rounded-xl transition-all mb-4">
-                                    <div>
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <h4 className="text-xl font-black text-fg">{client.activePlan.name}</h4>
-                                            <ChevronRight className="w-4 h-4 text-brand-400 opacity-0 group-hover:opacity-100 transition-all transform group-hover:translate-x-1" />
-                                        </div>
-                                        <p className="text-sm text-fg-muted">Currently deployed to athlete. Click to view.</p>
-                                    </div>
-                                    <Award className="w-8 h-8 text-brand-400 opacity-40 shrink-0 group-hover:opacity-100 transition-opacity" />
-                                </Link>
-
-                                {canEdit && assigning ? (
-                                    <div className="mt-6 space-y-3 animate-fade-in bg-surface-muted/50 p-4 rounded-2xl border border-surface-border">
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Select New Plan</p>
-                                        <div className="flex flex-col gap-2">
-                                            {availablePlans.map((p) => (
-                                                <button
-                                                    key={p.id}
-                                                    onClick={() => updatePlan(p.id)}
-                                                    disabled={updating}
-                                                    className="flex items-center justify-between p-3 rounded-xl bg-surface hover:bg-surface-elevated border border-surface-border text-left group transition-all"
-                                                >
-                                                    <span className="text-sm font-bold text-fg group-hover:text-brand-400">{p.name}</span>
-                                                    <span className="text-[8px] bg-brand-500/10 text-brand-400 px-1.5 py-0.5 rounded uppercase font-black">{p.type}</span>
-                                                </button>
-                                            ))}
-                                        </div>
-                                        <button 
-                                            onClick={() => setAssigning(false)}
-                                            className="text-[10px] font-bold text-fg-subtle uppercase tracking-widest hover:text-fg w-full text-center py-2"
-                                        >
-                                            Cancel Deployment
-                                        </button>
-                                    </div>
-                                ) : (
-                                    <div className="mt-2 flex flex-col sm:flex-row gap-2">
-                                        {canEdit && (
-                                        <>
-                                        <Link href={`/plans/create?id=${client.activePlan.id}&clientId=${client.id}`} className="btn-primary btn-sm flex-1 flex items-center justify-center gap-2 h-11 border border-brand-500/30">
-                                            <Edit3 className="w-4 h-4" /> Edit Plan
-                                        </Link>
-                                        <button 
-                                            onClick={() => setAssigning(true)}
-                                            className="btn-secondary btn-sm flex-1 h-11 font-bold uppercase tracking-wide border border-surface-border hover:bg-surface-elevated"
-                                        >
-                                            Assign New
-                                        </button>
-                                        </>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                        ) : (
-                            <div className="card p-8 text-center border-dashed bg-surface-muted/30">
-                                {canEdit && assigning ? (
-                                    <div className="space-y-6 animate-fade-in text-left">
-                                        {assignMode === "MENU" && (
-                                            <>
-                                                <div className="space-y-1 text-center mb-6">
-                                                    <h4 className="text-sm font-black uppercase tracking-widest text-fg">Assign New Plan</h4>
-                                                    <p className="text-[10px] text-fg-muted font-bold uppercase tracking-widest leading-relaxed">Choose a strategic path for this athlete.</p>
-                                                </div>
-                                                <div className="grid gap-3">
-                                                    <button 
-                                                        onClick={() => setAssignMode("LIST")}
-                                                        className="card-hover p-4 flex items-center justify-between border-brand-500/20 bg-brand-500/5 group"
-                                                    >
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="w-10 h-10 rounded-xl bg-brand-500/10 flex items-center justify-center text-brand-400">
-                                                                <Calendar className="w-5 h-5" />
-                                                            </div>
-                                                            <div className="text-left">
-                                                                <p className="text-sm font-black text-fg uppercase tracking-tight group-hover:text-brand-400">Existing Programme</p>
-                                                                <p className="text-[9px] text-fg-muted font-bold uppercase tracking-widest italic">From your saved database</p>
-                                                            </div>
-                                                        </div>
-                                                        <ChevronRight className="w-4 h-4 text-fg-subtle" />
-                                                    </button>
-
-                                                    <Link 
-                                                        href={`/plans/create?clientId=${client.id}`}
-                                                        className="card-hover p-4 flex items-center justify-between border-warning/20 bg-warning/5 group"
-                                                    >
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="w-10 h-10 rounded-xl bg-warning/10 flex items-center justify-center text-warning">
-                                                                <Dumbbell className="w-5 h-5" />
-                                                            </div>
-                                                            <div className="text-left">
-                                                                <p className="text-sm font-black text-fg uppercase tracking-tight group-hover:text-warning">Create New Plan</p>
-                                                                <p className="text-[9px] text-fg-muted font-bold uppercase tracking-widest italic">Build from scratch for this client</p>
-                                                            </div>
-                                                        </div>
-                                                        <ChevronRight className="w-4 h-4 text-fg-subtle" />
-                                                    </Link>
-
-                                                    <button 
-                                                        onClick={() => setAssignMode("IMPORT")}
-                                                        className="card-hover p-4 flex items-center justify-between border-success/20 bg-success/5 group"
-                                                    >
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="w-10 h-10 rounded-xl bg-success/10 flex items-center justify-center text-success">
-                                                                <Zap className="w-5 h-5" />
-                                                            </div>
-                                                            <div className="text-left">
-                                                                <p className="text-sm font-black text-fg uppercase tracking-tight group-hover:text-success">Import via Code</p>
-                                                                <p className="text-[9px] text-fg-muted font-bold uppercase tracking-widest italic">Deploy via plan share key</p>
-                                                            </div>
-                                                        </div>
-                                                        <ChevronRight className="w-4 h-4 text-fg-subtle" />
-                                                    </button>
-                                                </div>
-                                                <button 
-                                                    onClick={() => setAssigning(false)}
-                                                    className="w-full py-4 text-[10px] font-black uppercase tracking-widest text-fg-subtle hover:text-fg transition-all"
-                                                >
-                                                    Cancel Operations
-                                                </button>
-                                            </>
-                                        )}
-
-                                        {assignMode === "LIST" && (
-                                            <div className="space-y-4">
-                                                <button onClick={() => setAssignMode("MENU")} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-fg-muted hover:text-fg">
-                                                    <ChevronRight className="w-3 h-3 rotate-180" /> Back
-                                                </button>
-                                                <div className="grid gap-2 max-h-[300px] overflow-y-auto no-scrollbar">
-                                                    {availablePlans.length === 0 ? (
-                                                        <p className="p-8 text-center text-[10px] font-bold uppercase tracking-widest text-fg-subtle italic">No plans found in database.</p>
-                                                    ) : availablePlans.map((p) => (
-                                                        <button
-                                                            key={p.id}
-                                                            onClick={() => updatePlan(p.id)}
-                                                            className="flex items-center justify-between p-4 rounded-xl bg-surface-muted hover:bg-surface-elevated border border-surface-border transition-all group"
-                                                        >
-                                                            <span className="font-bold text-sm text-fg group-hover:text-brand-400">{p.name}</span>
-                                                            <ChevronRight className="w-4 h-4" />
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {assignMode === "IMPORT" && (
-                                            <div className="space-y-5">
-                                                <button onClick={() => setAssignMode("MENU")} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-fg-muted hover:text-fg">
-                                                    <ChevronRight className="w-3 h-3 rotate-180" /> Back
-                                                </button>
-                                                <div className="card p-6 bg-surface-card border-brand-500/20 shadow-glow-brand-sm">
-                                                    <label className="text-[10px] font-black uppercase tracking-widest text-brand-400 mb-2 block">Plan Share Key</label>
-                                                    <div className="flex gap-2">
-                                                        <input 
-                                                            type="text"
-                                                            placeholder="E.G. ALPHA-99"
-                                                            className="input flex-1 font-mono uppercase font-black tracking-widest"
-                                                            value={shareCode}
-                                                            onChange={(e) => setShareCode(e.target.value)}
-                                                        />
-                                                        <button 
-                                                            onClick={handleImport}
-                                                            disabled={importing || !shareCode}
-                                                            className="btn-primary h-12 px-6 shadow-glow-brand"
-                                                        >
-                                                            {importing ? "..." : "Import"}
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                ) : (
-                                    <>
-                                        <div className="flex justify-center mb-4">
-                                            <div className="w-12 h-12 rounded-2xl bg-surface-muted flex items-center justify-center text-fg-subtle border border-surface-border">
-                                                <Settings className="w-6 h-6 animate-spin-slow" />
-                                            </div>
-                                        </div>
-                                        <p className="text-fg-muted text-[10px] font-black uppercase tracking-widest italic mb-6">No plan currently deployed to this client.</p>
-                                        {canEdit ? (
-                                        <button onClick={() => { setAssigning(true); setAssignMode("MENU"); }} className="btn-primary px-10 h-12 shadow-glow-brand">Deploy New Plan</button>
-                                        ) : (
-                                        <p className="text-xs text-fg-subtle">Plans cannot be assigned to inactive accounts.</p>
-                                        )}
-                                    </>
-                                )}
-                            </div>
-                        )}
-                    </div>
-
                     {/* Recent Output */}
                     <div className="space-y-4">
                         <div className="flex items-center justify-between px-2">
