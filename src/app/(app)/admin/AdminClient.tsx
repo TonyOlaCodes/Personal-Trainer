@@ -3,7 +3,7 @@
 import { useMemo, useState, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Users, Dumbbell, Ticket, Shield, Copy, Check, ChevronRight, Plus, Trash2, UserX, RotateCcw, ArrowUpDown, Megaphone, UserPlus, AlertTriangle, Loader2, X } from "lucide-react";
+import { Users, Dumbbell, Ticket, Shield, Copy, Check, ChevronRight, Plus, Trash2, UserX, RotateCcw, ArrowUpDown, Megaphone, UserPlus, AlertTriangle, Loader2, X, Wrench } from "lucide-react";
 import { cn, formatDate, getInitials, roleLabels, roleBadgeClass } from "@/lib/utils";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { getAccessCodeStatus } from "@/lib/accessCodeStatus";
@@ -93,6 +93,7 @@ interface Props {
     plans: AdminPlan[];
     codes: AdminCode[];
     userRole: string;
+    maintenanceModeEnabled: boolean;
 }
 
 type Tab = "users" | "coaches" | "plans" | "codes" | "code-requests" | "announcements";
@@ -226,7 +227,7 @@ function codeStatusInput(code: AdminCode) {
     };
 }
 
-export function AdminClient({ users: initialUsers, coaches, plans: initialPlans, codes: initialCodes, userRole }: Props) {
+export function AdminClient({ users: initialUsers, coaches, plans: initialPlans, codes: initialCodes, userRole, maintenanceModeEnabled }: Props) {
     const searchParams = useSearchParams();
     const [tab, setTab] = useState<Tab>("users");
     const [users, setUsers] = useState<AdminUser[]>(initialUsers);
@@ -264,6 +265,8 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
     const [accountDeleteConfirmText, setAccountDeleteConfirmText] = useState("");
     const [selectedCoachId, setSelectedCoachId] = useState<string>("NONE");
     const [accountActionId, setAccountActionId] = useState<string | null>(null);
+    const [maintenanceEnabled, setMaintenanceEnabled] = useState(maintenanceModeEnabled);
+    const [maintenanceSaving, setMaintenanceSaving] = useState(false);
 
     const sortedUsers = useMemo(
         () => sortAdminUsers(users, userSortField, userSortDir),
@@ -429,6 +432,26 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
         setAccountDeleteConfirmText("");
     };
 
+    const updateMaintenanceMode = async (enabled: boolean) => {
+        if (maintenanceSaving || enabled === maintenanceEnabled) return;
+
+        setMaintenanceSaving(true);
+        try {
+            const res = await fetch("/api/admin/maintenance", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ enabled }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error ?? "Failed to update maintenance mode");
+            setMaintenanceEnabled(Boolean(data.enabled));
+        } catch (err) {
+            alert(err instanceof Error ? err.message : "Failed to update maintenance mode");
+        } finally {
+            setMaintenanceSaving(false);
+        }
+    };
+
     const confirmDeleteAccount = async () => {
         if (!accountPendingDelete || accountDeleteConfirmText !== ACCOUNT_DELETE_CONFIRM_WORD) return;
 
@@ -559,6 +582,54 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
                     </div>
                 </div>
             </ModalOverlay>
+
+            <div className={cn(
+                "card p-5 border",
+                maintenanceEnabled ? "border-warning/35 bg-warning/5 shadow-glow-warning-sm" : "border-surface-border bg-surface-card"
+            )}>
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="flex items-start gap-3">
+                        <div className={cn(
+                            "w-10 h-10 rounded-xl flex items-center justify-center border shrink-0",
+                            maintenanceEnabled ? "bg-warning/10 border-warning/30 text-warning" : "bg-surface-muted border-surface-border text-fg-muted"
+                        )}>
+                            <Wrench className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <h3 className="text-sm font-black uppercase tracking-widest text-fg">Maintenance Mode</h3>
+                            <p className="text-xs text-fg-muted mt-1">
+                                {maintenanceEnabled
+                                    ? "Maintenance mode is active. Only administrators can access the platform."
+                                    : "Temporarily block non-admin users during planned maintenance."}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="inline-flex rounded-xl border border-surface-border bg-surface-muted p-1 lg:shrink-0">
+                        {([
+                            { enabled: false, label: "Off" },
+                            { enabled: true, label: "On" },
+                        ] as const).map((option) => (
+                            <button
+                                key={option.label}
+                                type="button"
+                                onClick={() => void updateMaintenanceMode(option.enabled)}
+                                disabled={maintenanceSaving}
+                                className={cn(
+                                    "min-w-20 rounded-lg px-4 py-2 text-xs font-black uppercase tracking-widest transition-all disabled:opacity-60",
+                                    maintenanceEnabled === option.enabled
+                                        ? option.enabled
+                                            ? "bg-warning text-white shadow-glow-warning-sm"
+                                            : "bg-surface-card text-fg shadow-sm"
+                                        : "text-fg-muted hover:text-fg"
+                                )}
+                            >
+                                {maintenanceSaving && maintenanceEnabled !== option.enabled ? "..." : option.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            </div>
 
             {/* Stats */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">

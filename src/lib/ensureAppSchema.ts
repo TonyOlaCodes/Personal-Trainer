@@ -23,6 +23,7 @@ import { ensureLogSetExerciseOrdersReady } from "@/lib/logSetExerciseOrder";
 import { ensureUserNicknamesTable } from "@/lib/userNicknames";
 import { ensureOnboardingProfileColumns } from "@/lib/onboardingProfile";
 import { ensureCoachCodeRequestTables } from "@/lib/coachCodeRequest";
+import { ensureAppSettingsTable } from "@/lib/maintenanceMode";
 
 let appSchemaReady = false;
 let appSchemaPromise: Promise<void> | null = null;
@@ -61,6 +62,7 @@ export async function ensureAppSchema() {
             ensureUserNicknamesTable(),
             ensureOnboardingProfileColumns(),
             ensureCoachCodeRequestTables(),
+            ensureAppSettingsTable(),
         ]);
         appSchemaReady = true;
     })();

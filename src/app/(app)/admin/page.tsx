@@ -6,6 +6,7 @@ import { TopBar } from "@/components/layout/TopBar";
 import { AdminClient } from "./AdminClient";
 import { getUserAccountStatusMap } from "@/lib/userDeactivation";
 import { dedupeAdminPlansByName } from "@/lib/coachPlans";
+import { getMaintenanceMode } from "@/lib/maintenanceMode";
 
 export const metadata = { title: "Admin Panel" };
 
@@ -29,7 +30,7 @@ export default async function AdminPage() {
     });
     const creativeIds = admins.map(a => a.id);
 
-    const [users, plans, recentCodes, coaches] = await Promise.all([
+    const [users, plans, recentCodes, coaches, maintenanceModeEnabled] = await Promise.all([
         prisma.user.findMany({
             select: {
                 id: true,
@@ -91,6 +92,7 @@ export default async function AdminPage() {
             },
             orderBy: { name: "asc" },
         }),
+        getMaintenanceMode(),
     ]);
 
     const accountStatusMap = await getUserAccountStatusMap([
@@ -133,6 +135,7 @@ export default async function AdminPage() {
                 <Suspense fallback={<div className="card p-8 text-sm text-fg-muted">Loading admin panel...</div>}>
                     <AdminClient
                     userRole={user.role}
+                    maintenanceModeEnabled={maintenanceModeEnabled}
                     users={adminUsers}
                     coaches={activeCoaches.map((c) => ({
                         id: c.id,
