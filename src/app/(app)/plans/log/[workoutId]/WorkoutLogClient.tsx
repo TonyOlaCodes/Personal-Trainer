@@ -1030,7 +1030,7 @@ export function WorkoutLogClient({
     return (
         <div className="min-h-screen bg-surface flex flex-col pt-safe-area">
             {/* Header */}
-            <div className="flex items-center justify-between px-4 h-16 border-b border-surface-border glass fixed top-0 inset-x-0 z-40 md:pl-[var(--sidebar-width)]">
+            <div className="flex items-center justify-between px-4 h-16 border-b border-surface-border glass fixed top-0 left-0 right-0 z-40 md:left-[var(--sidebar-width)]">
                 <button 
                     onClick={handleDiscard} 
                     disabled={isDiscarding}
@@ -1095,8 +1095,8 @@ export function WorkoutLogClient({
                 )}
             </div>
 
-            <div className="flex-1 p-4 pt-20 pb-20 overflow-y-auto no-scrollbar md:pl-[calc(var(--sidebar-width)+1rem)] md:pb-28">
-                <div className="max-w-2xl mx-auto space-y-6">
+            <div className="flex-1 p-4 pt-20 pb-20 overflow-y-auto no-scrollbar md:ml-[var(--sidebar-width)] md:pb-28">
+                <div className="max-w-3xl mx-auto space-y-6">
                     {clientName && (
                         <div className="card p-3 border-brand-500/30 bg-brand-950/20 text-center">
                             <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">Logging for client</p>
@@ -1601,11 +1601,11 @@ export function WorkoutLogClient({
             )}
 
             {!sessionActive && (
-            <div className="hidden md:block fixed bottom-0 inset-x-0 z-40 p-4 pt-3 border-t border-surface-border bg-surface glass md:pl-[var(--sidebar-width)] pb-[max(1rem,env(safe-area-inset-bottom))]">
+            <div className="hidden md:block fixed bottom-0 left-0 right-0 z-40 p-4 pt-3 border-t border-surface-border bg-surface glass md:left-[var(--sidebar-width)] pb-[max(1rem,env(safe-area-inset-bottom))]">
                 <button
                     onClick={handleStartWorkout}
                     disabled={isStarting || isCheckingSession}
-                    className="btn-primary w-full max-w-2xl mx-auto h-14 text-sm font-black uppercase tracking-widest shadow-glow-brand flex items-center justify-center gap-2"
+                    className="btn-primary w-full max-w-3xl mx-auto h-14 text-sm font-black uppercase tracking-widest shadow-glow-brand flex items-center justify-center gap-2"
                 >
                     <Flame className="w-4.5 h-4.5" />
                     {isCheckingSession ? "Checking..." : isStarting ? "Starting..." : "Start Workout"}
