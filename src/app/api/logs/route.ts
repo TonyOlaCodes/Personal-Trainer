@@ -33,6 +33,18 @@ const logSchema = z.object({
     })),
 });
 
+type ParsedLogSet = z.infer<typeof logSchema>["sets"][number];
+
+function hasPerformedSetData(set: ParsedLogSet) {
+    return (
+        typeof set.reps === "number"
+        && set.reps > 0
+        && typeof set.weightKg === "number"
+        && Number.isFinite(set.weightKg)
+        && set.weightKg >= 0
+    );
+}
+
 // POST log a completed or in-progress workout
 export async function POST(req: Request) {
     await ensureDbSchema();
@@ -46,7 +58,11 @@ export async function POST(req: Request) {
     const parsed = logSchema.safeParse(body);
     if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-    const { workoutId, clientId, duration, notes, feeling, sets, status, loggedAt } = parsed.data;
+    const { workoutId, clientId, duration, notes, feeling, status, loggedAt } = parsed.data;
+    const sets = parsed.data.sets.map((set) => ({
+        ...set,
+        isCompleted: set.isCompleted || hasPerformedSetData(set),
+    }));
 
     const subjectResult = await resolveWorkoutLogSubjectUserId(user, clientId);
     if (subjectResult.error) return subjectResult.error;
@@ -131,18 +147,20 @@ export async function POST(req: Request) {
         });
     }
 
-    const existingCompleted =
-        status === "COMPLETED"
-            ? await prisma.workoutLog.findFirst({
-                  where: {
-                      userId: subjectUserId,
-                      workoutId,
-                      status: "COMPLETED",
-                      loggedAt: { gte: startOfDay, lte: endOfDay },
-                  },
-                  orderBy: { updatedAt: "desc" },
-              })
-            : null;
+    const existingCompleted = await prisma.workoutLog.findFirst({
+        where: {
+            userId: subjectUserId,
+            workoutId,
+            status: "COMPLETED",
+            loggedAt: { gte: startOfDay, lte: endOfDay },
+        },
+        include: { sets: true, workout: { select: { name: true } } },
+        orderBy: { updatedAt: "desc" },
+    });
+
+    if (status === "IN_PROGRESS" && existingCompleted) {
+        return NextResponse.json(existingCompleted, { status: 200 });
+    }
 
     // Resolve temp/custom exercise IDs — never mutate plan exercise order from a log save
     const tempToRealId = new Map<string, string>();

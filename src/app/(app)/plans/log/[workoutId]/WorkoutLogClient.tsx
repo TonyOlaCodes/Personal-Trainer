@@ -92,6 +92,12 @@ interface InitialActiveLog {
     sets: ActiveLogSet[];
 }
 
+type PendingProgressSave = {
+    logs: Record<string, SetLog[]>;
+    exercises?: Exercise[];
+    startTimeOverride?: number;
+};
+
 const WORKOUT_SET_INPUT_ATTR = "data-workout-set-input";
 
 function isWorkoutSetInputFocused() {
@@ -255,6 +261,17 @@ function formatTargetWeight(weight?: number | null) {
     return Number.isInteger(weight) ? String(weight) : weight.toFixed(1).replace(/\.0$/, "");
 }
 
+function hasEnteredWeight(value: string) {
+    if (value.trim() === "") return false;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed >= 0;
+}
+
+function hasPerformedSetData(set: Pick<SetLog, "reps" | "weightKg">, cardio = false) {
+    if (cardio) return set.reps > 0 || hasEnteredWeight(set.weightKg);
+    return set.reps > 0 && hasEnteredWeight(set.weightKg);
+}
+
 function getExerciseTargetSummary(ex: Exercise, cardio: boolean) {
     const parts = [`${ex.sets} ${cardio ? "rounds" : "sets"}`];
     const reps = ex.reps?.trim();
@@ -325,6 +342,9 @@ export function WorkoutLogClient({
         remoteUpdatedAtMs(initialActiveLog?.updatedAt)
     );
     const isSavingRef = useRef(false);
+    const progressSaveInFlightRef = useRef(false);
+    const pendingProgressSaveRef = useRef<PendingProgressSave | null>(null);
+    const isCompletingRef = useRef(false);
 
     const modalOpen = Boolean(previewExercise) || isSubstituting !== null || isAddingExercise || showFinishModal;
     useScrollLock(modalOpen);
@@ -607,15 +627,11 @@ export function WorkoutLogClient({
         return `${mins}:${secs.toString().padStart(2, "0")}`;
     };
 
-    const saveProgress = async (
-        currentLogs: Record<string, SetLog[]>,
-        currentExercises?: Exercise[],
-        startTimeOverride?: number
-    ) => {
-        if (!activeLogId) return;
+    const persistProgressSnapshot = async (snapshot: PendingProgressSave) => {
+        if (!activeLogId || isCompletingRef.current) return;
 
-        const exList = currentExercises || activeExercises;
-        const flattenedSets = Object.entries(currentLogs).flatMap(([exId, sets]) => {
+        const exList = snapshot.exercises || activeExercises;
+        const flattenedSets = Object.entries(snapshot.logs).flatMap(([exId, sets]) => {
             const exInfo = exList.find(e => e.id === exId);
             const exOrder = exList.findIndex(e => e.id === exId);
             return sets.map(s => ({
@@ -627,13 +643,13 @@ export function WorkoutLogClient({
                 weightKg: s.weightKg ? parseFloat(s.weightKg) : undefined,
                 rpe: s.rpe ? parseInt(s.rpe) : undefined,
                 isWarmup: s.isWarmup,
-                isCompleted: s.isCompleted,
+                isCompleted: s.isCompleted || hasPerformedSetData(s, exInfo ? isCardio(exInfo.name) : false),
                 videoUrl: s.videoUrl || undefined,
             }));
         });
 
         try {
-            const finalStartTime = startTimeOverride ?? startTime;
+            const finalStartTime = snapshot.startTimeOverride ?? startTime;
             const elapsedMinutes = Math.max(0, Math.floor((Date.now() - finalStartTime) / 60000));
             isSavingRef.current = true;
             const res = await fetch("/api/logs", {
@@ -662,13 +678,49 @@ export function WorkoutLogClient({
         }
     };
 
+    const flushProgressSaves = async () => {
+        if (progressSaveInFlightRef.current) return;
+        progressSaveInFlightRef.current = true;
+        try {
+            while (pendingProgressSaveRef.current) {
+                const next = pendingProgressSaveRef.current;
+                pendingProgressSaveRef.current = null;
+                await persistProgressSnapshot(next);
+            }
+        } finally {
+            progressSaveInFlightRef.current = false;
+            if (pendingProgressSaveRef.current) {
+                void flushProgressSaves();
+            }
+        }
+    };
+
+    const saveProgress = (
+        currentLogs: Record<string, SetLog[]>,
+        currentExercises?: Exercise[],
+        startTimeOverride?: number
+    ) => {
+        if (!activeLogId || isCompletingRef.current) return;
+        pendingProgressSaveRef.current = {
+            logs: currentLogs,
+            exercises: currentExercises,
+            startTimeOverride,
+        };
+        void flushProgressSaves();
+    };
+
     const updateSet = (exId: string, setIdx: number, updates: Partial<SetLog>) => {
         setLogs((prev) => {
             const currentSet = prev[exId][setIdx];
             const finalUpdates = { ...updates };
-            
-            // Auto-check logic: if weight is entered and it's not currently completed, check it
-            if (updates.weightKg && updates.weightKg.trim() !== "" && !currentSet.isCompleted && updates.isCompleted === undefined) {
+            const exercise = activeExercises.find((ex) => ex.id === exId);
+            const nextSet = { ...currentSet, ...finalUpdates };
+
+            if (
+                updates.isCompleted === undefined
+                && !currentSet.isCompleted
+                && hasPerformedSetData(nextSet, exercise ? isCardio(exercise.name) : false)
+            ) {
                 finalUpdates.isCompleted = true;
             }
 
@@ -803,7 +855,10 @@ export function WorkoutLogClient({
         const flattenedSets = Object.entries(logs).flatMap(([exId, sets]) =>
             sets.map(s => ({ ...s, exerciseId: exId }))
         );
-        return flattenedSets.some(s => s.isCompleted);
+        return flattenedSets.some((set) => {
+            const exercise = activeExercises.find((ex) => ex.id === set.exerciseId);
+            return set.isCompleted || hasPerformedSetData(set, exercise ? isCardio(exercise.name) : false);
+        });
     };
 
     const handleInitiateFinish = () => {
@@ -822,6 +877,8 @@ export function WorkoutLogClient({
 
     const handleSubmit = async (override?: { duration?: number; notes?: string; feeling?: number | null }) => {
         setSaving(true);
+        isCompletingRef.current = true;
+        pendingProgressSaveRef.current = null;
         const flattenedSets = Object.entries(logs).flatMap(([exId, sets]) => {
             const exInfo = activeExercises.find(e => e.id === exId);
             const exOrder = activeExercises.findIndex(e => e.id === exId);
@@ -834,7 +891,7 @@ export function WorkoutLogClient({
                 weightKg: s.weightKg ? parseFloat(s.weightKg) : undefined,
                 rpe: s.rpe ? parseInt(s.rpe) : undefined,
                 isWarmup: s.isWarmup,
-                isCompleted: s.isCompleted,
+                isCompleted: s.isCompleted || hasPerformedSetData(s, exInfo ? isCardio(exInfo.name) : false),
                 videoUrl: s.videoUrl || undefined,
             }));
         });
@@ -884,6 +941,7 @@ export function WorkoutLogClient({
             alert(`Save failed (Connection/JS Error): ${message}`);
         } finally {
             setSaving(false);
+            isCompletingRef.current = false;
         }
     };
 
