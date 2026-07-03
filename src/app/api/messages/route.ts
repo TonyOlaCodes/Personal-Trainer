@@ -17,6 +17,7 @@ import { notifyCoachOfClientMessage } from "@/lib/notifications";
 import { isClientRole, isCoachRole } from "@/lib/roles";
 import { getLastActiveMap, touchUserLastActive } from "@/lib/userPresence";
 import { getActiveSessionsForClients } from "@/lib/coachChat";
+import { getCoachClientFilterFlags } from "@/lib/chatConversationMeta";
 import { withResolvedUpload, withResolvedAvatar, normalizeStoredUploadUrl } from "@/lib/uploadUrls";
 import {
     markIncomingDeliveredForPeers,
@@ -42,6 +43,7 @@ export async function GET(req: Request) {
     const isGeneral = url.searchParams.get("general") === "true";
     const withUserId = url.searchParams.get("with");
     const activityOnly = url.searchParams.get("activity") === "true";
+    const includeFilterFlags = url.searchParams.get("filters") === "true";
     const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "80", 10) || 80, 100);
     const before = url.searchParams.get("before");
 
@@ -84,12 +86,17 @@ export async function GET(req: Request) {
             ? await getActiveSessionsForClients(peerIds)
             : undefined;
 
+        const filterFlags = includeFilterFlags && user.role === "COACH"
+            ? await getCoachClientFilterFlags(peerIds, user.id)
+            : undefined;
+
         return NextResponse.json({
             activity,
             unread,
             totalUnread,
             ...(presence ? { presence } : {}),
             ...(activeSessions ? { activeSessions } : {}),
+            ...(filterFlags ? { filterFlags } : {}),
         });
     }
 
@@ -177,8 +184,8 @@ export async function GET(req: Request) {
         status: statusOverrides.get(m.id) ?? m.status,
         sender: withResolvedAvatar({
             id: m.sender.id,
-            name: (m.sender as any).isDeleted ? ((m.sender as any).deletedName ?? "Deleted User") : (m.sender.name ?? "User"),
-            avatarUrl: (m.sender as any).isDeleted ? null : m.sender.avatarUrl,
+            name: m.sender.isDeleted ? (m.sender.deletedName ?? "Deleted User") : (m.sender.name ?? "User"),
+            avatarUrl: m.sender.isDeleted ? null : m.sender.avatarUrl,
             role: m.sender.role
         }),
     }));
@@ -263,8 +270,8 @@ export async function POST(req: Request) {
         ...message,
         sender: withResolvedAvatar({
             id: message.sender.id,
-            name: (message.sender as any).isDeleted ? ((message.sender as any).deletedName ?? "Deleted User") : (message.sender.name ?? "User"),
-            avatarUrl: (message.sender as any).isDeleted ? null : message.sender.avatarUrl,
+            name: message.sender.isDeleted ? (message.sender.deletedName ?? "Deleted User") : (message.sender.name ?? "User"),
+            avatarUrl: message.sender.isDeleted ? null : message.sender.avatarUrl,
             role: message.sender.role
         }),
     });

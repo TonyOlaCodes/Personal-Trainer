@@ -86,6 +86,8 @@ interface Conversation {
     isCoachClient?: boolean;
 }
 
+type ConversationFilterFlags = Pick<Conversation, "checkInDue" | "missedWorkout">;
+
 interface Props {
     currentUserId: string;
     currentUserRole: string;
@@ -200,6 +202,7 @@ export function ChatClient({
     const [activeSessions, setActiveSessions] = useState<Record<string, ActiveSession>>({});
     const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>(initialUnread);
     const [extraConversations, setExtraConversations] = useState<Conversation[]>([]);
+    const [conversationFilterFlags, setConversationFilterFlags] = useState<Record<string, ConversationFilterFlags>>({});
     const [coachSearch, setCoachSearch] = useState("");
     const [coachFilters, setCoachFilters] = useState<CoachListFilter[]>([]);
     const [loadingOlder, setLoadingOlder] = useState(false);
@@ -575,6 +578,12 @@ export function ChatClient({
                 if (isCoachUser && data.activeSessions) {
                     setActiveSessions(data.activeSessions);
                 }
+                if (isCoachUser && data.filterFlags) {
+                    setConversationFilterFlags((prev) => ({
+                        ...prev,
+                        ...(data.filterFlags as Record<string, ConversationFilterFlags>),
+                    }));
+                }
             } catch {
                 // ignore polling errors
             }
@@ -587,6 +596,32 @@ export function ChatClient({
 
         return () => clearInterval(interval);
     }, [isHydrated, canUseDirectChat, canViewLastOnline, isCoachUser, tab, selectedConv?.userId, refreshGlobalUnread]);
+
+    useEffect(() => {
+        if (!isHydrated || !canUseDirectChat || !isCoachUser) return;
+
+        const fetchCoachFilterFlags = async () => {
+            try {
+                const res = await fetch("/api/messages?activity=true&filters=true");
+                if (!res.ok) return;
+                const data = await res.json();
+                if (!data.filterFlags) return;
+                setConversationFilterFlags((prev) => ({
+                    ...prev,
+                    ...(data.filterFlags as Record<string, ConversationFilterFlags>),
+                }));
+            } catch {
+                // ignore polling errors
+            }
+        };
+
+        fetchCoachFilterFlags();
+        const interval = setInterval(() => {
+            if (document.visibilityState === "visible") fetchCoachFilterFlags();
+        }, 30000);
+
+        return () => clearInterval(interval);
+    }, [isHydrated, canUseDirectChat, isCoachUser]);
 
     useEffect(() => {
         if (!activeMessageId && !menuOpenId && !reactionPickerId) return;
@@ -831,9 +866,11 @@ export function ChatClient({
             allConversations.map((conversation) => ({
                 ...conversation,
                 lastMessageAt: conversationActivity[conversation.userId] ?? conversation.lastMessageAt ?? null,
+                checkInDue: conversationFilterFlags[conversation.userId]?.checkInDue ?? conversation.checkInDue,
+                missedWorkout: conversationFilterFlags[conversation.userId]?.missedWorkout ?? conversation.missedWorkout,
             }))
         );
-    }, [allConversations, conversationActivity]);
+    }, [allConversations, conversationActivity, conversationFilterFlags]);
 
     const toggleCoachFilter = (filter: CoachListFilter) => {
         setCoachFilters((prev) =>
