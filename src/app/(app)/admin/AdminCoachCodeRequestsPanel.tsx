@@ -145,7 +145,7 @@ export function AdminCoachCodeRequestsPanel({ coaches }: Props) {
             {error && <p className="text-sm text-danger">{error}</p>}
 
             {requests.length === 0 ? (
-                <div className="card p-8 text-center text-sm text-fg-muted">No pending coach code requests.</div>
+                <div className="card p-8 text-center text-sm text-fg-muted">No coach code requests.</div>
             ) : (
                 requests.map((request) => {
                     const label = request.user.name?.trim() || request.user.email;

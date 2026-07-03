@@ -212,7 +212,7 @@ export async function createCoachCodeRequest(userId: string) {
     return { sent: true as const, requestId: activeRequestId };
 }
 
-export async function listPendingCoachCodeRequestsForAdmin() {
+export async function listCoachCodeRequestsForAdmin() {
     await ensureCoachCodeRequestTables();
 
     const rows = await prisma.$queryRaw<
@@ -250,10 +250,14 @@ export async function listPendingCoachCodeRequestsForAdmin() {
         JOIN "users" u ON u.id = r."userId"
         LEFT JOIN "users" coach ON coach.id = u."coachId"
         LEFT JOIN "users" handler ON handler.id = r."claimedById"
-        WHERE r.status IN ('PENDING', 'DISPATCHED', 'CLAIMED')
-          AND u."isDeleted" = false
+        WHERE u."isDeleted" = false
           AND u."isDeactivated" = false
-        ORDER BY r."createdAt" DESC
+        ORDER BY
+            CASE
+                WHEN u.role = 'FREE' AND r.status IN ('PENDING', 'DISPATCHED', 'CLAIMED') THEN 0
+                ELSE 1
+            END,
+            r."createdAt" DESC
     `;
 
     const dispatchRows = await prisma.$queryRaw<
@@ -267,8 +271,7 @@ export async function listPendingCoachCodeRequestsForAdmin() {
         FROM "coach_code_request_dispatches" d
         JOIN "coach_code_requests" r ON r.id = d."requestId"
         JOIN "users" u ON u.id = r."userId"
-        WHERE r.status IN ('PENDING', 'DISPATCHED', 'CLAIMED')
-          AND u."isDeleted" = false
+        WHERE u."isDeleted" = false
           AND u."isDeactivated" = false
     `;
     const requestIds = new Set(rows.map((row) => row.id));

@@ -4,7 +4,7 @@ import { requireAuthUser } from "@/lib/apiAuth";
 import {
     adminDispatchCoachCodeRequest,
     adminHandleCoachCodeRequestSelf,
-    listPendingCoachCodeRequestsForAdmin,
+    listCoachCodeRequestsForAdmin,
 } from "@/lib/coachCodeRequest";
 
 const patchSchema = z.discriminatedUnion("action", [
@@ -27,7 +27,7 @@ export async function GET() {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const requests = await listPendingCoachCodeRequestsForAdmin();
+    const requests = await listCoachCodeRequestsForAdmin();
     return NextResponse.json({ requests });
 }
 
