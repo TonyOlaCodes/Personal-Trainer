@@ -8,6 +8,7 @@ import {
     computeMonthlyCompliance,
     computeWeeklyCompliance,
     complianceTone,
+    isFutureCalendarMonth,
     isSameCalendarMonth,
     type CalendarComplianceInput,
 } from "@/lib/calendarCompliance";
@@ -85,6 +86,7 @@ export function CalendarComplianceSummary({
     );
 
     const isViewingCurrentMonth = isSameCalendarMonth(now, calendarView.year, calendarView.month);
+    const isViewingFutureMonth = isFutureCalendarMonth(now, calendarView.year, calendarView.month);
 
     const weekCompliance = useMemo(
         () => computeWeeklyCompliance(complianceInput, now, complianceOptions),
@@ -135,10 +137,10 @@ export function CalendarComplianceSummary({
     return (
         <ComplianceCard
             label={`${MONTHS[calendarView.month]} ${calendarView.year}`}
-            sublabel="Workouts done in month"
-            completed={viewedMonthCompliance.completed}
-            due={viewedMonthCompliance.due}
-            percent={viewedMonthCompliance.percent}
+            sublabel={isViewingFutureMonth ? "Month not started yet" : "Workouts done in month"}
+            completed={isViewingFutureMonth ? 0 : viewedMonthCompliance.completed}
+            due={isViewingFutureMonth ? 0 : viewedMonthCompliance.due}
+            percent={isViewingFutureMonth ? null : viewedMonthCompliance.percent}
         />
     );
 }

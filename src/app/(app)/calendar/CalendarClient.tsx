@@ -420,10 +420,10 @@ export function CalendarClient({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fade-in">
             {/* ── Main Grid ── */}
             <div className="lg:col-span-8 space-y-6">
-                <div className="flex items-center justify-between px-2">
-                    <div className="space-y-1">
+                <div className="flex min-w-0 flex-col gap-3 px-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0 space-y-1">
                         <p className="text-[10px] font-black tracking-[0.2em] text-brand-400 uppercase">Interactive Calendar</p>
-                        <h2 className="text-3xl font-black text-fg flex items-center gap-4">
+                        <h2 className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1 text-2xl font-black text-fg sm:text-3xl">
                             {MONTHS[view.month]}
                             <span className="text-brand-400/30 font-light">{view.year}</span>
                         </h2>
@@ -450,7 +450,7 @@ export function CalendarClient({
                             </p>
                         )}
                     </div>
-                    <div className="flex items-center gap-1.5 bg-surface-muted/50 p-1.5 rounded-2xl border border-surface-border">
+                    <div className="grid grid-cols-[2rem_minmax(4.5rem,1fr)_2rem] items-center gap-1.5 rounded-2xl border border-surface-border bg-surface-muted/50 p-1.5 sm:flex sm:shrink-0">
                         <button 
                             onClick={() => setView(v => { const d = new Date(v.year, v.month-1); return { year: d.getFullYear(), month: d.getMonth() }; })} 
                             className="w-8 h-8 rounded-xl bg-surface hover:bg-surface-elevated flex items-center justify-center transition-all border border-surface-border text-fg-muted active:scale-90"
@@ -462,7 +462,7 @@ export function CalendarClient({
                                 const [y, m] = todayKey.split("-").map(Number);
                                 setView({ year: y, month: m - 1 });
                             }}
-                            className="px-4 h-8 rounded-xl bg-surface hover:bg-brand-950/30 hover:text-brand-400 text-[10px] font-black uppercase tracking-widest transition-all border border-surface-border text-fg active:scale-95"
+                            className="h-8 rounded-xl border border-surface-border bg-surface px-4 text-[10px] font-black uppercase tracking-widest text-fg transition-all hover:bg-brand-950/30 hover:text-brand-400 active:scale-95"
                         >
                             Today
                         </button>
