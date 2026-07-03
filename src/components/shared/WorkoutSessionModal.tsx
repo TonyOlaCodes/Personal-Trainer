@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Activity, ChevronLeft, ChevronRight, Edit3, Loader2, MessageSquare, Trash2, X } from "lucide-react";
+import { Activity, ChevronLeft, ChevronRight, Clock, Edit3, Loader2, MessageSquare, Save, Trash2, X } from "lucide-react";
 import { ModalOverlay } from "@/components/shared/ModalOverlay";
 import { cn, formatDate, calculateOneRM, parseLogDate, toDateKey } from "@/lib/utils";
 import { appendReturnTo } from "@/lib/navigation";
@@ -82,6 +82,8 @@ export function WorkoutSessionModal({
     const [savingNote, setSavingNote] = useState(false);
     const [deleting, setDeleting] = useState(false);
     const [editing, setEditing] = useState(false);
+    const [durationInput, setDurationInput] = useState("");
+    const [savingDuration, setSavingDuration] = useState(false);
 
     useEffect(() => {
         if (!sessionId) return;
@@ -111,6 +113,10 @@ export function WorkoutSessionModal({
             cancelled = true;
         };
     }, [sessionId]);
+
+    useEffect(() => {
+        setDurationInput(session?.duration != null ? String(session.duration) : "");
+    }, [session?.id, session?.duration]);
 
     const groupedSets = useMemo(() => {
         const map = new Map<string, { exercise: SessionSet["exercise"]; sets: SessionSet[] }>();
@@ -214,6 +220,40 @@ export function WorkoutSessionModal({
         }
     };
 
+    const saveDuration = async () => {
+        if (!session || savingDuration) return;
+        const trimmed = durationInput.trim();
+        const nextDuration = trimmed === "" ? null : Number(trimmed);
+
+        if (nextDuration !== null && (!Number.isInteger(nextDuration) || nextDuration < 0 || nextDuration > 1440)) {
+            setError("Enter a duration between 0 and 1440 minutes.");
+            return;
+        }
+
+        setSavingDuration(true);
+        setError("");
+        try {
+            const res = await fetch(`/api/logs/${session.id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ duration: nextDuration }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                const savedDuration = typeof data.duration === "number" ? data.duration : null;
+                setSession((prev) => prev ? { ...prev, duration: savedDuration } : prev);
+                notifyWorkoutStatsChanged();
+                router.refresh();
+            } else {
+                setError(typeof data.error === "string" ? data.error : "Could not save time.");
+            }
+        } catch {
+            setError("Could not save time.");
+        } finally {
+            setSavingDuration(false);
+        }
+    };
+
     return (
         <ModalOverlay alignToAppShell={alignToAppShell} className="bg-black/60 backdrop-blur-none sm:p-6 p-0">
             <div
@@ -286,7 +326,7 @@ export function WorkoutSessionModal({
                         </div>
                     ) : session ? (
                         <>
-                            <div className="grid sm:grid-cols-2 gap-3">
+                            <div className="grid sm:grid-cols-3 gap-3">
                                 <div className="stat-card">
                                     <Activity className="w-4 h-4 text-brand-400 mb-2" />
                                     <div className="flex items-center justify-center gap-6">
@@ -300,6 +340,41 @@ export function WorkoutSessionModal({
                                             <p className="stat-label">Completed Sets</p>
                                         </div>
                                     </div>
+                                </div>
+                                <div className="stat-card">
+                                    <Clock className="w-4 h-4 text-success mb-2" />
+                                    {canEditSession ? (
+                                        <div className="space-y-2 w-full">
+                                            <p className="stat-label">Time Logged</p>
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    max="1440"
+                                                    step="1"
+                                                    inputMode="numeric"
+                                                    className="input h-10 text-center text-sm font-black"
+                                                    value={durationInput}
+                                                    onChange={(e) => setDurationInput(e.target.value)}
+                                                    placeholder="mins"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={saveDuration}
+                                                    disabled={savingDuration}
+                                                    className="btn-icon shrink-0"
+                                                    title="Save time"
+                                                >
+                                                    {savingDuration ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <p className="stat-value">{session.duration ?? "--"}</p>
+                                            <p className="stat-label">Minutes</p>
+                                        </>
+                                    )}
                                 </div>
                                 <div className="stat-card">
                                     <MessageSquare className="w-4 h-4 text-warning mb-1" />

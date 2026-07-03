@@ -12,8 +12,9 @@ import { z } from "zod";
 const patchLogSchema = z.object({
     status: z.enum(["IN_PROGRESS", "COMPLETED"]).optional(),
     feeling: z.number().int().min(1).max(5).optional(),
-}).refine((data) => data.status !== undefined || data.feeling !== undefined, {
-    message: "Provide status or feeling to update",
+    duration: z.number().int().min(0).max(1440).nullable().optional(),
+}).refine((data) => data.status !== undefined || data.feeling !== undefined || data.duration !== undefined, {
+    message: "Provide status, feeling, or duration to update",
 });
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -116,7 +117,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const data: { status?: "IN_PROGRESS" | "COMPLETED"; feeling?: number } = {};
+    const data: { status?: "IN_PROGRESS" | "COMPLETED"; feeling?: number; duration?: number | null } = {};
 
     if (parsed.data.status !== undefined) {
         data.status = parsed.data.status;
@@ -127,6 +128,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             return NextResponse.json({ error: "Can only update feeling on completed workouts" }, { status: 400 });
         }
         data.feeling = parsed.data.feeling;
+    }
+
+    if (parsed.data.duration !== undefined) {
+        data.duration = parsed.data.duration;
     }
 
     const updated = await prisma.workoutLog.update({

@@ -866,10 +866,6 @@ export function WorkoutLogClient({
             alert("Finish at least one set!");
             return;
         }
-        if (isCoachForClient) {
-            handleSubmit({ duration: Math.floor(elapsed / 60), notes: "", feeling: null });
-            return;
-        }
         setManualDurationMinutes(Math.floor(elapsed / 60).toString());
         setFinishFeeling(null);
         setShowFinishModal(true);
@@ -1533,7 +1529,7 @@ export function WorkoutLogClient({
             </div>
             )}
 
-            {showFinishModal && !isCoachForClient && (
+            {showFinishModal && (
                 <div className="fixed inset-0 z-[70] flex overflow-hidden overscroll-none items-end sm:items-center justify-center bg-black/80 animate-fade-in sm:p-4">
                     <div
                         className="bg-surface-card w-full sm:max-w-sm max-h-[min(92dvh,100%)] sm:max-h-[90vh] rounded-t-[2rem] sm:rounded-[2rem] border border-surface-border shadow-glow-brand-lg flex flex-col animate-slide-up"
@@ -1548,11 +1544,13 @@ export function WorkoutLogClient({
                                 <p className="text-xs text-fg-subtle font-medium">Review your session details below.</p>
                             </div>
 
-                            <WorkoutFeelingPicker
-                                value={finishFeeling}
-                                onChange={setFinishFeeling}
-                                disabled={saving}
-                            />
+                            {!isCoachForClient && (
+                                <WorkoutFeelingPicker
+                                    value={finishFeeling}
+                                    onChange={setFinishFeeling}
+                                    disabled={saving}
+                                />
+                            )}
 
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black uppercase tracking-widest text-fg-subtle px-1">Duration (Minutes)</label>
@@ -1569,15 +1567,17 @@ export function WorkoutLogClient({
                                 </div>
                             </div>
 
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black uppercase tracking-widest text-fg-subtle px-1">Notes (Optional)</label>
-                                <textarea
-                                    className="input h-20 text-sm py-3 resize-none"
-                                    placeholder="Felt great, hit a PR on bench..."
-                                    value={workoutNotes}
-                                    onChange={(e) => setWorkoutNotes(e.target.value)}
-                                />
-                            </div>
+                            {!isCoachForClient && (
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-fg-subtle px-1">Notes (Optional)</label>
+                                    <textarea
+                                        className="input h-20 text-sm py-3 resize-none"
+                                        placeholder="Felt great, hit a PR on bench..."
+                                        value={workoutNotes}
+                                        onChange={(e) => setWorkoutNotes(e.target.value)}
+                                    />
+                                </div>
+                            )}
                         </div>
 
                         <div className="flex gap-3 p-4 sm:p-6 pt-3 border-t border-surface-border shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-6">
