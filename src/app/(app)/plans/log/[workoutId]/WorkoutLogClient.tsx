@@ -238,13 +238,22 @@ type ExercisePreviewMedia = {
 function getEmbedUrl(url: string) {
     try {
         const parsed = new URL(url);
-        if (parsed.hostname.includes("youtube.com")) {
-            const id = parsed.searchParams.get("v");
-            return id ? `https://www.youtube.com/embed/${id}` : url;
+        const host = parsed.hostname.replace(/^www\./, "").replace(/^m\./, "");
+
+        if (host === "youtube.com" || host === "youtube-nocookie.com") {
+            const pathParts = parsed.pathname.split("/").filter(Boolean);
+            const id = parsed.searchParams.get("v")
+                || (["embed", "shorts", "live"].includes(pathParts[0]) ? pathParts[1] : null);
+            return id ? `https://www.youtube-nocookie.com/embed/${id}?playsinline=1&rel=0` : url;
         }
-        if (parsed.hostname.includes("youtu.be")) {
-            const id = parsed.pathname.replace("/", "");
-            return id ? `https://www.youtube.com/embed/${id}` : url;
+        if (host === "youtu.be") {
+            const id = parsed.pathname.split("/").filter(Boolean)[0];
+            return id ? `https://www.youtube-nocookie.com/embed/${id}?playsinline=1&rel=0` : url;
+        }
+        if (host === "vimeo.com" || host === "player.vimeo.com") {
+            const pathParts = parsed.pathname.split("/").filter(Boolean);
+            const id = host === "player.vimeo.com" && pathParts[0] === "video" ? pathParts[1] : pathParts[0];
+            return id ? `https://player.vimeo.com/video/${id}` : url;
         }
         return url;
     } catch {
@@ -253,7 +262,11 @@ function getEmbedUrl(url: string) {
 }
 
 function isDirectVideo(url: string) {
-    return /\.(mp4|webm|ogg)(\?.*)?$/i.test(url);
+    try {
+        return /\.(mp4|webm|ogg|mov|m4v)(\?.*)?$/i.test(new URL(url).pathname);
+    } catch {
+        return /\.(mp4|webm|ogg|mov|m4v)(\?.*)?$/i.test(url);
+    }
 }
 
 function formatTargetWeight(weight?: number | null) {
@@ -1433,26 +1446,38 @@ export function WorkoutLogClient({
 
                         <div className="flex-1 overflow-y-auto overscroll-contain p-5 space-y-4">
                             {previewExercise.media.videoUrl && (
-                                <div className="w-full overflow-hidden rounded-2xl border border-surface-border bg-black aspect-video">
-                                    {isDirectVideo(previewExercise.media.videoUrl) ? (
-                                        <video
-                                            src={previewExercise.media.videoUrl}
-                                            controls
-                                            playsInline
-                                            poster={previewExercise.media.thumbnailUrl || undefined}
-                                            className="w-full h-full object-contain"
-                                        />
-                                    ) : (
-                                        <iframe
-                                            src={getEmbedUrl(previewExercise.media.videoUrl)}
-                                            title={`${previewExercise.name} video preview`}
-                                            className="w-full h-full"
-                                            loading="lazy"
-                                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                                            allowFullScreen
-                                        />
-                                    )}
-                                </div>
+                                <>
+                                    <div className="w-full overflow-hidden rounded-2xl border border-surface-border bg-black aspect-video">
+                                        {isDirectVideo(previewExercise.media.videoUrl) ? (
+                                            <video
+                                                src={previewExercise.media.videoUrl}
+                                                controls
+                                                playsInline
+                                                preload="metadata"
+                                                poster={previewExercise.media.thumbnailUrl || undefined}
+                                                className="w-full h-full object-contain"
+                                            />
+                                        ) : (
+                                            <iframe
+                                                src={getEmbedUrl(previewExercise.media.videoUrl)}
+                                                title={`${previewExercise.name} video preview`}
+                                                className="w-full h-full"
+                                                loading="eager"
+                                                referrerPolicy="strict-origin-when-cross-origin"
+                                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+                                                allowFullScreen
+                                            />
+                                        )}
+                                    </div>
+                                    <a
+                                        href={previewExercise.media.videoUrl}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="btn-secondary btn-sm w-full"
+                                    >
+                                        Open video
+                                    </a>
+                                </>
                             )}
 
                             {previewExercise.media.instructions && (
