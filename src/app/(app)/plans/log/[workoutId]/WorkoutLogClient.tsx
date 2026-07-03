@@ -236,30 +236,49 @@ type ExercisePreviewMedia = {
     thumbnailUrl?: string | null;
 };
 
-function getEmbedUrl(url: string) {
+function getYouTubeVideoId(url: string) {
     try {
         const parsed = new URL(url);
         const host = parsed.hostname.replace(/^www\./, "").replace(/^m\./, "");
 
         if (host === "youtube.com" || host === "youtube-nocookie.com") {
             const pathParts = parsed.pathname.split("/").filter(Boolean);
-            const id = parsed.searchParams.get("v")
+            return parsed.searchParams.get("v")
                 || (["embed", "shorts", "live"].includes(pathParts[0]) ? pathParts[1] : null);
-            return id ? `https://www.youtube-nocookie.com/embed/${id}?playsinline=1&rel=0` : url;
         }
         if (host === "youtu.be") {
-            const id = parsed.pathname.split("/").filter(Boolean)[0];
-            return id ? `https://www.youtube-nocookie.com/embed/${id}?playsinline=1&rel=0` : url;
+            return parsed.pathname.split("/").filter(Boolean)[0] || null;
+        }
+        return null;
+    } catch {
+        return null;
+    }
+}
+
+function getEmbedUrl(url: string, autoplay = false) {
+    try {
+        const parsed = new URL(url);
+        const host = parsed.hostname.replace(/^www\./, "").replace(/^m\./, "");
+        const youtubeId = getYouTubeVideoId(url);
+
+        if (youtubeId) {
+            return `https://www.youtube-nocookie.com/embed/${youtubeId}?playsinline=1&rel=0${autoplay ? "&autoplay=1" : ""}`;
         }
         if (host === "vimeo.com" || host === "player.vimeo.com") {
             const pathParts = parsed.pathname.split("/").filter(Boolean);
             const id = host === "player.vimeo.com" && pathParts[0] === "video" ? pathParts[1] : pathParts[0];
-            return id ? `https://player.vimeo.com/video/${id}` : url;
+            return id ? `https://player.vimeo.com/video/${id}?playsinline=1${autoplay ? "&autoplay=1" : ""}` : url;
         }
         return url;
     } catch {
         return url;
     }
+}
+
+function getVideoThumbnailUrl(url: string, thumbnailUrl?: string | null) {
+    if (thumbnailUrl) return thumbnailUrl;
+    const youtubeId = getYouTubeVideoId(url);
+    return youtubeId ? `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg` : null;
 }
 
 function isDirectVideo(url: string) {
@@ -351,6 +370,7 @@ export function WorkoutLogClient({
     const [isCheckingSession, setIsCheckingSession] = useState(!initialActiveLog);
     const sessionActive = Boolean(activeLogId);
     const [previewExercise, setPreviewExercise] = useState<{ name: string; media: ExercisePreviewMedia } | null>(null);
+    const [previewVideoStarted, setPreviewVideoStarted] = useState(false);
     const [modalTouchStart, setModalTouchStart] = useState<number | null>(null);
 
     const lastRemoteUpdatedAtRef = useRef(
@@ -363,6 +383,10 @@ export function WorkoutLogClient({
 
     const modalOpen = Boolean(previewExercise) || isSubstituting !== null || isAddingExercise || showFinishModal;
     useScrollLock(modalOpen);
+
+    useEffect(() => {
+        setPreviewVideoStarted(false);
+    }, [previewExercise?.media.videoUrl]);
 
     const findLastCompletedSet = (exerciseId: string, exerciseName: string, setNumber: number) =>
         lastWorkoutLogSets.find(
@@ -998,6 +1022,10 @@ export function WorkoutLogClient({
     const scheduledDayLabel = logDate && !isSameCalendarDay(logDate, new Date())
         ? formatDate(parseLogDate(logDate), { weekday: "long", day: "numeric", month: "long" })
         : null;
+    const previewVideoUrl = previewExercise?.media.videoUrl || null;
+    const previewThumbnailUrl = previewVideoUrl
+        ? getVideoThumbnailUrl(previewVideoUrl, previewExercise?.media.thumbnailUrl)
+        : null;
 
     return (
         <div className="min-h-screen bg-surface flex flex-col pt-safe-area">
@@ -1114,20 +1142,20 @@ export function WorkoutLogClient({
                                             <button
                                                 type="button"
                                                 onClick={() => setPreviewExercise({ name: ex.name, media })}
-                                                className="w-6 h-6 rounded-full bg-brand-500/10 text-brand-400 border border-brand-500/20 flex items-center justify-center hover:bg-brand-500 hover:text-white transition-colors shrink-0"
+                                                className="relative z-10 w-10 h-10 -my-2 rounded-full bg-brand-500/15 text-brand-300 border border-brand-500/30 flex items-center justify-center hover:bg-brand-500 hover:text-white active:scale-95 transition-all shrink-0"
                                                 title="Watch form video"
                                             >
-                                                <Play className="w-3 h-3 fill-current ml-0.5" />
+                                                <Play className="w-4 h-4 fill-current ml-0.5" />
                                             </button>
                                         )}
                                         {!media?.videoUrl && media?.instructions && (
                                             <button
                                                 type="button"
                                                 onClick={() => setPreviewExercise({ name: ex.name, media })}
-                                                className="w-6 h-6 rounded-full bg-brand-500/10 text-brand-400 border border-brand-500/20 flex items-center justify-center hover:bg-brand-500 hover:text-white transition-colors shrink-0"
+                                                className="relative z-10 w-10 h-10 -my-2 rounded-full bg-brand-500/15 text-brand-300 border border-brand-500/30 flex items-center justify-center hover:bg-brand-500 hover:text-white active:scale-95 transition-all shrink-0"
                                                 title="Exercise preview"
                                             >
-                                                <HelpCircle className="w-3.5 h-3.5" />
+                                                <HelpCircle className="w-4 h-4" />
                                             </button>
                                         )}
                                     </div>
@@ -1471,9 +1499,26 @@ export function WorkoutLogClient({
                                                 poster={previewExercise.media.thumbnailUrl || undefined}
                                                 className="w-full h-full object-contain"
                                             />
+                                        ) : !previewVideoStarted ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => setPreviewVideoStarted(true)}
+                                                className="relative w-full h-full overflow-hidden bg-black flex items-center justify-center group"
+                                                aria-label={`Play ${previewExercise.name} video`}
+                                            >
+                                                {previewThumbnailUrl && (
+                                                    <span
+                                                        className="absolute inset-0 bg-cover bg-center opacity-80 transition-transform group-hover:scale-105"
+                                                        style={{ backgroundImage: `url(${previewThumbnailUrl})` }}
+                                                    />
+                                                )}
+                                                <span className="relative z-10 w-16 h-16 rounded-full bg-brand-500 text-white flex items-center justify-center shadow-glow-brand group-active:scale-95 transition-transform">
+                                                    <Play className="w-7 h-7 fill-current ml-1" />
+                                                </span>
+                                            </button>
                                         ) : (
                                             <iframe
-                                                src={getEmbedUrl(previewExercise.media.videoUrl)}
+                                                src={getEmbedUrl(previewExercise.media.videoUrl, true)}
                                                 title={`${previewExercise.name} video preview`}
                                                 className="w-full h-full"
                                                 loading="eager"
