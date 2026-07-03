@@ -28,6 +28,7 @@ import { format, startOfWeek } from "date-fns";
 interface Props {
     userRole: string;
     hiddenGoals: string[];
+    todayWorkoutHref?: string | null;
 }
 
 type BodyweightHistoryPoint = { date: string; dateKey: string; weight: number };
@@ -201,7 +202,7 @@ function isWeightChangeTowardGoal(
     }
 }
 
-export function ProgressClient({ userRole, hiddenGoals }: Props) {
+export function ProgressClient({ userRole, hiddenGoals, todayWorkoutHref = null }: Props) {
     const isPremium = ["PREMIUM", "GENERAL_PREMIUM", "COACH", "SUPER_ADMIN"].includes(userRole);
     const showFreeAccessLock = !isPremium;
     const [data, setData] = useState<any>(null);
@@ -407,7 +408,7 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                     <Dumbbell className="w-12 h-12 text-brand-400/40 mx-auto mb-4" />
                     <h3 className="heading-3 mb-2">Build Your First Data Point</h3>
                     <p className="text-sm text-fg-muted mb-6">Complete a workout to see your progress come to life.</p>
-                    <Link href="/dashboard" className="btn-primary mx-auto">Go to Today&apos;s Workout</Link>
+                    <Link href={todayWorkoutHref ?? "/dashboard"} className="btn-primary mx-auto">Go to Today&apos;s Workout</Link>
                 </div>
             </div>
         );
