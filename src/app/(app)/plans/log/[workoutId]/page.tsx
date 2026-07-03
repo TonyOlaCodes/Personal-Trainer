@@ -13,6 +13,8 @@ import { isInactiveAccount } from "@/lib/userDeactivation";
 import { defaultHomeForRole, isCoachRole } from "@/lib/roles";
 
 export const metadata = { title: "Logging session" };
+const NEW_ACCOUNT_WORKOUT_HINT_DAYS = 30;
+const NEW_ACCOUNT_WORKOUT_HINT_MS = NEW_ACCOUNT_WORKOUT_HINT_DAYS * 24 * 60 * 60 * 1000;
 
 const activeLogInclude = {
     sets: {
@@ -50,9 +52,10 @@ export default async function WorkoutLogPage({
 
     const actor = await prisma.user.findUnique({
         where: { clerkId: userId },
-        select: { id: true, role: true },
+        select: { id: true, role: true, createdAt: true },
     });
     if (!actor) redirect("/sign-in");
+    const showWorkoutInputHint = Date.now() - actor.createdAt.getTime() < NEW_ACCOUNT_WORKOUT_HINT_MS;
 
     let subjectUserId = actor.id;
     let clientName: string | undefined;
@@ -183,6 +186,7 @@ export default async function WorkoutLogPage({
                 clientName={clientName}
                 lastWorkoutLogSets={lastWorkoutLogSets}
                 initialActiveLog={initialActiveLog}
+                showWorkoutInputHint={showWorkoutInputHint}
                 />
             </Suspense>
         </div>

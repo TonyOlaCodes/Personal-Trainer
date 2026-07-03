@@ -227,6 +227,7 @@ interface Props {
         rpe?: number | null;
     }>;
     initialActiveLog?: InitialActiveLog | null;
+    showWorkoutInputHint?: boolean;
 }
 
 type ExercisePreviewMedia = {
@@ -304,6 +305,7 @@ export function WorkoutLogClient({
     clientName,
     lastWorkoutLogSets = [],
     initialActiveLog = null,
+    showWorkoutInputHint = false,
 }: Props) {
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -1090,6 +1092,12 @@ export function WorkoutLogClient({
                         </div>
                     )}
 
+                    {showWorkoutInputHint && sessionActive && (
+                        <div className="rounded-lg border border-brand-500/30 bg-brand-950/20 px-3 py-2 text-xs font-semibold text-brand-100">
+                            Enter your weight, reps, and RPE in the highlighted boxes as you train.
+                        </div>
+                    )}
+
                     {activeExercises.map((ex) => {
                         const media = exerciseMedia[ex.name];
                         const hasPreview = !!(media?.videoUrl || media?.instructions);
@@ -1276,9 +1284,11 @@ export function WorkoutLogClient({
                                                     disabled={!sessionActive}
                                                     {...{ [WORKOUT_SET_INPUT_ATTR]: "" }}
                                                     className={cn(
-                                                        "input-sm w-full bg-surface-elevated border-none text-center text-sm font-semibold rounded-lg h-10",
+                                                        "input-sm w-full text-center text-sm font-semibold rounded-lg h-10 border transition-colors",
                                                         !cardio && (displayWeight || weightPlaceholder) ? "pr-5 pl-1" : "px-1",
-                                                        sessionActive && "focus:ring-1 focus:ring-brand-500"
+                                                        sessionActive
+                                                            ? "bg-surface border-brand-500/45 text-fg shadow-sm shadow-brand-950/20 placeholder:text-fg-subtle/80 focus:border-brand-400 focus:ring-2 focus:ring-brand-500/25"
+                                                            : "bg-surface-elevated/70 border-surface-border/70 text-fg-muted"
                                                     )}
                                                     value={displayWeight}
                                                     placeholder={weightPlaceholder}
@@ -1297,8 +1307,10 @@ export function WorkoutLogClient({
                                                 disabled={!sessionActive}
                                                 {...{ [WORKOUT_SET_INPUT_ATTR]: "" }}
                                                 className={cn(
-                                                    "input-sm w-full bg-surface-elevated border-none text-center text-sm font-semibold rounded-lg h-10 px-0",
-                                                    sessionActive && "focus:ring-1 focus:ring-brand-500"
+                                                    "input-sm w-full text-center text-sm font-semibold rounded-lg h-10 px-0 border transition-colors",
+                                                    sessionActive
+                                                        ? "bg-surface border-brand-500/45 text-fg shadow-sm shadow-brand-950/20 placeholder:text-fg-subtle/80 focus:border-brand-400 focus:ring-2 focus:ring-brand-500/25"
+                                                        : "bg-surface-elevated/70 border-surface-border/70 text-fg-muted"
                                                 )}
                                                 value={displayReps}
                                                 placeholder={repsPlaceholder}
@@ -1313,8 +1325,10 @@ export function WorkoutLogClient({
                                                 disabled={!sessionActive}
                                                 {...{ [WORKOUT_SET_INPUT_ATTR]: "" }}
                                                 className={cn(
-                                                    "input-sm w-full bg-surface-elevated border-none text-center text-sm font-semibold rounded-lg h-10 px-0",
-                                                    sessionActive && "focus:ring-1 focus:ring-brand-500"
+                                                    "input-sm w-full text-center text-sm font-semibold rounded-lg h-10 px-0 border transition-colors",
+                                                    sessionActive
+                                                        ? "bg-surface border-brand-500/45 text-fg shadow-sm shadow-brand-950/20 placeholder:text-fg-subtle/80 focus:border-brand-400 focus:ring-2 focus:ring-brand-500/25"
+                                                        : "bg-surface-elevated/70 border-surface-border/70 text-fg-muted"
                                                 )}
                                                 value={sessionActive ? set.rpe : (set.rpe || rpePlaceholder)}
                                                 placeholder={rpePlaceholder}
