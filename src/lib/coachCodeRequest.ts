@@ -468,13 +468,12 @@ export async function listCoachCodeRequestsForCoach(coachId: string) {
         JOIN "users" u ON u.id = r."userId"
         LEFT JOIN "users" coach ON coach.id = u."coachId"
         WHERE d."coachId" = ${coachId}
-          AND d.status IN ('PENDING', 'IGNORED')
+          AND d.status = 'PENDING'
           AND r.status = 'DISPATCHED'
+          AND u.role = 'FREE'
           AND u."isDeleted" = false
           AND u."isDeactivated" = false
-        ORDER BY
-            CASE WHEN d.status = 'PENDING' THEN 0 ELSE 1 END,
-            r."createdAt" DESC
+        ORDER BY r."createdAt" DESC
     `;
 
     return rows.map((row) => {

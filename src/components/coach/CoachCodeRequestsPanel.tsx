@@ -50,7 +50,9 @@ export function CoachCodeRequestsPanel() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ action: "ignore", dispatchId }),
             });
-            if (res.ok) await loadRequests();
+            if (res.ok) {
+                setRequests((current) => current.filter((request) => request.dispatchId !== dispatchId));
+            }
         } finally {
             setIgnoringId(null);
         }
