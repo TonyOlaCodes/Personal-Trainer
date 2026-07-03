@@ -418,7 +418,7 @@ export async function getActiveAnnouncementsForUser(user: { id: string; role: st
         const bannerUntil = new Date(a.dismissedAt);
         bannerUntil.setDate(bannerUntil.getDate() + a.dashboardBannerDays);
         return now < bannerUntil;
-    });
+    }).slice(0, 1);
 
     return { popup, dashboardBanners };
 }
