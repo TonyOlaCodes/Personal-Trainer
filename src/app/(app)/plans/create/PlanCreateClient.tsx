@@ -433,6 +433,19 @@ export function PlanCreateClient() {
         setWeeks(next);
     };
 
+    const removeExercise = (wIdx: number, eIdx: number) => {
+        const next = cloneWeeks(weeks);
+        next.forEach((w: LocalWeek) => {
+            const workout = w.workouts[wIdx];
+            if (!workout) return;
+            workout.exercises = workout.exercises.filter((_, i: number) => i !== eIdx);
+            workout.exercises.forEach((ex, idx: number) => {
+                ex.order = idx;
+            });
+        });
+        setWeeks(next);
+    };
+
     const reorderExercises = (wIdx: number, fromIdx: number, toIdx: number) => {
         if (fromIdx === toIdx) return;
         const next = cloneWeeks(weeks);
@@ -807,6 +820,9 @@ export function PlanCreateClient() {
                                                             </th>
                                                         );
                                                     })}
+                                                    {!isViewOnly && (
+                                                        <th className="text-right p-3 text-[10px] font-black uppercase text-fg-subtle tracking-widest border-b border-surface-border w-12">Del</th>
+                                                    )}
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -870,6 +886,19 @@ export function PlanCreateClient() {
                                                                 </td>
                                                             );
                                                         })}
+                                                        {!isViewOnly && (
+                                                            <td className="p-3 border-b border-surface-border text-right">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => removeExercise(activeWorkoutIdx, eIdx)}
+                                                                    className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-danger-muted/5 text-danger/45 hover:text-danger hover:bg-danger-muted/20 transition-all"
+                                                                    title="Remove exercise from all weeks"
+                                                                    aria-label={`Remove ${templateEx.name || "exercise"} from all weeks`}
+                                                                >
+                                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                                </button>
+                                                            </td>
+                                                        )}
                                                     </tr>
                                                 ))}
                                             </tbody>
