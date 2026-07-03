@@ -368,11 +368,13 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
     }
 
     const freeAccessOverlay = showFreeAccessLock ? (
-        <div className="absolute inset-0 z-20 flex items-start justify-center px-4 pt-6 sm:pt-10">
+        <div className="absolute inset-0 z-20 flex items-start justify-center px-4 pt-6 sm:pt-10 bg-surface-base/25 backdrop-blur-[1px]">
             <div className="sticky top-24 w-full max-w-xl">
                 <PremiumLockScreen
                     title="Progress Analytics"
-                    description="Your real progress is waiting underneath. Enter an access code or request full access to unlock the charts, PRs, and session history."
+                    description="Your real progress is underneath this lock. Enter an access code or request full access to unlock your charts, PRs, and session history."
+                    codeHeading="Input code to unlock"
+                    codeButtonLabel="Unlock progress"
                 />
             </div>
         </div>
@@ -385,7 +387,7 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
                 <div
                     className={cn(
                         "p-12 text-center card max-w-2xl mx-auto mt-12 bg-surface-muted/30 transition-all duration-300",
-                        showFreeAccessLock && "pointer-events-none select-none blur-sm opacity-60"
+                        showFreeAccessLock && "pointer-events-none select-none blur-[5px] opacity-50 saturate-50"
                     )}
                     aria-hidden={showFreeAccessLock}
                 >
@@ -407,7 +409,7 @@ export function ProgressClient({ userRole, hiddenGoals }: Props) {
             <div
                 className={cn(
                     "p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8 animate-fade-in mb-24 lg:mb-12 transition-all duration-300",
-                    showFreeAccessLock && "pointer-events-none select-none blur-sm opacity-60"
+                    showFreeAccessLock && "pointer-events-none select-none blur-[5px] opacity-50 saturate-50"
                 )}
                 aria-hidden={showFreeAccessLock}
             >

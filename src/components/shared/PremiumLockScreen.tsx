@@ -8,11 +8,15 @@ import { cn } from "@/lib/utils";
 interface Props {
     title?: string;
     description?: string;
+    codeHeading?: string;
+    codeButtonLabel?: string;
 }
 
 export function PremiumLockScreen({ 
     title = "Premium Feature", 
-    description = "This feature is reserved for Premium members and coached athletes. Upgrade to unlock." 
+    description = "This feature is reserved for Premium members and coached athletes. Upgrade to unlock.",
+    codeHeading = "Have an Access Code?",
+    codeButtonLabel = "Unlock Access",
 }: Props) {
     const [code, setCode] = useState("");
     const [codeStatus, setCodeStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
@@ -51,7 +55,7 @@ export function PremiumLockScreen({
             <div className="bg-surface-muted/50 p-6 rounded-2xl border border-surface-border mb-6">
                 <div className="flex items-center justify-center gap-2 mb-4">
                     <Ticket className="w-4 h-4 text-brand-400" />
-                    <p className="font-semibold text-sm">Have an Access Code?</p>
+                    <p className="font-semibold text-sm">{codeHeading}</p>
                 </div>
                 
                 <div className="space-y-3 max-w-sm mx-auto">
@@ -68,7 +72,7 @@ export function PremiumLockScreen({
                         disabled={code.length < 6 || codeStatus === "loading"}
                         className="btn-primary w-full shadow-glow-sm"
                     >
-                        {codeStatus === "loading" ? "Checking..." : "Unlock Access"}
+                        {codeStatus === "loading" ? "Checking..." : codeButtonLabel}
                     </button>
                     {codeMsg && (
                         <p className={cn("text-xs font-medium mt-2", codeStatus === "success" ? "text-success" : "text-danger")}>
