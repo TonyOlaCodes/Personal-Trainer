@@ -144,31 +144,48 @@ export function generateId(length = 12) {
 export const roleLabels: Record<string, string> = {
     FREE: "Free",
     PREMIUM: "Coached Premium",
-    GENERAL_PREMIUM: "General Premium",
+    GENERAL_PREMIUM: "Premium",
+    COACH: "Coach",
+    SUPER_ADMIN: "Admin",
+};
+
+/** Compact role labels for chat identity lines. */
+export const chatRoleLabels: Record<string, string> = {
+    FREE: "Free",
+    PREMIUM: "Coached",
+    GENERAL_PREMIUM: "Premium",
     COACH: "Coach",
     SUPER_ADMIN: "Admin",
 };
 
 /** Role badge variants */
 export const roleBadgeClass: Record<string, string> = {
-    FREE: "badge-muted",
-    PREMIUM: "badge-brand",
-    GENERAL_PREMIUM: "badge-success",
-    COACH: "badge-success",
-    SUPER_ADMIN: "badge-warning",
+    FREE: "border-[#A1A1AA]/25 bg-[#A1A1AA]/10 text-[#D4D4D8]",
+    PREMIUM: "border-[#8B5CF6]/30 bg-[#8B5CF6]/10 text-[#A78BFA]",
+    GENERAL_PREMIUM: "border-[#3B82F6]/30 bg-[#3B82F6]/10 text-[#60A5FA]",
+    COACH: "border-[#10B981]/30 bg-[#10B981]/10 text-[#34D399]",
+    SUPER_ADMIN: "border-[#F59E0B]/35 bg-[#F59E0B]/10 text-[#FBBF24]",
 };
 
 /** Role-based display name colors (chat, lists) */
 export const roleNameClass: Record<string, string> = {
-    FREE: "text-fg",
-    PREMIUM: "text-brand-400",
-    GENERAL_PREMIUM: "text-success",
-    COACH: "text-warning",
-    SUPER_ADMIN: "text-danger",
+    FREE: "text-[#D4D4D8]",
+    PREMIUM: "text-[#A78BFA]",
+    GENERAL_PREMIUM: "text-[#60A5FA]",
+    COACH: "text-[#34D399]",
+    SUPER_ADMIN: "text-[#FBBF24]",
 };
 
 export function getRoleNameClass(role: string): string {
-    return roleNameClass[role] ?? "text-fg";
+    return roleNameClass[role] ?? roleNameClass.FREE;
+}
+
+export function getRoleBadgeClass(role: string): string {
+    return roleBadgeClass[role] ?? roleBadgeClass.FREE;
+}
+
+export function getChatRoleLabel(role: string): string {
+    return chatRoleLabels[role] ?? roleLabels[role] ?? role;
 }
 
 export { calculateOneRM, deriveOneRMFromBestSet } from "@/lib/oneRepMax";

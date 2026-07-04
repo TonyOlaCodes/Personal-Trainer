@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ReactNode } from "react";
-import { cn, getInitials, getRoleNameClass } from "@/lib/utils";
+import { cn, getChatRoleLabel, getInitials, getRoleBadgeClass, getRoleNameClass } from "@/lib/utils";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { getPublicProfileHref } from "@/lib/profileNavigation";
 
@@ -20,6 +20,8 @@ interface ProfileLinkProps {
     nameClassName?: string;
     showAvatar?: boolean;
     avatarSize?: "xs" | "sm" | "md" | "lg";
+    showRoleLabel?: boolean;
+    showRoleBadge?: boolean;
     stopPropagation?: boolean;
     disabled?: boolean;
 }
@@ -40,11 +42,14 @@ export function ProfileLink({
     nameClassName,
     showAvatar = false,
     avatarSize = "sm",
+    showRoleLabel = false,
+    showRoleBadge = false,
     stopPropagation = false,
     disabled = false,
 }: ProfileLinkProps) {
     const displayName = typeof name === "string" ? (name.trim() || "User") : name;
     const initialsSource = typeof name === "string" ? name : "User";
+    const roleLabel = role ? getChatRoleLabel(role) : null;
     const content = (
         <>
             {showAvatar && (
@@ -61,7 +66,22 @@ export function ProfileLink({
                     )}
                 </span>
             )}
-            <span className={cn(role && getRoleNameClass(role), nameClassName)}>{displayName}</span>
+            <span className="inline-flex items-center gap-1.5 min-w-0">
+                <span className={cn(role && getRoleNameClass(role), nameClassName)}>{displayName}</span>
+                {showRoleLabel && roleLabel && (
+                    <span className={cn("text-[10px] font-black uppercase tracking-wider", getRoleNameClass(role))}>
+                        <span className="text-fg-subtle">·</span> {roleLabel}
+                    </span>
+                )}
+            </span>
+            {showRoleBadge && roleLabel && (
+                <span className={cn(
+                    "inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider",
+                    getRoleBadgeClass(role ?? "")
+                )}>
+                    {roleLabel}
+                </span>
+            )}
         </>
     );
 
