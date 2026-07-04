@@ -1,7 +1,7 @@
 export type OverviewTier = "bad" | "decent" | "good";
 export type OverviewTone = "bad" | "warn" | "neutral" | "good" | "great";
 
-/** Four overview axes (81 combos): recovery, energy, stress, load — load links stress + training. */
+/** Four overview axes (81 combos): recovery, energy, stress, load — load links stress + training feel. */
 export type OverviewKey = `${OverviewTier}${OverviewTier}${OverviewTier}${OverviewTier}`;
 
 const TIER_ORDER: OverviewTier[] = ["bad", "decent", "good"];
@@ -32,20 +32,20 @@ const LOAD: Record<OverviewTier, string> = {
 
 const FOCUS: Record<OverviewTier, Record<"recovery" | "energy" | "stress" | "load", string>> = {
     bad: {
-        recovery: "Protect sleep and hit protein at two meals daily.",
+        recovery: "Protect sleep and keep meals regular before pushing harder.",
         energy: "Eat enough and sleep earlier before adding training volume.",
         stress: "Cut optional stressors and keep sessions lighter next week.",
-        load: "Show up for short sessions — consistency beats perfection.",
+        load: "Keep the next session simple and rebuild momentum.",
     },
     decent: {
         recovery: "Tighten bedtime by 30 minutes and keep meals regular.",
         energy: "Add a snack on training days to avoid mid-week dips.",
         stress: "Keep stress from spilling into sleep — one unwind habit helps.",
-        load: "Add one harder set or an extra session if recovery holds up.",
+        load: "Progress one small thing if recovery holds up.",
     },
     good: {
         recovery: "Keep the same sleep and meal rhythm.",
-        energy: "Ride the momentum — don't skip meals on busy days.",
+        energy: "Ride the momentum and keep food timing steady on busy days.",
         stress: "Stay proactive so stress doesn't creep up mid-week.",
         load: "Progress gradually — don't jump volume just because you feel good.",
     },
@@ -63,15 +63,10 @@ export function ratingToTier(value: number, inverse = false): OverviewTier | nul
     return "good";
 }
 
-/** Metrics 1+2 (sleep & diet) share one recovery tier — use the weaker score. */
-export function recoveryTier(sleep: number, diet: number, sleepHidden: boolean): OverviewTier {
+export function recoveryTier(sleep: number, sleepHidden: boolean): OverviewTier {
     const tiers: OverviewTier[] = [];
     if (!sleepHidden && sleep > 0) {
         const tier = ratingToTier(sleep);
-        if (tier) tiers.push(tier);
-    }
-    if (diet > 0) {
-        const tier = ratingToTier(diet);
         if (tier) tiers.push(tier);
     }
     if (tiers.length === 0) return "decent";
@@ -94,17 +89,17 @@ export function loadTier(stress: number, training: number): OverviewTier {
 
 export function buildOverviewKey(opts: {
     sleep: number;
-    diet: number;
+    diet?: number;
     energy: number;
     stress: number;
     training: number;
     sleepHidden?: boolean;
 }): OverviewKey | null {
-    const { sleep, diet, energy, stress, training, sleepHidden = false } = opts;
-    const hasAny = (!sleepHidden && sleep > 0) || diet > 0 || energy > 0 || stress > 0 || training > 0;
+    const { sleep, energy, stress, training, sleepHidden = false } = opts;
+    const hasAny = (!sleepHidden && sleep > 0) || energy > 0 || stress > 0 || training > 0;
     if (!hasAny) return null;
 
-    const r = recoveryTier(sleep, diet, sleepHidden);
+    const r = recoveryTier(sleep, sleepHidden);
     const e = energy > 0 ? ratingToTier(energy) ?? "decent" : "decent";
     const s = stress > 0 ? ratingToTier(stress, true) ?? "decent" : "decent";
     const l = loadTier(stress, training);
@@ -185,7 +180,7 @@ const SUMMARY_CACHE = new Map<OverviewKey, { message: string; tone: OverviewTone
 
 export function getCheckInOverviewSummary(opts: {
     sleep: number;
-    diet: number;
+    diet?: number;
     energy: number;
     stress: number;
     training: number;

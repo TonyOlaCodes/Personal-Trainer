@@ -32,7 +32,7 @@ export interface PerformanceFeedback {
 
 export function getPerformanceMetricsFeedback(opts: {
     sleep: number;
-    diet: number;
+    diet?: number;
     energy: number;
     stress: number;
     training: number;

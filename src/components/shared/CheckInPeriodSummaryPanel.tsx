@@ -1,6 +1,6 @@
 "use client";
 
-import { Scale, Flame, Footprints, Dumbbell, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { Scale, Footprints, Dumbbell, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { CheckInPeriodSummary } from "@/lib/checkInPeriodSummary";
 
@@ -104,27 +104,9 @@ export function CheckInPeriodSummaryPanel({
                     <StatAdvice
                         message={summary.workouts.message}
                         detail={summary.workouts.detail}
-                        met={summary.workouts.completionPercent >= 100}
+                        met={summary.workouts.completionPercent >= 80 ? true : summary.workouts.completionPercent >= 50 ? null : false}
                     />
                 </div>
-
-                {summary.calories && (
-                    <div className="rounded-2xl border border-surface-border bg-surface-card/40 p-4 space-y-2">
-                        <div className="flex items-center gap-2">
-                            <Flame className="w-4 h-4 text-warning" />
-                            <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Calories</span>
-                        </div>
-                        <p className="text-xl font-black text-fg">
-                            {summary.calories.average != null ? summary.calories.average.toLocaleString() : "—"}
-                            <span className="text-sm text-fg-muted font-bold"> avg / day</span>
-                        </p>
-                        <p className="text-[10px] text-fg-muted">
-                            Target {summary.calories.target?.toLocaleString() ?? "—"}
-                            {summary.calories.daysLogged > 0 ? ` · ${summary.calories.daysLogged} days logged` : ""}
-                        </p>
-                        <StatAdvice message={summary.calories.message} detail={summary.calories.detail} met={summary.calories.metGoal} />
-                    </div>
-                )}
 
                 {summary.steps && (
                     <div className="rounded-2xl border border-surface-border bg-surface-card/40 p-4 space-y-2">
