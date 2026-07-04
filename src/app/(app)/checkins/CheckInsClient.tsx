@@ -6,7 +6,7 @@ import Link from "next/link";
 import {
     Scale, Send, Check, Camera, Calendar, MessageSquare, CheckCircle2,
     Zap, Moon, Brain, Activity, ChevronDown, AlertCircle,
-    Dumbbell, Flame, Edit2, Clock, Trash2, Loader2, Plus
+    Dumbbell, Flame, Edit2, Clock, Trash2, Loader2, Plus, Utensils, HeartPulse
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { formatDate, getWeekNumber, cn } from "@/lib/utils";
@@ -41,6 +41,7 @@ interface CheckIn {
     status: "PENDING" | "REVIEWED"; coachResponse?: string | null;
     respondedAt?: string | null;
     sleepRating?: number | null; dietRating?: number | null;
+    injuryRating?: number | null;
     energyRating?: number | null;
     stressRating?: number | null; intensityRating?: number | null;
     frontImageUrl?: string | null;
@@ -96,6 +97,8 @@ const SLEEP_LABELS    = [...SLEEP_VALUE_LABELS];
 const ENERGY_LABELS   = [...ENERGY_VALUE_LABELS];
 const STRESS_LABELS   = [...STRESS_VALUE_LABELS];
 const TRAINING_LABELS = [...TRAINING_VALUE_LABELS];
+const NUTRITION_LABELS = ["Poor", "Patchy", "Okay", "Good", "Great"];
+const ACHES_LABELS = ["None", "Minor", "Manageable", "Sore", "Painful"];
 
 function PerformanceMetricsFeedbackPanel({ sleep, energy, stress, training, sleepHidden }: {
     sleep: number; energy: number; stress: number; training: number; sleepHidden?: boolean;
@@ -124,13 +127,13 @@ function RatingBar({ icon: Icon, label, sublabels, value, onChange, prevValue, i
         // Use the color of the final selected value for the entire line up to that point
         const target = currentVal || 0;
         if (inverse) {
-            if (target <= 2) return "bg-success/30 border-success/60 text-success shadow-glow-success-sm";
-            if (target === 3) return "bg-warning/30 border-warning/60 text-warning shadow-glow-warning-sm";
-            return "bg-danger/30 border-danger/60 text-danger shadow-glow-danger-sm";
+            if (target <= 2) return "bg-success/35 border-success/70 text-white shadow-glow-success-sm";
+            if (target === 3) return "bg-warning/35 border-warning/70 text-white shadow-glow-warning-sm";
+            return "bg-danger/35 border-danger/70 text-white shadow-glow-danger-sm";
         }
-        if (target <= 2) return "bg-danger/30 border-danger/60 text-danger shadow-glow-danger-sm";
-        if (target === 3) return "bg-warning/30 border-warning/60 text-warning shadow-glow-warning-sm";
-        return "bg-success/30 border-success/60 text-success shadow-glow-success-sm";
+        if (target <= 2) return "bg-danger/35 border-danger/70 text-white shadow-glow-danger-sm";
+        if (target === 3) return "bg-warning/35 border-warning/70 text-white shadow-glow-warning-sm";
+        return "bg-success/35 border-success/70 text-white shadow-glow-success-sm";
     };
 
     return (
@@ -153,8 +156,9 @@ function RatingBar({ icon: Icon, label, sublabels, value, onChange, prevValue, i
                         key={s} type="button"
                         onClick={() => onChange(s === value ? 0 : s)}
                         className={cn(
-                            "flex-1 h-11 rounded-xl text-sm font-black border transition-all duration-200 active:scale-90 relative overflow-hidden",
+                            "flex-1 h-11 rounded-xl text-base font-black border transition-all duration-200 active:scale-90 relative overflow-hidden",
                             getColor(s, s <= value, value),
+                            s <= value && "shadow-sm",
                             s === prevValue && "ring-2 ring-brand-400/80 ring-offset-2 ring-offset-surface-card bg-brand-500/15 border-brand-400/70"
                         )}
                     >
@@ -174,8 +178,10 @@ function RatingBar({ icon: Icon, label, sublabels, value, onChange, prevValue, i
 function ratingChips(c: CheckIn, isSleepHidden?: boolean) {
     return [
         { l: "Sleep", v: isSleepHidden ? null : c.sleepRating },
+        { l: "Nutrition", v: c.dietRating },
         { l: "Energy", v: c.energyRating },
         { l: "Stress", v: c.stressRating },
+        { l: "Aches", v: c.injuryRating },
         { l: "Training", v: c.intensityRating },
     ].filter((r) => r.v);
 }
@@ -214,7 +220,7 @@ function PrevCheckInCard({ prev, setViewerMedia, isWeightHidden, isSleepHidden }
                         {ratingChips(prev, isSleepHidden).map(r => (
                             <div key={r.l} className="flex items-center gap-1.5 px-3 py-1 bg-surface-card rounded-xl border border-surface-border font-black text-fg">
                                 <span className="text-[10px] font-bold text-fg-subtle">{r.l}</span>
-                                <span className="text-[10px]">{r.v}/5</span>
+                                <span className="text-xs text-fg">{r.v}/5</span>
                             </div>
                         ))}
                     </div>
@@ -604,7 +610,9 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
     const [checkInId, setCheckInId] = useState<string | null>(null);
     const [energy, setEnergy] = useState(0);
     const [sleep, setSleep] = useState(0);
+    const [nutrition, setNutrition] = useState(0);
     const [stress, setStress] = useState(0);
+    const [aches, setAches] = useState(0);
     const [training, setTraining] = useState(0);
     const [notes,    setNotes]    = useState("");
     const [frontImg, setFrontImg] = useState("");
@@ -659,7 +667,9 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
             setCheckInId(existing.id);
             setEnergy(existing.energyRating || 0);
             setSleep(existing.sleepRating || 0);
+            setNutrition(existing.dietRating || 0);
             setStress(existing.stressRating || 0);
+            setAches(existing.injuryRating || 0);
             setTraining(existing.intensityRating || 0);
             setNotes(existing.feedback || "");
             setFrontImg(existing.frontImageUrl || "");
@@ -765,7 +775,9 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
         setSelectedDate(new Date().toISOString().split("T")[0]);
         setEnergy(0);
         setSleep(0);
+        setNutrition(0);
         setStress(0);
+        setAches(0);
         setTraining(0);
         setNotes("");
         setFrontImg("");
@@ -784,7 +796,9 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
         setSelectedDate(weekStartDateString(c.weekNumber, c.createdAt));
         setEnergy(c.energyRating || 0);
         setSleep(c.sleepRating || 0);
+        setNutrition(c.dietRating || 0);
         setStress(c.stressRating || 0);
+        setAches(c.injuryRating || 0);
         setTraining(c.intensityRating || 0);
         setNotes(c.feedback || "");
         setFrontImg(c.frontImageUrl || "");
@@ -819,7 +833,9 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                 weekNumber: selectedWeek,
                 energyRating: energy || undefined,
                 sleepRating: sleep || undefined,
+                dietRating: nutrition || undefined,
                 stressRating: stress || undefined,
+                injuryRating: aches || undefined,
                 intensityRating: training || undefined,
                 frontImageUrl:   frontImg || undefined,
                 sideImageUrl:    sideImg  || undefined,
@@ -1437,8 +1453,10 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                 {!isSleepHidden && (
                     <RatingBar icon={Moon} label="Sleep" sublabels={SLEEP_LABELS} value={sleep} onChange={setSleep} prevValue={prevCheckIn?.sleepRating} />
                 )}
+                <RatingBar icon={Utensils} label="Nutrition" sublabels={NUTRITION_LABELS} value={nutrition} onChange={setNutrition} prevValue={prevCheckIn?.dietRating} />
                 <RatingBar icon={Zap} label="Energy" sublabels={ENERGY_LABELS} value={energy} onChange={setEnergy} prevValue={prevCheckIn?.energyRating} />
                 <RatingBar icon={Brain} label="Stress" sublabels={STRESS_LABELS} value={stress} onChange={setStress} prevValue={prevCheckIn?.stressRating} inverse />
+                <RatingBar icon={HeartPulse} label="Aches / pain" sublabels={ACHES_LABELS} value={aches} onChange={setAches} prevValue={prevCheckIn?.injuryRating} inverse />
                 <RatingBar icon={Activity} label="Training" sublabels={TRAINING_LABELS} value={training} onChange={setTraining} prevValue={prevCheckIn?.intensityRating} />
 
                 <PerformanceMetricsFeedbackPanel

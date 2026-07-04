@@ -146,6 +146,7 @@ export default async function CheckInsPage() {
                             sleepRating: c.sleepRating,
                             dietRating: c.dietRating,
                             stressRating: c.stressRating,
+                            injuryRating: c.injuryRating,
                             energyRating: c.energyRating,
                             intensityRating: c.intensityRating,
                             frontImageUrl: c.frontImageUrl,
