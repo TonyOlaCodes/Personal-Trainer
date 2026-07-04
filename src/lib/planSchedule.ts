@@ -14,6 +14,7 @@ export interface PlanWorkoutLike {
     name: string;
     dayNumber: number;
     dayOfWeek?: number | null;
+    exercises?: { id?: string }[] | null;
 }
 
 export interface PlanWeekLike {

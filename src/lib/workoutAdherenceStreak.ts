@@ -6,6 +6,7 @@ import { loadPlanScheduleRevisions } from "@/lib/planScheduleHistory";
 import { getClientAttentionActions, getExcusedMissedWorkoutKeys } from "@/lib/coachAttentionActions";
 import { prisma } from "@/lib/prisma";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
+import { isRestPlanWorkout } from "@/lib/planTrainingTarget";
 import { parseLogDate, toDateKey } from "@/lib/utils";
 
 export interface CompletedWorkoutLog {
@@ -71,6 +72,7 @@ function buildScheduledSlots(
         const day = parseLogDate(dateKey);
         const planned = getPlannedWorkoutForDate(activeUserPlan, day, { today });
         if (!planned) continue;
+        if (isRestPlanWorkout(planned)) continue;
 
         slots.push({
             dateKey,
@@ -239,6 +241,7 @@ export async function getWorkoutAdherenceForUser(userId: string): Promise<Workou
                                     name: true,
                                     dayNumber: true,
                                     dayOfWeek: true,
+                                    exercises: { select: { id: true } },
                                 },
                             },
                         },

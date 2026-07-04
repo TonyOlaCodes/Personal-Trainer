@@ -220,6 +220,7 @@ export async function loadCoachDashboardInsights(input: {
                                             name: true,
                                             dayNumber: true,
                                             dayOfWeek: true,
+                                            exercises: { select: { id: true } },
                                         },
                                     },
                                 },
