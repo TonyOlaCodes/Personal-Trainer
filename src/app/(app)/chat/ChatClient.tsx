@@ -130,8 +130,8 @@ const CHAT_MEDIA_THUMB =
 const LAST_CHAT_TAB_KEY = "lastChatTab";
 const LAST_CHAT_CONVERSATION_KEY = "lastChatConversationId";
 const ACCESS_REQUEST_REPLY_OPTIONS = [
-    "Would you like coached premium, with a coach supporting you?",
-    "Would you like general premium, where you manage everything yourself?",
+    "Would you like Coached Premium, with a coach supporting you?",
+    "Would you like Premium, where you manage everything yourself?",
 ];
 
 function findConversation(conversations: Conversation[], userId: string | null | undefined) {
@@ -1380,7 +1380,7 @@ export function ChatClient({
                 <div className="flex-1 overflow-y-auto p-2 space-y-0.5 no-scrollbar">
                     {!canUseDirectChat ? (
                         <div className="p-6 text-center space-y-3">
-                            <p className="text-sm font-bold text-fg">Direct coach chat is Premium</p>
+                            <p className="text-sm font-bold text-fg">Direct coach chat is Coached Premium</p>
                             <p className="text-xs text-fg-muted">Redeem an access code from your coach in Settings to unlock 1-on-1 messaging. Community chat is still available.</p>
                         </div>
                     ) : currentUserRole === "PREMIUM" && allConversations.length === 0 ? (
@@ -1391,7 +1391,7 @@ export function ChatClient({
                             <div className="space-y-2">
                                 <p className="text-sm font-bold text-fg">No coach assigned yet</p>
                                 <p className="text-xs text-fg-muted leading-relaxed">
-                                    Your Premium account is active, but you haven&apos;t been linked to a coach yet. Message other athletes from their profile, or redeem a coach code in Settings.
+                                    Your Coached Premium account is active, but you haven&apos;t been linked to a coach yet. Message other athletes from their profile, or redeem a coach code in Settings.
                                 </p>
                             </div>
                             <div className="flex flex-col gap-2">

@@ -709,7 +709,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
     if (!isPremium && !isCoach) {
         return (
             <div className="p-4 sm:p-10">
-                <PremiumLockScreen title="Weekly Check-ins" description="Weekly check-ins require Premium access." />
+                <PremiumLockScreen title="Weekly Check-ins" description="Weekly check-ins require Coached Premium access." />
             </div>
         );
     }

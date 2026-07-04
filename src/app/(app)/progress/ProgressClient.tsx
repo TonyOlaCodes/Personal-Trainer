@@ -11,7 +11,7 @@ import {
     Dumbbell, Activity, Search, ChevronRight,
     Scale, Zap, BarChart2,
     Flame, ArrowUpRight, ArrowDownRight, X,
-    Pin, Minus
+    Pin, Minus, ClipboardList
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -29,6 +29,7 @@ interface Props {
     userRole: string;
     hiddenGoals: string[];
     todayWorkoutHref?: string | null;
+    canAccessCheckIns?: boolean;
 }
 
 type BodyweightHistoryPoint = { date: string; dateKey: string; weight: number };
@@ -202,7 +203,7 @@ function isWeightChangeTowardGoal(
     }
 }
 
-export function ProgressClient({ userRole, hiddenGoals, todayWorkoutHref = null }: Props) {
+export function ProgressClient({ userRole, hiddenGoals, todayWorkoutHref = null, canAccessCheckIns = false }: Props) {
     const isPremium = ["PREMIUM", "GENERAL_PREMIUM", "COACH", "SUPER_ADMIN"].includes(userRole);
     const showFreeAccessLock = !isPremium;
     const [data, setData] = useState<any>(null);
@@ -420,6 +421,18 @@ export function ProgressClient({ userRole, hiddenGoals, todayWorkoutHref = null 
     return (
         <div className="relative">
             <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8 animate-fade-in mb-24 lg:mb-12 transition-all duration-300">
+            {canAccessCheckIns && (
+                <div className="flex justify-end">
+                    <Link
+                        href="/checkins"
+                        className="inline-flex items-center gap-2 rounded-xl border border-surface-border bg-surface-card px-3 py-2 text-xs font-bold text-fg-muted transition-colors hover:border-brand-500/35 hover:text-brand-300"
+                    >
+                        <ClipboardList className="w-3.5 h-3.5" />
+                        Check-ins
+                        <ChevronRight className="w-3.5 h-3.5" />
+                    </Link>
+                </div>
+            )}
 
             {/* ── WEEKLY PULSE ── */}
             <section>

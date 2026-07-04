@@ -705,7 +705,7 @@ export function SettingsClient({ user }: Props) {
                                 <p className="text-xs text-fg-muted">
                                     {user.role === "GENERAL_PREMIUM"
                                         ? "Have a coach invite? Redeem it here to link with your coach — your training history stays intact."
-                                        : "Enter a coach invite or General Premium code to unlock full training features."}
+                                        : "Enter a coach invite or Premium code to unlock full training features."}
                                 </p>
                                 <div className="flex flex-col sm:flex-row gap-2">
                                     <input

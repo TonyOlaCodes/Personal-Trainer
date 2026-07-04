@@ -23,7 +23,7 @@ export async function POST(req: Request) {
             ? null
             : result.accessCode.generator.name || result.accessCode.generator.email || "your coach",
         membershipLabel: result.accessCode.upgradesTo === "GENERAL_PREMIUM"
-            ? "General Premium"
+            ? "Premium"
             : result.accessCode.upgradesTo === "PREMIUM"
                 ? "Coached Premium"
                 : result.accessCode.upgradesTo,

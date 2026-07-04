@@ -232,8 +232,8 @@ function ProfileAvatar({ name, email, avatarUrl, userId, disabled = false }: { n
 
 function codeTypeLabel(upgradesTo: string) {
     if (upgradesTo === "COACH") return "Coach";
-    if (upgradesTo === "GENERAL_PREMIUM") return "Premium Member";
-    if (upgradesTo === "PREMIUM") return "Coached Member";
+    if (upgradesTo === "GENERAL_PREMIUM") return "Premium";
+    if (upgradesTo === "PREMIUM") return "Coached Premium";
     return upgradesTo;
 }
 
@@ -532,7 +532,7 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
     const stats = [
         { label: "Total Users", val: activeUsers.length, icon: Users, color: "text-brand-400" },
         { label: "Coached Premium", val: users.filter(u => u.role === "PREMIUM" && !u.isDeactivated && !u.isDeleted).length, icon: Shield, color: "text-success" },
-        { label: "General Premium", val: users.filter(u => u.role === "GENERAL_PREMIUM" && !u.isDeactivated && !u.isDeleted).length, icon: Shield, color: "text-brand-300" },
+        { label: "Premium", val: users.filter(u => u.role === "GENERAL_PREMIUM" && !u.isDeactivated && !u.isDeleted).length, icon: Shield, color: "text-brand-300" },
         { label: "Coaches", val: coaches.length, icon: Users, color: "text-warning" },
     ];
 
@@ -1136,7 +1136,7 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
                     <div className="card p-5 border-brand-500/10">
                         <h3 className="heading-3 mb-1">Access Codes</h3>
                         <p className="text-xs text-fg-muted mb-4">
-                            Invite new coaches or premium members. Codes stay valid until redeemed or deleted.
+                            Invite new coaches or Premium members. Codes stay valid until redeemed or deleted.
                         </p>
                     <div className="card p-5 border-0 bg-surface-muted/20">
                         <h3 className="heading-3 mb-4">Generate Code</h3>
@@ -1150,7 +1150,7 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
                                     if (nextType === "COACH") setSelectedPlanId("");
                                 }}
                             >
-                                <option value="GENERAL_PREMIUM">Premium Member Code</option>
+                                <option value="GENERAL_PREMIUM">Premium Code</option>
                                 {userRole === "SUPER_ADMIN" && <option value="COACH">Coach Code</option>}
                             </select>
                             <select

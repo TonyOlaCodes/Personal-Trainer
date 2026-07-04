@@ -20,7 +20,24 @@ export async function POST(req: Request) {
         );
     }
 
-    const { planId } = z.object({ planId: z.string().nullable() }).parse(await req.json());
+    const { planId, weekStartDay } = z.object({
+        planId: z.string().nullable(),
+        weekStartDay: z.number().int().min(0).max(6).optional().nullable(),
+    }).parse(await req.json());
+
+    // Compute the desired startedAt based on weekStartDay selection
+    function nextWeekdayDate(targetDow: number): Date {
+        const now = new Date();
+        const jsDow = now.getDay();
+        const todayMon0 = jsDow === 0 ? 6 : jsDow - 1;
+        let daysUntil = targetDow - todayMon0;
+        if (daysUntil < 0) daysUntil += 7;
+        const target = new Date(now);
+        target.setDate(now.getDate() + daysUntil);
+        target.setHours(0, 0, 0, 0);
+        return target;
+    }
+    const chosenStartedAt = (weekStartDay != null) ? nextWeekdayDate(weekStartDay) : null;
 
     const targetAssignment = planId
         ? await prisma.userPlan.findUnique({
@@ -84,16 +101,22 @@ export async function POST(req: Request) {
         });
 
         if (planId) {
-            const reactivatedStartedAt = earliestCompletedLogForTarget
-                ? new Date(Math.min(
-                    targetAssignment!.startedAt.getTime(),
-                    earliestCompletedLogForTarget.loggedAt.getTime()
-                ))
-                : new Date();
+            // If user picked a specific start day, honour it; otherwise fall back to history-aware logic
+            let reactivatedStartedAt: Date;
+            if (chosenStartedAt) {
+                reactivatedStartedAt = chosenStartedAt;
+            } else {
+                reactivatedStartedAt = earliestCompletedLogForTarget
+                    ? new Date(Math.min(
+                        targetAssignment!.startedAt.getTime(),
+                        earliestCompletedLogForTarget.loggedAt.getTime()
+                    ))
+                    : new Date();
+            }
 
             await tx.userPlan.update({
                 where: { userId_planId: { userId: user.id, planId } },
-                data: switchingPlans
+                data: switchingPlans || chosenStartedAt
                     ? { isActive: true, startedAt: reactivatedStartedAt }
                     : { isActive: true },
             });

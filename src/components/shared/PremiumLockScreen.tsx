@@ -15,7 +15,7 @@ interface Props {
 
 export function PremiumLockScreen({ 
     title = "Premium Feature", 
-    description = "This feature is reserved for Premium members and coached athletes. Upgrade to unlock.",
+    description = "This feature is reserved for Premium and Coached Premium members. Upgrade to unlock.",
     codeHeading = "Have an Access Code?",
     codeButtonLabel = "Unlock Access",
     compact = false,

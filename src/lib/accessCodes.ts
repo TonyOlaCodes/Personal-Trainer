@@ -67,7 +67,7 @@ export async function generateGeneralPremiumAccessCode(prisma: PrismaClient) {
         possibleNumbers.splice(randomIndex, 1);
     }
 
-    throw new Error("All General Premium access codes have been exhausted.");
+    throw new Error("All Premium access codes have been exhausted.");
 }
 
 function resolveCoachIdForCode(upgradesTo: Role, generatedBy: string): string | null {
@@ -89,11 +89,11 @@ export async function redeemAccessCodeForUser(
         });
 
         if (existingUser?.role === "GENERAL_PREMIUM") {
-            return { error: "You already have General Premium access", status: 400 } as const;
+            return { error: "You already have Premium access", status: 400 } as const;
         }
 
         if (existingUser?.role === "PREMIUM" && existingUser.coachId) {
-            return { error: "You already have coached premium access", status: 400 } as const;
+            return { error: "You already have Coached Premium access", status: 400 } as const;
         }
 
         await prisma.user.update({
@@ -126,7 +126,7 @@ export async function redeemAccessCodeForUser(
         existingUser?.role === "GENERAL_PREMIUM"
         && accessCode.upgradesTo === "GENERAL_PREMIUM"
     ) {
-        return { error: "You already have General Premium access", status: 400 } as const;
+        return { error: "You already have Premium access", status: 400 } as const;
     }
 
     if (
@@ -134,7 +134,7 @@ export async function redeemAccessCodeForUser(
         && existingUser.coachId
         && accessCode.upgradesTo === "GENERAL_PREMIUM"
     ) {
-        return { error: "You already have coached premium access", status: 400 } as const;
+        return { error: "You already have Coached Premium access", status: 400 } as const;
     }
 
     const coachId = resolveCoachIdForCode(accessCode.upgradesTo, accessCode.generatedBy);

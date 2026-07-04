@@ -9,6 +9,7 @@ import { parseLogDate, toDateKey } from "@/lib/utils";
 import { serializePlanWeeksForSchedule, loadPlanScheduleRevisions } from "@/lib/planScheduleHistory";
 import { resolvePlannedWorkoutWithExercisesForDate } from "@/lib/plannedWorkoutResolve";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
+import { canAccessCheckIns } from "@/lib/roles";
 
 export const metadata = {
     title: "Progress",
@@ -26,6 +27,7 @@ export default async function ProgressPage() {
                 where: { clerkId: userId },
                 select: {
                     role: true,
+                    coachId: true,
                     hiddenGoals: true,
                     plans: {
                         where: { isActive: true },
@@ -111,7 +113,12 @@ export default async function ProgressPage() {
                     subtitle="Am I improving?" 
                 />
                 <main className="animate-fade-in">
-                    <ProgressClient userRole={user.role} hiddenGoals={hiddenGoals} todayWorkoutHref={todayWorkoutHref} />
+                    <ProgressClient
+                        userRole={user.role}
+                        hiddenGoals={hiddenGoals}
+                        todayWorkoutHref={todayWorkoutHref}
+                        canAccessCheckIns={canAccessCheckIns(user.role, user.coachId)}
+                    />
                 </main>
             </div>
         );

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
     Plus, Dumbbell, Calendar, ChevronRight, Star,
-    Trash2, Play, Ticket, Share2, Check, PauseCircle, User, X, Loader2,
+    Trash2, Play, Share2, Check, PauseCircle, User, X, Loader2, HelpCircle,
 } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import { PLAN_TEMPLATES } from "@/lib/templates";
@@ -46,6 +46,41 @@ const TEMPLATE_ICONS: Record<string, string> = {
     hybrid: "HYB",
 };
 
+const SHARE_CODE_HELP =
+    "Enter an 8-character share code from an athlete or coach to instantly copy their workout plan into your account.";
+
+function ShareCodeHelpButton() {
+    const [open, setOpen] = useState(false);
+
+    return (
+        <div className="relative shrink-0">
+            <button
+                type="button"
+                onClick={() => setOpen((value) => !value)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-fg-subtle hover:text-brand-400 hover:bg-surface-muted transition-colors"
+                aria-label="Share code help"
+                aria-expanded={open}
+                title={SHARE_CODE_HELP}
+            >
+                <HelpCircle className="w-4 h-4" />
+            </button>
+            {open && (
+                <>
+                    <button
+                        type="button"
+                        className="fixed inset-0 z-40 cursor-default"
+                        aria-label="Close help"
+                        onClick={() => setOpen(false)}
+                    />
+                    <p className="absolute right-0 top-full z-50 mt-2 w-64 rounded-xl border border-surface-border bg-surface-elevated p-3 text-[11px] leading-relaxed text-fg-muted shadow-modal">
+                        {SHARE_CODE_HELP}
+                    </p>
+                </>
+            )}
+        </div>
+    );
+}
+
 const PREBUILT_TEMPLATES = Object.values(PLAN_TEMPLATES).map((template) => ({
     id: template.id,
     name: template.name,
@@ -58,7 +93,7 @@ export function PlansClient({ plans, userRole, activeSession = null, coachClient
     const router = useRouter();
     const searchParams = useSearchParams();
     const highlightedPlanId = searchParams.get("highlight");
-    const [tab, setTab] = useState<"mine" | "templates" | "code">("mine");
+    const [tab, setTab] = useState<"mine" | "templates">("mine");
     const [code, setCode] = useState("");
     const [codeStatus, setCodeStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
     const [codeMsg, setCodeMsg] = useState("");
@@ -75,16 +110,31 @@ export function PlansClient({ plans, userRole, activeSession = null, coachClient
     const [assignClientId, setAssignClientId] = useState("");
     const [assignBusy, setAssignBusy] = useState(false);
     const [assignError, setAssignError] = useState<string | null>(null);
+    // Activate-with-start-day modal
+    const [activatePlan, setActivatePlan] = useState<{ id: string; name: string; weekCount: number } | null>(null);
+    const [activateStartDay, setActivateStartDay] = useState<number | null>(null);
+    const [activateBusy, setActivateBusy] = useState(false);
+
+    const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    const DAYS_FULL = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+    function daysUntilWeekday(targetDow: number): number {
+        const jsDow = new Date().getDay();
+        const todayMon0 = jsDow === 0 ? 6 : jsDow - 1;
+        let diff = targetDow - todayMon0;
+        if (diff < 0) diff += 7;
+        return diff;
+    }
 
     const activePlan = localPlans.find((p) => p.isActive);
     const [localActiveSession, setLocalActiveSession] = useState(activeSession);
     const canPublishToProfile = !isCoach && localPlans.some((p) => p.isActive);
 
-    const setActive = async (planId: string | null) => {
+    const setActive = async (planId: string | null, weekStartDay?: number | null) => {
         await fetch("/api/plans/activate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ planId }),
+            body: JSON.stringify({ planId, weekStartDay: weekStartDay ?? null }),
         });
         window.location.reload();
     };
@@ -183,7 +233,9 @@ export function PlansClient({ plans, userRole, activeSession = null, coachClient
     };
 
     const importPlan = async () => {
+        if (code.length !== 8 || codeStatus === "loading") return;
         setCodeStatus("loading");
+        setCodeMsg("");
         const res = await fetch("/api/plans/import", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -212,6 +264,97 @@ export function PlansClient({ plans, userRole, activeSession = null, coachClient
                 }}
                 onConfirm={confirmDeletePlan}
             />
+
+            {/* Activate-with-start-day modal */}
+            {activatePlan && (
+                <ModalOverlay onClose={() => { if (!activateBusy) { setActivatePlan(null); setActivateStartDay(null); } }}>
+                    <div
+                        className="bg-surface-card w-full sm:max-w-md rounded-t-[2rem] sm:rounded-3xl border border-surface-border shadow-glow-brand-lg overflow-hidden animate-slide-up"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between gap-4 px-5 py-4 border-b border-surface-border">
+                            <div className="min-w-0">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">Activate plan</p>
+                                <h3 className="text-lg font-black text-fg truncate">{activatePlan.name}</h3>
+                            </div>
+                            <button type="button" onClick={() => { setActivatePlan(null); setActivateStartDay(null); }} disabled={activateBusy} className="btn-icon shrink-0">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="p-5 space-y-4">
+                            {activatePlan.weekCount > 1 && (
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-bold uppercase tracking-widest text-fg-subtle">Week 1 Starts On</label>
+                                    <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
+                                        <button
+                                            type="button"
+                                            onClick={() => setActivateStartDay(null)}
+                                            className={cn(
+                                                "px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider border transition-all",
+                                                activateStartDay === null
+                                                    ? "bg-brand-500/20 border-brand-500/50 text-brand-300"
+                                                    : "bg-surface-elevated border-surface-border text-fg-subtle hover:text-fg hover:border-brand-600/40"
+                                            )}
+                                        >
+                                            Right away
+                                        </button>
+                                        {DAYS.map((day, idx) => {
+                                            const diff = daysUntilWeekday(idx);
+                                            const isToday = diff === 0;
+                                            return (
+                                                <button
+                                                    key={day}
+                                                    type="button"
+                                                    onClick={() => setActivateStartDay(idx)}
+                                                    className={cn(
+                                                        "px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider border transition-all relative",
+                                                        activateStartDay === idx
+                                                            ? "bg-brand-500/20 border-brand-500/50 text-brand-300"
+                                                            : "bg-surface-elevated border-surface-border text-fg-subtle hover:text-fg hover:border-brand-600/40"
+                                                    )}
+                                                >
+                                                    {day}
+                                                    {isToday && (
+                                                        <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-brand-400" title="Today" />
+                                                    )}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                    <p className="text-[10px] text-fg-subtle">
+                                        {activateStartDay === null
+                                            ? "Week 1 starts immediately."
+                                            : daysUntilWeekday(activateStartDay) === 0
+                                                ? `Week 1 starts today (${DAYS_FULL[activateStartDay]}).`
+                                                : `Week 1 starts ${DAYS_FULL[activateStartDay]} — ${daysUntilWeekday(activateStartDay)} day${daysUntilWeekday(activateStartDay) !== 1 ? "s" : ""} from now.`
+                                        }
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                        <div className="px-5 py-4 border-t border-surface-border flex gap-2">
+                            <button type="button" onClick={() => { setActivatePlan(null); setActivateStartDay(null); }} disabled={activateBusy} className="btn-secondary flex-1">
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={async () => {
+                                    setActivateBusy(true);
+                                    await setActive(activatePlan.id, activateStartDay);
+                                }}
+                                disabled={activateBusy}
+                                className="btn-primary flex-1 inline-flex items-center justify-center gap-2"
+                            >
+                                {activateBusy ? (
+                                    <><Loader2 className="w-4 h-4 animate-spin" />Activating…</>
+                                ) : (
+                                    "Activate"
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </ModalOverlay>
+            )}
 
             {assignPlan && (
                 <ModalOverlay onClose={closeAssignModal}>
@@ -327,7 +470,6 @@ export function PlansClient({ plans, userRole, activeSession = null, coachClient
                 {[
                     { id: "mine", label: "My Plans" },
                     { id: "templates", label: "Templates" },
-                    { id: "code", label: "Use Code", icon: Ticket },
                 ].map((t) => (
                     <button
                         key={t.id}
@@ -339,10 +481,58 @@ export function PlansClient({ plans, userRole, activeSession = null, coachClient
                                 : "text-fg-muted hover:text-fg"
                         )}
                     >
-                        {t.icon && <t.icon className="w-3.5 h-3.5" />}
                         {t.label}
                     </button>
                 ))}
+            </div>
+
+            {/* Inline share code import */}
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-surface-border bg-surface-muted/40 px-3 py-2.5">
+                <label htmlFor="plan-share-code" className="text-[10px] font-black uppercase tracking-widest text-fg-subtle shrink-0">
+                    Share code
+                </label>
+                <div className="flex flex-1 min-w-0 items-center gap-2">
+                    <input
+                        id="plan-share-code"
+                        placeholder="XXXXXXXX"
+                        className="input h-9 w-full max-w-[9.5rem] font-mono text-xs font-bold uppercase tracking-widest"
+                        value={code}
+                        onChange={(e) => {
+                            setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8));
+                            if (codeStatus !== "idle") {
+                                setCodeStatus("idle");
+                                setCodeMsg("");
+                            }
+                        }}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter") void importPlan();
+                        }}
+                        maxLength={8}
+                        autoComplete="off"
+                        spellCheck={false}
+                    />
+                    <button
+                        type="button"
+                        onClick={() => void importPlan()}
+                        disabled={code.length !== 8 || codeStatus === "loading"}
+                        className="btn-primary btn-sm h-9 shrink-0 px-4"
+                    >
+                        {codeStatus === "loading" ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                            "Import"
+                        )}
+                    </button>
+                    <ShareCodeHelpButton />
+                </div>
+                {codeMsg && (
+                    <p className={cn(
+                        "w-full text-[11px] font-semibold",
+                        codeStatus === "success" ? "text-success" : "text-danger"
+                    )}>
+                        {codeMsg}
+                    </p>
+                )}
             </div>
 
             {/* Tab: My Plans */}
@@ -444,7 +634,10 @@ export function PlansClient({ plans, userRole, activeSession = null, coachClient
                                                 </button>
                                             ) : (
                                                 <button
-                                                    onClick={() => setActive(plan.id)}
+                                                    onClick={() => {
+                                                        setActivateStartDay(null);
+                                                        setActivatePlan({ id: plan.id, name: plan.name, weekCount: plan.weekCount });
+                                                    }}
                                                     className="btn-ghost btn-sm text-brand-400 hover:text-brand-300"
                                                 >
                                                     <Play className="w-3.5 h-3.5" />
@@ -542,44 +735,6 @@ export function PlansClient({ plans, userRole, activeSession = null, coachClient
                 </div>
             )}
 
-            {/* Tab: Access Code */}
-            {tab === "code" && (
-                <div className="card p-6 border-brand-500/20 max-w-xl mx-auto mt-10 shadow-glow-brand-sm">
-                    <div className="flex flex-col items-center text-center space-y-4">
-                        <div className="w-16 h-16 bg-brand-400/10 rounded-full flex items-center justify-center mb-2">
-                            <Ticket className="w-8 h-8 text-brand-400 transform -rotate-45" />
-                        </div>
-                        <h3 className="text-xl font-black text-fg tracking-tight">Import a Plan</h3>
-                        <p className="text-sm text-fg-muted max-w-sm mx-auto">
-                            Enter an 8-character share code from any athlete or creator to instantly clone their program directly into your personal library.
-                        </p>
-                        <div className="flex w-full max-w-sm gap-2 mt-4">
-                            <input
-                                placeholder="SHARE CODE"
-                                className="input flex-1 text-center font-mono font-bold uppercase tracking-widest text-sm h-12"
-                                value={code}
-                                onChange={(e) => setCode(e.target.value.toUpperCase().trim())}
-                                maxLength={8}
-                            />
-                            <button
-                                onClick={importPlan}
-                                disabled={code.length < 8 || codeStatus === "loading"}
-                                className="btn-primary h-12 px-6"
-                            >
-                                {codeStatus === "loading" ? "..." : "Import"}
-                            </button>
-                        </div>
-                        {codeMsg && (
-                            <p className={cn(
-                                "text-xs font-bold mt-2 uppercase tracking-wider text-center",
-                                codeStatus === "success" ? "text-success" : "text-danger"
-                            )}>
-                                {codeMsg}
-                            </p>
-                        )}
-                    </div>
-                </div>
-            )}
         </div>
     );
 }

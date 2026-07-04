@@ -226,7 +226,7 @@ export function OnboardingPage() {
             setCoachName(data.coachName || "");
             setCodeMessage(
                 data.upgradesTo === "GENERAL_PREMIUM"
-                    ? "General Premium access confirmed."
+                    ? "Premium access confirmed."
                     : data.coachName
                         ? "Coach invite confirmed."
                         : "Code looks good."
@@ -315,8 +315,8 @@ export function OnboardingPage() {
         step === 1 ? "Your Profile" : step === 2 ? "Training" : showSummary ? "You're ready to train!" : "Optional Details";
 
     const coachStatusLabel = codeStatus === "valid"
-        ? membershipLabel === "General Premium"
-            ? "General Premium Connected ✓"
+        ? membershipLabel === "Premium"
+            ? "Premium Connected ✓"
             : coachName
                 ? "Coach Connected ✓"
                 : "Access Code Applied ✓"

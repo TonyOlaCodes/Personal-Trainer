@@ -97,8 +97,28 @@ export function PlanCreateClient() {
     const [copyNotice, setCopyNotice] = useState<string | null>(null);
     const [canCopyPlan, setCanCopyPlan] = useState(false);
     const [cloningPlan, setCloningPlan] = useState(false);
+    // null = "right away", 0-6 = Mon-Sun target weekday for Week 1
+    const [weekStartDay, setWeekStartDay] = useState<number | null>(null);
 
     const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    const DAYS_FULL = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+    /** Returns how many days until the next occurrence of targetDow (0=Mon..6=Sun), 0 if today. */
+    function daysUntilWeekday(targetDow: number): number {
+        const jsDow = new Date().getDay(); // 0=Sun..6=Sat
+        const todayMon0 = jsDow === 0 ? 6 : jsDow - 1;
+        let diff = targetDow - todayMon0;
+        if (diff < 0) diff += 7;
+        return diff;
+    }
+
+    function weekStartLabel(): string | null {
+        if (weekStartDay === null) return null;
+        const diff = daysUntilWeekday(weekStartDay);
+        if (diff === 0) return `Starts today (${DAYS_FULL[weekStartDay]})`;
+        if (diff === 1) return `Starts tomorrow (${DAYS_FULL[weekStartDay]})`;
+        return `Starts in ${diff} days (${DAYS_FULL[weekStartDay]})`;
+    }
     const cloneWeeks = (source: LocalWeek[]): LocalWeek[] => source.map((week) => ({
         ...week,
         workouts: week.workouts.map((workout) => ({
@@ -471,6 +491,7 @@ export function PlanCreateClient() {
         const payload = {
             name,
             description: desc,
+            weekStartDay: editId ? undefined : weekStartDay, // only applied on creation
             weeks: weeks.map(w => ({
                 weekNumber: w.weekNumber,
                 name: w.name,
@@ -682,6 +703,66 @@ export function PlanCreateClient() {
                         )}
                     </div>
                 </div>
+
+                {/* Week 1 start day — only shown on new plans (not edit/view) */}
+                {!isViewOnly && !editId && (
+                    <div className="space-y-2 pt-1">
+                        <div className="flex items-center justify-between">
+                            <label className="label mb-0">Week 1 Starts On</label>
+                            {weekStartDay !== null && (
+                                <span className="text-[10px] font-black uppercase tracking-widest text-brand-400 animate-fade-in">
+                                    {weekStartLabel()}
+                                </span>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                            {/* "Right away" pill */}
+                            <button
+                                type="button"
+                                onClick={() => setWeekStartDay(null)}
+                                className={cn(
+                                    "px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider border transition-all",
+                                    weekStartDay === null
+                                        ? "bg-brand-500/20 border-brand-500/50 text-brand-300"
+                                        : "bg-surface-elevated border-surface-border text-fg-subtle hover:text-fg hover:border-brand-600/40"
+                                )}
+                            >
+                                Right away
+                            </button>
+                            {/* Day of week pills */}
+                            {DAYS.map((day, idx) => {
+                                const diff = daysUntilWeekday(idx);
+                                const isToday = diff === 0;
+                                return (
+                                    <button
+                                        key={day}
+                                        type="button"
+                                        onClick={() => setWeekStartDay(idx)}
+                                        className={cn(
+                                            "px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider border transition-all relative",
+                                            weekStartDay === idx
+                                                ? "bg-brand-500/20 border-brand-500/50 text-brand-300"
+                                                : "bg-surface-elevated border-surface-border text-fg-subtle hover:text-fg hover:border-brand-600/40"
+                                        )}
+                                    >
+                                        {day}
+                                        {isToday && (
+                                            <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-brand-400" title="Today" />
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        <p className="text-[10px] text-fg-subtle">
+                            {weekStartDay === null
+                                ? "Plan goes live immediately when saved."
+                                : daysUntilWeekday(weekStartDay) === 0
+                                    ? "Week 1 starts today."
+                                    : `Week 1 won't appear until ${DAYS_FULL[weekStartDay]}. Rest days will show until then.`
+                            }
+                        </p>
+                    </div>
+                )}
             </div>
 
             {/* Week + day switcher — sticky so days stay reachable while editing exercises */}
@@ -1143,16 +1224,7 @@ export function PlanCreateClient() {
                                                                 {!isViewOnly && (
                                                                     <button
                                                                         type="button"
-                                                                        onClick={() => {
-                                                                            const next = cloneWeeks(weeks);
-                                                                            next.forEach((w: LocalWeek) => {
-                                                                                if (w.workouts[activeWorkoutIdx]) {
-                                                                                    w.workouts[activeWorkoutIdx].exercises = w.workouts[activeWorkoutIdx].exercises.filter((_, i: number) => i !== eIdx);
-                                                                                    w.workouts[activeWorkoutIdx].exercises.forEach((ex, idx: number) => ex.order = idx);
-                                                                                }
-                                                                            });
-                                                                            setWeeks(next);
-                                                                        }}
+                                                                        onClick={() => removeExercise(activeWorkoutIdx, eIdx)}
                                                                         className="flex items-center justify-center shrink-0 w-10 h-10 rounded-xl bg-danger-muted/5 text-danger/40 hover:text-danger hover:bg-danger-muted/20 transition-all"
                                                                         title="Remove exercise"
                                                                     >

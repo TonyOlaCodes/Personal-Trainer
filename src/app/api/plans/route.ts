@@ -11,6 +11,8 @@ const planSchema = z.object({
     name: z.string().min(1),
     description: z.string().optional(),
     type: z.enum(["USER_CREATED", "PREBUILT"]).default("USER_CREATED"),
+    // 0=Mon … 6=Sun — when provided, Week 1 starts on the next occurrence of that weekday
+    weekStartDay: z.number().int().min(0).max(6).optional().nullable(),
     weeks: z.array(z.object({
         weekNumber: z.number(),
         name: z.string().optional(),
@@ -32,6 +34,23 @@ const planSchema = z.object({
         })),
     })),
 });
+
+/**
+ * Given a day-of-week (0=Mon … 6=Sun) return the Date for the
+ * next occurrence of that day (today if today already matches).
+ */
+function nextWeekdayDate(targetDow: number): Date {
+    const now = new Date();
+    // JS getDay(): 0=Sun, 1=Mon … 6=Sat → convert to Mon=0 … Sun=6
+    const jsDow = now.getDay();
+    const todayMon0 = jsDow === 0 ? 6 : jsDow - 1;
+    let daysUntil = targetDow - todayMon0;
+    if (daysUntil < 0) daysUntil += 7;
+    const target = new Date(now);
+    target.setDate(now.getDate() + daysUntil);
+    target.setHours(0, 0, 0, 0);
+    return target;
+}
 
 // GET all plans for the user
 export async function GET() {
@@ -81,7 +100,8 @@ export async function POST(req: Request) {
     const parsed = planSchema.safeParse(body);
     if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-    const { name, description, type, weeks } = parsed.data;
+    const { name, description, type, weekStartDay, weeks } = parsed.data;
+    const planStartedAt = (weekStartDay != null) ? nextWeekdayDate(weekStartDay) : new Date();
     
     const shareCode = await generateUniquePlanShareCode();
 
@@ -134,6 +154,7 @@ export async function POST(req: Request) {
                 userId: user.id,
                 planId: plan.id,
                 isActive: !hasActivePlan,
+                startedAt: planStartedAt,
             },
         });
     }

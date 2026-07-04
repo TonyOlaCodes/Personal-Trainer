@@ -40,7 +40,7 @@ export async function POST(req: Request) {
         }
 
         if (!canAccessCheckIns(user.role, user.coachId)) {
-            return NextResponse.json({ error: "Check-ins require coached premium access" }, { status: 403 });
+            return NextResponse.json({ error: "Check-ins require Coached Premium access" }, { status: 403 });
         }
 
         const body = await req.json();

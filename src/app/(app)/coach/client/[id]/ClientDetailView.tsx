@@ -1775,7 +1775,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                 Danger Zone
                             </h4>
                             <p className="text-xs text-fg-muted max-w-md mt-2">
-                                Revoking this athlete&apos;s premium access will remove them from your stable and reset their status to Free. They will no longer see your assigned plans.
+                                Revoking this athlete&apos;s Coached Premium access will remove them from your stable and reset their status to Free. They will no longer see your assigned plans.
                             </p>
                         </div>
 

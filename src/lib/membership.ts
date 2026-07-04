@@ -21,7 +21,7 @@ export function canAccessCheckIns(role: Role | string, coachId?: string | null):
 }
 
 export function membershipLabel(role: Role | string): string {
-    if (role === "GENERAL_PREMIUM") return "General Premium";
+    if (role === "GENERAL_PREMIUM") return "Premium";
     if (role === "PREMIUM") return "Coached Premium";
     return role;
 }
