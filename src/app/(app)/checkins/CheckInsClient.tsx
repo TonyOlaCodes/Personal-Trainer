@@ -85,6 +85,12 @@ interface Props {
     }>;
 }
 
+type OverdueCheckInClient = NonNullable<Props["overdueClients"]>[number];
+
+function getOverdueCheckInAlertKey(client: OverdueCheckInClient) {
+    return `check-in:${client.id}:${client.weekNumber}`;
+}
+
 /* ─────────────────── Rating bar component ───────────────────── */
 const SLEEP_LABELS    = [...SLEEP_VALUE_LABELS];
 const ENERGY_LABELS   = [...ENERGY_VALUE_LABELS];
@@ -610,11 +616,18 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
     const [isLogging, setIsLogging] = useState(false);
     const [statusFilter, setStatusFilter] = useState<"ALL" | "PENDING" | "REVIEWED">(initialStatusFilter);
     const [coachSortBy, setCoachSortBy] = useState<"WEEK" | "CLIENT">("WEEK");
+    const [dismissedOverdueCheckIns, setDismissedOverdueCheckIns] = useState<Set<string>>(() => new Set());
+    const [dismissingCheckInKey, setDismissingCheckInKey] = useState<string | null>(null);
+    const [coachActionError, setCoachActionError] = useState<string | null>(null);
     const filteredCheckIns = checkIns.filter(c => {
         if (statusFilter === "PENDING") return c.status === "PENDING";
         if (statusFilter === "REVIEWED") return c.status === "REVIEWED";
         return true;
     });
+    const visibleOverdueClients = useMemo(
+        () => overdueClients.filter((client) => !dismissedOverdueCheckIns.has(getOverdueCheckInAlertKey(client))),
+        [dismissedOverdueCheckIns, overdueClients]
+    );
     const displayCheckIns = useMemo(() => {
         const items = [...filteredCheckIns];
         items.sort((a, b) => {
@@ -854,6 +867,38 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
         }
     };
 
+    const dismissCoachCheckIn = async (client: OverdueCheckInClient) => {
+        const alertKey = getOverdueCheckInAlertKey(client);
+        setDismissingCheckInKey(alertKey);
+        setCoachActionError(null);
+
+        try {
+            const res = await fetch("/api/coach/attention-inbox", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    alertKey,
+                    clientId: client.id,
+                    category: client.isOverdue ? "check_in_overdue" : "check_in_missed",
+                    operation: "dismiss",
+                    weekNumber: client.weekNumber,
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error ?? "Could not dismiss check-in");
+
+            setDismissedOverdueCheckIns((prev) => {
+                const next = new Set(prev);
+                next.add(alertKey);
+                return next;
+            });
+        } catch (err) {
+            setCoachActionError(err instanceof Error ? err.message : "Could not dismiss check-in");
+        } finally {
+            setDismissingCheckInKey(null);
+        }
+    };
+
     /* ── Coach view ── */
     if (isCoach) {
         return (
@@ -861,7 +906,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                 <div className="mb-4">
                     <h2 className="text-xl font-black text-fg">Client Check-ins</h2>
                     <p className="text-xs text-fg-muted mt-0.5">
-                        {overdueClients.length} overdue · {checkIns.filter(c => c.status === "PENDING").length} pending review · {checkIns.length} submitted
+                        {visibleOverdueClients.length} overdue · {checkIns.filter(c => c.status === "PENDING").length} pending review · {checkIns.length} submitted
                     </p>
                 </div>
 
@@ -879,7 +924,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                         <span className={cn(
                             "px-1.5 py-0.5 rounded-md text-[10px] font-bold",
                             coachView === "overdue" ? "bg-warning/20 text-warning" : "bg-surface-muted text-fg-subtle"
-                        )}>{overdueClients.length}</span>
+                        )}>{visibleOverdueClients.length}</span>
                     </Link>
                     <Link
                         href="/checkins"
@@ -899,7 +944,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                 </div>
 
                 {coachView === "overdue" ? (
-                    overdueClients.length === 0 ? (
+                    visibleOverdueClients.length === 0 ? (
                         <div className="card p-8 text-center border-success/20 bg-success/5">
                             <CheckCircle2 className="w-8 h-8 text-success mx-auto mb-3" />
                             <p className="text-sm font-bold text-fg">No overdue check-ins</p>
@@ -907,15 +952,24 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                         </div>
                     ) : (
                         <div className="space-y-3">
-                            {overdueClients.map((client) => (
-                                <Link
-                                    key={client.id}
-                                    href={`/coach/client/${client.id}`}
+                            {coachActionError && (
+                                <div className="rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm font-semibold text-danger">
+                                    {coachActionError}
+                                </div>
+                            )}
+                            {visibleOverdueClients.map((client) => {
+                                const alertKey = getOverdueCheckInAlertKey(client);
+                                const isDismissing = dismissingCheckInKey === alertKey;
+
+                                return (
+                                <div
+                                    key={alertKey}
                                     className={cn(
-                                        "card p-4 flex items-center justify-between gap-3 transition-all hover:border-brand-500/40 group",
+                                        "card p-4 flex flex-col gap-3 transition-all sm:flex-row sm:items-center sm:justify-between",
                                         client.isOverdue && "border-warning/30 bg-warning/5"
                                     )}
                                 >
+                                    <Link href={`/coach/client/${client.id}`} className="min-w-0 flex-1 group">
                                     <div className="min-w-0">
                                         <p className="text-sm font-black text-fg truncate group-hover:text-brand-400 transition-colors">
                                             {client.name}
@@ -930,12 +984,31 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                                             Waiting for client to submit — nothing to review yet
                                         </p>
                                     </div>
-                                    <AlertCircle className={cn(
-                                        "w-5 h-5 shrink-0",
-                                        client.isOverdue ? "text-warning" : "text-brand-400"
-                                    )} />
-                                </Link>
-                            ))}
+                                    </Link>
+                                    <div className="flex items-center gap-2 sm:justify-end">
+                                        <Link
+                                            href={`/coach/client/${client.id}`}
+                                            className="px-3 py-2 rounded-xl border border-surface-border bg-surface-muted/30 text-xs font-bold text-fg-muted transition-all hover:bg-surface-muted/60 hover:text-fg"
+                                        >
+                                            Open
+                                        </Link>
+                                        <button
+                                            type="button"
+                                            onClick={() => void dismissCoachCheckIn(client)}
+                                            disabled={isDismissing}
+                                            className="px-3 py-2 rounded-xl border border-success/25 bg-success/10 text-xs font-bold text-success transition-all hover:bg-success/15 disabled:cursor-not-allowed disabled:opacity-60 inline-flex items-center gap-1.5"
+                                        >
+                                            {isDismissing ? (
+                                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                            ) : (
+                                                <Check className="w-3.5 h-3.5" />
+                                            )}
+                                            Dismiss
+                                        </button>
+                                    </div>
+                                </div>
+                                );
+                            })}
                         </div>
                     )
                 ) : (
