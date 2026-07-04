@@ -36,7 +36,7 @@ interface ReplyPreview {
     id: string;
     content?: string | null;
     type: string;
-    sender: { id: string; name?: string | null };
+    sender: { id: string; name?: string | null; role?: string | null };
 }
 
 interface ReactionData {
@@ -1706,7 +1706,7 @@ export function ChatClient({
                                     name={pm.sender.name ?? "User"}
                                     role={pm.sender.role}
                                     showRoleLabel
-                                    nameClassName="font-bold"
+                                    nameClassName={cn("font-bold", getRoleNameClass(pm.sender.role))}
                                     className="inline-flex shrink-0"
                                 />
                                 <span className="text-fg-subtle">:</span>
@@ -2055,7 +2055,7 @@ export function ChatClient({
                                                         ? "bg-white/5 border-l-white/20 text-white/60"
                                                         : "bg-surface-elevated border-l-brand-500/40 text-fg-muted"
                                                 )}>
-                                                    <span className="font-bold">{msg.replyTo.sender.name}</span>: {msg.replyTo.content || "[media]"}
+                                                    <span className={cn("font-bold", getRoleNameClass(msg.replyTo.sender.role ?? "FREE"))}>{msg.replyTo.sender.name}</span>: {msg.replyTo.content || "[media]"}
                                                 </div>
                                             )}
 
@@ -2205,7 +2205,9 @@ export function ChatClient({
                         {replyTo && (
                             <div className="flex items-center justify-between gap-3 mb-2 px-3 py-2 bg-surface-muted/50 rounded-xl border-l-2 border-l-brand-500 animate-slide-up">
                                 <div className="min-w-0">
-                                    <p className="text-[10px] font-bold text-brand-400">Replying to {replyTo.sender.name}</p>
+                                    <p className="text-[10px] font-bold text-fg-subtle">
+                                        Replying to <span className={getRoleNameClass(replyTo.sender.role)}>{replyTo.sender.name}</span>
+                                    </p>
                                     <p className="text-xs text-fg-muted truncate">{replyTo.content || "[media]"}</p>
                                 </div>
                                 <button onClick={() => setReplyTo(null)} className="btn-icon w-6 h-6 shrink-0">

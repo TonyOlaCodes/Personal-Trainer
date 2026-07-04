@@ -138,7 +138,7 @@ export async function GET(req: Request) {
             replyTo: {
                 select: {
                     id: true, content: true, type: true,
-                    sender: { select: { id: true, name: true } }
+                    sender: { select: { id: true, name: true, role: true } }
                 }
             },
             reactions: {
@@ -259,7 +259,7 @@ export async function POST(req: Request) {
             replyTo: {
                 select: {
                     id: true, content: true, type: true,
-                    sender: { select: { id: true, name: true } }
+                    sender: { select: { id: true, name: true, role: true } }
                 }
             },
             reactions: true,
