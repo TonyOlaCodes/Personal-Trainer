@@ -1142,20 +1142,20 @@ export function WorkoutLogClient({
                                             <button
                                                 type="button"
                                                 onClick={() => setPreviewExercise({ name: ex.name, media })}
-                                                className="relative z-10 w-10 h-10 -my-2 rounded-full bg-brand-500/15 text-brand-300 border border-brand-500/30 flex items-center justify-center hover:bg-brand-500 hover:text-white active:scale-95 transition-all shrink-0"
+                                                className="relative z-10 w-8 h-8 -my-1 rounded-full bg-brand-500/15 text-brand-300 border border-brand-500/30 flex items-center justify-center hover:bg-brand-500 hover:text-white active:scale-95 transition-all shrink-0"
                                                 title="Watch form video"
                                             >
-                                                <Play className="w-4 h-4 fill-current ml-0.5" />
+                                                <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
                                             </button>
                                         )}
                                         {!media?.videoUrl && media?.instructions && (
                                             <button
                                                 type="button"
                                                 onClick={() => setPreviewExercise({ name: ex.name, media })}
-                                                className="relative z-10 w-10 h-10 -my-2 rounded-full bg-brand-500/15 text-brand-300 border border-brand-500/30 flex items-center justify-center hover:bg-brand-500 hover:text-white active:scale-95 transition-all shrink-0"
+                                                className="relative z-10 w-8 h-8 -my-1 rounded-full bg-brand-500/15 text-brand-300 border border-brand-500/30 flex items-center justify-center hover:bg-brand-500 hover:text-white active:scale-95 transition-all shrink-0"
                                                 title="Exercise preview"
                                             >
-                                                <HelpCircle className="w-4 h-4" />
+                                                <HelpCircle className="w-3.5 h-3.5" />
                                             </button>
                                         )}
                                     </div>
