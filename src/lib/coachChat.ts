@@ -3,6 +3,9 @@ import { notifyClientOfCheckInRequest, notifyClientOfCoachBroadcast, notifyClien
 import { NOTIFICATION_TYPES, QUICK_REPLY_TEMPLATES } from "@/lib/notificationTypes";
 import { assignCoachPlanToClient } from "@/lib/coachPlanAssignment";
 import type { User } from "@prisma/client";
+import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
+import { getEffectiveCheckInDueStateForUser } from "@/lib/coachAttentionActions";
+import { formatCheckInDueDate } from "@/lib/checkInLabels";
 
 export type ChatActionType = "PLAN_ASSIGNED" | "CHECKIN_REQUEST" | "MISSED_WORKOUT" | "BROADCAST" | "ACCESS_REQUEST";
 
@@ -38,11 +41,36 @@ export async function assignPlanToClient(coachId: string, clientId: string, plan
 async function requireOwnActiveClient(coach: Pick<User, "id">, clientId: string) {
     const client = await prisma.user.findUnique({
         where: { id: clientId },
-        select: { coachId: true, isDeleted: true, isDeactivated: true },
+        select: { id: true, name: true, email: true, coachId: true, isDeleted: true, isDeactivated: true },
     });
     if (!client || client.coachId !== coach.id || client.isDeleted || client.isDeactivated) {
         throw new Error("Forbidden");
     }
+
+    return client;
+}
+
+function firstName(name: string | null | undefined, fallback = "there") {
+    const value = name?.trim();
+    if (!value) return fallback;
+    return value.split(/\s+/)[0] || fallback;
+}
+
+async function buildGeneratedCheckInReminder(client: Awaited<ReturnType<typeof requireOwnActiveClient>>) {
+    const name = firstName(client.name ?? client.email);
+    const schedule = await getUserCheckInSchedule(client.id);
+    const dueState = await getEffectiveCheckInDueStateForUser(client.id, schedule, new Date());
+    const dueLabel = formatCheckInDueDate(dueState.currentPeriodDueDate ?? dueState.nextDueDate);
+
+    if (dueState.isOverdue) {
+        return `Hi ${name}, quick reminder that your check-in is overdue${dueLabel ? ` from ${dueLabel}` : ""}. Please send it through when you can so I can review how training, recovery, and weight are moving.`;
+    }
+
+    if (dueState.isDueToday) {
+        return `Hi ${name}, your check-in is due today${dueLabel ? ` (${dueLabel})` : ""}. Send it through when you get a chance so I can review your week properly.`;
+    }
+
+    return `Hi ${name}, can you send over your latest check-in when you get a chance? Include how training felt, recovery, and anything you want me to look at.`;
 }
 
 export async function createCoachDirectMessage(input: {
@@ -136,10 +164,10 @@ export async function sendPlanViaChat(coach: User, clientId: string, planId: str
 }
 
 export async function sendCheckInRequestViaChat(coach: User, clientId: string, note?: string) {
-    await requireOwnActiveClient(coach, clientId);
+    const client = await requireOwnActiveClient(coach, clientId);
 
     const content = note?.trim()
-        || "Your coach requested a check-in. Please submit your weekly check-in when you're ready.";
+        || await buildGeneratedCheckInReminder(client);
 
     await notifyClientOfCheckInRequest({
         clientUserId: clientId,

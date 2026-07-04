@@ -102,7 +102,7 @@ export async function POST(req: Request) {
                 await sendCheckInRequestViaChat(
                     coach,
                     parsed.clientId,
-                    parsed.message ?? "Please complete your weekly check-in when you can."
+                    parsed.message
                 );
             } else if (category === "missed_workout") {
                 await sendMissedWorkoutNotifyViaChat(coach, parsed.clientId, {
