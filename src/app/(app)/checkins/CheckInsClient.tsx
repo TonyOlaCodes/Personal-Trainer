@@ -1415,7 +1415,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
             <CheckInPeriodSummaryPanel summary={periodSummary} loading={loadingPeriodSummary} />
 
             {/* Weight submitted with check-in */}
-            {!isWeightHidden && (
+            {false && !isWeightHidden && (
                 <div className="card p-5 space-y-3 border-surface-border">
                     <div className="flex items-center gap-2">
                         <Scale className="w-4 h-4 text-brand-400" />
