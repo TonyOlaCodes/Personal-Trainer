@@ -251,7 +251,24 @@ export async function POST(req: Request) {
 
     if (status === "COMPLETED" && existingInProgress) {
         if (existingCompleted && existingCompleted.id !== existingInProgress.id) {
-            await prisma.workoutLog.delete({ where: { id: existingCompleted.id } });
+            const workoutLog = await prisma.$transaction(async (tx) => {
+                await tx.logSet.deleteMany({ where: { workoutLogId: existingCompleted.id } });
+                const updatedCompleted = await tx.workoutLog.update({
+                    where: { id: existingCompleted.id },
+                    data: { ...logPayload, sets: { create: setsCreate } },
+                    include: { sets: true, workout: { select: { name: true } } },
+                });
+                await tx.logSet.deleteMany({ where: { workoutLogId: existingInProgress.id } });
+                await tx.workoutLog.deleteMany({
+                    where: {
+                        id: existingInProgress.id,
+                        status: "IN_PROGRESS",
+                    },
+                });
+                return updatedCompleted;
+            });
+            triggerAchievementSync(subjectUserId);
+            return NextResponse.json(workoutLog, { status: 200 });
         }
         await prisma.logSet.deleteMany({ where: { workoutLogId: existingInProgress.id } });
         const workoutLog = await prisma.workoutLog.update({
