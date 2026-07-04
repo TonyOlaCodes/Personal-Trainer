@@ -56,7 +56,7 @@ export function isCoachClientCheckInAttentionNeeded(
 ): boolean {
     return dueState.isConfigured
         && !hasCheckInThisWeek
-        && (dueState.isOverdue || dueState.isDueToday);
+        && dueState.isOverdue;
 }
 
 /** Clients assigned to this coach who owe a check-in but have not submitted one this week. */
