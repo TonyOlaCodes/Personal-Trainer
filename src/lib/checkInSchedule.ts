@@ -38,8 +38,8 @@ export async function ensureCheckInScheduleColumns() {
 async function runWithRetry<T>(fn: () => Promise<T>): Promise<T> {
     try {
         return await fn();
-    } catch (err: any) {
-        const msg = String(err.message || err);
+    } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
         if (msg.includes("does not exist") || msg.includes("P2010") || msg.includes("relation") || msg.includes("column")) {
             console.warn("[CheckInSchedule] Column missing, resetting ready state and retrying...", err);
             checkInScheduleReady = false;
@@ -109,6 +109,23 @@ function dateForWeekdayInIsoWeek(date: Date, day: number) {
     return due;
 }
 
+function addDays(date: Date, days: number) {
+    const next = new Date(date);
+    next.setDate(next.getDate() + days);
+    return next;
+}
+
+function getFirstEligibleDueDate(startDate: Date, day: number) {
+    const earliestDueDate = addDays(startDate, 7);
+    let candidate = dateForWeekdayInIsoWeek(earliestDueDate, day);
+
+    if (candidate.getTime() < earliestDueDate.getTime()) {
+        candidate = addDays(candidate, 7);
+    }
+
+    return candidate;
+}
+
 function weeksBetween(start: Date, end: Date) {
     const startWeek = startOfIsoWeek(start);
     const endWeek = startOfIsoWeek(end);
@@ -140,10 +157,13 @@ export function getCheckInDueState(schedule: CheckInSchedule, today = new Date()
     const cleanToday = new Date(today);
     cleanToday.setHours(0, 0, 0, 0);
 
-    const elapsedWeeks = weeksBetween(startDate, cleanToday);
+    const firstEligibleDueDate = getFirstEligibleDueDate(cleanStartDate, day);
+    const elapsedWeeks = weeksBetween(firstEligibleDueDate, cleanToday);
     const dueDateThisWeek = dateForWeekdayInIsoWeek(cleanToday, day);
-    const dueDateAlreadyPassedWhenScheduleStarted = elapsedWeeks === 0 && dueDateThisWeek.getTime() < cleanStartDate.getTime();
-    const isDueWeek = elapsedWeeks >= 0 && elapsedWeeks % frequencyWeeks === 0 && !dueDateAlreadyPassedWhenScheduleStarted;
+    const isDueWeek =
+        dueDateThisWeek.getTime() >= firstEligibleDueDate.getTime()
+        && elapsedWeeks >= 0
+        && elapsedWeeks % frequencyWeeks === 0;
     const isDueToday = isDueWeek && cleanToday.getTime() === dueDateThisWeek.getTime();
     const isOverdue = isDueWeek && cleanToday.getTime() > dueDateThisWeek.getTime();
 
@@ -152,8 +172,8 @@ export function getCheckInDueState(schedule: CheckInSchedule, today = new Date()
         for (let i = 1; i <= 60; i++) {
             const candidate = new Date(dueDateThisWeek);
             candidate.setDate(dueDateThisWeek.getDate() + i * 7);
-            const candidateWeeks = weeksBetween(startDate, candidate);
-            if (candidateWeeks >= 0 && candidateWeeks % frequencyWeeks === 0) {
+            const candidateWeeks = weeksBetween(firstEligibleDueDate, candidate);
+            if (candidate.getTime() >= firstEligibleDueDate.getTime() && candidateWeeks >= 0 && candidateWeeks % frequencyWeeks === 0) {
                 nextDueDate = candidate;
                 break;
             }
