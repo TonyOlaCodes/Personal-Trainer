@@ -7,7 +7,7 @@ import {
     Dumbbell, ClipboardList, Activity, Search, Megaphone, Loader2, Shield, Eye
 } from "lucide-react";
 import Link from "next/link";
-import { getInitials, formatRelative, cn, getChatRoleLabel, getRoleBadgeClass, getRoleNameClass } from "@/lib/utils";
+import { getInitials, formatRelative, cn, getRoleNameClass } from "@/lib/utils";
 import { getPresenceIndicator } from "@/lib/userPresence";
 import { sortConversationsByActivity } from "@/lib/chatActivity";
 import {
@@ -152,11 +152,6 @@ function resolveDirectConversation(
         }))
     );
     return findConversation(sorted, preferredUserId) ?? fallback ?? sorted[0] ?? null;
-}
-
-function roleIdentityLabel(name: string | null | undefined, role: string) {
-    const displayName = name?.trim() || "User";
-    return `${displayName} · ${getChatRoleLabel(role)}`;
 }
 
 /* ─── Component ──────────────────────────────────────── */
@@ -1468,11 +1463,8 @@ export function ChatClient({
                                 </div>
                                 <div className="min-w-0 flex-1">
                                     <div className="flex items-center justify-between gap-1">
-                                        <span className="text-sm font-bold truncate">
-                                            <span className={getRoleNameClass(conv.role)}>{conv.name}</span>
-                                            {!conv.isDeleted && (
-                                                <span className="text-fg-subtle font-semibold"> · {getChatRoleLabel(conv.role)}</span>
-                                            )}
+                                        <span className={cn("text-sm font-bold truncate", getRoleNameClass(conv.role))}>
+                                            {conv.name}
                                             {conv.isDeleted && (
                                                 <span className="text-[9px] text-danger/80 ml-1.5 font-bold uppercase tracking-wider">(Deleted)</span>
                                             )}
@@ -1500,16 +1492,9 @@ export function ChatClient({
                                         </p>
                                     ) : canViewLastOnline && presence ? (
                                         <p className="text-[10px] text-fg-subtle truncate">{presence.label}</p>
-                                    ) : (
-                                    <div className="mt-1">
-                                        <span className={cn(
-                                            "inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider",
-                                            conv.isDeleted ? "border-surface-border bg-surface-muted text-fg-subtle" : getRoleBadgeClass(conv.role)
-                                        )}>
-                                            {conv.isDeleted ? "Inactive" : getChatRoleLabel(conv.role)}
-                                        </span>
-                                    </div>
-                                    )}
+                                    ) : conv.isDeleted ? (
+                                        <p className="text-[10px] uppercase font-bold tracking-widest text-fg-subtle">Inactive</p>
+                                    ) : null}
                                 </div>
                             </button>
                             );
@@ -1624,8 +1609,6 @@ export function ChatClient({
                                             role={selectedConv.role}
                                             showAvatar
                                             avatarSize="sm"
-                                            showRoleLabel
-                                            showRoleBadge
                                             disabled={selectedConv.isDeleted}
                                             className="gap-2.5"
                                             nameClassName={cn(
@@ -1705,7 +1688,6 @@ export function ChatClient({
                                     userId={pm.sender.id}
                                     name={pm.sender.name ?? "User"}
                                     role={pm.sender.role}
-                                    showRoleLabel
                                     nameClassName={cn("font-bold", getRoleNameClass(pm.sender.role))}
                                     className="inline-flex shrink-0"
                                 />
@@ -1721,7 +1703,7 @@ export function ChatClient({
                     <div className="px-5 py-2 border-b border-surface-border/60 bg-brand-500/5 shrink-0">
                         <p className="text-[11px] text-brand-400 font-medium flex items-center gap-2">
                             <span className={cn("font-bold", getRoleNameClass(selectedConv.role))}>
-                                {roleIdentityLabel(selectedConv.name, selectedConv.role)}
+                                {selectedConv.name}
                             </span>
                             is typing
                             <TypingDots />
@@ -2040,10 +2022,9 @@ export function ChatClient({
                                                     userId={msg.sender.id}
                                                     name={msg.sender.name}
                                                     role={msg.sender.role}
-                                                    showRoleLabel
                                                     stopPropagation
                                                     className="mb-1 ml-1"
-                                                    nameClassName="text-[10px] font-bold"
+                                                    nameClassName={cn("text-[10px] font-bold", getRoleNameClass(msg.sender.role))}
                                                 />
                                             )}
 
