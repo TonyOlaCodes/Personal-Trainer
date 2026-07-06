@@ -78,7 +78,7 @@ export async function GET(req: Request) {
             await markIncomingDeliveredForPeers(user.id, peerIds);
         }
 
-        const presence = isCoachRole(user.role)
+        const presence = peerIds.length > 0
             ? await getLastActiveMap(peerIds)
             : undefined;
 

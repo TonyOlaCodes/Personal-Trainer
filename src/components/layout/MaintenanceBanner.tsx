@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
-export const MAINTENANCE_BANNER_HEIGHT = "2.75rem";
+export const MAINTENANCE_BANNER_HEIGHT = "3.5rem";
 
 function formatMaintenanceStart(value: string) {
     const date = new Date(value);
@@ -30,7 +30,7 @@ export function MaintenanceBanner({ scheduledAt }: MaintenanceBannerProps) {
     return (
         <div
             className={cn(
-                "fixed inset-x-0 z-[35] border-b border-warning/25 bg-warning/10 px-4 py-2.5 text-center text-xs font-bold leading-snug text-fg",
+                "fixed inset-x-0 z-[35] border-b border-warning/25 bg-warning/10 px-4 py-3 text-center text-xs font-bold leading-relaxed text-fg",
                 "md:left-[var(--sidebar-width)]",
                 belowTopBar ? "top-16" : "top-0"
             )}

@@ -119,11 +119,23 @@ export default async function PlansPage() {
             name: client.name?.trim() || client.email || "Client",
         }));
 
+        const assignedPlanIds = [...assigneesByPlanId.keys()];
+        if (assignedPlanIds.length > 0) {
+            await prisma.plan.updateMany({
+                where: {
+                    id: { in: assignedPlanIds },
+                    creatorId: user.id,
+                    type: { not: "COACH_ASSIGNED" },
+                },
+                data: { type: "COACH_ASSIGNED" },
+            });
+        }
+
         plans = created.map((plan) => ({
             id: plan.id,
             name: plan.name,
             description: plan.description,
-            type: plan.type,
+            type: assigneesByPlanId.has(plan.id) ? "COACH_ASSIGNED" : plan.type,
             shareCode: plan.shareCode,
             creatorName: planCreatorName(plan),
             isOwned: true,

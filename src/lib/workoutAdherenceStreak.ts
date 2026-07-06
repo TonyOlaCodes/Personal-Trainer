@@ -36,6 +36,13 @@ const EMPTY_RESULT: WorkoutAdherenceResult = {
     scheduledHits: 0,
 };
 
+interface AdherenceDay {
+    dateKey: string;
+    workoutId: string | null;
+    isRestDay: boolean;
+    completed: boolean;
+}
+
 interface AdherenceSlot {
     dateKey: string;
     workoutId: string;
@@ -57,6 +64,39 @@ function eachDateKeyInclusive(fromKey: string, toKey: string): string[] {
         cur = addDaysToDateKey(cur, 1);
     }
     return keys;
+}
+
+function buildAdherenceDays(
+    activeUserPlan: ActiveUserPlanLike,
+    rangeStart: Date,
+    today: Date
+): AdherenceDay[] {
+    const startKey = toDateKey(rangeStart);
+    const endKey = toDateKey(today);
+    const days: AdherenceDay[] = [];
+
+    for (const dateKey of eachDateKeyInclusive(startKey, endKey)) {
+        const day = parseLogDate(dateKey);
+        const planned = getPlannedWorkoutForDate(activeUserPlan, day, { today });
+        if (!planned || isRestPlanWorkout(planned)) {
+            days.push({
+                dateKey,
+                workoutId: planned?.id ?? null,
+                isRestDay: true,
+                completed: true,
+            });
+            continue;
+        }
+
+        days.push({
+            dateKey,
+            workoutId: planned.id,
+            isRestDay: false,
+            completed: false,
+        });
+    }
+
+    return days;
 }
 
 function buildScheduledSlots(
@@ -84,6 +124,25 @@ function buildScheduledSlots(
     return slots;
 }
 
+function markDayCompletion(
+    days: AdherenceDay[],
+    completedLogs: CompletedWorkoutLog[],
+    excusedKeys?: Set<string>
+): number {
+    const logSet = new Set(
+        completedLogs.map((log) => `${log.dateKey}:${log.workoutId}`)
+    );
+
+    let hits = 0;
+    for (const day of days) {
+        if (day.isRestDay || !day.workoutId) continue;
+        const slotKey = `${day.dateKey}:${day.workoutId}`;
+        day.completed = logSet.has(slotKey) || (excusedKeys?.has(slotKey) ?? false);
+        if (day.completed) hits++;
+    }
+    return hits;
+}
+
 function markSlotCompletion(
     slots: AdherenceSlot[],
     completedLogs: CompletedWorkoutLog[],
@@ -102,32 +161,32 @@ function markSlotCompletion(
     return hits;
 }
 
-function computeCurrentStreak(slots: AdherenceSlot[], todayKey: string): number {
-    if (slots.length === 0) return 0;
+function computeCurrentStreak(days: AdherenceDay[], todayKey: string): number {
+    if (days.length === 0) return 0;
 
-    let evalSlots = slots;
-    const last = slots[slots.length - 1];
-    if (last.dateKey === todayKey && !last.completed) {
-        evalSlots = slots.slice(0, -1);
+    let evalDays = days;
+    const last = days[days.length - 1];
+    if (last.dateKey === todayKey && !last.completed && !last.isRestDay) {
+        evalDays = days.slice(0, -1);
     }
 
     let streak = 0;
-    for (let i = evalSlots.length - 1; i >= 0; i--) {
-        if (evalSlots[i].completed) streak++;
+    for (let i = evalDays.length - 1; i >= 0; i--) {
+        if (evalDays[i].completed) streak++;
         else break;
     }
     return streak;
 }
 
-function computeMaxStreak(slots: AdherenceSlot[], todayKey: string): number {
-    const evalSlots = slots.filter(
-        (slot) => slot.dateKey !== todayKey || slot.completed
+function computeMaxStreak(days: AdherenceDay[], todayKey: string): number {
+    const evalDays = days.filter(
+        (day) => day.dateKey !== todayKey || day.completed || day.isRestDay
     );
 
     let max = 0;
     let run = 0;
-    for (const slot of evalSlots) {
-        if (slot.completed) {
+    for (const day of evalDays) {
+        if (day.completed) {
             run++;
             max = Math.max(max, run);
         } else {
@@ -179,7 +238,7 @@ function computePerfectWeeks(
     return perfectWeeks;
 }
 
-/** Plan-adherence streak: consecutive scheduled workouts completed; rest days are ignored. */
+/** Plan-adherence streak: consecutive plan days kept (training completed or rest day). */
 export function computeWorkoutAdherence(input: WorkoutAdherenceInput): WorkoutAdherenceResult {
     if (!input.activeUserPlan?.plan?.weeks?.length) {
         return EMPTY_RESULT;
@@ -195,13 +254,15 @@ export function computeWorkoutAdherence(input: WorkoutAdherenceInput): WorkoutAd
         return EMPTY_RESULT;
     }
 
+    const days = buildAdherenceDays(input.activeUserPlan, startedAt, today);
     const slots = buildScheduledSlots(input.activeUserPlan, startedAt, today);
     const excusedKeys = new Set(input.excusedMissedWorkoutKeys ?? []);
     const scheduledHits = markSlotCompletion(slots, input.completedLogs, excusedKeys);
+    markDayCompletion(days, input.completedLogs, excusedKeys);
 
     return {
-        currentStreak: computeCurrentStreak(slots, todayKey),
-        maxStreak: computeMaxStreak(slots, todayKey),
+        currentStreak: computeCurrentStreak(days, todayKey),
+        maxStreak: computeMaxStreak(days, todayKey),
         perfectWeeks: computePerfectWeeks(
             input.activeUserPlan,
             input.completedLogs,

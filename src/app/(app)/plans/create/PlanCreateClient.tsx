@@ -831,33 +831,35 @@ export function PlanCreateClient() {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
-                    {workouts.map((w, i) => (
-                        <button
-                            key={i}
-                            ref={(el) => { workoutTabRefs.current[i] = el; }}
-                            onClick={() => setActiveWorkoutIdx(i)}
-                            className={cn(
-                                "shrink-0 flex items-center gap-2 px-3 py-2 rounded-xl border transition-all text-left min-w-[120px] max-w-[180px]",
-                                activeWorkoutIdx === i
-                                    ? "bg-brand-950/40 border-brand-700/60 shadow-glow-sm"
-                                    : "bg-surface-card border-surface-border hover:bg-surface-muted"
-                            )}
-                        >
-                            <div className={cn(
-                                "w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold shrink-0",
-                                activeWorkoutIdx === i ? "bg-brand-400 text-white" : "bg-surface-elevated text-fg-subtle"
-                            )}>
-                                {w.dayNumber}
-                            </div>
-                            <div className="min-w-0">
-                                <p className="text-xs font-bold text-fg truncate">{w.name}</p>
-                                <p className="text-[9px] text-fg-muted font-medium truncate">
-                                    {w.dayOfWeek !== null && w.dayOfWeek !== undefined ? DAYS[w.dayOfWeek] : "No day"} · {w.exercises.length} ex
-                                </p>
-                            </div>
-                        </button>
-                    ))}
+                <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5 min-w-0 flex-1">
+                        {workouts.map((w, i) => (
+                            <button
+                                key={i}
+                                ref={(el) => { workoutTabRefs.current[i] = el; }}
+                                onClick={() => setActiveWorkoutIdx(i)}
+                                className={cn(
+                                    "shrink-0 flex items-center gap-2 px-3 py-2 rounded-xl border transition-all text-left min-w-[120px] max-w-[180px]",
+                                    activeWorkoutIdx === i
+                                        ? "bg-brand-950/40 border-brand-700/60 shadow-glow-sm"
+                                        : "bg-surface-card border-surface-border hover:bg-surface-muted"
+                                )}
+                            >
+                                <div className={cn(
+                                    "w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold shrink-0",
+                                    activeWorkoutIdx === i ? "bg-brand-400 text-white" : "bg-surface-elevated text-fg-subtle"
+                                )}>
+                                    {w.dayNumber}
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="text-xs font-bold text-fg truncate">{w.name}</p>
+                                    <p className="text-[9px] text-fg-muted font-medium truncate">
+                                        {w.dayOfWeek !== null && w.dayOfWeek !== undefined ? DAYS[w.dayOfWeek] : "No day"} · {w.exercises.length} ex
+                                    </p>
+                                </div>
+                            </button>
+                        ))}
+                    </div>
                     {!isViewOnly && workouts.length < 7 && (
                         <button
                             onClick={addWorkout}

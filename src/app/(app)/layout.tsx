@@ -102,7 +102,7 @@ export default async function AppLayout({
             <GlobalAnnouncements />
             <div className="min-h-screen bg-surface w-full max-w-full">
                 {/* Prevent layout shifts by injecting sidebar width before browser renders */}
-                <style dangerouslySetInnerHTML={{ __html: `:root { --sidebar-width: ${isSidebarCollapsed ? '72px' : '260px'}; --maintenance-banner-height: ${scheduledMaintenanceAt ? MAINTENANCE_BANNER_HEIGHT : '0px'}; }` }} />
+                <style dangerouslySetInnerHTML={{ __html: `:root { --sidebar-width: ${isSidebarCollapsed ? '72px' : '260px'}; --maintenance-banner-height: ${scheduledMaintenanceAt ? MAINTENANCE_BANNER_HEIGHT : '0px'}; --maintenance-below-topbar-gap: ${scheduledMaintenanceAt ? '0.75rem' : '0px'}; }` }} />
                 <Sidebar userRole={userRole} showCheckIns={showCheckIns} initialCollapsed={isSidebarCollapsed} />
 
                 <div className="md:pl-[var(--sidebar-width)] w-full max-w-full min-w-0">

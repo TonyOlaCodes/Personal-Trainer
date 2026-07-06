@@ -449,8 +449,8 @@ export function PublicProfileClient({ userId }: Props) {
                         </div>
                     )}
 
-                    {!isLimited && socialEntries.length > 0 && (
-                        <div className="mt-3 flex flex-wrap gap-2 justify-center sm:justify-start">
+                    {!isLimited && (socialEntries.length > 0 || viewer.canMessage || viewer.isSelf || (profile.isPrivateProfile && (viewer.isSelf || viewer.isAdmin || viewer.isAssignedCoach))) && (
+                        <div className="mt-3 flex flex-wrap items-center gap-2 justify-center sm:justify-start">
                             {socialEntries.map(([key, value]) => {
                                 const href = formatSocialHref(key, value);
                                 const Icon = key === "instagram" ? Instagram : key === "youtube" ? Youtube : ExternalLink;
@@ -468,6 +468,23 @@ export function PublicProfileClient({ userId }: Props) {
                                     </a>
                                 );
                             })}
+                            {viewer.canMessage && (
+                                <Link href={`/chat?with=${profile.id}`} className="btn-primary inline-flex items-center gap-2 h-9 px-4 text-xs">
+                                    <MessageSquare className="w-4 h-4" />
+                                    Message
+                                </Link>
+                            )}
+                            {viewer.isSelf && (
+                                <Link href="/settings" className="btn-secondary inline-flex items-center gap-2 h-9 px-4 text-xs">
+                                    Edit profile
+                                </Link>
+                            )}
+                            {profile.isPrivateProfile && (viewer.isSelf || viewer.isAdmin || viewer.isAssignedCoach) && (
+                                <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-muted border border-surface-border text-[10px] font-bold uppercase tracking-widest text-fg-muted">
+                                    <Lock className="w-3.5 h-3.5" />
+                                    Private account
+                                </span>
+                            )}
                         </div>
                     )}
 
@@ -532,25 +549,6 @@ export function PublicProfileClient({ userId }: Props) {
                         </div>
                     )}
 
-                    <div className="flex flex-wrap gap-2 justify-center sm:justify-start mt-4">
-                        {viewer.canMessage && (
-                            <Link href={`/chat?with=${profile.id}`} className="btn-primary inline-flex items-center gap-2">
-                                <MessageSquare className="w-4 h-4" />
-                                Message
-                            </Link>
-                        )}
-                        {viewer.isSelf && (
-                            <Link href="/settings" className="btn-secondary inline-flex items-center gap-2">
-                                Edit profile
-                            </Link>
-                        )}
-                        {profile.isPrivateProfile && (viewer.isSelf || viewer.isAdmin || viewer.isAssignedCoach) && (
-                            <span className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-surface-muted border border-surface-border text-xs font-bold text-fg-muted">
-                                <Lock className="w-3.5 h-3.5" />
-                                Private account
-                            </span>
-                        )}
-                    </div>
                 </div>
             </div>
 

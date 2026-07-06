@@ -163,7 +163,8 @@ export function ChatClient({
     initialUnread = {},
 }: Props) {
     const isCoachUser = currentUserRole === "COACH" || currentUserRole === "SUPER_ADMIN";
-    const canViewLastOnline = currentUserRole === "COACH" || currentUserRole === "SUPER_ADMIN";
+    const canViewPresenceLabels = isCoachUser;
+    const canViewPresenceDots = canUseDirectChat;
     const { refresh: refreshGlobalUnread } = useChatUnread();
     const keyboardOpen = useMobileKeyboardOpen();
     const [tab, setTab] = useState<"direct" | "general">("general");
@@ -233,9 +234,9 @@ export function ChatClient({
     }, [selectedConv, activeSessions]);
 
     const selectedPresence = useMemo(() => {
-        if (!canViewLastOnline || !selectedConv) return null;
+        if (!canViewPresenceDots || !selectedConv || selectedActiveSession) return null;
         return getPresenceIndicator(resolveLastActive(selectedConv.userId));
-    }, [canViewLastOnline, selectedConv, resolveLastActive, conversationPresence]);
+    }, [canViewPresenceDots, selectedConv, selectedActiveSession, resolveLastActive, conversationPresence]);
 
     const showAccessRequestReplyOptions = useMemo(() => {
         if (currentUserRole !== "SUPER_ADMIN" || tab !== "direct" || !selectedConv || selectedConv.isDeleted) return false;
@@ -572,7 +573,7 @@ export function ChatClient({
                     });
                 }
                 void refreshGlobalUnread();
-                if (canViewLastOnline && data.presence) {
+                if (canViewPresenceDots && data.presence) {
                     setConversationPresence((prev) => ({ ...prev, ...data.presence }));
                 }
                 if (isCoachUser && data.activeSessions) {
@@ -595,7 +596,7 @@ export function ChatClient({
         }, 3000);
 
         return () => clearInterval(interval);
-    }, [isHydrated, canUseDirectChat, canViewLastOnline, isCoachUser, tab, selectedConv?.userId, refreshGlobalUnread]);
+    }, [isHydrated, canUseDirectChat, canViewPresenceDots, isCoachUser, tab, selectedConv?.userId, refreshGlobalUnread]);
 
     useEffect(() => {
         if (!isHydrated || !canUseDirectChat || !isCoachUser) return;
@@ -1415,7 +1416,7 @@ export function ChatClient({
                     ) : (
                         filteredConversations.map((conv) => {
                             const session = activeSessions[conv.userId];
-                            const presence = canViewLastOnline && !session
+                            const presence = canViewPresenceDots && !session
                                 ? getPresenceIndicator(resolveLastActive(conv.userId))
                                 : null;
                             const unread = unreadCounts[conv.userId] ?? 0;
@@ -1445,7 +1446,7 @@ export function ChatClient({
                                             getInitials(conv.name)
                                         )}
                                     </span>
-                                    {canViewLastOnline && presence && (
+                                    {canViewPresenceDots && presence && (
                                         <span
                                             className={cn(
                                                 "absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-surface",
@@ -1454,7 +1455,7 @@ export function ChatClient({
                                             title={presence.label}
                                         />
                                     )}
-                                    {canViewLastOnline && session && (
+                                    {isCoachUser && session && (
                                         <span
                                             className="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-surface bg-success animate-pulse"
                                             title={`In workout: ${session.workoutName}`}
@@ -1485,12 +1486,12 @@ export function ChatClient({
                                         )}
                                     </div>
                                     </div>
-                                    {canViewLastOnline && session ? (
+                                    {isCoachUser && session ? (
                                         <p className="text-[10px] text-success font-bold truncate flex items-center gap-1">
                                             <Activity className="w-3 h-3 shrink-0" />
                                             In workout · {session.workoutName}
                                         </p>
-                                    ) : canViewLastOnline && presence ? (
+                                    ) : canViewPresenceLabels && presence ? (
                                         <p className="text-[10px] text-fg-subtle truncate">{presence.label}</p>
                                     ) : conv.isDeleted ? (
                                         <p className="text-[10px] uppercase font-bold tracking-widest text-fg-subtle">Inactive</p>
@@ -1637,7 +1638,7 @@ export function ChatClient({
                                         <Activity className="w-3 h-3 shrink-0" />
                                         In workout · {selectedActiveSession.workoutName}
                                     </p>
-                                ) : canViewLastOnline && selectedPresence ? (
+                                ) : canViewPresenceLabels && selectedPresence ? (
                                     <p className="text-[10px] text-fg-subtle font-medium truncate mt-0.5">{selectedPresence.label}</p>
                                 ) : null}
                             </div>

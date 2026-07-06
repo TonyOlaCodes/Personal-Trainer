@@ -568,7 +568,9 @@ export function PlansClient({ plans, userRole, activeSession = null, coachClient
                                             <div className="flex items-center gap-2 mb-1">
                                                 <p className="font-semibold text-fg truncate">{plan.name}</p>
                                                 {plan.isActive && <span className="badge-brand text-[10px]">Active</span>}
-                                                {plan.type === "COACH_ASSIGNED" && <span className="badge-success text-[10px]">Coach</span>}
+                                                {!isCoach && plan.type === "COACH_ASSIGNED" && (
+                                                    <span className="badge-success text-[10px]">Coach</span>
+                                                )}
                                             </div>
                                             {plan.description && (
                                                 <p className="text-sm text-fg-muted truncate">{plan.description}</p>

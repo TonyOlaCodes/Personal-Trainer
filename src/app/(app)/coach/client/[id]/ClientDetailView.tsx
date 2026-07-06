@@ -122,7 +122,7 @@ interface Props {
 export function ClientDetailView({ client, currentUserId, availablePlans, logs, checkIns, checkInStatus = null, bodyweightHistory, workoutNotes, workoutHistory, exerciseHistory, exerciseLastDone, initialPinnedExercises = [], readOnly = false }: Props) {
     const canEdit = !readOnly;
     const [assigning, setAssigning] = useState(false);
-    const [assignMode, setAssignMode] = useState<"MENU" | "LIST" | "IMPORT">("MENU");
+    const [assignMode, setAssignMode] = useState<"MENU" | "LIST">("MENU");
     const [updating, setUpdating] = useState(false);
     const [shareCode, setShareCode] = useState("");
     const [importing, setImporting] = useState(false);
@@ -528,22 +528,26 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                             </div>
                             <ChevronRight className="w-4 h-4 text-fg-subtle" />
                         </Link>
+                    </div>
 
-                        <button
-                            onClick={() => setAssignMode("IMPORT")}
-                            className="rounded-2xl p-4 flex items-center justify-between border border-success/20 bg-success/5 group transition-all hover:border-success/40"
-                        >
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-success/10 flex items-center justify-center text-success">
-                                    <Zap className="w-5 h-5" />
-                                </div>
-                                <div className="text-left">
-                                    <p className="text-sm font-black text-fg uppercase tracking-tight group-hover:text-success">Import via Code</p>
-                                    <p className="text-[9px] text-fg-muted font-bold uppercase tracking-widest italic">Deploy via share key</p>
-                                </div>
-                            </div>
-                            <ChevronRight className="w-4 h-4 text-fg-subtle" />
-                        </button>
+                    <div className="rounded-2xl p-5 bg-surface-card border border-brand-500/20 shadow-glow-brand-sm">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-brand-400 mb-2 block">Plan Share Key</label>
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                            <input
+                                type="text"
+                                placeholder="E.G. ALPHA-99"
+                                className="input flex-1 font-mono uppercase font-black tracking-widest"
+                                value={shareCode}
+                                onChange={(e) => setShareCode(e.target.value)}
+                            />
+                            <button
+                                onClick={handleImport}
+                                disabled={importing || !shareCode}
+                                className="btn-primary h-12 px-6 shadow-glow-brand"
+                            >
+                                {importing ? "..." : "Import"}
+                            </button>
+                        </div>
                     </div>
                     <button
                         onClick={() => setAssigning(false)}
@@ -577,32 +581,6 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                 </div>
             )}
 
-            {assignMode === "IMPORT" && (
-                <div className="space-y-5">
-                    <button onClick={() => setAssignMode("MENU")} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-fg-muted hover:text-fg">
-                        <ChevronRight className="w-3 h-3 rotate-180" /> Back
-                    </button>
-                    <div className="rounded-2xl p-5 bg-surface-card border border-brand-500/20 shadow-glow-brand-sm">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-brand-400 mb-2 block">Plan Share Key</label>
-                        <div className="flex flex-col gap-2 sm:flex-row">
-                            <input
-                                type="text"
-                                placeholder="E.G. ALPHA-99"
-                                className="input flex-1 font-mono uppercase font-black tracking-widest"
-                                value={shareCode}
-                                onChange={(e) => setShareCode(e.target.value)}
-                            />
-                            <button
-                                onClick={handleImport}
-                                disabled={importing || !shareCode}
-                                className="btn-primary h-12 px-6 shadow-glow-brand"
-                            >
-                                {importing ? "..." : "Import"}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     ) : null;
 
@@ -645,25 +623,24 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                     <div>
                         <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 justify-center sm:justify-start">
                             <h2 className="text-2xl font-bold text-fg tracking-tight">{client.name || "Strength Athlete"}</h2>
-                            <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface-muted/50 border border-surface-border w-fit h-fit mx-auto sm:mx-0">
-                                {client.activeSession ? (
-                                    <>
-                                        <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
-                                        <span className="text-[9px] text-success font-black uppercase tracking-wider">
-                                            In workout · {client.activeSession.workoutName}
-                                        </span>
-                                    </>
-                                ) : presence ? (
-                                    <>
-                                        <span className={cn("w-1.5 h-1.5 rounded-full", presence.dotClassName)} />
-                                        <span className="text-[9px] text-fg-subtle font-black uppercase tracking-wider">{presence.label}</span>
-                                    </>
-                                ) : null}
-                            </div>
+                            {(client.activeSession || presence) && (
+                                <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface-muted/50 border border-surface-border w-fit h-fit mx-auto sm:mx-0">
+                                    {client.activeSession ? (
+                                        <span
+                                            className="w-1.5 h-1.5 rounded-full bg-success animate-pulse"
+                                            title={`In workout · ${client.activeSession.workoutName}`}
+                                        />
+                                    ) : presence ? (
+                                        <span
+                                            className={cn("w-1.5 h-1.5 rounded-full", presence.dotClassName)}
+                                            title={presence.label}
+                                        />
+                                    ) : null}
+                                </div>
+                            )}
                         </div>
                         <p className="text-sm text-fg-muted mb-1 mt-1 sm:mt-0">{client.email}</p>
                         <div className="flex flex-wrap gap-2 mt-3 justify-center sm:justify-start">
-                            <span className="badge-brand text-[9px] uppercase font-bold tracking-widest">{client.role} Member</span>
                             {client.assignedCoachName && (
                                 <span className="badge text-[9px] bg-surface-muted text-fg-muted border border-surface-border">
                                     Coach: {client.assignedCoachName}

@@ -412,7 +412,10 @@ export function TopBar({ title, subtitle, showToday = false, streak, hideSearch 
 
             <GainAccessModal open={showGainAccess} onClose={() => setShowGainAccess(false)} />
         </header>
-        <div className="h-16 shrink-0" aria-hidden="true" />
+        <div
+            className="shrink-0 h-[calc(4rem+var(--maintenance-banner-height,0px)+var(--maintenance-below-topbar-gap,0px))]"
+            aria-hidden="true"
+        />
         </>
     );
 }

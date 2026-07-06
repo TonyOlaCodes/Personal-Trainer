@@ -15,7 +15,7 @@ import { cn, formatDate, getInitials, toDateKey } from "@/lib/utils";
 import { shiftDateKey } from "@/lib/coachNotificationSchedule";
 import { useCurrentDate } from "@/hooks/useCurrentDate";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
-import { getPresenceIndicator, formatLastActiveText } from "@/lib/userPresence";
+import { getPresenceIndicator } from "@/lib/userPresence";
 import { PendingReviewsModal, type PendingReviewItem } from "@/components/shared/PendingReviewsModal";
 import { NeedsAttentionInboxModal } from "@/components/coach/NeedsAttentionInboxModal";
 import { CoachCodeRequestsPanel } from "@/components/coach/CoachCodeRequestsPanel";
@@ -583,7 +583,7 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                     <Link href="#clients" className="block flex-1 min-h-0">
                         <Users className="w-4 h-4 text-brand-400 mb-1" />
                         <p className="stat-value">{clients.length}</p>
-                        <p className="stat-label">Active Clients</p>
+                        <p className="stat-label">Clients</p>
                     </Link>
                     <Link
                         href="/coach/invites"
@@ -663,7 +663,6 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                     <div className="flex items-center justify-between gap-3 px-2">
                         <div className="min-w-0">
                             <h3 className="heading-3">My Clients</h3>
-                            <span className="text-xs text-fg-subtle">{clients.length} active</span>
                         </div>
                         <Link
                             href="/coach/invites"
@@ -688,9 +687,9 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                                 const session = c.activeSession ?? null;
                                 const presence = session ? null : getPresenceIndicator(c.lastActiveAt);
                                 const insight = insights.clientInsights[c.id];
-                                const lastActiveLabel = session
+                                const presenceTitle = session
                                     ? `In workout · ${session.workoutName}`
-                                    : formatLastActiveText(c.lastActiveAt);
+                                    : presence?.label;
                                 return (
                                 <Link
                                     key={c.id}
@@ -710,7 +709,7 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                                             {session ? (
                                                 <span
                                                     className="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-surface-card bg-success animate-pulse"
-                                                    title={`In workout: ${session.workoutName}`}
+                                                    title={presenceTitle}
                                                 />
                                             ) : presence ? (
                                                 <span
@@ -718,7 +717,7 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                                                         "absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-surface-card",
                                                         presence.dotClassName
                                                     )}
-                                                    title={presence.label}
+                                                    title={presenceTitle}
                                                 />
                                             ) : null}
                                         </div>
@@ -737,13 +736,6 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                                                     </span>
                                                 )}
                                             </div>
-                                            <p className={cn(
-                                                "text-[10px] truncate",
-                                                session ? "text-success font-bold flex items-center gap-1" : "text-fg-subtle"
-                                            )}>
-                                                {session && <Activity className="w-3 h-3 shrink-0" />}
-                                                {lastActiveLabel}
-                                            </p>
                                         </div>
                                     </div>
                                     <ClientInsightRow insight={insight} client={c} />

@@ -38,7 +38,7 @@ export function StreakBadge({
 
     return (
         <div
-            title={`${streak} workout${streak === 1 ? "" : "s"} in a row on plan`}
+            title={`${streak} day${streak === 1 ? "" : "s"} on plan in a row`}
             className={cn(
                 "inline-flex items-center cursor-default select-none",
                 s.wrap,

@@ -186,12 +186,10 @@ export async function assignCoachPlanToClient(input: {
             });
         }
 
-        if (!cloned) {
-            await tx.plan.update({
-                where: { id: resolvedPlanId },
-                data: { type: "COACH_ASSIGNED" },
-            });
-        }
+        await tx.plan.update({
+            where: { id: resolvedPlanId },
+            data: { type: "COACH_ASSIGNED" },
+        });
     });
 
     const plan = await prisma.plan.findUniqueOrThrow({ where: { id: resolvedPlanId } });
