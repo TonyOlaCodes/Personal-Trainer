@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
     Trophy, MessageSquare, Loader2, Lock, Dumbbell, ChevronRight,
-    Target, Calendar, Activity, ExternalLink, Instagram,
+    Calendar, Activity, ExternalLink, Instagram,
     Youtube, Users,
 } from "lucide-react";
 import { cn, getInitials, roleLabels, getRoleNameClass, formatDate } from "@/lib/utils";
@@ -79,6 +79,9 @@ interface ProfilePayload {
     isPrivateProfile?: boolean;
     joinDate: string;
     trainingGoal: string | null;
+    goal: string | null;
+    trainingLocation: string | null;
+    trainingDaysPerWeek: number | null;
     streak: number | null;
     totalWorkouts: number | null;
     onlineStatus: { level: string; label: string } | null;
@@ -102,12 +105,6 @@ interface ViewerPayload {
     canSetNickname?: boolean;
     nickname?: string | null;
 }
-
-const EXP_LABELS: Record<string, string> = {
-    BEGINNER: "Beginner",
-    INTERMEDIATE: "Intermediate",
-    ADVANCED: "Advanced",
-};
 
 interface Props {
     userId: string;
@@ -145,28 +142,6 @@ function formatSocialHref(key: keyof SocialLinks, value: string): string {
         ? `https://youtube.com/${trimmed}`
         : `https://youtube.com/@${trimmed.replace(/^@/, "")}`;
     return `https://${trimmed.replace(/^\/\//, "")}`;
-}
-
-function CoachedByCard({ coach }: { coach: PublicProfileCoachedBy }) {
-    return (
-        <Link
-            href={getPublicProfileHref(coach.id)}
-            className="mt-4 inline-flex items-center gap-3 rounded-2xl border border-surface-border bg-surface-muted/40 px-3 py-2.5 hover:border-brand-500/30 transition-colors max-w-full"
-        >
-            <div className="w-10 h-10 rounded-xl bg-gradient-brand flex items-center justify-center text-xs font-black text-white overflow-hidden shrink-0">
-                {coach.avatarUrl ? (
-                    <img src={resolveUploadUrl(coach.avatarUrl)} alt={coach.name} className="w-full h-full object-cover" />
-                ) : (
-                    getInitials(coach.name)
-                )}
-            </div>
-            <div className="flex-1 min-w-0">
-                <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Coached by</p>
-                <p className="text-sm font-black text-fg truncate">{coach.name}</p>
-            </div>
-            <ChevronRight className="w-4 h-4 text-fg-subtle shrink-0" />
-        </Link>
-    );
 }
 
 export function PublicProfileClient({ userId }: Props) {
@@ -380,6 +355,25 @@ export function PublicProfileClient({ userId }: Props) {
                 )}
 
                 <div className={cn("px-5 sm:px-8 pb-6 relative", isLimited ? "pt-8" : "-mt-11 sm:-mt-12")}>
+                    {viewer.isSelf && (
+                        <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2 mb-4">
+                            <Link
+                                href="/settings?section=profile"
+                                className={cn(
+                                    "inline-flex items-center gap-2 h-9 px-4 text-[10px] font-black uppercase tracking-widest rounded-xl border transition-colors",
+                                    profile.isPrivateProfile
+                                        ? "bg-brand-500/15 border-brand-500/35 text-brand-300 shadow-glow-brand-sm"
+                                        : "bg-surface-muted/40 border-surface-border text-fg-muted hover:text-fg hover:border-brand-500/30"
+                                )}
+                            >
+                                <Lock className="w-3.5 h-3.5" />
+                                Private account
+                            </Link>
+                            <Link href="/settings?section=profile" className="btn-secondary inline-flex items-center gap-2 h-9 px-4 text-xs">
+                                Edit profile
+                            </Link>
+                        </div>
+                    )}
                     <div className="flex flex-col sm:flex-row sm:items-end gap-4 sm:gap-5">
                         <div className="w-[4.5rem] h-[4.5rem] sm:w-20 sm:h-20 rounded-2xl bg-gradient-brand flex items-center justify-center text-xl font-black text-white overflow-hidden shrink-0 border-4 border-surface-card shadow-glow-sm mx-auto sm:mx-0">
                             {profile.avatarUrl ? (
@@ -402,8 +396,45 @@ export function PublicProfileClient({ userId }: Props) {
                             {!isLimited && (
                                 <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">
                                     {roleLabels[profile.role] ?? profile.role}
-                                    {profile.experienceLevel && ` · ${EXP_LABELS[profile.experienceLevel] ?? profile.experienceLevel}`}
                                 </p>
+                            )}
+                            {!isLimited && (
+                                profile.coachedBy ||
+                                profile.goal ||
+                                profile.experienceLevel ||
+                                profile.trainingLocation ||
+                                profile.trainingDaysPerWeek
+                            ) && (
+                                <div className="flex flex-wrap gap-2 mt-2 justify-center sm:justify-start">
+                                    {profile.coachedBy && (
+                                        <Link
+                                            href={getPublicProfileHref(profile.coachedBy.id)}
+                                            className="badge text-[9px] bg-surface-muted text-fg-muted border border-surface-border hover:border-brand-500/30 transition-colors"
+                                        >
+                                            Coach: {profile.coachedBy.name}
+                                        </Link>
+                                    )}
+                                    {profile.goal && (
+                                        <span className="badge text-[9px] bg-brand-500/10 text-brand-400 border border-brand-500/20">
+                                            {profile.goal.replace(/_/g, " ")}
+                                        </span>
+                                    )}
+                                    {profile.experienceLevel && (
+                                        <span className="badge text-[9px] bg-warning-500/10 text-warning border border-warning-500/20">
+                                            {profile.experienceLevel.replace(/_/g, " ")}
+                                        </span>
+                                    )}
+                                    {profile.trainingLocation && (
+                                        <span className="badge text-[9px] bg-success-500/10 text-success border border-success-500/20">
+                                            {profile.trainingLocation} Training
+                                        </span>
+                                    )}
+                                    {profile.trainingDaysPerWeek != null && profile.trainingDaysPerWeek > 0 && (
+                                        <span className="badge text-[9px] bg-surface-muted text-fg-muted border border-surface-border">
+                                            {profile.trainingDaysPerWeek} Days / Wk
+                                        </span>
+                                    )}
+                                </div>
                             )}
                         </div>
                     </div>
@@ -428,28 +459,13 @@ export function PublicProfileClient({ userId }: Props) {
                         )}
                     </div>
 
-                    {profile.coachedBy && (
-                        <div className="flex justify-center sm:justify-start">
-                            <CoachedByCard coach={profile.coachedBy} />
-                        </div>
-                    )}
-
                     {isLimited && (
                         <p className="text-sm text-fg-muted text-center sm:text-left mt-4 leading-relaxed">
                             This account is private. Only basic profile info is visible.
                         </p>
                     )}
 
-                    {!isLimited && profile.trainingGoal && (
-                        <div className="mt-3 flex justify-center sm:justify-start">
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-400/10 border border-brand-400/20 text-[10px] font-bold uppercase tracking-widest text-brand-300">
-                                <Target className="w-3 h-3" />
-                                {profile.trainingGoal}
-                            </span>
-                        </div>
-                    )}
-
-                    {!isLimited && (socialEntries.length > 0 || viewer.canMessage || viewer.isSelf || (profile.isPrivateProfile && (viewer.isSelf || viewer.isAdmin || viewer.isAssignedCoach))) && (
+                    {!isLimited && (socialEntries.length > 0 || viewer.canMessage) && (
                         <div className="mt-3 flex flex-wrap items-center gap-2 justify-center sm:justify-start">
                             {socialEntries.map(([key, value]) => {
                                 const href = formatSocialHref(key, value);
@@ -473,17 +489,6 @@ export function PublicProfileClient({ userId }: Props) {
                                     <MessageSquare className="w-4 h-4" />
                                     Message
                                 </Link>
-                            )}
-                            {viewer.isSelf && (
-                                <Link href="/settings" className="btn-secondary inline-flex items-center gap-2 h-9 px-4 text-xs">
-                                    Edit profile
-                                </Link>
-                            )}
-                            {profile.isPrivateProfile && (viewer.isSelf || viewer.isAdmin || viewer.isAssignedCoach) && (
-                                <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-muted border border-surface-border text-[10px] font-bold uppercase tracking-widest text-fg-muted">
-                                    <Lock className="w-3.5 h-3.5" />
-                                    Private account
-                                </span>
                             )}
                         </div>
                     )}
@@ -697,16 +702,6 @@ export function PublicProfileClient({ userId }: Props) {
                         </div>
                     ))}
                 </div>
-            )}
-
-            {viewer.isSelf && (
-                <Link href="/settings" className="card p-4 flex items-center justify-between hover:border-brand-500/30 transition-colors">
-                    <div>
-                        <p className="text-sm font-black text-fg">Account privacy</p>
-                        <p className="text-xs text-fg-muted mt-0.5">Make your profile public or private</p>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-fg-subtle" />
-                </Link>
             )}
 
             <AchievementsModal

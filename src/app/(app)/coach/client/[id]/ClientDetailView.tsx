@@ -126,6 +126,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
     const [updating, setUpdating] = useState(false);
     const [shareCode, setShareCode] = useState("");
     const [importing, setImporting] = useState(false);
+    const [removingPlan, setRemovingPlan] = useState(false);
     const [removing, setRemoving] = useState(false);
     const [confirmEmail, setConfirmEmail] = useState("");
     const [checkInDay, setCheckInDay] = useState(client.checkInSchedule.day ?? 6);
@@ -221,6 +222,32 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
             alert("Network error.");
         } finally {
             setImporting(false);
+        }
+    };
+
+    const removePlan = async () => {
+        if (!canEdit || !client.activePlan) return;
+        if (!confirm(`Remove "${client.activePlan.name}" from this client? Their workout history will be kept.`)) {
+            return;
+        }
+
+        setRemovingPlan(true);
+        try {
+            const res = await fetch("/api/coach/clients/plan", {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ clientId: client.id }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                window.location.reload();
+            } else {
+                alert(data.error ?? "Failed to remove plan");
+            }
+        } catch {
+            alert("Network error.");
+        } finally {
+            setRemovingPlan(false);
         }
     };
 
@@ -535,7 +562,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                         <div className="flex flex-col gap-2 sm:flex-row">
                             <input
                                 type="text"
-                                placeholder="E.G. ALPHA-99"
+                                placeholder="e.g. 20964E4C"
                                 className="input flex-1 font-mono uppercase font-black tracking-widest"
                                 value={shareCode}
                                 onChange={(e) => setShareCode(e.target.value)}
@@ -757,6 +784,17 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                 Assign New Plan
                             </button>
                         )}
+                        {canEdit && client.activePlan && (
+                            <button
+                                type="button"
+                                onClick={() => void removePlan()}
+                                disabled={removingPlan || updating}
+                                className="btn-secondary h-11 px-5 inline-flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest text-danger/80 hover:text-danger hover:border-danger/30 disabled:opacity-60"
+                            >
+                                {removingPlan ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                                Remove Plan
+                            </button>
+                        )}
                     </div>
                 </div>
                 {planAssignmentPanel}
@@ -799,12 +837,11 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
             </div>
             <Link
                 href={`/coach/calendar?clientId=${client.id}`}
-                className="btn-primary h-12 px-5 sm:px-6 inline-flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest shadow-glow-brand lg:mt-1 lg:shrink-0"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-brand-500/30 bg-brand-500/10 text-brand-400 shadow-glow-brand-sm transition-all hover:bg-brand-500/20 hover:border-brand-500/45 lg:mt-1 lg:shrink-0"
                 title="Open client calendar"
                 aria-label="Open client calendar"
             >
-                <Calendar className="w-5 h-5" />
-                Calendar
+                <Calendar className="w-4 h-4" />
             </Link>
             </div>
 

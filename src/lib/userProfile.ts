@@ -217,6 +217,9 @@ export interface BuiltPublicProfile {
     isPrivateProfile: boolean;
     joinDate: string;
     trainingGoal: string | null;
+    goal: string | null;
+    trainingLocation: string | null;
+    trainingDaysPerWeek: number | null;
     bio: string | null;
     streak: number | null;
     totalWorkouts: number | null;
@@ -403,6 +406,8 @@ export async function buildPublicProfileData(
                 bio: true,
                 goal: true,
                 experienceLevel: true,
+                trainingLocation: true,
+                trainingDaysPerWeek: true,
                 isPrivateProfile: true,
                 isDeleted: true,
                 coachId: true,
@@ -448,6 +453,9 @@ export async function buildPublicProfileData(
             username: formatPublicUsername(chosenName, target.id, target.username),
             joinDate: formatJoinDate(target.createdAt),
             trainingGoal: null,
+            goal: null,
+            trainingLocation: null,
+            trainingDaysPerWeek: null,
             bio: null,
             streak: null,
             totalWorkouts: null,
@@ -528,6 +536,9 @@ export async function buildPublicProfileData(
         username: formatPublicUsername(chosenName, target.id, target.username),
         joinDate: formatJoinDate(target.createdAt),
         trainingGoal,
+        goal: target.goal ?? null,
+        trainingLocation: target.trainingLocation ?? null,
+        trainingDaysPerWeek: target.trainingDaysPerWeek ?? null,
         bio: target.bio?.trim() ? target.bio.trim() : null,
         streak,
         totalWorkouts,

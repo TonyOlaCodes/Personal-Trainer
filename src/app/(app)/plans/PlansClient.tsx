@@ -494,7 +494,7 @@ export function PlansClient({ plans, userRole, activeSession = null, coachClient
                 <div className="flex flex-1 min-w-0 items-center gap-2">
                     <input
                         id="plan-share-code"
-                        placeholder="XXXXXXXX"
+                        placeholder="20964E4C"
                         className="input h-9 w-full max-w-[9.5rem] font-mono text-xs font-bold uppercase tracking-widest"
                         value={code}
                         onChange={(e) => {
@@ -637,6 +637,10 @@ export function PlansClient({ plans, userRole, activeSession = null, coachClient
                                             ) : (
                                                 <button
                                                     onClick={() => {
+                                                        if (plan.weekCount <= 1) {
+                                                            setActive(plan.id, null);
+                                                            return;
+                                                        }
                                                         setActivateStartDay(null);
                                                         setActivatePlan({ id: plan.id, name: plan.name, weekCount: plan.weekCount });
                                                     }}

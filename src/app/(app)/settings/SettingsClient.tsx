@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import {
-    User, Bell,
+    User, Bell, Ticket,
     HelpCircle, LogOut, ChevronRight,
     Camera, Loader2, Target, ImageIcon, Link2, ArrowLeft,
 } from "lucide-react";
@@ -434,6 +434,36 @@ export function SettingsClient({ user }: Props) {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 animate-fade-in pb-20">
             {!activeSection ? (
                 <div className="space-y-6">
+                    {(user.role === "FREE" || user.role === "GENERAL_PREMIUM") && (
+                        <div className="card p-5 border-brand-500/20 bg-brand-500/5 space-y-3">
+                            <div className="flex items-center gap-2">
+                                <Ticket className="w-4 h-4 text-brand-400" />
+                                <p className="text-sm font-black text-fg">Redeem access code</p>
+                            </div>
+                            <p className="text-xs text-fg-muted">
+                                {user.role === "GENERAL_PREMIUM"
+                                    ? "Have a coach invite? Redeem it here to link with your coach — your training history stays intact."
+                                    : "Enter a coach invite or Premium code to unlock full training features."}
+                            </p>
+                            <div className="flex flex-col sm:flex-row gap-2">
+                                <input
+                                    type="text"
+                                    className="input h-11 flex-1 font-mono uppercase tracking-widest text-sm"
+                                    placeholder="ACCESS CODE"
+                                    value={secretCode}
+                                    onChange={(e) => setSecretCode(e.target.value.toUpperCase())}
+                                />
+                                <button
+                                    onClick={handleRedeemCode}
+                                    disabled={redeeming || !secretCode.trim()}
+                                    className="btn-primary h-11 px-6 text-xs font-black uppercase tracking-widest"
+                                >
+                                    {redeeming ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : "Redeem"}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="space-y-2">
                         {sections.map((section) => (
                             <Link
@@ -698,33 +728,6 @@ export function SettingsClient({ user }: Props) {
                                 View your public profile →
                             </Link>
                         </div>
-
-                        {(user.role === "FREE" || user.role === "GENERAL_PREMIUM") && (
-                            <div className="p-5 rounded-2xl bg-surface-muted/40 border border-surface-border space-y-3">
-                                <p className="text-sm font-bold text-fg">Redeem access code</p>
-                                <p className="text-xs text-fg-muted">
-                                    {user.role === "GENERAL_PREMIUM"
-                                        ? "Have a coach invite? Redeem it here to link with your coach — your training history stays intact."
-                                        : "Enter a coach invite or Premium code to unlock full training features."}
-                                </p>
-                                <div className="flex flex-col sm:flex-row gap-2">
-                                    <input
-                                        type="text"
-                                        className="input h-11 flex-1 font-mono uppercase tracking-widest text-sm"
-                                        placeholder="ACCESS CODE"
-                                        value={secretCode}
-                                        onChange={(e) => setSecretCode(e.target.value.toUpperCase())}
-                                    />
-                                    <button
-                                        onClick={handleRedeemCode}
-                                        disabled={redeeming || !secretCode.trim()}
-                                        className="btn-primary h-11 px-6 text-xs font-black uppercase tracking-widest"
-                                    >
-                                        {redeeming ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : "Redeem"}
-                                    </button>
-                                </div>
-                            </div>
-                        )}
 
                     </div>
                 )}

@@ -195,3 +195,55 @@ export async function assignCoachPlanToClient(input: {
     const plan = await prisma.plan.findUniqueOrThrow({ where: { id: resolvedPlanId } });
     return { plan, assignedPlanId: resolvedPlanId, cloned };
 }
+
+/** Deactivate the client's current training plan without deleting history. */
+export async function removeCoachPlanFromClient(input: {
+    coachId: string;
+    clientId: string;
+    allowAnyCoachPlan?: boolean;
+}): Promise<{ removed: boolean }> {
+    const activeAssignment = await prisma.userPlan.findFirst({
+        where: { userId: input.clientId, isActive: true },
+        include: {
+            plan: {
+                include: {
+                    weeks: {
+                        include: {
+                            workouts: {
+                                where: activeWorkoutWhere(),
+                                orderBy: { dayNumber: "asc" },
+                            },
+                        },
+                        orderBy: { weekNumber: "asc" },
+                    },
+                },
+            },
+        },
+    });
+
+    if (!activeAssignment) {
+        return { removed: false };
+    }
+
+    if (
+        !input.allowAnyCoachPlan
+        && activeAssignment.plan.creatorId !== input.coachId
+    ) {
+        throw new Error("You can only remove plans you assigned");
+    }
+
+    await prisma.$transaction(async (tx) => {
+        await snapshotMissedSessionsForPlanChange(
+            tx,
+            activeAssignment.planId,
+            serializePlanWeeksForSchedule(activeAssignment.plan.weeks)
+        );
+
+        await tx.userPlan.updateMany({
+            where: { userId: input.clientId },
+            data: { isActive: false },
+        });
+    });
+
+    return { removed: true };
+}

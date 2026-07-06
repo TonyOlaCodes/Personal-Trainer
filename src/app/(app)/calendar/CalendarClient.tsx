@@ -501,6 +501,7 @@ export function CalendarClient({
                             );
                             const isBeforePlan = Boolean(
                                 planStartedAt
+                                && planWeekCount > 1
                                 && dateKey < toDateKey(new Date(planStartedAt))
                             );
                             const programWeek = planned ? getProgramWeekForDateKey(dateKey) : null;

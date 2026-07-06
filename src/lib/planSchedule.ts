@@ -66,9 +66,10 @@ export function getPlanDayOffset(startedAt: Date | string, date: Date, dateKey?:
  * - Multi-week plans: linear index, null after the program ends.
  */
 export function resolvePlanWeekIndex(weekCount: number, diffDays: number): number | null {
-    if (weekCount <= 0 || diffDays < 0) return null;
-    const weekIndex = Math.floor(diffDays / 7);
+    if (weekCount <= 0) return null;
     if (weekCount === 1) return 0;
+    if (diffDays < 0) return null;
+    const weekIndex = Math.floor(diffDays / 7);
     if (weekIndex >= weekCount) return null;
     return weekIndex;
 }

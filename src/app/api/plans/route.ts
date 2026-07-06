@@ -101,7 +101,8 @@ export async function POST(req: Request) {
     if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
     const { name, description, type, weekStartDay, weeks } = parsed.data;
-    const planStartedAt = (weekStartDay != null) ? nextWeekdayDate(weekStartDay) : new Date();
+    const effectiveWeekStartDay = weeks.length <= 1 ? null : weekStartDay;
+    const planStartedAt = (effectiveWeekStartDay != null) ? nextWeekdayDate(effectiveWeekStartDay) : new Date();
     
     const shareCode = await generateUniquePlanShareCode();
 

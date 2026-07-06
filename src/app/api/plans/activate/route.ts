@@ -37,8 +37,6 @@ export async function POST(req: Request) {
         target.setHours(0, 0, 0, 0);
         return target;
     }
-    const chosenStartedAt = (weekStartDay != null) ? nextWeekdayDate(weekStartDay) : null;
-
     const targetAssignment = planId
         ? await prisma.userPlan.findUnique({
             where: { userId_planId: { userId: user.id, planId } },
@@ -51,6 +49,13 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Plan is not in your library" }, { status: 404 });
         }
     }
+
+    const activatingPlanWeekCount = planId
+        ? await prisma.planWeek.count({ where: { planId } })
+        : 0;
+    const isSingleWeekPlan = activatingPlanWeekCount <= 1;
+    const effectiveWeekStartDay = isSingleWeekPlan ? null : weekStartDay;
+    const chosenStartedAt = (effectiveWeekStartDay != null) ? nextWeekdayDate(effectiveWeekStartDay) : null;
 
     const previousActive = await prisma.userPlan.findFirst({
         where: { userId: user.id, isActive: true },
@@ -101,9 +106,10 @@ export async function POST(req: Request) {
         });
 
         if (planId) {
-            // If user picked a specific start day, honour it; otherwise fall back to history-aware logic
             let reactivatedStartedAt: Date;
-            if (chosenStartedAt) {
+            if (isSingleWeekPlan) {
+                reactivatedStartedAt = new Date();
+            } else if (chosenStartedAt) {
                 reactivatedStartedAt = chosenStartedAt;
             } else {
                 reactivatedStartedAt = earliestCompletedLogForTarget
@@ -116,7 +122,7 @@ export async function POST(req: Request) {
 
             await tx.userPlan.update({
                 where: { userId_planId: { userId: user.id, planId } },
-                data: switchingPlans || chosenStartedAt
+                data: switchingPlans || chosenStartedAt || isSingleWeekPlan
                     ? { isActive: true, startedAt: reactivatedStartedAt }
                     : { isActive: true },
             });

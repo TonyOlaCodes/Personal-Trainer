@@ -510,7 +510,7 @@ export function PlanCreateClient() {
         const payload = {
             name,
             description: desc,
-            weekStartDay: editId ? undefined : weekStartDay, // only applied on creation
+            weekStartDay: editId ? undefined : (weeks.length <= 1 ? null : weekStartDay),
             weeks: weeks.map(w => ({
                 weekNumber: w.weekNumber,
                 name: w.name,
@@ -726,7 +726,7 @@ export function PlanCreateClient() {
                 </div>
 
                 {/* Week 1 start day — only shown on new plans (not edit/view) */}
-                {!isViewOnly && !editId && (
+                {!isViewOnly && !editId && weeks.length > 1 && (
                     <div className="space-y-2 pt-1">
                         <div className="flex items-center justify-between">
                             <label className="label mb-0">Week 1 Starts On</label>

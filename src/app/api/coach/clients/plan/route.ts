@@ -5,7 +5,7 @@ import { z } from "zod";
 import { notifyClientOfPlanAssigned } from "@/lib/notifications";
 import { requireCoachCanEditClient } from "@/lib/apiAuth";
 import { triggerAchievementSync } from "@/lib/achievements";
-import { assignCoachPlanToClient } from "@/lib/coachPlanAssignment";
+import { assignCoachPlanToClient, removeCoachPlanFromClient } from "@/lib/coachPlanAssignment";
 
 const planUpdateSchema = z.object({
     clientId: z.string().min(1),
@@ -54,6 +54,38 @@ export async function POST(req: Request) {
         });
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : "Failed to assign plan";
+        return NextResponse.json({ error: message }, { status: 400 });
+    }
+}
+
+const planRemoveSchema = z.object({
+    clientId: z.string().min(1),
+});
+
+export async function DELETE(req: Request) {
+    const { userId } = await auth();
+    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const coach = await prisma.user.findUnique({ where: { clerkId: userId } });
+    if (!coach || !["COACH", "SUPER_ADMIN"].includes(coach.role)) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    try {
+        const { clientId } = planRemoveSchema.parse(await req.json());
+
+        const editCheck = await requireCoachCanEditClient(coach, clientId);
+        if (editCheck.error) return editCheck.error;
+
+        const result = await removeCoachPlanFromClient({
+            coachId: coach.id,
+            clientId,
+            allowAnyCoachPlan: coach.role === "SUPER_ADMIN",
+        });
+
+        return NextResponse.json({ success: true, removed: result.removed });
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Failed to remove plan";
         return NextResponse.json({ error: message }, { status: 400 });
     }
 }

@@ -997,21 +997,6 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
                                                             <p className="text-xs text-fg-muted truncate">{client.email}</p>
                                                         </div>
                                                     </div>
-                                                    <div className="flex items-center gap-2 shrink-0">
-                                                        <span className={cn(
-                                                            "text-[9px] font-black uppercase tracking-widest border px-2 py-0.5 rounded",
-                                                            client.isDeleted
-                                                                ? "text-fg-subtle bg-surface-muted border-surface-border"
-                                                                : client.isDeactivated
-                                                                    ? "text-danger bg-danger/10 border-danger/20"
-                                                                    : "text-success bg-success/10 border-success/20"
-                                                        )}>
-                                                            {client.isDeleted ? "Deleted" : client.isDeactivated ? "Deactivated" : "Active"}
-                                                        </span>
-                                                        <span className={cn("text-[9px] px-2 py-0.5 rounded border font-black uppercase tracking-widest", roleBadgeClass[client.role])}>
-                                                            {roleLabels[client.role]?.replace(" Member", "") ?? client.role}
-                                                        </span>
-                                                    </div>
                                                 </div>
                                             ))}
                                         </div>
