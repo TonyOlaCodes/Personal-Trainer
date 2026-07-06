@@ -620,7 +620,11 @@ export function PlanCreateClient() {
                 cloningPlan={cloningPlan}
                 onBack={() => router.back()}
                 onCopyPlan={() => void clonePlanToLibrary()}
-                onEditPlan={editId ? () => router.push(`/plans/create?id=${editId}`) : undefined}
+                onEditPlan={editId
+                    ? () => router.push(
+                        `/plans/create?id=${editId}${clientId ? `&clientId=${clientId}` : ""}`
+                    )
+                    : undefined}
             />
         );
     }

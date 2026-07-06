@@ -755,20 +755,20 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                     <div className="flex flex-col sm:flex-row gap-2 lg:shrink-0">
                         {client.activePlan && (
                             <Link
-                                href={`/plans/create?id=${client.activePlan.id}&view=true`}
+                                href={`/plans/create?id=${client.activePlan.id}&view=true&clientId=${client.id}`}
                                 className="btn-secondary h-11 px-5 inline-flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest"
                             >
                                 View Plan
                                 <ChevronRight className="w-4 h-4" />
                             </Link>
                         )}
-                        {canEdit && (
+                        {canEdit && !client.activePlan && (
                             <Link
-                                href={client.activePlan ? `/plans/create?id=${client.activePlan.id}&clientId=${client.id}` : `/plans/create?clientId=${client.id}`}
+                                href={`/plans/create?clientId=${client.id}`}
                                 className="btn-primary h-11 px-5 inline-flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest shadow-glow-brand"
                             >
-                                {client.activePlan ? <Edit3 className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-                                {client.activePlan ? "Edit Plan" : "Create Plan"}
+                                <Plus className="w-4 h-4" />
+                                Create Plan
                             </Link>
                         )}
                         {canEdit && (
