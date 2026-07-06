@@ -160,20 +160,20 @@ export const chatRoleLabels: Record<string, string> = {
 
 /** Role badge variants */
 export const roleBadgeClass: Record<string, string> = {
-    FREE: "border-[#A1A1AA]/25 bg-[#A1A1AA]/10 text-[#D4D4D8]",
-    PREMIUM: "border-[#8B5CF6]/30 bg-[#8B5CF6]/10 text-[#A78BFA]",
-    GENERAL_PREMIUM: "border-[#3B82F6]/30 bg-[#3B82F6]/10 text-[#60A5FA]",
-    COACH: "border-[#10B981]/30 bg-[#10B981]/10 text-[#34D399]",
-    SUPER_ADMIN: "border-[#F59E0B]/35 bg-[#F59E0B]/10 text-[#FBBF24]",
+    FREE: "border-role-free-muted/25 bg-role-free-muted/10 text-role-free",
+    PREMIUM: "border-role-coached/30 bg-role-coached/10 text-role-coached",
+    GENERAL_PREMIUM: "border-role-premium/30 bg-role-premium/10 text-role-premium",
+    COACH: "border-role-coach/30 bg-role-coach/10 text-role-coach",
+    SUPER_ADMIN: "border-role-admin/35 bg-role-admin/10 text-role-admin",
 };
 
 /** Role-based display name colors (chat, lists) */
 export const roleNameClass: Record<string, string> = {
-    FREE: "text-[#D4D4D8]",
-    PREMIUM: "text-[#A78BFA]",
-    GENERAL_PREMIUM: "text-[#60A5FA]",
-    COACH: "text-[#34D399]",
-    SUPER_ADMIN: "text-[#FBBF24]",
+    FREE: "text-role-free",
+    PREMIUM: "text-role-coached",
+    GENERAL_PREMIUM: "text-role-premium",
+    COACH: "text-role-coach",
+    SUPER_ADMIN: "text-role-admin",
 };
 
 export function getRoleNameClass(role: string): string {

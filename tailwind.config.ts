@@ -5,6 +5,7 @@ const config: Config = {
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/lib/**/*.{js,ts,jsx,tsx}",
   ],
   darkMode: "class",
   theme: {
@@ -42,6 +43,14 @@ const config: Config = {
         success: { DEFAULT: "#22d3a0", muted: "#0f3d2e" },
         warning: { DEFAULT: "#f59e0b", muted: "#3d2e0f" },
         danger:  { DEFAULT: "#f43f5e", muted: "#3d0f1a" },
+        role: {
+          admin: "#FBBF24",
+          coach: "#34D399",
+          coached: "#A78BFA",
+          premium: "#60A5FA",
+          free: "#D4D4D8",
+          "free-muted": "#A1A1AA",
+        },
       },
       boxShadow: {
         "glow-brand": "0 0 20px rgba(99,102,241,0.35)",
