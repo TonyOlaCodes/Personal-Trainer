@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
     Plus, Minus, Save, ChevronLeft, Dumbbell,
@@ -65,6 +65,7 @@ interface PlanPayload {
     weeks?: PlanWeekPayload[];
     creator?: { name: string } | null;
     canCopy?: boolean;
+    canEdit?: boolean;
     error?: string;
 }
 
@@ -96,9 +97,11 @@ export function PlanCreateClient() {
     const [dragEnabledIdx, setDragEnabledIdx] = useState<number | null>(null);
     const [copyNotice, setCopyNotice] = useState<string | null>(null);
     const [canCopyPlan, setCanCopyPlan] = useState(false);
+    const [canEditPlan, setCanEditPlan] = useState(false);
     const [cloningPlan, setCloningPlan] = useState(false);
     // null = "right away", 0-6 = Mon-Sun target weekday for Week 1
     const [weekStartDay, setWeekStartDay] = useState<number | null>(null);
+    const workoutTabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
     const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
     const DAYS_FULL = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -150,6 +153,7 @@ export function PlanCreateClient() {
                         setName(data.name);
                         setDesc(data.description || "");
                         setCanCopyPlan(Boolean(data.canCopy));
+                        setCanEditPlan(Boolean(data.canEdit));
                         if (data.creator?.name) {
                             setCreatorName(data.creator.name);
                         }
@@ -177,6 +181,7 @@ export function PlanCreateClient() {
                     } else {
                         setWeeks([]);
                         setCanCopyPlan(false);
+                        setCanEditPlan(false);
                         setError(data.error || "Failed to load plan details.");
                     }
                 } catch (e) {
@@ -230,6 +235,14 @@ export function PlanCreateClient() {
         }
     }, [weeks, activeWeekIdx, activeWorkoutIdx]);
 
+    useEffect(() => {
+        workoutTabRefs.current[activeWorkoutIdx]?.scrollIntoView({
+            behavior: "smooth",
+            block: "nearest",
+            inline: "nearest",
+        });
+    }, [activeWorkoutIdx, weeks, activeWeekIdx]);
+
     const currentWeek = weeks[activeWeekIdx];
     const workouts = currentWeek?.workouts || [];
 
@@ -266,12 +279,6 @@ export function PlanCreateClient() {
         } finally {
             setCloningPlan(false);
         }
-    };
-
-    const copyCurrentDay = () => {
-        const workout = workouts[activeWorkoutIdx];
-        if (!workout) return;
-        copyText(formatWorkoutText(workout), "Day copied!");
     };
 
     const copyCurrentWeek = () => {
@@ -372,10 +379,8 @@ export function PlanCreateClient() {
             alert("A week can have a maximum of 7 training days.");
             return;
         }
-        const nextIdx = workouts.length;
-        
-        // Find next available day of week
-        let nextDow = nextIdx % 7;
+
+        let nextDow = workouts.length % 7;
         const usedDows = workouts.map(w => w.dayOfWeek);
         for (let i = 0; i < 7; i++) {
             if (!usedDows.includes(i)) {
@@ -384,13 +389,27 @@ export function PlanCreateClient() {
             }
         }
 
-        updateCurrentWorkouts([...workouts, {
-            name: `Day ${nextIdx + 1}`,
-            dayNumber: nextIdx + 1,
+        const newWorkout: LocalWorkout = {
+            name: `Day ${workouts.length + 1}`,
+            dayNumber: workouts.length + 1,
             dayOfWeek: nextDow,
-            exercises: []
-        }]);
-        setActiveWorkoutIdx(nextIdx);
+            exercises: [],
+        };
+
+        const sorted = [...workouts, newWorkout]
+            .sort((a, b) => {
+                const aDay = a.dayOfWeek ?? 999;
+                const bDay = b.dayOfWeek ?? 999;
+                return aDay - bDay;
+            })
+            .map((w, i) => ({ ...w, dayNumber: i + 1 }));
+
+        const newIdx = sorted.findIndex(
+            (w) => w.dayOfWeek === newWorkout.dayOfWeek && w.name === newWorkout.name
+        );
+
+        updateCurrentWorkouts(sorted);
+        setActiveWorkoutIdx(newIdx >= 0 ? newIdx : sorted.length - 1);
     };
 
     const removeWorkout = (idx: number) => {
@@ -597,9 +616,11 @@ export function PlanCreateClient() {
                 creatorName={creatorName}
                 weeks={weeks}
                 canCopyPlan={canCopyPlan}
+                canEditPlan={canEditPlan}
                 cloningPlan={cloningPlan}
                 onBack={() => router.back()}
                 onCopyPlan={() => void clonePlanToLibrary()}
+                onEditPlan={editId ? () => router.push(`/plans/create?id=${editId}`) : undefined}
             />
         );
     }
@@ -783,25 +804,38 @@ export function PlanCreateClient() {
                             {workouts.length} session{workouts.length === 1 ? "" : "s"}
                         </p>
                     </div>
-                    <button
-                        onClick={handleNextWeek}
-                        className={cn(
-                            "btn-icon w-8 h-8 rounded-lg shrink-0 border",
-                            activeWeekIdx === weeks.length - 1 && !isViewOnly
-                                ? "bg-brand-500/10 text-brand-400 border-brand-500/30 hover:bg-brand-500/20"
-                                : "bg-surface-elevated hover:bg-white/10 disabled:opacity-30"
+                    <div className="flex items-center gap-1.5 shrink-0">
+                        {!isViewOnly && weeks.length > 1 && (
+                            <button
+                                type="button"
+                                onClick={handleDeleteWeek}
+                                className="btn-icon w-8 h-8 rounded-lg border bg-surface-elevated text-danger/70 hover:text-danger hover:bg-danger/10 hover:border-danger/30"
+                                title="Delete week"
+                            >
+                                <Trash2 className="w-4 h-4" />
+                            </button>
                         )}
-                        title={activeWeekIdx === weeks.length - 1 && !isViewOnly ? "Clone & Add Next Week" : "Next Week"}
-                        disabled={activeWeekIdx === weeks.length - 1 && isViewOnly}
-                    >
-                        {activeWeekIdx === weeks.length - 1 && !isViewOnly ? <Plus className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
-                    </button>
+                        <button
+                            onClick={handleNextWeek}
+                            className={cn(
+                                "btn-icon w-8 h-8 rounded-lg border",
+                                activeWeekIdx === weeks.length - 1 && !isViewOnly
+                                    ? "bg-brand-500/10 text-brand-400 border-brand-500/30 hover:bg-brand-500/20"
+                                    : "bg-surface-elevated hover:bg-white/10 disabled:opacity-30"
+                            )}
+                            title={activeWeekIdx === weeks.length - 1 && !isViewOnly ? "Clone & Add Next Week" : "Next Week"}
+                            disabled={activeWeekIdx === weeks.length - 1 && isViewOnly}
+                        >
+                            {activeWeekIdx === weeks.length - 1 && !isViewOnly ? <Plus className="w-4 h-4" /> : <ArrowRight className="w-4 h-4" />}
+                        </button>
+                    </div>
                 </div>
 
                 <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
                     {workouts.map((w, i) => (
                         <button
                             key={i}
+                            ref={(el) => { workoutTabRefs.current[i] = el; }}
                             onClick={() => setActiveWorkoutIdx(i)}
                             className={cn(
                                 "shrink-0 flex items-center gap-2 px-3 py-2 rounded-xl border transition-all text-left min-w-[120px] max-w-[180px]",
@@ -835,16 +869,6 @@ export function PlanCreateClient() {
                     )}
                 </div>
 
-                {!isViewOnly && (
-                    <div className="flex justify-end">
-                        <button
-                            onClick={handleDeleteWeek}
-                            className="py-1 px-2 text-[10px] uppercase tracking-widest font-bold text-danger/70 hover:text-danger hover:bg-danger/10 rounded-lg transition-all"
-                        >
-                            Delete week
-                        </button>
-                    </div>
-                )}
             </div>
 
             <div>
@@ -1079,14 +1103,6 @@ export function PlanCreateClient() {
                                          </div>
                                     </div>
                                     <div className="flex items-center gap-1 ml-4 shrink-0">
-                                        <button
-                                            type="button"
-                                            onClick={copyCurrentDay}
-                                            className="btn-icon w-8 h-8 rounded-lg"
-                                            title="Copy this day to clipboard"
-                                        >
-                                            <Copy className="w-3.5 h-3.5" />
-                                        </button>
                                     {!isViewOnly && (
                                         <>
                                             <button onClick={() => duplicateWorkout(activeWorkoutIdx)} className="btn-icon w-8 h-8 rounded-lg" title="Duplicate day in plan">

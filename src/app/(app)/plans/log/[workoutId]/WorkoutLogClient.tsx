@@ -1030,7 +1030,7 @@ export function WorkoutLogClient({
     return (
         <div className="min-h-screen bg-surface flex flex-col pt-safe-area">
             {/* Header */}
-            <div className="flex items-center justify-between px-4 h-16 border-b border-surface-border glass fixed top-0 left-0 right-0 z-40 md:left-[var(--sidebar-width)]">
+            <div className="flex items-center justify-between px-4 h-16 border-b border-surface-border glass fixed top-[var(--maintenance-banner-height,0px)] left-0 right-0 z-40 md:left-[var(--sidebar-width)]">
                 <button 
                     onClick={handleDiscard} 
                     disabled={isDiscarding}

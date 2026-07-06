@@ -100,7 +100,35 @@ export async function GET(
         ? await canCopyUserPlan({ id: user.id, role: user.role }, planId, plan.creatorId)
         : false;
 
-    return NextResponse.json({ ...plan, canCopy });
+    let canEdit = isOwner || isAdmin;
+    if (!canEdit) {
+        const isCoachOfAssignee = await prisma.userPlan.findFirst({
+            where: {
+                planId: plan.id,
+                user: { coachId: user.id },
+            },
+        });
+        const isAssignee = await prisma.userPlan.findFirst({
+            where: { planId: plan.id, userId: user.id },
+        });
+        if (isAssignee) {
+            canEdit = true;
+        } else if (isCoachOfAssignee) {
+            const activeAssignment = await prisma.userPlan.findFirst({
+                where: {
+                    planId: plan.id,
+                    user: {
+                        coachId: user.id,
+                        isDeleted: false,
+                        isDeactivated: false,
+                    },
+                },
+            });
+            canEdit = Boolean(activeAssignment);
+        }
+    }
+
+    return NextResponse.json({ ...plan, canCopy, canEdit });
 }
 
 export async function PATCH(

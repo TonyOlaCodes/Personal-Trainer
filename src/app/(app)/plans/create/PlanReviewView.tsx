@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-    ChevronLeft, Dumbbell, CopyPlus, Loader2, ArrowLeft, ArrowRight, Moon,
+    ChevronLeft, Dumbbell, CopyPlus, Loader2, ArrowLeft, ArrowRight, Moon, Pencil,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -34,9 +34,11 @@ interface Props {
     creatorName: string | null;
     weeks: ReviewWeek[];
     canCopyPlan: boolean;
+    canEditPlan?: boolean;
     cloningPlan: boolean;
     onBack: () => void;
     onCopyPlan: () => void;
+    onEditPlan?: () => void;
 }
 
 function workoutForDay(week: ReviewWeek, dayOfWeek: number): ReviewWorkout | null {
@@ -68,9 +70,11 @@ export function PlanReviewView({
     creatorName,
     weeks,
     canCopyPlan,
+    canEditPlan = false,
     cloningPlan,
     onBack,
     onCopyPlan,
+    onEditPlan,
 }: Props) {
     const [activeWeekIdx, setActiveWeekIdx] = useState(0);
     const [selectedDay, setSelectedDay] = useState(0);
@@ -113,6 +117,17 @@ export function PlanReviewView({
                         </p>
                     </div>
                 </div>
+                <div className="flex items-center gap-2 shrink-0">
+                {canEditPlan && onEditPlan && (
+                    <button
+                        type="button"
+                        onClick={onEditPlan}
+                        className="btn-secondary h-10 px-3 sm:px-4 gap-2 shrink-0"
+                    >
+                        <Pencil className="w-4 h-4" />
+                        <span>Edit plan</span>
+                    </button>
+                )}
                 {canCopyPlan && (
                     <button
                         type="button"
@@ -128,6 +143,7 @@ export function PlanReviewView({
                         <span className="hidden sm:inline">{cloningPlan ? "Copying..." : "Copy plan"}</span>
                     </button>
                 )}
+                </div>
             </div>
 
             {(description || creatorName) && (

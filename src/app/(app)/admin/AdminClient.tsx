@@ -1035,7 +1035,7 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
                                 <div className="flex items-start justify-between gap-4">
                                     <div className="min-w-0">
                                         <div className="flex flex-wrap items-center gap-2">
-                                            <Link href={`/plans/create?id=${p.id}`} className="font-medium text-sm text-fg hover:text-brand-400 truncate">
+                                            <Link href={`/plans/create?id=${p.id}&view=true`} className="font-medium text-sm text-fg hover:text-brand-400 truncate">
                                                 {p.name}
                                             </Link>
                                             <button
@@ -1060,7 +1060,7 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
                                     </div>
                                     <div className="flex items-center gap-2 shrink-0">
                                         <span className="text-xs text-fg-muted">{p.userCount} active {p.userCount === 1 ? "user" : "users"}</span>
-                                        <Link href={`/plans/create?id=${p.id}`} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-surface-muted" title="Edit plan">
+                                        <Link href={`/plans/create?id=${p.id}&view=true`} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-surface-muted" title="View plan">
                                             <ChevronRight className="w-4 h-4 text-fg-subtle" />
                                         </Link>
                                         <button
