@@ -1,9 +1,13 @@
 "use client";
 
-import { Heart, Shield, Zap, Copy, Check, Info } from "lucide-react";
+import Image from "next/image";
+import { Heart, Shield, Zap, Copy, Check, Info, ExternalLink } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { siteConfig } from "@/lib/site";
+
+const REVOLUT_TAG = "@tonyola";
+const REVOLUT_LINK = "https://revolut.me/tonyola";
 
 export function DonateClient() {
     const [copied, setCopied] = useState<string | null>(null);
@@ -67,7 +71,51 @@ export function DonateClient() {
                 ))}
             </div>
 
-            <div className="max-w-2xl mx-auto">
+            <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="card p-8 space-y-8 bg-surface-card">
+                    <div className="space-y-1">
+                        <h3 className="text-xl font-black text-fg tracking-tight">Revolut</h3>
+                        <p className="text-xs text-fg-muted uppercase font-bold tracking-widest">Scan or send to tag</p>
+                    </div>
+
+                    <div className="flex flex-col items-center gap-6">
+                        <div className="rounded-2xl border border-surface-border bg-black p-4 shadow-lg">
+                            <Image
+                                src="/donate/revolut-qr.png"
+                                alt={`Revolut QR code for ${REVOLUT_TAG}`}
+                                width={240}
+                                height={240}
+                                className="rounded-xl"
+                                priority
+                            />
+                        </div>
+
+                        <div className="w-full group relative">
+                            <div className="p-5 bg-surface-elevated/50 rounded-2xl border border-surface-border transition-all group-hover:border-brand-500/40 text-center">
+                                <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1.5">Revolut tag</p>
+                                <p className="text-lg font-black text-fg">{REVOLUT_TAG}</p>
+                                <button
+                                    onClick={() => handleCopy(REVOLUT_TAG, "revolut")}
+                                    className="absolute top-4 right-4 text-brand-400 hover:text-brand-300 transition-colors"
+                                    aria-label="Copy Revolut tag"
+                                >
+                                    {copied === "revolut" ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+                                </button>
+                            </div>
+                        </div>
+
+                        <a
+                            href={REVOLUT_LINK}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn-primary w-full justify-center gap-2"
+                        >
+                            Open in Revolut
+                            <ExternalLink className="w-4 h-4" />
+                        </a>
+                    </div>
+                </div>
+
                 <div className="card p-8 space-y-8 bg-surface-card">
                     <div className="space-y-1">
                         <h3 className="text-xl font-black text-fg tracking-tight">Bank transfer</h3>
@@ -104,13 +152,15 @@ export function DonateClient() {
                             </div>
                         </div>
                     </div>
+                </div>
+            </div>
 
-                    <div className="p-4 bg-brand-400/5 rounded-2xl border border-brand-400/10 flex items-start gap-3">
-                        <Info className="w-4 h-4 text-brand-400 shrink-0 mt-0.5" />
-                        <p className="text-xs text-fg-muted leading-relaxed">
-                            Contributions are optional. For business enquiries or support, use the contact options in Settings.
-                        </p>
-                    </div>
+            <div className="max-w-4xl mx-auto">
+                <div className="p-4 bg-brand-400/5 rounded-2xl border border-brand-400/10 flex items-start gap-3">
+                    <Info className="w-4 h-4 text-brand-400 shrink-0 mt-0.5" />
+                    <p className="text-xs text-fg-muted leading-relaxed">
+                        Contributions are optional. For business enquiries or support, use the contact options in Settings.
+                    </p>
                 </div>
             </div>
         </div>
