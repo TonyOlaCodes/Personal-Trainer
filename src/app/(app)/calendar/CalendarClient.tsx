@@ -19,7 +19,9 @@ import {
     getPlanEndDateKey,
     getPlanProgramWeekNumber,
     getPlanScheduleMode,
+    getPlanStartDateKey,
     isDateAfterPlanEnd,
+    isDateBeforePlanStart,
     type PlanScheduleRevisionRecord,
 } from "@/lib/planSchedule";
 import { groupLogSetsByExercise, formatLoggedWeight } from "@/lib/logSetGrouping";
@@ -184,11 +186,13 @@ export function CalendarClient({
 
     const historicalMissedByDate = useMemo(() => {
         const map = new Map<string, { workoutId: string; workoutName: string }>();
+        const planStartKey = planStartedAt ? getPlanStartDateKey(planStartedAt) : null;
         for (const session of historicalMissedSessions) {
+            if (planStartKey && session.dateKey < planStartKey) continue;
             map.set(session.dateKey, session);
         }
         return map;
-    }, [historicalMissedSessions]);
+    }, [historicalMissedSessions, planStartedAt]);
 
     const [localExcusedKeys, setLocalExcusedKeys] = useState(excusedMissedWorkoutKeys);
     const [statusUpdating, setStatusUpdating] = useState(false);
@@ -256,6 +260,7 @@ export function CalendarClient({
 
     const resolvePlannedWorkoutForDate = useCallback((date: Date, dateKey?: string): PlanWorkout | null => {
         const key = dateKey ?? toDateKey(date);
+        const planStartKey = planStartedAt ? getPlanStartDateKey(planStartedAt) : null;
 
         const workoutFromLog = (): PlanWorkout | null => {
             const session = logMap[key]?.[0];
@@ -280,6 +285,10 @@ export function CalendarClient({
                 exercises: [],
             };
         };
+
+        if (planStartKey && isDateBeforePlanStart(planStartedAt!, key)) {
+            return workoutFromLog();
+        }
 
         if (!planStartedAt || serializedPlanWeeks.length === 0) {
             if (planStartedAt && planWeekCount > 1 && isDateAfterPlanEnd(planStartedAt, planWeekCount, key)) {
@@ -394,6 +403,7 @@ export function CalendarClient({
             router.refresh();
         } catch (err) {
             console.error("[CalendarClient] workout status update failed", err);
+            alert(err instanceof Error ? err.message : "Could not update workout status");
         } finally {
             setStatusUpdating(false);
         }
@@ -461,6 +471,7 @@ export function CalendarClient({
                             onClick={() => {
                                 const [y, m] = todayKey.split("-").map(Number);
                                 setView({ year: y, month: m - 1 });
+                                setSelectedDateKey(todayKey);
                             }}
                             className="h-8 rounded-xl border border-surface-border bg-surface px-4 text-[10px] font-black uppercase tracking-widest text-fg transition-all hover:bg-brand-950/30 hover:text-brand-400 active:scale-95"
                         >
@@ -500,9 +511,7 @@ export function CalendarClient({
                                 && isDateAfterPlanEnd(planStartedAt, planWeekCount, dateKey)
                             );
                             const isBeforePlan = Boolean(
-                                planStartedAt
-                                && planWeekCount > 1
-                                && dateKey < toDateKey(new Date(planStartedAt))
+                                planStartedAt && isDateBeforePlanStart(planStartedAt, dateKey)
                             );
                             const programWeek = planned ? getProgramWeekForDateKey(dateKey) : null;
 
@@ -511,7 +520,8 @@ export function CalendarClient({
                             if (dayLogs && dayLogs.length > 0) status = 'completed';
                             else if (dayInProgress) status = 'in-progress';
                             else if (planned) {
-                                if (isPast && isWorkoutExcused(dateKey, planned.id)) status = 'excused';
+                                if (isBeforePlan) status = 'rest';
+                                else if (isPast && isWorkoutExcused(dateKey, planned.id)) status = 'excused';
                                 else if (isPast) status = 'missed';
                                 else status = 'scheduled';
                             }

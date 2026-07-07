@@ -60,15 +60,23 @@ export function getPlanDayOffset(startedAt: Date | string, date: Date, dateKey?:
     return Math.floor((Date.UTC(dy, dm - 1, dd) - Date.UTC(sy, sm - 1, sd)) / 86400000);
 }
 
+export function getPlanStartDateKey(startedAt: Date | string): string {
+    return toDateKey(new Date(startedAt));
+}
+
+export function isDateBeforePlanStart(startedAt: Date | string, dateKey: string): boolean {
+    return dateKey < getPlanStartDateKey(startedAt);
+}
+
 /**
  * Map day offset to program week index.
- * - 1-week plans: always week 0 (repeats).
+ * - 1-week plans: always week 0 (repeats) once the plan has started.
  * - Multi-week plans: linear index, null after the program ends.
  */
 export function resolvePlanWeekIndex(weekCount: number, diffDays: number): number | null {
     if (weekCount <= 0) return null;
-    if (weekCount === 1) return 0;
     if (diffDays < 0) return null;
+    if (weekCount === 1) return 0;
     const weekIndex = Math.floor(diffDays / 7);
     if (weekIndex >= weekCount) return null;
     return weekIndex;
@@ -132,6 +140,8 @@ export function getPlannedWorkoutForDate(
     if (weeks.length === 0) return null;
 
     const diffDays = getPlanDayOffset(activeUserPlan.startedAt, date, dateKey);
+    if (diffDays < 0) return null;
+
     const weekIndex = resolvePlanWeekIndex(weeks.length, diffDays);
     if (weekIndex === null) return null;
 

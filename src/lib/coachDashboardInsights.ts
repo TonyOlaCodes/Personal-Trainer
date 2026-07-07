@@ -478,7 +478,7 @@ export async function loadCoachDashboardInsights(input: {
                     label: plannedWorkout.name,
                     dateKey,
                     dateLabel: formatUpcomingDateLabel(dateKey, todayKey),
-                    href: `/coach/client/${client.id}`,
+                    href: `/coach/calendar?clientId=${client.id}&date=${dateKey}`,
                 });
             }
 
@@ -494,7 +494,7 @@ export async function loadCoachDashboardInsights(input: {
                         label: "Weekly check-in",
                         dateKey,
                         dateLabel: formatUpcomingDateLabel(dateKey, todayKey),
-                        href: `/coach/client/${client.id}`,
+                        href: `/coach/client/${client.id}#client-check-ins`,
                     });
                 }
             }

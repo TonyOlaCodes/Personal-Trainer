@@ -8,10 +8,10 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  turbopack: {
+    rules: {},
+  },
   experimental: {
-    turbo: {
-      rules: {},
-    },
     serverActions: {
       bodySizeLimit: "12mb",
     },

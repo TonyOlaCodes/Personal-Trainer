@@ -9,6 +9,8 @@ import { defaultHomeForRole } from "@/lib/roles";
 
 export const metadata = { title: "Onboarding" };
 
+export const dynamic = "force-dynamic";
+
 export default async function OnboardingServerPage() {
     await ensureAppSchema();
     const { userId } = await auth();

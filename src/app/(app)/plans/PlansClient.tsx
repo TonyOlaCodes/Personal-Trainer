@@ -131,12 +131,23 @@ export function PlansClient({ plans, userRole, activeSession = null, coachClient
     const canPublishToProfile = !isCoach && localPlans.some((p) => p.isActive);
 
     const setActive = async (planId: string | null, weekStartDay?: number | null) => {
-        await fetch("/api/plans/activate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ planId, weekStartDay: weekStartDay ?? null }),
-        });
-        window.location.reload();
+        try {
+            const res = await fetch("/api/plans/activate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ planId, weekStartDay: weekStartDay ?? null }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                alert(data.error ?? "Could not update active plan");
+                return false;
+            }
+            window.location.reload();
+            return true;
+        } catch {
+            alert("Connection error");
+            return false;
+        }
     };
 
     const togglePlanVisibility = async (planId: string, isPublic: boolean) => {
@@ -340,7 +351,8 @@ export function PlansClient({ plans, userRole, activeSession = null, coachClient
                                 type="button"
                                 onClick={async () => {
                                     setActivateBusy(true);
-                                    await setActive(activatePlan.id, activateStartDay);
+                                    const ok = await setActive(activatePlan.id, activateStartDay);
+                                    if (!ok) setActivateBusy(false);
                                 }}
                                 disabled={activateBusy}
                                 className="btn-primary flex-1 inline-flex items-center justify-center gap-2"
@@ -560,13 +572,22 @@ export function PlansClient({ plans, userRole, activeSession = null, coachClient
                                 highlightedPlanId === plan.id && "ring-2 ring-brand-400 shadow-glow-brand-sm"
                             )}>
                                 <div className="flex items-start justify-between p-5 gap-4">
-                                    <Link href={`/plans/create?id=${plan.id}`} className="flex-1 min-w-0 flex items-start gap-4 hover:opacity-90">
-                                        <div className="w-10 h-10 rounded-xl bg-surface-muted flex items-center justify-center flex-shrink-0">
+                                    <div className="flex-1 min-w-0 flex items-start gap-4">
+                                        <Link
+                                            href={`/plans/create?id=${plan.id}`}
+                                            className="w-10 h-10 rounded-xl bg-surface-muted flex items-center justify-center flex-shrink-0 hover:opacity-90"
+                                            aria-label={`Open ${plan.name}`}
+                                        >
                                             <Dumbbell className="w-5 h-5 text-brand-400" />
-                                        </div>
+                                        </Link>
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center gap-2 mb-1">
-                                                <p className="font-semibold text-fg truncate">{plan.name}</p>
+                                                <Link
+                                                    href={`/plans/create?id=${plan.id}`}
+                                                    className="font-semibold text-fg truncate hover:text-brand-400 transition-colors"
+                                                >
+                                                    {plan.name}
+                                                </Link>
                                                 {plan.isActive && <span className="badge-brand text-[10px]">Active</span>}
                                                 {!isCoach && plan.type === "COACH_ASSIGNED" && (
                                                     <span className="badge-success text-[10px]">Coach</span>
@@ -622,7 +643,7 @@ export function PlansClient({ plans, userRole, activeSession = null, coachClient
                                                 )}
                                             </div>
                                         </div>
-                                    </Link>
+                                    </div>
                                     <div className="flex items-center gap-2 shrink-0 self-center">
                                         {!isCoach && (
                                             plan.isActive ? (

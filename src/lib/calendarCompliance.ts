@@ -1,5 +1,5 @@
 import { APP_TIMEZONE } from "@/lib/appTimezone";
-import { getPlannedWorkoutForDate, type ActiveUserPlanLike } from "@/lib/planSchedule";
+import { getPlannedWorkoutForDate, type ActiveUserPlanLike, isDateBeforePlanStart } from "@/lib/planSchedule";
 import { getLocalTimeParts } from "@/lib/coachNotificationSchedule";
 import { parseLogDate, toDateKey } from "@/lib/utils";
 
@@ -152,6 +152,8 @@ export function computeWorkoutCompliance(
     let due = 0;
 
     for (const dateKey of eachDateKeyInclusive(startKey, endKey)) {
+        if (isDateBeforePlanStart(activeUserPlan.startedAt, dateKey)) continue;
+
         const day = parseLogDate(dateKey);
         const planned = getPlannedWorkoutForDate(activeUserPlan, day, { today: referenceToday });
         if (!planned) continue;
@@ -172,6 +174,7 @@ export function computeWorkoutCompliance(
 
     for (const session of input.historicalMissedSessions ?? []) {
         if (session.dateKey < startKey || session.dateKey > endKey) continue;
+        if (isDateBeforePlanStart(activeUserPlan.startedAt, session.dateKey)) continue;
         const slotKey = `${session.dateKey}:${session.workoutId}`;
         if (countedSlots.has(slotKey)) continue;
 

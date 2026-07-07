@@ -206,12 +206,17 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
             });
             if (res.ok) {
                 const data = await res.json();
-                
-                await fetch("/api/coach/clients/plan", {
+
+                const assignRes = await fetch("/api/coach/clients/plan", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ clientId: client.id, planId: data.id }),
                 });
+                if (!assignRes.ok) {
+                    const assignData = await assignRes.json().catch(() => ({}));
+                    alert(assignData.error ?? "Plan imported but could not assign to this client.");
+                    return;
+                }
 
                 window.location.reload();
             } else {
@@ -1498,7 +1503,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
             </div>
 
             {/* Check-ins */}
-            <section className="space-y-4">
+            <section id="client-check-ins" className="space-y-4 scroll-mt-24">
                 <div className="flex items-center justify-between px-2">
                     <h3 className="heading-3 flex items-center gap-2 uppercase tracking-widest text-[11px] font-black text-success">
                         <Calendar className="w-4 h-4" />

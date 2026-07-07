@@ -37,6 +37,12 @@ export async function POST(req: Request) {
         target.setHours(0, 0, 0, 0);
         return target;
     }
+
+    function startOfToday(): Date {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        return today;
+    }
     const targetAssignment = planId
         ? await prisma.userPlan.findUnique({
             where: { userId_planId: { userId: user.id, planId } },
@@ -107,8 +113,10 @@ export async function POST(req: Request) {
 
         if (planId) {
             let reactivatedStartedAt: Date;
-            if (isSingleWeekPlan) {
-                reactivatedStartedAt = new Date();
+            if (switchingPlans) {
+                reactivatedStartedAt = chosenStartedAt ?? startOfToday();
+            } else if (isSingleWeekPlan) {
+                reactivatedStartedAt = startOfToday();
             } else if (chosenStartedAt) {
                 reactivatedStartedAt = chosenStartedAt;
             } else {
@@ -117,7 +125,7 @@ export async function POST(req: Request) {
                         targetAssignment!.startedAt.getTime(),
                         earliestCompletedLogForTarget.loggedAt.getTime()
                     ))
-                    : new Date();
+                    : startOfToday();
             }
 
             await tx.userPlan.update({

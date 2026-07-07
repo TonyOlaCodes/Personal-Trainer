@@ -11,6 +11,8 @@ import { APP_TIMEZONE } from "@/lib/appTimezone";
 
 export const metadata = { title: "Missed Workouts" };
 
+export const dynamic = "force-dynamic";
+
 function formatPageDateLabel(dateKey: string): string {
     const [y, m, d] = dateKey.split("-").map(Number);
     const date = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
