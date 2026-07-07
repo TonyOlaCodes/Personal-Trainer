@@ -342,8 +342,7 @@ export function computeWorkoutAdherence(input: WorkoutAdherenceInput): WorkoutAd
         return EMPTY_RESULT;
     }
 
-    const weekCount = activeUserPlan.plan.weeks.length;
-    const planWorkoutIds = collectPlanWorkoutIds(activeUserPlan);
+    const planWorkoutIds = collectPlanWorkoutIds(input.activeUserPlan);
     const excusedKeys = new Set(input.excusedMissedWorkoutKeys ?? []);
     const historicalMissedSessions = filterHistoricalMissedForActivePlan(
         input.historicalMissedSessions ?? [],
@@ -388,7 +387,8 @@ function toCompletedLogRows(
 }
 
 export async function getWorkoutAdherenceForUser(userId: string): Promise<WorkoutAdherenceResult> {
-    const userPlan = await prisma.userPlan.findFirst({
+    try {
+        const userPlan = await prisma.userPlan.findFirst({
         where: { userId, isActive: true },
         select: {
             startedAt: true,
@@ -449,6 +449,10 @@ export async function getWorkoutAdherenceForUser(userId: string): Promise<Workou
         excusedMissedWorkoutKeys,
         historicalMissedSessions,
     });
+    } catch (error) {
+        console.error("[getWorkoutAdherenceForUser] Failed for user", userId, error);
+        return EMPTY_RESULT;
+    }
 }
 
 /** Current plan-adherence streak for profiles, dashboard, and progress. */

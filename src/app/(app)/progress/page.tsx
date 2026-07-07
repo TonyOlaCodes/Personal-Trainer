@@ -58,7 +58,7 @@ export default async function ProgressPage() {
             try {
                 user = await prisma.user.findUnique({
                     where: { clerkId: userId },
-                    select: { id: true, role: true, hiddenGoals: true }
+                    select: { id: true, role: true, coachId: true, hiddenGoals: true }
                 });
             } catch (dbErr2) {
                 console.error("[ProgressPage] Failed to fetch user completely:", dbErr2);
