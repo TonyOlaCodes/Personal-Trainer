@@ -20,8 +20,9 @@ import {
     isDismissedAlertCurrentlyHidden,
     isMissedWorkoutExcused,
 } from "@/lib/coachAttentionActions";
-import { getPlannedWorkoutForDate, type ActiveUserPlanLike } from "@/lib/planSchedule";
+import { getPlannedWorkoutForDate, getPlanStartDateKey, type ActiveUserPlanLike } from "@/lib/planSchedule";
 import { loadPlanScheduleRevisionsByPlanIds } from "@/lib/planScheduleHistory";
+import { loadHistoricalMissedSessionsByUserIds, filterHistoricalMissedForActivePlan } from "@/lib/planMissedSessionHistory";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
 import { formatCheckInDueDate } from "@/lib/checkInLabels";
 import {
@@ -198,6 +199,7 @@ export async function loadCoachDashboardInsights(input: {
         unreadByPeer,
         missedWorkoutsYesterday,
         attentionActions,
+        historicalMissedByUserId,
     ] = await Promise.all([
         activeClientIds.length > 0
             ? prisma.userPlan.findMany({
@@ -265,6 +267,7 @@ export async function loadCoachDashboardInsights(input: {
         getUnreadCountsByPeer(input.coachId, activeClientIds),
         getMissedWorkoutsYesterdayForCoach(input.coachId),
         getCoachAttentionActions(input.coachId),
+        loadHistoricalMissedSessionsByUserIds(activeClientIds),
     ]);
 
     const planIds = [...new Set(userPlans.map((row) => row.plan.id))];
@@ -272,7 +275,7 @@ export async function loadCoachDashboardInsights(input: {
 
     const planByUserId = new Map(userPlans.map((row) => [row.userId, row]));
     const planStartedAtByUser = new Map(
-        userPlans.map((row) => [row.userId, row.startedAt.getTime()])
+        userPlans.map((row) => [row.userId, parseLogDate(getPlanStartDateKey(row.startedAt)).getTime()])
     );
     const todayCompletedByUser = new Map<string, Set<string>>();
     for (const log of todayCompletedLogs) {
@@ -390,11 +393,16 @@ export async function loadCoachDashboardInsights(input: {
             excludeTodayUntilLogged: true,
         });
 
-        const workoutStreak = activeUserPlan
+        const workoutStreak = activeUserPlan && userPlan
             ? computeWorkoutAdherence({
                 activeUserPlan,
                 completedLogs: adherenceLogsByUser.get(client.id) ?? [],
                 excusedMissedWorkoutKeys: getExcusedMissedWorkoutKeysForClient(attentionActions, client.id),
+                historicalMissedSessions: filterHistoricalMissedForActivePlan(
+                    historicalMissedByUserId.get(client.id) ?? [],
+                    userPlan.plan.id,
+                    userPlan.startedAt
+                ),
                 today,
             }).currentStreak
             : 0;

@@ -51,6 +51,7 @@ interface AdminCode {
     planName?: string | null;
     createdBy?: string | null;
     createdById?: string | null;
+    createdByStatus?: "ACTIVE" | "DEACTIVATED" | "DELETED" | null;
     usedBy?: string | null;
     usedByName?: string | null;
     usedByEmail?: string | null;
@@ -241,6 +242,53 @@ function codeTypeBadgeClass(upgradesTo: string) {
     if (upgradesTo === "COACH") return "bg-warning-500/10 text-warning border border-warning/20";
     if (upgradesTo === "GENERAL_PREMIUM") return "bg-success/10 text-success border border-success/20";
     return "bg-brand-500/10 text-brand-400 border border-brand/20";
+}
+
+function CodeUserLink({
+    label,
+    name,
+    userId,
+    status,
+    className,
+    tone = "brand",
+}: {
+    label: string;
+    name: string;
+    userId?: string | null;
+    status?: "ACTIVE" | "DEACTIVATED" | "DELETED" | null;
+    className?: string;
+    tone?: "brand" | "success";
+}) {
+    const statusSuffix = status === "DEACTIVATED" ? " (deactivated)" : status === "DELETED" ? " (deleted)" : "";
+    const content = `${label}: ${name}${statusSuffix}`;
+
+    if (userId && status !== "DELETED") {
+        return (
+            <Link
+                href={getPublicProfileHref(userId)}
+                className={cn(
+                    "hover:underline transition-colors",
+                    status === "DEACTIVATED"
+                        ? "text-danger hover:text-danger/80"
+                        : tone === "success"
+                            ? "text-success hover:text-success/80"
+                            : "text-brand-400 hover:text-brand-300",
+                    className
+                )}
+            >
+                {content}
+            </Link>
+        );
+    }
+
+    return (
+        <span className={cn(
+            status === "DELETED" ? "text-fg-subtle" : status === "DEACTIVATED" ? "text-danger" : tone === "success" ? "text-success" : "text-fg-subtle",
+            className
+        )}>
+            {content}
+        </span>
+    );
 }
 
 function codeStatusInput(code: AdminCode) {
@@ -1238,30 +1286,29 @@ export function AdminClient({ users: initialUsers, coaches, plans: initialPlans,
                                             <p className="text-[10px] text-fg-muted font-bold uppercase tracking-widest mt-1">
                                                 {c.planName ? c.planName : "Open Entry"} · {formatDate(c.createdAt)}
                                                 {c.createdBy && (
-                                                    <span className="text-fg-subtle"> · Created by {c.createdBy}</span>
+                                                    <>
+                                                        {" · "}
+                                                        <CodeUserLink
+                                                            label="Created by"
+                                                            name={c.createdBy}
+                                                            userId={c.createdById}
+                                                            status={c.createdByStatus}
+                                                            className="text-[10px] font-bold uppercase tracking-widest"
+                                                        />
+                                                    </>
                                                 )}
                                             </p>
                                             {c.usedBy && (
                                                 <div className="flex items-center gap-1.5 mt-1">
                                                     <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
-                                                    {c.usedById && c.usedByStatus !== "DELETED" ? (
-                                                        <Link 
-                                                            href={getPublicProfileHref(c.usedById)}
-                                                            className={cn(
-                                                                "text-[10px] font-black uppercase tracking-widest hover:underline",
-                                                                c.usedByStatus === "DEACTIVATED" ? "text-danger" : "text-success"
-                                                            )}
-                                                        >
-                                                            Claimed: {c.usedBy}{c.usedByStatus === "DEACTIVATED" ? " (deactivated)" : ""}
-                                                        </Link>
-                                                    ) : (
-                                                        <p className={cn(
-                                                            "text-[10px] font-black uppercase tracking-widest",
-                                                            c.usedByStatus === "DELETED" ? "text-fg-subtle" : "text-success"
-                                                        )}>
-                                                            Claimed: {c.usedBy}{c.usedByStatus === "DELETED" ? " (deleted)" : ""}
-                                                        </p>
-                                                    )}
+                                                    <CodeUserLink
+                                                        label="Claimed"
+                                                        name={c.usedBy}
+                                                        userId={c.usedById}
+                                                        status={c.usedByStatus}
+                                                        tone="success"
+                                                        className="text-[10px] font-black uppercase tracking-widest"
+                                                    />
                                                 </div>
                                             )}
                                         </div>

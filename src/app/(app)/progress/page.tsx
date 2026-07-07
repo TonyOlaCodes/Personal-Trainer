@@ -10,6 +10,7 @@ import { serializePlanWeeksForSchedule, loadPlanScheduleRevisions } from "@/lib/
 import { resolvePlannedWorkoutWithExercisesForDate } from "@/lib/plannedWorkoutResolve";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
 import { canAccessCheckIns } from "@/lib/roles";
+import { getWorkoutStreak } from "@/lib/workoutAdherenceStreak";
 
 export const metadata = {
     title: "Progress",
@@ -26,6 +27,7 @@ export default async function ProgressPage() {
             user = await prisma.user.findUnique({ 
                 where: { clerkId: userId },
                 select: {
+                    id: true,
                     role: true,
                     coachId: true,
                     hiddenGoals: true,
@@ -56,7 +58,7 @@ export default async function ProgressPage() {
             try {
                 user = await prisma.user.findUnique({
                     where: { clerkId: userId },
-                    select: { role: true, hiddenGoals: true }
+                    select: { id: true, role: true, hiddenGoals: true }
                 });
             } catch (dbErr2) {
                 console.error("[ProgressPage] Failed to fetch user completely:", dbErr2);
@@ -106,11 +108,14 @@ export default async function ProgressPage() {
             }
         }
 
+        const streak = await getWorkoutStreak(user.id);
+
         return (
             <div className="bg-surface-base min-h-screen">
                 <TopBar 
                     title="Progress" 
-                    subtitle="Am I improving?" 
+                    subtitle="Am I improving?"
+                    streak={streak}
                 />
                 <main className="animate-fade-in">
                     <ProgressClient
@@ -118,6 +123,7 @@ export default async function ProgressPage() {
                         hiddenGoals={hiddenGoals}
                         todayWorkoutHref={todayWorkoutHref}
                         canAccessCheckIns={canAccessCheckIns(user.role, user.coachId)}
+                        workoutStreak={streak}
                     />
                 </main>
             </div>

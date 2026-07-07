@@ -1,14 +1,16 @@
 import { randomUUID } from "crypto";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { APP_TIMEZONE } from "@/lib/appTimezone";
 import { getLocalTimeParts } from "@/lib/coachNotificationSchedule";
 import { getClientAttentionActions, getExcusedMissedWorkoutKeys } from "@/lib/coachAttentionActions";
-import { getPlannedWorkoutForDate, type ActiveUserPlanLike } from "@/lib/planSchedule";
+import { getPlannedWorkoutForDate, isDateBeforePlanStart, type ActiveUserPlanLike } from "@/lib/planSchedule";
+import { isRestPlanWorkout } from "@/lib/planTrainingTarget";
 import type { ScheduleWeekSnapshot } from "@/lib/planScheduleHistory";
 import { parseLogDate, toDateKey } from "@/lib/utils";
 
 export interface HistoricalMissedSession {
+    planId?: string;
     dateKey: string;
     workoutId: string;
     workoutName: string;
@@ -127,7 +129,7 @@ export async function snapshotMissedSessionsForPlanChange(
 
         for (const dateKey of eachDateKeyInclusive(startedKey, yesterdayKey)) {
             const planned = getPlannedWorkoutForDate(schedulePlan, parseLogDate(dateKey), { today });
-            if (!planned) continue;
+            if (!planned || isRestPlanWorkout(planned)) continue;
 
             const slotKey = `${dateKey}:${planned.id}`;
             if (completedKeys.has(slotKey) || excusedKeys.has(slotKey)) continue;
@@ -151,25 +153,78 @@ export async function snapshotMissedSessionsForPlanChange(
     }
 }
 
-export async function loadHistoricalMissedSessions(userId: string): Promise<HistoricalMissedSession[]> {
+export async function loadHistoricalMissedSessions(
+    userId: string,
+    options?: { planId?: string }
+): Promise<HistoricalMissedSession[]> {
     await ensurePlanMissedSessionHistoryTable();
 
     const rows = await prisma.$queryRaw<Array<{
+        planId: string;
         dateKey: string;
         workoutId: string;
         workoutName: string;
     }>>`
-        SELECT "dateKey", "workoutId", "workoutName"
+        SELECT "planId", "dateKey", "workoutId", "workoutName"
         FROM "plan_missed_session_history"
         WHERE "userId" = ${userId}
+        ${options?.planId ? Prisma.sql`AND "planId" = ${options.planId}` : Prisma.empty}
         ORDER BY "dateKey" ASC
     `;
 
     return rows.map((row) => ({
+        planId: row.planId,
         dateKey: row.dateKey,
         workoutId: row.workoutId,
         workoutName: row.workoutName,
     }));
+}
+
+export async function loadHistoricalMissedSessionsByUserIds(
+    userIds: string[]
+): Promise<Map<string, HistoricalMissedSession[]>> {
+    const result = new Map<string, HistoricalMissedSession[]>();
+    if (userIds.length === 0) return result;
+
+    await ensurePlanMissedSessionHistoryTable();
+
+    const rows = await prisma.$queryRaw<Array<{
+        userId: string;
+        planId: string;
+        dateKey: string;
+        workoutId: string;
+        workoutName: string;
+    }>>`
+        SELECT "userId", "planId", "dateKey", "workoutId", "workoutName"
+        FROM "plan_missed_session_history"
+        WHERE "userId" IN (${Prisma.join(userIds.map((id) => Prisma.sql`${id}`))})
+        ORDER BY "dateKey" ASC
+    `;
+
+    for (const row of rows) {
+        const sessions = result.get(row.userId) ?? [];
+        sessions.push({
+            planId: row.planId,
+            dateKey: row.dateKey,
+            workoutId: row.workoutId,
+            workoutName: row.workoutName,
+        });
+        result.set(row.userId, sessions);
+    }
+
+    return result;
+}
+
+export function filterHistoricalMissedForActivePlan(
+    sessions: HistoricalMissedSession[],
+    planId: string,
+    startedAt: Date
+): HistoricalMissedSession[] {
+    return sessions.filter(
+        (session) =>
+            (!session.planId || session.planId === planId)
+            && !isDateBeforePlanStart(startedAt, session.dateKey)
+    );
 }
 
 export function historicalMissedSessionsByDate(

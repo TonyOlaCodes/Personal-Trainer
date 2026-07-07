@@ -73,13 +73,13 @@ export const ACHIEVEMENT_DEFINITIONS: AchievementDefinition[] = [
     { id: "workouts-250", title: "250 Workouts Completed", description: "Complete 250 training sessions", rarity: "epic", icon: "dumbbell", target: 250, progressKey: "workoutsCompleted" },
     { id: "workouts-500", title: "500 Workouts Completed", description: "Complete 500 training sessions", rarity: "legendary", icon: "dumbbell", target: 500, progressKey: "workoutsCompleted" },
 
-    { id: "streak-3", title: "3 Workout Streak", description: "Complete 3 scheduled workouts in a row without missing one", rarity: "common", icon: "flame", target: 3, progressKey: "maxAdherenceStreak" },
-    { id: "streak-7", title: "7 Workout Streak", description: "Complete 7 scheduled workouts in a row without missing one", rarity: "common", icon: "flame", target: 7, progressKey: "maxAdherenceStreak" },
-    { id: "streak-14", title: "14 Workout Streak", description: "Complete 14 scheduled workouts in a row without missing one", rarity: "rare", icon: "flame", target: 14, progressKey: "maxAdherenceStreak" },
-    { id: "streak-30", title: "30 Workout Streak", description: "Complete 30 scheduled workouts in a row without missing one", rarity: "rare", icon: "flame", target: 30, progressKey: "maxAdherenceStreak" },
-    { id: "streak-50", title: "50 Workout Streak", description: "Complete 50 scheduled workouts in a row without missing one", rarity: "epic", icon: "flame", target: 50, progressKey: "maxAdherenceStreak" },
-    { id: "streak-100", title: "100 Workout Streak", description: "Complete 100 scheduled workouts in a row without missing one", rarity: "epic", icon: "flame", target: 100, progressKey: "maxAdherenceStreak" },
-    { id: "streak-365", title: "365 Workout Streak", description: "Complete 365 scheduled workouts in a row without missing one", rarity: "legendary", icon: "flame", target: 365, progressKey: "maxAdherenceStreak" },
+    { id: "streak-3", title: "3 Day Streak", description: "Keep a 3-day streak by completing scheduled workouts or taking planned rest days without missing a session", rarity: "common", icon: "flame", target: 3, progressKey: "maxAdherenceStreak" },
+    { id: "streak-7", title: "7 Day Streak", description: "Keep a 7-day streak by completing scheduled workouts or taking planned rest days without missing a session", rarity: "common", icon: "flame", target: 7, progressKey: "maxAdherenceStreak" },
+    { id: "streak-14", title: "14 Day Streak", description: "Keep a 14-day streak by completing scheduled workouts or taking planned rest days without missing a session", rarity: "rare", icon: "flame", target: 14, progressKey: "maxAdherenceStreak" },
+    { id: "streak-30", title: "30 Day Streak", description: "Keep a 30-day streak by completing scheduled workouts or taking planned rest days without missing a session", rarity: "rare", icon: "flame", target: 30, progressKey: "maxAdherenceStreak" },
+    { id: "streak-50", title: "50 Day Streak", description: "Keep a 50-day streak by completing scheduled workouts or taking planned rest days without missing a session", rarity: "epic", icon: "flame", target: 50, progressKey: "maxAdherenceStreak" },
+    { id: "streak-100", title: "100 Day Streak", description: "Keep a 100-day streak by completing scheduled workouts or taking planned rest days without missing a session", rarity: "epic", icon: "flame", target: 100, progressKey: "maxAdherenceStreak" },
+    { id: "streak-365", title: "365 Day Streak", description: "Keep a 365-day streak by completing scheduled workouts or taking planned rest days without missing a session", rarity: "legendary", icon: "flame", target: 365, progressKey: "maxAdherenceStreak" },
 
     // Check-ins
     { id: "checkins-5", title: "5 Check-ins", description: "Submit 5 weekly check-ins", rarity: "common", icon: "clipboard", target: 5, progressKey: "checkIns" },

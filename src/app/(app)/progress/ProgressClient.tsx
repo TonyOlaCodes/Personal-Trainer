@@ -19,6 +19,7 @@ import { useScrollLock } from "@/hooks/useScrollLock";
 import { workoutFeelingEmoji } from "@/lib/workoutFeeling";
 import { PremiumLockScreen } from "@/components/shared/PremiumLockScreen";
 import { ReturnLink } from "@/components/shared/ReturnLink";
+import { StreakBadge } from "@/components/shared/StreakBadge";
 import { ExerciseHistoryTooltipContent } from "@/components/shared/ExerciseHistoryTooltip";
 import { deriveOneRMFromBestSet } from "@/lib/exerciseHistory";
 import { MAX_PINNED_EXERCISES, normalizePinnedExercises, orderExerciseNames } from "@/lib/pinnedExercises";
@@ -30,6 +31,7 @@ interface Props {
     hiddenGoals: string[];
     todayWorkoutHref?: string | null;
     canAccessCheckIns?: boolean;
+    workoutStreak?: number;
 }
 
 type BodyweightHistoryPoint = { date: string; dateKey: string; weight: number };
@@ -203,7 +205,7 @@ function isWeightChangeTowardGoal(
     }
 }
 
-export function ProgressClient({ userRole, hiddenGoals, todayWorkoutHref = null, canAccessCheckIns = false }: Props) {
+export function ProgressClient({ userRole, hiddenGoals, todayWorkoutHref = null, canAccessCheckIns = false, workoutStreak = 0 }: Props) {
     const isPremium = ["PREMIUM", "GENERAL_PREMIUM", "COACH", "SUPER_ADMIN"].includes(userRole);
     const showFreeAccessLock = !isPremium;
     const [data, setData] = useState<any>(null);
@@ -441,6 +443,25 @@ export function ProgressClient({ userRole, hiddenGoals, todayWorkoutHref = null,
                     Weekly Overview
                 </h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                    {/* Plan streak */}
+                    <div className="card p-5 flex items-center gap-4">
+                        <div className="w-14 h-14 rounded-2xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center shrink-0">
+                            {workoutStreak > 0 ? (
+                                <StreakBadge streak={workoutStreak} size="lg" />
+                            ) : (
+                                <Flame className="w-6 h-6 text-orange-500/40" />
+                            )}
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest">Plan Streak</p>
+                            <p className="text-xs text-fg-muted mt-0.5">
+                                {workoutStreak > 0
+                                    ? `${workoutStreak} day${workoutStreak === 1 ? "" : "s"} without missing a scheduled workout`
+                                    : "Complete workouts or rest days to build your streak"}
+                            </p>
+                        </div>
+                    </div>
+
                     {/* Consistency Ring */}
                     <div className="card p-5 flex items-center gap-4">
                         <div className="relative w-14 h-14 shrink-0">

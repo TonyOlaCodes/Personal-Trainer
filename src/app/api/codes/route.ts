@@ -59,6 +59,13 @@ export async function GET(req: Request) {
                 : c.generator.name ?? c.generator.email)
             : null,
         createdById: c.generator?.id ?? null,
+        createdByStatus: c.generator
+            ? (accountStatusMap.get(c.generator.id)?.isDeleted
+                ? "DELETED"
+                : accountStatusMap.get(c.generator.id)?.isDeactivated
+                    ? "DEACTIVATED"
+                    : "ACTIVE")
+            : null,
         usedByName: c.usedBy
             ? (accountStatusMap.get(c.usedBy.id)?.isDeleted
                 ? accountStatusMap.get(c.usedBy.id)?.deletedName ?? c.usedBy.name

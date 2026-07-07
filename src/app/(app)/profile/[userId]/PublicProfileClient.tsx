@@ -595,7 +595,7 @@ export function PublicProfileClient({ userId }: Props) {
                     {profile.streak != null && profile.streak > 0 && (
                         <div className="card p-4 flex items-center gap-3 flex-1 min-w-[140px]">
                             <StreakBadge streak={profile.streak} size="md" />
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-fg-subtle">Workout streak</p>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-fg-subtle">Plan streak</p>
                         </div>
                     )}
                     {profile.totalWorkouts != null && profile.totalWorkouts > 0 && (
