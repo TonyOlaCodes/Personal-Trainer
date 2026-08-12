@@ -236,6 +236,7 @@ export function ExerciseAutocomplete({
                 <div
                     className="min-h-0 flex-1 overflow-y-auto overscroll-contain touch-pan-y"
                     style={{ WebkitOverflowScrolling: "touch" }}
+                    data-allow-scroll="true"
                     onTouchMove={(e) => e.stopPropagation()}
                     onWheel={(e) => e.stopPropagation()}
                 >

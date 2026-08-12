@@ -12,6 +12,7 @@ import { notifyWorkoutStatsChanged } from "@/lib/workoutStatsRefresh";
 import { isCardio, ExerciseAutocomplete } from "@/components/shared/ExerciseAutocomplete";
 import { WorkoutFeelingPicker } from "@/components/shared/WorkoutFeelingPicker";
 import { useScrollLock } from "@/hooks/useScrollLock";
+import { useIsolateScroll } from "@/hooks/useIsolateScroll";
 import { useVisualViewport } from "@/hooks/useVisualViewportHeight";
 import { exerciseIdentityKey } from "@/lib/exerciseIdentity";
 import {
@@ -399,7 +400,9 @@ export function WorkoutLogClient({
     const isCompletingRef = useRef(false);
 
     const modalOpen = Boolean(previewExercise) || isSubstituting !== null || isAddingExercise || showFinishModal;
+    const exercisePickerOpen = isSubstituting !== null || isAddingExercise;
     useScrollLock(modalOpen);
+    useIsolateScroll(exercisePickerOpen);
 
     useEffect(() => {
         setPreviewVideoStarted(false);
@@ -1175,8 +1178,8 @@ export function WorkoutLogClient({
             <div
                 className={cn(
                     "flex-1 p-4 pt-20 pb-20 no-scrollbar md:ml-[var(--sidebar-width)] md:pb-28",
-                    isSubstituting || isAddingExercise || showFinishModal || previewExercise
-                        ? "overflow-hidden overscroll-none"
+                    exercisePickerOpen || showFinishModal || previewExercise
+                        ? "overflow-hidden overscroll-none touch-none"
                         : "overflow-y-auto"
                 )}
             >
@@ -1705,7 +1708,7 @@ export function WorkoutLogClient({
                     }
                     onClick={closeExercisePicker}
                     onTouchMove={(e) => {
-                        // Block background scroll while the sheet is open.
+                        // Only the results list (data-allow-scroll) may scroll.
                         if (e.target === e.currentTarget) e.preventDefault();
                     }}
                 >
