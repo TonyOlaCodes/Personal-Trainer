@@ -787,6 +787,29 @@ export function WorkoutLogClient({
         void flushProgressSaves();
     };
 
+    const muscleBreakdown = useMemo(
+        () => buildWorkoutMuscleBreakdown(activeExercises),
+        [activeExercises]
+    );
+    const viewportHeight = useVisualViewportHeight();
+
+    const updateExerciseNote = (exerciseId: string, text: string) => {
+        const clipped = text.slice(0, EXERCISE_NOTE_MAX_LENGTH);
+        setExerciseNotes((prev) => {
+            const next = { ...prev, [exerciseId]: clipped };
+            exerciseNotesRef.current = next;
+            return next;
+        });
+        if (activeLogId) {
+            // Queue after state settles; notes ride on the next snapshot via ref.
+            pendingProgressSaveRef.current = {
+                logs,
+                exercises: activeExercises,
+            };
+            void flushProgressSaves();
+        }
+    };
+
     const updateSet = (exId: string, setIdx: number, updates: Partial<SetLog>) => {
         setLogs((prev) => {
             const currentSet = prev[exId][setIdx];
@@ -985,6 +1008,7 @@ export function WorkoutLogClient({
                     status: "COMPLETED",
                     loggedAt: toLoggedAtIso(logDate),
                     sets: flattenedSets,
+                    exerciseNotes: buildExerciseNotesPayload(),
                     ...logSubjectFields,
                 }),
             });
@@ -1151,12 +1175,19 @@ export function WorkoutLogClient({
                     )}
 
                     {!sessionActive && (
-                        <div className="card p-4 border-brand-500/20 bg-brand-950/10">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">Workout preview</p>
-                            <p className="text-sm text-fg-muted mt-1">
-                                Review sets below, then start when you&apos;re ready.
-                            </p>
+                        <div className="card p-4 border-brand-500/20 bg-brand-950/10 space-y-3">
+                            <div>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">Workout preview</p>
+                                <p className="text-sm text-fg-muted mt-1">
+                                    Review sets below, then start when you&apos;re ready.
+                                </p>
+                            </div>
+                            <MuscleMap breakdown={muscleBreakdown} />
                         </div>
+                    )}
+
+                    {sessionActive && (
+                        <MuscleChips breakdown={muscleBreakdown} className="px-1" />
                     )}
 
                     {showWorkoutInputHint && sessionActive && (
@@ -1170,6 +1201,9 @@ export function WorkoutLogClient({
                         const hasPreview = !!(media?.videoUrl || media?.instructions);
                         const cardio = isCardio(ex.name, ex.muscleGroup);
                         const targetSummary = getExerciseTargetSummary(ex, cardio);
+                        const previous = previousSessionFor(ex.name);
+                        const noteOpen = openNoteExerciseId === ex.id || Boolean(exerciseNotes[ex.id]?.trim());
+                        const noteText = exerciseNotes[ex.id] ?? "";
 
                         return (
                         <div key={ex.id} id={`exercise-${ex.id}`} className="card p-4 space-y-4 animate-slide-up">
@@ -1214,6 +1248,18 @@ export function WorkoutLogClient({
                                     </div>
                                 )}
 
+                                {previous && previous.sets.length > 0 && (
+                                    <div className="rounded-lg border border-surface-border/60 bg-surface-muted/30 px-2.5 py-2">
+                                        <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">
+                                            Last session
+                                            {previous.dateKey ? ` · ${formatDate(previous.dateKey)}` : ""}
+                                        </p>
+                                        <p className="text-[11px] font-semibold text-fg-muted mt-0.5 leading-relaxed">
+                                            {previous.sets.map((set) => formatPreviousSetLine(set)).join("  ·  ")}
+                                        </p>
+                                    </div>
+                                )}
+
                                 {sessionActive && (
                                     <div className="flex items-center gap-2 pt-1">
                                         <button
@@ -1225,12 +1271,37 @@ export function WorkoutLogClient({
                                         </button>
                                         <button
                                             type="button"
+                                            onClick={() =>
+                                                setOpenNoteExerciseId((id) => (id === ex.id ? null : ex.id))
+                                            }
+                                            className={cn(
+                                                "text-[10px] font-black uppercase px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5",
+                                                noteText.trim()
+                                                    ? "text-brand-400 bg-brand-400/10"
+                                                    : "text-fg-subtle hover:text-fg-muted bg-surface-muted/40 hover:bg-surface-muted/70"
+                                            )}
+                                        >
+                                            <StickyNote className="w-3 h-3" /> Note
+                                        </button>
+                                        <button
+                                            type="button"
                                             onClick={() => removeExercise(ex.id)}
                                             className="text-[10px] font-black uppercase text-danger/40 hover:text-danger bg-danger/5 hover:bg-danger/10 px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5"
                                         >
                                             <Trash2 className="w-3 h-3" /> Delete
                                         </button>
                                     </div>
+                                )}
+
+                                {sessionActive && noteOpen && (
+                                    <textarea
+                                        value={noteText}
+                                        onChange={(e) => updateExerciseNote(ex.id, e.target.value)}
+                                        rows={2}
+                                        maxLength={EXERCISE_NOTE_MAX_LENGTH}
+                                        placeholder="Technique, machine setting, pain, cue for next time…"
+                                        className="w-full resize-none rounded-lg border border-surface-border/70 bg-surface-elevated/80 px-2.5 py-2 text-xs text-fg placeholder:text-fg-subtle focus:outline-none focus:ring-1 focus:ring-brand-500"
+                                    />
                                 )}
                             </div>
 
@@ -1276,16 +1347,27 @@ export function WorkoutLogClient({
                                 </div>
 
                                 {logs[ex.id]?.map((set, sIdx) => {
-                                    const lastWeightPlaceholder = getWeightPlaceholder(ex.id, ex.name, set.setNumber);
-                                    const lastRepsPlaceholder = getRepsPlaceholder(ex.id, ex.name, set.setNumber);
+                                    const lastWeightPlaceholder = getWeightPlaceholder(ex.name, set.setNumber);
+                                    const lastRepsPlaceholder = getRepsPlaceholder(ex.name, set.setNumber);
                                     const weightPlaceholder = lastWeightPlaceholder || formatTargetWeight(ex.weightTargetKg);
                                     const repsPlaceholder = lastRepsPlaceholder || ex.reps?.trim() || "";
-                                    const rpePlaceholder = getRpePlaceholder(ex.id, ex.name, set.setNumber);
+                                    const rpePlaceholder = getRpePlaceholder(ex.name, set.setNumber);
                                     const displayWeight = set.weightKg || (sessionActive ? "" : lastWeightPlaceholder);
                                     const displayReps = set.reps > 0 ? set.reps : (sessionActive ? "" : lastRepsPlaceholder);
                                     const weightNum = parseFloat(String(displayWeight)) || 0;
                                     const repsNum = typeof displayReps === "number" ? displayReps : parseInt(String(displayReps), 10) || 0;
                                     const est1RM = !cardio && !set.isWarmup && weightNum > 0 && repsNum > 0 ? calculateOneRM(weightNum, repsNum) : null;
+                                    const pr = sessionActive && !cardio
+                                        ? evaluateSetPr(
+                                            {
+                                                weightKg: weightNum,
+                                                reps: repsNum,
+                                                isWarmup: set.isWarmup,
+                                                isCompleted: set.isCompleted || hasPerformedSetData(set, cardio),
+                                            },
+                                            recordsFor(ex.name)
+                                        )
+                                        : null;
 
                                     const setActions = sessionActive ? (
                                         <div className="flex items-center justify-end gap-1 shrink-0">
@@ -1438,11 +1520,14 @@ export function WorkoutLogClient({
                                             </div>
                                         )}
                                     </div>
+                                    {pr?.isPr && pr.label && (
+                                        <p className="px-1 text-[10px] font-black uppercase tracking-wider text-warning">
+                                            {pr.label}
+                                        </p>
+                                    )}
                                     </div>
                                 )})}
                                         </div>
-
-                                        {!sessionActive && cardio && <div className="col-span-4" />}
 
                                         {sessionActive && (
                                 <button
@@ -1583,34 +1668,39 @@ export function WorkoutLogClient({
                 </div>
             )}
 
-            {/* Substitution / Add Modal */}
+            {/* Substitution / Add Modal — sized to visualViewport so the keyboard never covers search */}
             {(isSubstituting || isAddingExercise) && (
-                <div className="fixed inset-0 z-[60] flex overflow-hidden overscroll-none items-end sm:items-center justify-center bg-black/80 animate-fade-in p-4 backdrop-blur-sm">
-                    <div className="bg-surface-card w-full max-w-sm rounded-[2.5rem] p-8 space-y-6 animate-slide-up border border-surface-border shadow-glow-brand-lg">
-                        <div className="text-center space-y-2">
-                             <div className="w-16 h-16 bg-gradient-brand rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-glow-brand animate-pulse-brand">
-                                <Plus className="w-8 h-8 text-white" />
+                <div className="fixed inset-0 z-[60] flex overflow-hidden overscroll-none items-end sm:items-center justify-center bg-black/80 animate-fade-in p-0 sm:p-4 backdrop-blur-sm">
+                    <div
+                        className="bg-surface-card w-full sm:max-w-sm rounded-t-[2rem] sm:rounded-[2.5rem] p-5 sm:p-8 space-y-4 animate-slide-up border border-surface-border shadow-glow-brand-lg flex flex-col overflow-hidden"
+                        style={{
+                            maxHeight: viewportHeight
+                                ? `${Math.max(280, viewportHeight - 12)}px`
+                                : "min(92dvh, 100%)",
+                        }}
+                    >
+                        <div className="text-center space-y-2 shrink-0">
+                             <div className="w-12 h-12 sm:w-16 sm:h-16 bg-gradient-brand rounded-2xl sm:rounded-3xl flex items-center justify-center mx-auto shadow-glow-brand animate-pulse-brand">
+                                <Plus className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
                             </div>
-                            <h3 className="text-2xl font-black text-fg tracking-tighter uppercase whitespace-pre-wrap">
+                            <h3 className="text-xl sm:text-2xl font-black text-fg tracking-tighter uppercase whitespace-pre-wrap">
                                 {isSubstituting ? "Substitute\nExercise" : "Add New\nExercise"}
                             </h3>
                             <p className="text-xs text-fg-subtle font-medium">Search for an exercise to replace or add.</p>
                         </div>
 
-                        <div className="space-y-4">
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black uppercase tracking-widest text-fg-subtle px-1">Search Exercises</label>
-                                <ExerciseAutocomplete 
-                                    value={searchQuery}
-                                    onChange={setSearchQuery}
-                                    autoFocus
-                                    className="input h-14 font-bold border-brand-500/20 focus:border-brand-500"
-                                    placeholder="Search e.g. Bench Press..."
-                                />
-                            </div>
+                        <div className="space-y-2 min-h-0 flex-1 flex flex-col">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-fg-subtle px-1 shrink-0">Search Exercises</label>
+                            <ExerciseAutocomplete 
+                                value={searchQuery}
+                                onChange={setSearchQuery}
+                                autoFocus
+                                className="input h-12 sm:h-14 font-bold border-brand-500/20 focus:border-brand-500"
+                                placeholder="Search e.g. Bench Press..."
+                            />
                         </div>
 
-                        <div className="flex gap-3 pt-2">
+                        <div className="flex gap-3 pt-1 shrink-0 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
                             <button 
                                 onClick={() => {
                                     setIsSubstituting(null);

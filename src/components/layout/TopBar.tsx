@@ -10,6 +10,7 @@ import { formatRelative, roleLabels, roleBadgeClass, formatDate, getDayName, cn 
 import { useCurrentDate } from "@/hooks/useCurrentDate";
 import { getQuickReplyTemplate, supportsQuickReply, NOTIFICATION_TYPES } from "@/lib/notificationTypes";
 import { GainAccessModal } from "@/components/shared/GainAccessModal";
+import { ResumeWorkoutBarHost } from "@/components/shared/ResumeWorkoutBarHost";
 
 
 interface TopBarProps {
@@ -416,6 +417,8 @@ export function TopBar({ title, subtitle, showToday = false, streak, hideSearch 
             className="shrink-0 h-[calc(4rem+var(--maintenance-banner-height,0px)+var(--maintenance-below-topbar-gap,0px))]"
             aria-hidden="true"
         />
+        {/* Below the fixed header spacer so Resume is never covered by TopBar */}
+        <ResumeWorkoutBarHost />
         </>
     );
 }

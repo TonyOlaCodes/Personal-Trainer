@@ -158,13 +158,13 @@ export const chatRoleLabels: Record<string, string> = {
     SUPER_ADMIN: "Admin",
 };
 
-/** Role badge variants */
+/** Role label text colours — no box/border (cleaner header). */
 export const roleBadgeClass: Record<string, string> = {
-    FREE: "border-role-free-muted/25 bg-role-free-muted/10 text-role-free",
-    PREMIUM: "border-role-coached/30 bg-role-coached/10 text-role-coached",
-    GENERAL_PREMIUM: "border-role-premium/30 bg-role-premium/10 text-role-premium",
-    COACH: "border-role-coach/30 bg-role-coach/10 text-role-coach",
-    SUPER_ADMIN: "border-role-admin/35 bg-role-admin/10 text-role-admin",
+    FREE: "text-role-free font-bold text-[10px] uppercase tracking-widest",
+    PREMIUM: "text-role-coached font-bold text-[10px] uppercase tracking-widest",
+    GENERAL_PREMIUM: "text-role-premium font-bold text-[10px] uppercase tracking-widest",
+    COACH: "text-role-coach font-bold text-[10px] uppercase tracking-widest",
+    SUPER_ADMIN: "text-role-admin font-bold text-[10px] uppercase tracking-widest",
 };
 
 /** Role-based display name colors (chat, lists) */

@@ -170,7 +170,7 @@ export default async function WorkoutLogPage({
                     name: workout.name,
                     exercises: workout.exercises.map((ex) => ({
                         id: ex.id,
-                        name: ex.name,
+                        name: canonicalExerciseName(ex.name) || ex.name,
                         sets: ex.sets,
                         reps: ex.reps,
                         weightTargetKg: ex.weightTargetKg,

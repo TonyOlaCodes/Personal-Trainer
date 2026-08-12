@@ -14,6 +14,8 @@ import { canEditWorkoutLog, canViewWorkoutLog } from "@/lib/userProfile";
 import { getNickname, pickDisplayName } from "@/lib/userNicknames";
 import { groupLogSetsByExercise, logSetDisplayOrderBy, formatLoggedWeight } from "@/lib/logSetGrouping";
 import { resolveLogSetExerciseName } from "@/lib/logSetExerciseName";
+import { getLogExerciseNotes } from "@/lib/logExerciseNotes";
+import { canonicalExerciseName } from "@/lib/exerciseCanonical";
 
 export default async function LogViewPage({ params }: { params: Promise<{ logId: string }> }) {
     const { logId } = await params;
@@ -52,7 +54,10 @@ export default async function LogViewPage({ params }: { params: Promise<{ logId:
         log.user.name || "Athlete"
     );
 
-    const groupedExercises = groupLogSetsByExercise(log.sets, (set) => resolveLogSetExerciseName(set));
+    const groupedExercises = groupLogSetsByExercise(log.sets, (set) =>
+        canonicalExerciseName(resolveLogSetExerciseName(set)) || resolveLogSetExerciseName(set)
+    );
+    const exerciseNotes = await getLogExerciseNotes(log.id);
 
     return (
         <div className="bg-surface min-h-screen pb-20">
@@ -142,6 +147,13 @@ export default async function LogViewPage({ params }: { params: Promise<{ logId:
                                     </div>
                                 </div>
                             </div>
+
+                            {exerciseNotes[ex.exerciseId] && (
+                                <div className="mb-4 rounded-xl border border-surface-border/60 bg-surface-muted/30 px-3 py-2">
+                                    <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle mb-1">Exercise note</p>
+                                    <p className="text-sm text-fg-muted leading-relaxed whitespace-pre-wrap">{exerciseNotes[ex.exerciseId]}</p>
+                                </div>
+                            )}
                             
                             <div className="space-y-3">
                                 <div className="grid grid-cols-6 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-fg-subtle border-b border-surface-border mb-3">

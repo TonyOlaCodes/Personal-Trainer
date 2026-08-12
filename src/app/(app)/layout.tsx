@@ -1,4 +1,3 @@
-import { Suspense } from "react";
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -17,7 +16,6 @@ import { ChatUnreadProvider } from "@/components/chat/ChatUnreadProvider";
 import { AppUserProvider } from "@/lib/AppUserContext";
 import { getMaintenanceStatus } from "@/lib/maintenanceMode";
 import { MaintenanceBanner, MAINTENANCE_BANNER_HEIGHT } from "@/components/layout/MaintenanceBanner";
-import { ResumeWorkoutBarSlot } from "@/components/shared/ResumeWorkoutBarSlot";
 
 export default async function AppLayout({
     children,
@@ -112,9 +110,6 @@ export default async function AppLayout({
                         <MaintenanceBanner scheduledAt={scheduledMaintenanceAt} />
                     )}
                     <AppMobileFrame userRole={userRole}>
-                        <Suspense fallback={null}>
-                            <ResumeWorkoutBarSlot userId={user.id} />
-                        </Suspense>
                         {children}
                     </AppMobileFrame>
                 </div>

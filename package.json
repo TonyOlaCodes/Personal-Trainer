@@ -13,7 +13,9 @@
     "generate:exercise-media": "node scripts/generate-exercise-media.mjs",
     "optimize:landing-videos": "node scripts/optimize-landing-videos.mjs",
     "audit:safety": "node scripts/audit-data-safety.js",
-    "audit:streak": "node scripts/audit-streak-logic.js"
+    "audit:streak": "node scripts/audit-streak-logic.js",
+    "audit:exercises": "npx tsx scripts/audit-exercise-duplicates.ts",
+    "merge:exercises": "npx tsx scripts/merge-duplicate-exercises.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.0.5",
