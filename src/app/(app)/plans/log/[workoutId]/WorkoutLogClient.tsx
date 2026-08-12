@@ -793,6 +793,20 @@ export function WorkoutLogClient({
     );
     const viewport = useVisualViewport();
 
+    const closeExercisePicker = () => {
+        setIsSubstituting(null);
+        setIsAddingExercise(false);
+        setSearchQuery("");
+    };
+
+    /** Keep the swap sheet compact (~header + search + 5 results); shrink further if the keyboard is open. */
+    const swapSheetMaxHeight = viewport
+        ? Math.min(viewport.height - 16, 420)
+        : undefined;
+    const swapResultsMaxHeight = viewport
+        ? Math.min(224, Math.max(140, viewport.height - 200))
+        : 224;
+
     const updateExerciseNote = (exerciseId: string, text: string) => {
         const clipped = text.slice(0, EXERCISE_NOTE_MAX_LENGTH);
         setExerciseNotes((prev) => {
@@ -1158,7 +1172,14 @@ export function WorkoutLogClient({
                 )}
             </div>
 
-            <div className="flex-1 p-4 pt-20 pb-20 overflow-y-auto no-scrollbar md:ml-[var(--sidebar-width)] md:pb-28">
+            <div
+                className={cn(
+                    "flex-1 p-4 pt-20 pb-20 no-scrollbar md:ml-[var(--sidebar-width)] md:pb-28",
+                    isSubstituting || isAddingExercise || showFinishModal || previewExercise
+                        ? "overflow-hidden overscroll-none"
+                        : "overflow-y-auto"
+                )}
+            >
                 <div className="max-w-3xl mx-auto space-y-6">
                     {clientName && (
                         <div className="card p-3 border-brand-500/30 bg-brand-950/20 text-center">
@@ -1670,10 +1691,10 @@ export function WorkoutLogClient({
                 </div>
             )}
 
-            {/* Substitution / Add Modal — pinned to the visual viewport so keyboard never covers it */}
+            {/* Substitution / Add Modal — compact sheet; only the results list scrolls */}
             {(isSubstituting || isAddingExercise) && (
                 <div
-                    className="fixed inset-x-0 z-[60] flex overflow-hidden overscroll-none items-stretch sm:items-center justify-center bg-black/80 animate-fade-in sm:px-4 backdrop-blur-sm"
+                    className="fixed inset-x-0 z-[60] flex overflow-hidden overscroll-none items-end sm:items-center justify-center bg-black/70 animate-fade-in sm:px-4 backdrop-blur-sm"
                     style={
                         viewport
                             ? {
@@ -1682,13 +1703,21 @@ export function WorkoutLogClient({
                               }
                             : { top: 0, bottom: 0 }
                     }
+                    onClick={closeExercisePicker}
+                    onTouchMove={(e) => {
+                        // Block background scroll while the sheet is open.
+                        if (e.target === e.currentTarget) e.preventDefault();
+                    }}
                 >
                     <div
-                        className="bg-surface-card w-full sm:max-w-sm sm:my-auto rounded-t-[1.5rem] sm:rounded-[2rem] p-4 sm:p-6 border border-surface-border shadow-glow-brand-lg flex flex-col overflow-hidden min-h-0"
+                        className="bg-surface-card w-full sm:max-w-sm rounded-t-[1.5rem] sm:rounded-[2rem] p-4 sm:p-5 border border-surface-border shadow-glow-brand-lg flex flex-col overflow-hidden min-h-0 mb-0 sm:mb-auto"
                         style={{
-                            maxHeight: viewport ? `${Math.max(260, viewport.height - 8)}px` : "92dvh",
-                            height: viewport ? `${Math.max(260, viewport.height - 8)}px` : undefined,
+                            maxHeight: swapSheetMaxHeight
+                                ? `${swapSheetMaxHeight}px`
+                                : "min(420px, 85dvh)",
                         }}
+                        onClick={(e) => e.stopPropagation()}
+                        onTouchMove={(e) => e.stopPropagation()}
                     >
                         <div className="flex items-start justify-between gap-3 shrink-0 pb-2">
                             <div className="min-w-0 pt-0.5">
@@ -1701,11 +1730,7 @@ export function WorkoutLogClient({
                             </div>
                             <button
                                 type="button"
-                                onClick={() => {
-                                    setIsSubstituting(null);
-                                    setIsAddingExercise(false);
-                                    setSearchQuery("");
-                                }}
+                                onClick={closeExercisePicker}
                                 className="btn-ghost h-9 px-3 text-xs font-black uppercase tracking-widest text-fg-muted shrink-0"
                                 aria-label="Cancel"
                             >
@@ -1713,7 +1738,7 @@ export function WorkoutLogClient({
                             </button>
                         </div>
 
-                        <div className="min-h-0 flex-1 flex flex-col pb-[max(0.25rem,env(safe-area-inset-bottom))]">
+                        <div className="min-h-0 flex flex-col shrink pb-[max(0.25rem,env(safe-area-inset-bottom))]">
                             <label className="text-[10px] font-black uppercase tracking-widest text-fg-subtle px-1 shrink-0 mb-1.5">Search Exercises</label>
                             <ExerciseAutocomplete
                                 value={searchQuery}
@@ -1724,6 +1749,7 @@ export function WorkoutLogClient({
                                 }}
                                 autoFocus
                                 resultsPlacement="inline"
+                                resultsMaxHeightPx={swapResultsMaxHeight}
                                 className="input h-12 font-bold border-brand-500/20 focus:border-brand-500"
                                 placeholder="Search e.g. Bench Press..."
                             />

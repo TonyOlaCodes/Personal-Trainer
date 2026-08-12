@@ -68,6 +68,8 @@ interface Props {
      * without the list disappearing under the keyboard.
      */
     resultsPlacement?: "dropdown" | "inline";
+    /** Caps the visible results list (about five rows ≈ 224px). List scrolls inside this. */
+    resultsMaxHeightPx?: number;
 }
 
 let globalExercisesCache: ExerciseOption[] | null = null;
@@ -113,6 +115,7 @@ export function ExerciseAutocomplete({
     className,
     autoFocus,
     resultsPlacement = "dropdown",
+    resultsMaxHeightPx,
 }: Props) {
     const [open, setOpen] = useState(false);
     const [suggestions, setSuggestions] = useState<ExerciseOption[]>([]);
@@ -221,12 +224,21 @@ export function ExerciseAutocomplete({
                 className={cn(
                     "bg-surface-elevated border border-surface-border rounded-xl shadow-lg animate-slide-up flex flex-col min-h-0 overflow-hidden",
                     resultsPlacement === "inline"
-                        ? "relative mt-2 flex-1"
-                        : "absolute top-full left-0 right-0 z-50 mt-1",
-                    EXERCISE_RESULTS_VISIBLE_MAX_CLASS
+                        ? "relative mt-2 shrink-0"
+                        : cn("absolute top-full left-0 right-0 z-50 mt-1", EXERCISE_RESULTS_VISIBLE_MAX_CLASS)
                 )}
+                style={
+                    resultsPlacement === "inline" || resultsMaxHeightPx
+                        ? { maxHeight: resultsMaxHeightPx ?? 224 }
+                        : undefined
+                }
             >
-                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                <div
+                    className="min-h-0 flex-1 overflow-y-auto overscroll-contain touch-pan-y"
+                    style={{ WebkitOverflowScrolling: "touch" }}
+                    onTouchMove={(e) => e.stopPropagation()}
+                    onWheel={(e) => e.stopPropagation()}
+                >
                     {suggestions.map((ex, i) => (
                         <button
                             key={ex.name}
@@ -284,7 +296,7 @@ export function ExerciseAutocomplete({
             ref={containerRef}
             className={cn(
                 "relative min-w-0 w-full max-w-2xl",
-                resultsPlacement === "inline" && "flex flex-col min-h-0 flex-1"
+                resultsPlacement === "inline" && "flex flex-col min-h-0"
             )}
         >
             <input
