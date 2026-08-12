@@ -57,6 +57,8 @@ export function isCardio(name: string, muscleGroup?: string | null): boolean {
 interface Props {
     value: string;
     onChange: (val: string, muscleGroup?: string | null) => void;
+    /** Fires when a suggestion is chosen (click / Enter) — not while typing. */
+    onSelect?: (val: string, muscleGroup?: string | null) => void;
     placeholder?: string;
     className?: string;
     autoFocus?: boolean;
@@ -106,6 +108,7 @@ async function fetchGlobalExercises(): Promise<ExerciseOption[]> {
 export function ExerciseAutocomplete({
     value,
     onChange,
+    onSelect,
     placeholder,
     className,
     autoFocus,
@@ -172,6 +175,7 @@ export function ExerciseAutocomplete({
         onChange(ex.name, ex.muscleGroup);
         setOpen(false);
         setActiveIndex(-1);
+        onSelect?.(ex.name, ex.muscleGroup);
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -197,6 +201,10 @@ export function ExerciseAutocomplete({
                 if (activeIndex >= 0) {
                     e.preventDefault();
                     pick(suggestions[activeIndex]);
+                } else if (value.trim() && onSelect) {
+                    e.preventDefault();
+                    setOpen(false);
+                    onSelect(value.trim());
                 } else {
                     setOpen(false);
                 }

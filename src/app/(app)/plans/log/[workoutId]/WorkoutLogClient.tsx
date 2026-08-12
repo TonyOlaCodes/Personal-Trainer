@@ -1697,7 +1697,9 @@ export function WorkoutLogClient({
                             <h3 className="text-lg sm:text-xl font-black text-fg tracking-tighter uppercase">
                                 {isSubstituting ? "Substitute Exercise" : "Add Exercise"}
                             </h3>
-                            <p className="text-[11px] text-fg-subtle font-medium">Search and pick a replacement.</p>
+                            <p className="text-[11px] text-fg-subtle font-medium">
+                                {isSubstituting ? "Tap a match to swap instantly." : "Tap a match to add, or add a custom name."}
+                            </p>
                         </div>
 
                         <div className="min-h-0 flex-1 flex flex-col">
@@ -1705,6 +1707,10 @@ export function WorkoutLogClient({
                             <ExerciseAutocomplete
                                 value={searchQuery}
                                 onChange={setSearchQuery}
+                                onSelect={(name) => {
+                                    if (isSubstituting) handleReplace(name);
+                                    else handleAddExercise(name);
+                                }}
                                 autoFocus
                                 resultsPlacement="inline"
                                 className="input h-12 font-bold border-brand-500/20 focus:border-brand-500"
@@ -1723,13 +1729,15 @@ export function WorkoutLogClient({
                             >
                                 Cancel
                             </button>
-                            <button
-                                onClick={() => isSubstituting ? handleReplace(searchQuery) : handleAddExercise(searchQuery)}
-                                disabled={!searchQuery.trim()}
-                                className="btn-primary h-11 flex-[2] shadow-glow-brand"
-                            >
-                                {isSubstituting ? "Replace" : "Add"}
-                            </button>
+                            {!isSubstituting && (
+                                <button
+                                    onClick={() => handleAddExercise(searchQuery)}
+                                    disabled={!searchQuery.trim()}
+                                    className="btn-primary h-11 flex-[2] shadow-glow-brand"
+                                >
+                                    Add custom
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
