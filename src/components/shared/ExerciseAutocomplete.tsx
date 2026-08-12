@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { muscleGroupBadgeClass } from "@/lib/muscleGroups";
-import { EXERCISE_SEARCH_LIMIT } from "@/lib/exerciseSearch";
+import { EXERCISE_RESULTS_VISIBLE_MAX_CLASS, EXERCISE_SEARCH_LIMIT } from "@/lib/exerciseSearch";
 
 type ExerciseOption = { name: string; muscleGroup?: string | null };
 
@@ -211,44 +211,53 @@ export function ExerciseAutocomplete({
         open && suggestions.length > 0 ? (
             <div
                 className={cn(
-                    "bg-surface-elevated border border-surface-border rounded-xl shadow-lg overflow-hidden animate-slide-up overflow-y-auto overscroll-contain",
-                    resultsPlacement === "inline" ? "relative mt-2 min-h-0 flex-1 max-h-none" : "absolute top-full left-0 right-0 z-50 mt-1 max-h-72"
+                    "bg-surface-elevated border border-surface-border rounded-xl shadow-lg animate-slide-up flex flex-col min-h-0 overflow-hidden",
+                    resultsPlacement === "inline"
+                        ? "relative mt-2 flex-1"
+                        : "absolute top-full left-0 right-0 z-50 mt-1",
+                    EXERCISE_RESULTS_VISIBLE_MAX_CLASS
                 )}
             >
-                {suggestions.map((ex, i) => (
-                    <button
-                        key={ex.name}
-                        type="button"
-                        onClick={() => pick(ex)}
-                        onMouseEnter={() => setActiveIndex(i)}
-                        className={cn(
-                            "w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center justify-between gap-3 border-b border-surface-border/50 last:border-0",
-                            activeIndex === i
-                                ? "bg-brand-500/20 text-brand-300"
-                                : "text-fg hover:bg-brand-500/10 hover:text-brand-300"
-                        )}
-                    >
-                        <span className="flex items-center gap-2 min-w-0">
-                            <span className={cn(
-                                "w-4 h-4 rounded-md text-[9px] font-black flex items-center justify-center shrink-0 transition-colors",
-                                activeIndex === i ? "bg-brand-400 text-white" : "bg-brand-400/10 text-brand-400"
-                            )}>
-                                {i + 1}
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                    {suggestions.map((ex, i) => (
+                        <button
+                            key={ex.name}
+                            type="button"
+                            onClick={() => pick(ex)}
+                            onMouseEnter={() => setActiveIndex(i)}
+                            className={cn(
+                                "w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center justify-between gap-3 border-b border-surface-border/50 last:border-0",
+                                activeIndex === i
+                                    ? "bg-brand-500/20 text-brand-300"
+                                    : "text-fg hover:bg-brand-500/10 hover:text-brand-300"
+                            )}
+                        >
+                            <span className="flex items-center gap-2 min-w-0">
+                                <span className={cn(
+                                    "w-4 h-4 rounded-md text-[9px] font-black flex items-center justify-center shrink-0 transition-colors",
+                                    activeIndex === i ? "bg-brand-400 text-white" : "bg-brand-400/10 text-brand-400"
+                                )}>
+                                    {i + 1}
+                                </span>
+                                <span className="leading-snug break-words">{ex.name}</span>
                             </span>
-                            <span className="leading-snug break-words">{ex.name}</span>
-                        </span>
-                        {ex.muscleGroup && (
-                            <span className={cn(
-                                "text-[9px] font-bold px-1.5 py-0.5 rounded-full border uppercase tracking-wider shrink-0",
-                                muscleGroupBadgeClass(ex.muscleGroup)
-                            )}>
-                                {ex.muscleGroup}
-                            </span>
-                        )}
-                    </button>
-                ))}
-                <div className="px-4 py-1.5 text-[10px] text-fg-subtle border-t border-surface-border/30 bg-surface-muted/30 font-bold uppercase tracking-wider">
-                    <span>Top {EXERCISE_SEARCH_LIMIT} matches • ↑↓ navigate • Enter to pick</span>
+                            {ex.muscleGroup && (
+                                <span className={cn(
+                                    "text-[9px] font-bold px-1.5 py-0.5 rounded-full border uppercase tracking-wider shrink-0",
+                                    muscleGroupBadgeClass(ex.muscleGroup)
+                                )}>
+                                    {ex.muscleGroup}
+                                </span>
+                            )}
+                        </button>
+                    ))}
+                </div>
+                <div className="px-4 py-1.5 text-[10px] text-fg-subtle border-t border-surface-border/30 bg-surface-muted/30 font-bold uppercase tracking-wider shrink-0">
+                    <span>
+                        {suggestions.length} match{suggestions.length === 1 ? "" : "es"}
+                        {suggestions.length > 5 ? " · scroll for more" : ""}
+                        {" · ↑↓ · Enter"}
+                    </span>
                 </div>
             </div>
         ) : open && suggestions.length === 0 && value.trim().length > 0 && !loading ? (

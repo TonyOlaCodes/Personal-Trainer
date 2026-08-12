@@ -1,4 +1,7 @@
-export const EXERCISE_SEARCH_LIMIT = 5;
+export const EXERCISE_SEARCH_LIMIT = 20;
+
+/** About five result rows visible before the list scrolls. */
+export const EXERCISE_RESULTS_VISIBLE_MAX_CLASS = "max-h-56";
 
 function escapeRegex(value: string): string {
     return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
