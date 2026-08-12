@@ -203,6 +203,12 @@ const NO_PR: SetPrResult = { isPr: false, kind: null, label: null };
 /**
  * Judges one performed set against all-time records.
  *
+ * Rules (deliberate):
+ * - Weight PR  — heavier than your heaviest completed working set ever
+ * - Rep PR     — more reps than you've ever done *at that same weight*
+ *               (a lighter weight you've never lifted before is not a PR)
+ * - Est. 1RM   — only when neither of the above applied
+ *
  * `records` must exclude the session being judged, otherwise a set would compare
  * against itself and the badge would flicker off as soon as it is saved.
  */
@@ -218,22 +224,27 @@ export function evaluateSetPr(
     const reps = set.reps ?? 0;
     if (weight <= 0 || reps <= 0) return NO_PR;
 
+    // First ever working set for this movement.
     if (records.bestWeightKg === null) {
-        return { isPr: true, kind: "weight", label: "New Best" };
+        return { isPr: true, kind: "weight", label: "🔥 New Best" };
     }
 
+    // Heavier than you've ever loaded — e.g. 105×5 after a best of 100×5.
     if (weight > records.bestWeightKg) {
-        return { isPr: true, kind: "weight", label: "Weight PR" };
+        return { isPr: true, kind: "weight", label: "🔥 Weight PR" };
     }
 
-    const bestRepsAtWeight = records.bestRepsByWeight[weightKey(weight)] ?? 0;
-    if (reps > bestRepsAtWeight) {
-        return { isPr: true, kind: "reps", label: "Rep PR" };
+    // Rep PR only at a weight you've already completed before. Doing 90×5 when your
+    // best is 100×5 must stay quiet — a brand-new lighter weight is not a record.
+    const wKey = weightKey(weight);
+    const priorBestAtWeight = records.bestRepsByWeight[wKey];
+    if (priorBestAtWeight != null && reps > priorBestAtWeight) {
+        return { isPr: true, kind: "reps", label: "💪 Rep PR" };
     }
 
     const oneRm = calculateOneRM(weight, reps);
     if (records.bestOneRm !== null && oneRm > records.bestOneRm) {
-        return { isPr: true, kind: "oneRm", label: "Est. 1RM PR" };
+        return { isPr: true, kind: "oneRm", label: "🔥 Est. 1RM PR" };
     }
 
     return NO_PR;

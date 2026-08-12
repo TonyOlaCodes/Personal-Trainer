@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
     Timer, Flame, Check, HelpCircle,
-    Trash2, Plus, InfoIcon, Award, Play, Zap, X, ChevronLeft, StickyNote
+    Trash2, Plus, InfoIcon, Award, Play, Zap, X, ChevronLeft, NotebookPen
 } from "lucide-react";
 import { cn, generateId, formatDate, isSameCalendarDay, parseLogDate, toDateKey, toLoggedAtIso, calculateOneRM } from "@/lib/utils";
 import { appendReturnTo, getReturnToFromSearchParams } from "@/lib/navigation";
@@ -12,7 +12,7 @@ import { notifyWorkoutStatsChanged } from "@/lib/workoutStatsRefresh";
 import { isCardio, ExerciseAutocomplete } from "@/components/shared/ExerciseAutocomplete";
 import { WorkoutFeelingPicker } from "@/components/shared/WorkoutFeelingPicker";
 import { useScrollLock } from "@/hooks/useScrollLock";
-import { useVisualViewportHeight } from "@/hooks/useVisualViewportHeight";
+import { useVisualViewport } from "@/hooks/useVisualViewportHeight";
 import { exerciseIdentityKey } from "@/lib/exerciseIdentity";
 import {
     EMPTY_EXERCISE_RECORDS,
@@ -791,7 +791,7 @@ export function WorkoutLogClient({
         () => buildWorkoutMuscleBreakdown(activeExercises),
         [activeExercises]
     );
-    const viewportHeight = useVisualViewportHeight();
+    const viewport = useVisualViewport();
 
     const updateExerciseNote = (exerciseId: string, text: string) => {
         const clipped = text.slice(0, EXERCISE_NOTE_MAX_LENGTH);
@@ -1274,14 +1274,16 @@ export function WorkoutLogClient({
                                             onClick={() =>
                                                 setOpenNoteExerciseId((id) => (id === ex.id ? null : ex.id))
                                             }
+                                            aria-label={noteText.trim() ? "Edit exercise note" : "Add exercise note"}
+                                            title={noteText.trim() ? "Edit note" : "Add note"}
                                             className={cn(
-                                                "text-[10px] font-black uppercase px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5",
+                                                "w-8 h-8 rounded-md transition-all flex items-center justify-center",
                                                 noteText.trim()
                                                     ? "text-brand-400 bg-brand-400/10"
                                                     : "text-fg-subtle hover:text-fg-muted bg-surface-muted/40 hover:bg-surface-muted/70"
                                             )}
                                         >
-                                            <StickyNote className="w-3 h-3" /> Note
+                                            <NotebookPen className="w-3.5 h-3.5" />
                                         </button>
                                         <button
                                             type="button"
@@ -1668,53 +1670,63 @@ export function WorkoutLogClient({
                 </div>
             )}
 
-            {/* Substitution / Add Modal — sized to visualViewport so the keyboard never covers search */}
+            {/* Substitution / Add Modal — pinned to the visual viewport so keyboard never covers it */}
             {(isSubstituting || isAddingExercise) && (
-                <div className="fixed inset-0 z-[60] flex overflow-hidden overscroll-none items-end sm:items-center justify-center bg-black/80 animate-fade-in p-0 sm:p-4 backdrop-blur-sm">
+                <div
+                    className="fixed inset-x-0 z-[60] flex overflow-hidden overscroll-none items-stretch sm:items-center justify-center bg-black/80 animate-fade-in sm:px-4 backdrop-blur-sm"
+                    style={
+                        viewport
+                            ? {
+                                  top: viewport.offsetTop,
+                                  height: viewport.height,
+                              }
+                            : { top: 0, bottom: 0 }
+                    }
+                >
                     <div
-                        className="bg-surface-card w-full sm:max-w-sm rounded-t-[2rem] sm:rounded-[2.5rem] p-5 sm:p-8 space-y-4 animate-slide-up border border-surface-border shadow-glow-brand-lg flex flex-col overflow-hidden"
+                        className="bg-surface-card w-full sm:max-w-sm sm:my-auto rounded-t-[1.5rem] sm:rounded-[2rem] p-4 sm:p-6 border border-surface-border shadow-glow-brand-lg flex flex-col overflow-hidden min-h-0"
                         style={{
-                            maxHeight: viewportHeight
-                                ? `${Math.max(280, viewportHeight - 12)}px`
-                                : "min(92dvh, 100%)",
+                            maxHeight: viewport ? `${Math.max(260, viewport.height - 8)}px` : "92dvh",
+                            height: viewport ? `${Math.max(260, viewport.height - 8)}px` : undefined,
                         }}
                     >
-                        <div className="text-center space-y-2 shrink-0">
-                             <div className="w-12 h-12 sm:w-16 sm:h-16 bg-gradient-brand rounded-2xl sm:rounded-3xl flex items-center justify-center mx-auto shadow-glow-brand animate-pulse-brand">
-                                <Plus className="w-6 h-6 sm:w-8 sm:h-8 text-white" />
+                        <div className="text-center space-y-1 shrink-0 pb-2">
+                            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-brand rounded-2xl flex items-center justify-center mx-auto shadow-glow-brand">
+                                <Plus className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
                             </div>
-                            <h3 className="text-xl sm:text-2xl font-black text-fg tracking-tighter uppercase whitespace-pre-wrap">
-                                {isSubstituting ? "Substitute\nExercise" : "Add New\nExercise"}
+                            <h3 className="text-lg sm:text-xl font-black text-fg tracking-tighter uppercase">
+                                {isSubstituting ? "Substitute Exercise" : "Add Exercise"}
                             </h3>
-                            <p className="text-xs text-fg-subtle font-medium">Search for an exercise to replace or add.</p>
+                            <p className="text-[11px] text-fg-subtle font-medium">Search and pick a replacement.</p>
                         </div>
 
-                        <div className="space-y-2 min-h-0 flex-1 flex flex-col">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-fg-subtle px-1 shrink-0">Search Exercises</label>
-                            <ExerciseAutocomplete 
+                        <div className="min-h-0 flex-1 flex flex-col">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-fg-subtle px-1 shrink-0 mb-1.5">Search Exercises</label>
+                            <ExerciseAutocomplete
                                 value={searchQuery}
                                 onChange={setSearchQuery}
                                 autoFocus
-                                className="input h-12 sm:h-14 font-bold border-brand-500/20 focus:border-brand-500"
+                                resultsPlacement="inline"
+                                className="input h-12 font-bold border-brand-500/20 focus:border-brand-500"
                                 placeholder="Search e.g. Bench Press..."
                             />
                         </div>
 
-                        <div className="flex gap-3 pt-1 shrink-0 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-                            <button 
+                        <div className="flex gap-3 pt-3 shrink-0 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
+                            <button
                                 onClick={() => {
                                     setIsSubstituting(null);
                                     setIsAddingExercise(false);
                                     setSearchQuery("");
-                                }} 
-                                className="btn-secondary h-12 flex-1"
+                                }}
+                                className="btn-secondary h-11 flex-1"
                             >
                                 Cancel
                             </button>
-                            <button 
+                            <button
                                 onClick={() => isSubstituting ? handleReplace(searchQuery) : handleAddExercise(searchQuery)}
-                                disabled={!searchQuery.trim()} 
-                                className="btn-primary h-12 flex-[2] shadow-glow-brand"
+                                disabled={!searchQuery.trim()}
+                                className="btn-primary h-11 flex-[2] shadow-glow-brand"
                             >
                                 {isSubstituting ? "Replace" : "Add"}
                             </button>

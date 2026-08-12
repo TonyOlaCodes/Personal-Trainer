@@ -60,6 +60,12 @@ interface Props {
     placeholder?: string;
     className?: string;
     autoFocus?: boolean;
+    /**
+     * `dropdown` (default) floats results under the input.
+     * `inline` renders results in normal flow so a keyboard-safe sheet can scroll them
+     * without the list disappearing under the keyboard.
+     */
+    resultsPlacement?: "dropdown" | "inline";
 }
 
 let globalExercisesCache: ExerciseOption[] | null = null;
@@ -97,7 +103,14 @@ async function fetchGlobalExercises(): Promise<ExerciseOption[]> {
     return globalExercisesPromise;
 }
 
-export function ExerciseAutocomplete({ value, onChange, placeholder, className, autoFocus }: Props) {
+export function ExerciseAutocomplete({
+    value,
+    onChange,
+    placeholder,
+    className,
+    autoFocus,
+    resultsPlacement = "dropdown",
+}: Props) {
     const [open, setOpen] = useState(false);
     const [suggestions, setSuggestions] = useState<ExerciseOption[]>([]);
     const [activeIndex, setActiveIndex] = useState(-1);
@@ -194,14 +207,75 @@ export function ExerciseAutocomplete({ value, onChange, placeholder, className, 
         }
     };
 
+    const resultsList =
+        open && suggestions.length > 0 ? (
+            <div
+                className={cn(
+                    "bg-surface-elevated border border-surface-border rounded-xl shadow-lg overflow-hidden animate-slide-up overflow-y-auto overscroll-contain",
+                    resultsPlacement === "inline" ? "relative mt-2 min-h-0 flex-1 max-h-none" : "absolute top-full left-0 right-0 z-50 mt-1 max-h-72"
+                )}
+            >
+                {suggestions.map((ex, i) => (
+                    <button
+                        key={ex.name}
+                        type="button"
+                        onClick={() => pick(ex)}
+                        onMouseEnter={() => setActiveIndex(i)}
+                        className={cn(
+                            "w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center justify-between gap-3 border-b border-surface-border/50 last:border-0",
+                            activeIndex === i
+                                ? "bg-brand-500/20 text-brand-300"
+                                : "text-fg hover:bg-brand-500/10 hover:text-brand-300"
+                        )}
+                    >
+                        <span className="flex items-center gap-2 min-w-0">
+                            <span className={cn(
+                                "w-4 h-4 rounded-md text-[9px] font-black flex items-center justify-center shrink-0 transition-colors",
+                                activeIndex === i ? "bg-brand-400 text-white" : "bg-brand-400/10 text-brand-400"
+                            )}>
+                                {i + 1}
+                            </span>
+                            <span className="leading-snug break-words">{ex.name}</span>
+                        </span>
+                        {ex.muscleGroup && (
+                            <span className={cn(
+                                "text-[9px] font-bold px-1.5 py-0.5 rounded-full border uppercase tracking-wider shrink-0",
+                                muscleGroupBadgeClass(ex.muscleGroup)
+                            )}>
+                                {ex.muscleGroup}
+                            </span>
+                        )}
+                    </button>
+                ))}
+                <div className="px-4 py-1.5 text-[10px] text-fg-subtle border-t border-surface-border/30 bg-surface-muted/30 font-bold uppercase tracking-wider">
+                    <span>Top {EXERCISE_SEARCH_LIMIT} matches • ↑↓ navigate • Enter to pick</span>
+                </div>
+            </div>
+        ) : open && suggestions.length === 0 && value.trim().length > 0 && !loading ? (
+            <div
+                className={cn(
+                    "bg-surface-elevated border border-surface-border rounded-xl shadow-lg px-4 py-3 text-xs text-fg-muted",
+                    resultsPlacement === "inline" ? "relative mt-2" : "absolute top-full left-0 right-0 z-50 mt-1"
+                )}
+            >
+                No dictionary match — press Enter to use &quot;{value.trim()}&quot; as a custom exercise.
+            </div>
+        ) : null;
+
     return (
-        <div ref={containerRef} className="relative min-w-0 w-full max-w-2xl">
+        <div
+            ref={containerRef}
+            className={cn(
+                "relative min-w-0 w-full max-w-2xl",
+                resultsPlacement === "inline" && "flex flex-col min-h-0 flex-1"
+            )}
+        >
             <input
                 ref={inputRef}
                 type="text"
                 placeholder={placeholder ?? "e.g. Lat Pullover"}
                 className={cn(
-                    "w-full min-w-[10rem] bg-surface-muted border border-surface-border rounded-xl px-4 py-2 text-[16px] sm:text-sm text-fg",
+                    "w-full min-w-[10rem] bg-surface-muted border border-surface-border rounded-xl px-4 py-2 text-[16px] sm:text-sm text-fg shrink-0",
                     className
                 )}
                 value={value}
@@ -223,50 +297,7 @@ export function ExerciseAutocomplete({ value, onChange, placeholder, className, 
             {loading && value.trim().length > 0 && !open && (
                 <p className="absolute top-full left-0 mt-1 text-[10px] text-fg-subtle px-1">Searching exercises…</p>
             )}
-            {open && suggestions.length > 0 && (
-                <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-surface-elevated border border-surface-border rounded-xl shadow-lg overflow-hidden animate-slide-up max-h-72 overflow-y-auto">
-                    {suggestions.map((ex, i) => (
-                        <button
-                            key={ex.name}
-                            type="button"
-                            onClick={() => pick(ex)}
-                            onMouseEnter={() => setActiveIndex(i)}
-                            className={cn(
-                                "w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center justify-between gap-3 border-b border-surface-border/50 last:border-0",
-                                activeIndex === i
-                                    ? "bg-brand-500/20 text-brand-300"
-                                    : "text-fg hover:bg-brand-500/10 hover:text-brand-300"
-                            )}
-                        >
-                            <span className="flex items-center gap-2 min-w-0">
-                                <span className={cn(
-                                    "w-4 h-4 rounded-md text-[9px] font-black flex items-center justify-center shrink-0 transition-colors",
-                                    activeIndex === i ? "bg-brand-400 text-white" : "bg-brand-400/10 text-brand-400"
-                                )}>
-                                    {i + 1}
-                                </span>
-                                <span className="leading-snug break-words">{ex.name}</span>
-                            </span>
-                            {ex.muscleGroup && (
-                                <span className={cn(
-                                    "text-[9px] font-bold px-1.5 py-0.5 rounded-full border uppercase tracking-wider shrink-0",
-                                    muscleGroupBadgeClass(ex.muscleGroup)
-                                )}>
-                                    {ex.muscleGroup}
-                                </span>
-                            )}
-                        </button>
-                    ))}
-                    <div className="px-4 py-1.5 text-[10px] text-fg-subtle border-t border-surface-border/30 bg-surface-muted/30 font-bold uppercase tracking-wider">
-                        <span>Top {EXERCISE_SEARCH_LIMIT} matches • ↑↓ navigate • Enter to pick</span>
-                    </div>
-                </div>
-            )}
-            {open && suggestions.length === 0 && value.trim().length > 0 && !loading && (
-                <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-surface-elevated border border-surface-border rounded-xl shadow-lg px-4 py-3 text-xs text-fg-muted">
-                    No dictionary match — press Enter to use &quot;{value.trim()}&quot; as a custom exercise.
-                </div>
-            )}
+            {resultsList}
         </div>
     );
 }
