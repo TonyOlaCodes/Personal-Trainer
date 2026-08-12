@@ -662,12 +662,6 @@ export function CalendarClient({
                                                     {workoutLabel}
                                                     {dayLogs && dayLogs.length > 1 ? ` +${dayLogs.length - 1}` : ""}
                                                 </span>
-                                                <span className={cn(
-                                                    "inline-flex sm:hidden text-[7px] font-black uppercase tracking-widest px-1 py-0.5 rounded border",
-                                                    statusStyle.badge
-                                                )}>
-                                                    {statusStyle.shortLabel}
-                                                </span>
                                             </div>
                                         ) : isAfterPlan ? null : status === "rest" ? (
                                             <span className="text-[7px] sm:text-[8px] font-black uppercase tracking-widest text-fg-subtle/50">
