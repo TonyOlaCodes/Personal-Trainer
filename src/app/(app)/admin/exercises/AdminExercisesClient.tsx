@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Check, Search, Loader2, Dumbbell, Pencil, X } from "lucide-react";
+import { Plus, Check, Search, Loader2, Dumbbell, Pencil, X, Merge, CheckSquare } from "lucide-react";
 import { MUSCLE_GROUPS, muscleGroupBadgeClass } from "@/lib/muscleGroups";
 
 interface GlobalExercise {
@@ -49,6 +49,15 @@ export function AdminExercisesClient({ initialExercises }: { initialExercises: G
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editingExercise, setEditingExercise] = useState<ExerciseDraft>(emptyDraft);
     const [saving, setSaving] = useState(false);
+    const [mergeMode, setMergeMode] = useState(false);
+    const [selectedIds, setSelectedIds] = useState<string[]>([]);
+    const [mergeTargetName, setMergeTargetName] = useState("");
+    const [mergeMuscleGroup, setMergeMuscleGroup] = useState("Uncategorized");
+
+    const dictionaryExercises = useMemo(
+        () => exercises.filter((e) => !e.isSuggestion),
+        [exercises]
+    );
 
     const filtered = exercises.filter((e) => {
         const matchesSearch = e.name.toLowerCase().includes(search.toLowerCase());
@@ -80,6 +89,19 @@ export function AdminExercisesClient({ initialExercises }: { initialExercises: G
         }
         return counts;
     }, [exercises]);
+
+    const selectedExercises = dictionaryExercises.filter((e) => selectedIds.includes(e.id));
+
+    const toggleSelected = (id: string) => {
+        setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+    };
+
+    const exitMergeMode = () => {
+        setMergeMode(false);
+        setSelectedIds([]);
+        setMergeTargetName("");
+        setMergeMuscleGroup("Uncategorized");
+    };
 
     const handleAdd = async () => {
         if (!newExercise.name.trim()) return;
@@ -119,7 +141,7 @@ export function AdminExercisesClient({ initialExercises }: { initialExercises: G
                 setEditingId(null);
             } else {
                 const data = await res.json().catch(() => null);
-                alert(data?.error?.fieldErrors?.videoUrl?.[0] || data?.error?.fieldErrors?.thumbnailUrl?.[0] || "Failed to update exercise.");
+                alert(data?.error?.fieldErrors?.videoUrl?.[0] || data?.error?.fieldErrors?.thumbnailUrl?.[0] || data?.error || "Failed to update exercise.");
             }
         } finally {
             setSaving(false);
@@ -145,18 +167,160 @@ export function AdminExercisesClient({ initialExercises }: { initialExercises: G
         }
     };
 
+    const handleMerge = async () => {
+        if (selectedIds.length < 2) {
+            alert("Select at least two exercises to combine.");
+            return;
+        }
+        const targetName = mergeTargetName.trim() || selectedExercises[0]?.name;
+        if (!targetName) return;
+
+        const confirmed = window.confirm(
+            `Combine ${selectedExercises.length} exercises into "${targetName}"?\n\nAll logged history from the selected exercises will join this name. This cannot be undone.`
+        );
+        if (!confirmed) return;
+
+        setSaving(true);
+        try {
+            const res = await fetch("/api/admin/exercises", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    action: "merge",
+                    sourceIds: selectedIds,
+                    targetName,
+                    targetMuscleGroup: mergeMuscleGroup,
+                    keepId: selectedIds[0],
+                }),
+            });
+            const data = await res.json().catch(() => null);
+            if (!res.ok) {
+                alert(data?.error || "Failed to combine exercises.");
+                return;
+            }
+
+            const removed = new Set(selectedIds);
+            const survivor = data.exercise
+                ? {
+                      ...data.exercise,
+                      muscleGroup: mergeMuscleGroup,
+                      instructions: data.exercise.instructions ?? null,
+                      thumbnailUrl: data.exercise.thumbnailUrl ?? null,
+                  }
+                : {
+                      id: selectedIds[0],
+                      name: targetName,
+                      muscleGroup: mergeMuscleGroup,
+                      videoUrl: null,
+                      instructions: null,
+                      thumbnailUrl: null,
+                  };
+
+            setExercises((prev) =>
+                [
+                    ...prev.filter((e) => !removed.has(e.id) || e.id === survivor.id),
+                    ...prev.some((e) => e.id === survivor.id) ? [] : [survivor],
+                ]
+                    .map((e) => (e.id === survivor.id || e.name.toLowerCase() === targetName.toLowerCase() ? { ...e, ...survivor } : e))
+                    .filter((e, i, arr) => {
+                        // Drop duplicates after fold
+                        const key = e.isSuggestion ? e.id : e.name.toLowerCase();
+                        return arr.findIndex((x) => (x.isSuggestion ? x.id : x.name.toLowerCase()) === key) === i;
+                    })
+                    .sort((a, b) => a.name.localeCompare(b.name))
+            );
+            exitMergeMode();
+            alert(
+                `Combined into "${data.targetName}".\n` +
+                    `Plans remapped: ${data.planRenamed + data.planMerged}\n` +
+                    `Logged sets joined: ${data.logSetsMoved + data.logNamesRewritten}`
+            );
+        } finally {
+            setSaving(false);
+        }
+    };
+
     return (
         <div className="max-w-4xl mx-auto p-6 animate-fade-in pb-20">
             <div className="card p-6 border-brand-500/20 mb-6 bg-gradient-to-r from-surface-card to-brand-950/10">
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                     <div>
                         <h2 className="heading-2">Exercise Dictionary</h2>
-                        <p className="subheading">Manage the global exercise list used during workouts and plan creation.</p>
+                        <p className="subheading">
+                            Edit names, muscle groups, and media — or combine duplicates so all logged history joins one exercise.
+                        </p>
                     </div>
-                    <button onClick={() => setIsAdding(!isAdding)} className="btn-primary w-full sm:w-auto">
-                        <Plus className="w-5 h-5" /> New Exercise
-                    </button>
+                    <div className="flex w-full sm:w-auto gap-2">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                if (mergeMode) exitMergeMode();
+                                else {
+                                    setIsAdding(false);
+                                    setEditingId(null);
+                                    setMergeMode(true);
+                                    setMergeTargetName("");
+                                    setMergeMuscleGroup("Uncategorized");
+                                }
+                            }}
+                            className={`btn-secondary w-full sm:w-auto ${mergeMode ? "ring-2 ring-brand-500/40" : ""}`}
+                        >
+                            <Merge className="w-5 h-5" />
+                            {mergeMode ? "Cancel combine" : "Combine"}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                exitMergeMode();
+                                setIsAdding(!isAdding);
+                            }}
+                            className="btn-primary w-full sm:w-auto"
+                        >
+                            <Plus className="w-5 h-5" /> New Exercise
+                        </button>
+                    </div>
                 </div>
+
+                {mergeMode && (
+                    <div className="mt-6 space-y-3 animate-slide-up rounded-xl border border-surface-border bg-surface-muted/40 p-4">
+                        <p className="text-sm text-fg-muted">
+                            Select 2+ dictionary exercises, pick the final name and muscle group, then combine.
+                            Logged sets from every selected name are remapped onto the survivor.
+                        </p>
+                        <div className="grid sm:grid-cols-2 gap-3">
+                            <input
+                                className="input"
+                                placeholder={selectedExercises[0]?.name || "Final exercise name"}
+                                value={mergeTargetName}
+                                onChange={(e) => setMergeTargetName(e.target.value)}
+                            />
+                            <select
+                                className="input"
+                                value={mergeMuscleGroup}
+                                onChange={(e) => setMergeMuscleGroup(e.target.value)}
+                            >
+                                {MUSCLE_GROUPS.map((g) => (
+                                    <option key={g} value={g}>{g}</option>
+                                ))}
+                                <option value="Uncategorized">Uncategorized</option>
+                            </select>
+                        </div>
+                        {selectedExercises.length > 0 && (
+                            <p className="text-xs text-fg-muted">
+                                Selected: {selectedExercises.map((e) => e.name).join(" · ")}
+                            </p>
+                        )}
+                        <button
+                            type="button"
+                            onClick={handleMerge}
+                            disabled={saving || selectedIds.length < 2}
+                            className="btn-primary"
+                        >
+                            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckSquare className="w-4 h-4" />}
+                            Combine {selectedIds.length || ""} exercises
+                        </button>
+                    </div>
+                )}
 
                 {isAdding && (
                     <div className="mt-6 grid sm:grid-cols-2 gap-3 animate-slide-up">
@@ -255,9 +419,35 @@ export function AdminExercisesClient({ initialExercises }: { initialExercises: G
                         <div className="space-y-3">
                 {items.map(ex => {
                     const isEditing = editingId === ex.id;
+                    const isSelected = selectedIds.includes(ex.id);
                     return (
-                    <div key={ex.id} className="card p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 fade-in">
-                        <div className="flex items-center gap-4 flex-1">
+                    <div
+                        key={ex.id}
+                        className={`card p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 fade-in ${
+                            mergeMode && isSelected ? "ring-2 ring-brand-500/50 border-brand-500/30" : ""
+                        }`}
+                    >
+                        <div className="flex items-center gap-4 flex-1 min-w-0">
+                            {mergeMode && !ex.isSuggestion && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        toggleSelected(ex.id);
+                                        if (!mergeTargetName) setMergeTargetName(ex.name);
+                                        if (mergeMuscleGroup === "Uncategorized" && ex.muscleGroup) {
+                                            setMergeMuscleGroup(ex.muscleGroup);
+                                        }
+                                    }}
+                                    className={`h-6 w-6 rounded-md border flex items-center justify-center shrink-0 ${
+                                        isSelected
+                                            ? "bg-brand-500 border-brand-500 text-white"
+                                            : "border-surface-border text-transparent"
+                                    }`}
+                                    aria-label={`Select ${ex.name}`}
+                                >
+                                    <Check className="w-3.5 h-3.5" />
+                                </button>
+                            )}
                             <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border bg-surface-elevated text-fg-subtle border-surface-border">
                                 <Dumbbell className="w-4 h-4" />
                             </div>
@@ -299,7 +489,7 @@ export function AdminExercisesClient({ initialExercises }: { initialExercises: G
                         {ex.isSuggestion ? (
                             <button
                                 onClick={() => addSuggestion(ex)}
-                                disabled={saving}
+                                disabled={saving || mergeMode}
                                 className="btn-primary btn-sm w-full sm:w-auto"
                             >
                                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
@@ -316,7 +506,7 @@ export function AdminExercisesClient({ initialExercises }: { initialExercises: G
                                     Cancel
                                 </button>
                             </div>
-                        ) : (
+                        ) : !mergeMode ? (
                             <button
                                 onClick={() => {
                                     setEditingId(ex.id);
@@ -327,7 +517,7 @@ export function AdminExercisesClient({ initialExercises }: { initialExercises: G
                                 <Pencil className="w-4 h-4" />
                                 Edit
                             </button>
-                        )}
+                        ) : null}
                     </div>
                 )})}
                         </div>

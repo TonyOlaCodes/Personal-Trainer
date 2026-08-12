@@ -1,288 +1,273 @@
 "use client";
 
-import { cn } from "@/lib/utils";
 import {
-    MUSCLE_REGION_LABELS,
-    hasMuscleData,
-    type MuscleRegion,
-    type WorkoutMuscleBreakdown,
+  MUSCLE_REGION_LABELS,
+  muscleHeatFill,
+  muscleHeatOpacity,
+  muscleHeatStroke,
+  type MuscleHeatLevel,
+  type MuscleRegion,
+  type WorkoutMuscleBreakdown,
 } from "@/lib/exerciseMuscles";
 
-/**
- * Front and back body silhouettes with the trained muscles highlighted.
- * Regions come from exercise metadata only — an unmapped exercise is reported as
- * "no muscle data" rather than shaded.
- */
-
-type BodyView = "front" | "back";
-
-/** Which silhouette each region is drawn on. */
-const REGION_VIEW: Record<MuscleRegion, BodyView[]> = {
-    chest: ["front"],
-    shoulders: ["front", "back"],
-    biceps: ["front"],
-    forearms: ["front"],
-    core: ["front"],
-    obliques: ["front"],
-    quads: ["front"],
-    traps: ["back"],
-    upperBack: ["back"],
-    lats: ["back"],
-    lowerBack: ["back"],
-    triceps: ["back"],
-    glutes: ["back"],
-    hamstrings: ["back"],
-    calves: ["back"],
+type Props = {
+  breakdown: WorkoutMuscleBreakdown;
+  className?: string;
+  size?: "sm" | "md";
 };
 
-/** Simplified anatomy shapes on a 200×420 canvas, mirrored for left/right. */
-const REGION_SHAPES: Record<MuscleRegion, string[]> = {
-    chest: [
-        "M100 108 q-22 -6 -34 4 q-6 16 2 28 q16 8 32 2 z",
-        "M100 108 q22 -6 34 4 q6 16 -2 28 q-16 8 -32 2 z",
-    ],
-    shoulders: [
-        "M66 100 q-16 2 -21 18 q-2 14 4 22 q12 -4 18 -16 q3 -12 -1 -24 z",
-        "M134 100 q16 2 21 18 q2 14 -4 22 q-12 -4 -18 -16 q-3 -12 1 -24 z",
-    ],
-    biceps: [
-        "M56 142 q-9 12 -8 30 q1 14 8 20 q9 -8 11 -24 q1 -16 -11 -26 z",
-        "M144 142 q9 12 8 30 q-1 14 -8 20 q-9 -8 -11 -24 q-1 -16 11 -26 z",
-    ],
-    triceps: [
-        "M54 140 q-11 14 -10 34 q1 14 9 20 q9 -10 10 -28 q1 -18 -9 -26 z",
-        "M146 140 q11 14 10 34 q-1 14 -9 20 q-9 -10 -10 -28 q-1 -18 9 -26 z",
-    ],
-    forearms: [
-        "M50 196 q-8 16 -6 36 q2 16 8 22 q8 -10 9 -30 q1 -20 -11 -28 z",
-        "M150 196 q8 16 6 36 q-2 16 -8 22 q-8 -10 -9 -30 q-1 -20 11 -28 z",
-    ],
-    core: ["M100 146 q-18 0 -21 10 l0 52 q4 12 21 12 q17 0 21 -12 l0 -52 q-3 -10 -21 -10 z"],
-    obliques: [
-        "M76 152 q-10 6 -11 22 q-1 20 6 34 q8 -6 9 -24 q1 -20 -4 -32 z",
-        "M124 152 q10 6 11 22 q1 20 -6 34 q-8 -6 -9 -24 q-1 -20 4 -32 z",
-    ],
-    traps: ["M100 84 q-26 4 -34 20 q16 8 34 8 q18 0 34 -8 q-8 -16 -34 -20 z"],
-    upperBack: [
-        "M100 112 q-26 -2 -32 12 q-2 18 6 28 q14 4 26 0 z",
-        "M100 112 q26 -2 32 12 q2 18 -6 28 q-14 4 -26 0 z",
-    ],
-    lats: [
-        "M68 130 q-8 22 -2 46 q6 14 16 18 q6 -22 6 -46 q0 -14 -20 -18 z",
-        "M132 130 q8 22 2 46 q-6 14 -16 18 q-6 -22 -6 -46 q0 -14 20 -18 z",
-    ],
-    lowerBack: ["M100 186 q-16 0 -19 10 q-1 16 5 24 q14 4 28 0 q6 -8 5 -24 q-3 -10 -19 -10 z"],
-    glutes: [
-        "M100 220 q-22 0 -26 14 q-2 18 8 26 q12 4 18 -4 z",
-        "M100 220 q22 0 26 14 q2 18 -8 26 q-12 4 -18 -4 z",
-    ],
-    quads: [
-        "M84 226 q-12 22 -10 54 q2 24 10 34 q10 -12 12 -42 q2 -30 -12 -46 z",
-        "M116 226 q12 22 10 54 q-2 24 -10 34 q-10 -12 -12 -42 q-2 -30 12 -46 z",
-    ],
-    hamstrings: [
-        "M84 262 q-11 20 -9 48 q2 20 9 28 q9 -10 11 -36 q2 -26 -11 -40 z",
-        "M116 262 q11 20 9 48 q-2 20 -9 28 q-9 -10 -11 -36 q-2 -26 11 -40 z",
-    ],
-    calves: [
-        "M85 336 q-9 16 -8 40 q1 18 8 24 q8 -8 9 -30 q1 -22 -9 -34 z",
-        "M115 336 q9 16 8 40 q-1 18 -8 24 q-8 -8 -9 -30 q-1 -22 9 -34 z",
-    ],
+/** SVG paths overlaid on the grey silhouette — keyed by MuscleRegion. */
+const REGION_PATHS: Record<
+  MuscleRegion,
+  { front?: string; back?: string }
+> = {
+  chest: {
+    front:
+      "M46 52c4-6 10-10 18-10s14 4 18 10c2 4 3 9 2 14-1 6-4 11-9 14-3 2-7 3-11 3s-8-1-11-3c-5-3-8-8-9-14-1-5 0-10 2-14z",
+  },
+  shoulders: {
+    front:
+      "M28 48c-5 1-9 5-10 11-1 5 1 10 5 13 3 2 6 2 9 1 2-4 3-9 3-14 0-4-2-8-7-11zm72 0c5 1 9 5 10 11 1 5-1 10-5 13-3 2-6 2-9 1-2-4-3-9-3-14 0-4 2-8 7-11z",
+  },
+  biceps: {
+    front:
+      "M24 72c-2 8-2 16 0 24 1 4 3 7 6 8 2-8 3-16 2-24-1-4-3-7-8-8zm80 0c2 8 2 16 0 24-1 4-3 7-6 8-2-8-3-16-2-24 1-4 3-7 8-8z",
+  },
+  triceps: {
+    back:
+      "M26 74c-2 9-1 18 1 26 2 3 4 5 7 5 1-9 1-18-1-26-1-3-3-5-7-5zm76 0c2 9 1 18-1 26-2 3-4 5-7 5-1-9-1-18 1-26 1-3 3-5 7-5z",
+  },
+  forearms: {
+    front:
+      "M22 102c-2 10-1 20 1 28 2 2 4 3 6 2 1-10 0-20-2-28-1-2-3-3-5-2zm84 0c2 10 1 20-1 28-2 2-4 3-6 2-1-10 0-20 2-28 1-2 3-3 5-2z",
+  },
+  core: {
+    front:
+      "M52 78h24c1 8 1 16 0 24-1 6-4 11-12 11s-11-5-12-11c-1-8-1-16 0-24z",
+  },
+  obliques: {
+    front:
+      "M44 80c-3 8-4 16-3 24 2 3 4 4 6 3 0-8 1-16 3-24-1-2-3-3-6-3zm40 0c3 8 4 16 3 24-2 3-4 4-6 3 0-8-1-16-3-24 1-2 3-3 6-3z",
+  },
+  quads: {
+    front:
+      "M42 118c-2 14-1 28 1 40 3 4 7 5 11 3 1-14 0-28-2-40-2-3-5-4-10-3zm46 0c2 14 1 28-1 40-3 4-7 5-11 3-1-14 0-28 2-40 2-3 5-4 10-3z",
+  },
+  calves: {
+    front:
+      "M44 168c-1 10 0 18 2 24 2 2 5 2 7 0 0-8-1-16-2-24-1-2-4-2-7 0zm40 0c1 10 0 18-2 24-2 2-5 2-7 0 0-8 1-16 2-24 1-2 4-2 7 0z",
+  },
+  glutes: {
+    back:
+      "M44 112c2-6 8-10 16-10s14 4 16 10c1 6-1 12-6 15-3 2-7 3-10 3s-7-1-10-3c-5-3-7-9-6-15z",
+  },
+  hamstrings: {
+    back:
+      "M42 132c-1 12 0 24 2 34 3 3 7 4 11 2 0-12-1-24-3-34-2-2-5-3-10-2zm46 0c1 12 0 24-2 34-3 3-7 4-11 2 0-12 1-24 3-34 2-2 5-3 10-2z",
+  },
+  traps: {
+    back:
+      "M48 42c4-8 10-12 16-12s12 4 16 12c2 5 1 10-2 13-4 3-9 4-14 4s-10-1-14-4c-3-3-4-8-2-13z",
+  },
+  lats: {
+    back:
+      "M34 58c-2 12 0 26 4 38 4 6 10 8 16 6 2-14 1-28-2-40-3-4-8-6-18-4zm70 0c2 12 0 26-4 38-4 6-10 8-16 6-2-14-1-28 2-40 3-4 8-6 18-4z",
+  },
+  upperBack: {
+    back:
+      "M46 54c3-5 9-8 18-8s15 3 18 8c2 6 1 12-2 16-4 4-10 5-16 5s-12-1-16-5c-3-4-4-10-2-16z",
+  },
+  lowerBack: {
+    back:
+      "M52 88h24c1 6 1 12 0 18-1 4-4 7-12 7s-11-3-12-7c-1-6-1-12 0-18z",
+  },
 };
 
-const SILHOUETTE =
-    "M100 22 a17 17 0 0 1 17 17 a17 17 0 0 1 -17 17 a17 17 0 0 1 -17 -17 a17 17 0 0 1 17 -17 z"
-    + " M100 60 q26 2 38 18 q10 14 12 40 q3 26 8 44 q4 18 -2 24 q-8 2 -12 -10 q-3 22 -6 40"
-    + " q-2 14 0 26 q3 40 1 74 q-1 32 -6 52 q-6 14 -16 12 q-8 -2 -9 -18 q-2 -30 -8 -60"
-    + " q-6 30 -8 60 q-1 16 -9 18 q-10 2 -16 -12 q-5 -20 -6 -52 q-2 -34 1 -74 q2 -12 0 -26"
-    + " q-3 -18 -6 -40 q-4 12 -12 10 q-6 -6 -2 -24 q5 -18 8 -44 q2 -26 12 -40 q12 -16 38 -18 z";
+const OUTLINE = "#4b5563";
+const BASE_GREY = "#9ca3af";
 
-function BodyOutline({
-    view,
-    primary,
-    secondary,
+function BodySilhouette() {
+  return (
+    <g strokeLinejoin="round">
+      {/* Base body — cool grey */}
+      <g fill={BASE_GREY} stroke={OUTLINE} strokeWidth="1.5">
+        <ellipse cx="64" cy="22" rx="12" ry="14" />
+        <path d="M56 34c1 6 3 8 8 8s7-2 8-8" />
+        <path d="M40 48c6-6 14-9 24-9s18 3 24 9c4 5 6 12 6 20v28c0 8-3 14-8 18-4 3-10 5-22 5s-18-2-22-5c-5-4-8-10-8-18V68c0-8 2-15 6-20z" />
+        <path d="M40 52c-8 2-14 8-16 16-2 10-1 22 1 34 1 6 4 10 8 11 2-12 2-24 1-36 0-8 2-14 6-20z" />
+        <path d="M88 52c8 2 14 8 16 16 2 10 1 22-1 34-1 6-4 10-8 11-2-12-2-24-1-36 0-8-2-14-6-20z" />
+        <path d="M25 110c-2 12-1 22 1 30 2 4 5 5 8 4 0-10-1-20-2-30-1-3-4-4-7-4z" />
+        <path d="M103 110c2 12 1 22-1 30-2 4-5 5-8 4 0-10 1-20 2-30 1-3 4-4 7-4z" />
+        <path d="M50 118c-3 0-6 2-7 6-2 14-1 30 1 44 1 6 4 10 8 11 2-16 1-32-1-46 0-5 1-9-1-15z" />
+        <path d="M78 118c3 0 6 2 7 6 2 14 1 30-1 44-1 6-4 10-8 11-2-16-1-32 1-46 0-5-1-9 1-15z" />
+        <path d="M44 176c0 4 2 8 8 9h6c1-4 0-8-1-10-3-1-8-1-13 1z" />
+        <path d="M84 176c0 4-2 8-8 9h-6c-1-4 0-8 1-10 3-1 8-1 13 1z" />
+      </g>
+      {/* Definition lines */}
+      <g fill="none" stroke="#6b7280" strokeWidth="1" strokeOpacity="0.55">
+        <path d="M64 48v54" />
+        <path d="M52 78h24" />
+        <path d="M52 90h24" />
+        <path d="M52 102h24" />
+        <path d="M44 68c4 2 8 3 12 3s8-1 12-3" />
+        <path d="M48 118v40" />
+        <path d="M80 118v40" />
+        <path d="M30 78c2 8 3 16 2 24" />
+        <path d="M98 78c-2 8-3 16-2 24" />
+      </g>
+    </g>
+  );
+}
+
+function HeatOverlay({
+  view,
+  heat,
 }: {
-    view: BodyView;
-    primary: Set<MuscleRegion>;
-    secondary: Set<MuscleRegion>;
+  view: "front" | "back";
+  heat: Partial<Record<MuscleRegion, MuscleHeatLevel>>;
 }) {
-    const regions = (Object.keys(REGION_SHAPES) as MuscleRegion[]).filter((region) =>
-        REGION_VIEW[region].includes(view)
-    );
+  const regions = (Object.keys(REGION_PATHS) as MuscleRegion[]).filter((r) => {
+    const path = view === "front" ? REGION_PATHS[r].front : REGION_PATHS[r].back;
+    const level = heat[r];
+    return Boolean(path && level && level !== "none");
+  });
 
-    return (
-        <div className="flex flex-col items-center gap-1">
-            <svg
-                viewBox="0 0 200 420"
-                className="w-full h-auto max-h-[220px]"
-                role="img"
-                aria-label={`${view === "front" ? "Front" : "Back"} view of muscles trained`}
+  return (
+    <g>
+      {regions.map((region) => {
+        const path = view === "front" ? REGION_PATHS[region].front! : REGION_PATHS[region].back!;
+        const level = heat[region] ?? "none";
+        return (
+          <path
+            key={`${view}-${region}`}
+            d={path}
+            fill={muscleHeatFill(level)}
+            fillOpacity={muscleHeatOpacity(level)}
+            stroke={muscleHeatStroke(level)}
+            strokeWidth="1.2"
+            strokeOpacity={0.9}
+          />
+        );
+      })}
+    </g>
+  );
+}
+
+function HeatChip({
+  region,
+  heat,
+}: {
+  region: MuscleRegion;
+  heat: MuscleHeatLevel;
+}) {
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium"
+      style={{
+        borderColor: muscleHeatStroke(heat),
+        background: `${muscleHeatFill(heat)}22`,
+        color: muscleHeatStroke(heat),
+      }}
+    >
+      <span className="h-1.5 w-1.5 rounded-full" style={{ background: muscleHeatFill(heat) }} />
+      {MUSCLE_REGION_LABELS[region]}
+    </span>
+  );
+}
+
+export function MuscleMap({ breakdown, className = "", size = "md" }: Props) {
+  const dim = size === "sm" ? 88 : 118;
+  const heat = breakdown.heat;
+
+  const labels = [
+    ...breakdown.primary.map((r) => ({
+      region: r,
+      heat: (heat[r] ?? "high") as MuscleHeatLevel,
+    })),
+    ...breakdown.secondary.map((r) => ({
+      region: r,
+      heat: (heat[r] ?? "low") as MuscleHeatLevel,
+    })),
+  ];
+
+  if (labels.length === 0 && breakdown.activityGroups.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className={`flex items-center gap-3 ${className}`}>
+      <div className="flex gap-1.5">
+        {(["front", "back"] as const).map((view) => (
+          <svg
+            key={view}
+            width={dim * 0.55}
+            height={dim}
+            viewBox="0 0 128 200"
+            className="shrink-0"
+            aria-hidden
+          >
+            <BodySilhouette />
+            <HeatOverlay view={view} heat={heat} />
+            <text
+              x="64"
+              y="196"
+              textAnchor="middle"
+              className="fill-[var(--muted)]"
+              style={{ fontSize: 9 }}
             >
-                <path
-                    d={SILHOUETTE}
-                    className="fill-surface-muted/40 stroke-surface-border"
-                    strokeWidth={1.5}
-                />
-                {regions.map((region) => {
-                    const isPrimary = primary.has(region);
-                    const isSecondary = !isPrimary && secondary.has(region);
-                    if (!isPrimary && !isSecondary) return null;
-
-                    return REGION_SHAPES[region].map((shape, index) => (
-                        <path
-                            key={`${region}-${index}`}
-                            d={shape}
-                            className={cn(
-                                isPrimary
-                                    ? "fill-brand-500/85 stroke-brand-300/70"
-                                    : "fill-brand-500/28 stroke-brand-500/35"
-                            )}
-                            strokeWidth={0.8}
-                        />
-                    ));
-                })}
-            </svg>
-            <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">
-                {view === "front" ? "Front" : "Back"}
+              {view === "front" ? "Front" : "Back"}
+            </text>
+          </svg>
+        ))}
+      </div>
+      <div className="min-w-0 flex-1 space-y-1.5">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">
+          Muscles worked
+        </p>
+        <div className="flex flex-wrap gap-1">
+          {labels.map(({ region, heat: level }) => (
+            <HeatChip key={region} region={region} heat={level} />
+          ))}
+          {breakdown.activityGroups.map((group) => (
+            <span
+              key={group}
+              className="rounded-full border border-[var(--border)] px-2 py-0.5 text-[10px] font-medium text-[var(--muted)]"
+            >
+              {group}
             </span>
+          ))}
         </div>
-    );
+        <p className="text-[10px] text-[var(--muted)]">
+          Grey = resting · Yellow → red = more work
+        </p>
+      </div>
+    </div>
+  );
 }
 
-interface Props {
-    breakdown: WorkoutMuscleBreakdown;
-    className?: string;
-    /** Compact rendering for the active workout screen. */
-    compact?: boolean;
-}
-
-export function MuscleMap({ breakdown, className, compact = false }: Props) {
-    const primary = new Set(breakdown.primary);
-    const secondary = new Set(breakdown.secondary);
-
-    if (!hasMuscleData(breakdown)) {
-        return (
-            <div className={cn("card p-4", className)}>
-                <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">
-                    Muscles trained
-                </p>
-                <p className="text-xs text-fg-muted mt-1.5">
-                    {breakdown.activityGroups.length > 0
-                        ? `${breakdown.activityGroups.join(", ")} session — no muscle mapping recorded.`
-                        : "No muscle data recorded for these exercises."}
-                </p>
-            </div>
-        );
-    }
-
-    return (
-        <div className={cn("card p-4 space-y-3", className)}>
-            <div className="flex items-baseline justify-between gap-3">
-                <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">
-                    Muscles trained
-                </p>
-                {breakdown.unknownExerciseCount > 0 && (
-                    <span className="text-[9px] font-semibold text-fg-subtle">
-                        {breakdown.unknownExerciseCount} without muscle data
-                    </span>
-                )}
-            </div>
-
-            <div className={cn("grid gap-3", compact ? "grid-cols-2" : "grid-cols-2 sm:gap-5")}>
-                <BodyOutline view="front" primary={primary} secondary={secondary} />
-                <BodyOutline view="back" primary={primary} secondary={secondary} />
-            </div>
-
-            <div className="space-y-2">
-                <MuscleLegendRow
-                    label="Primary"
-                    regions={breakdown.primary}
-                    dotClass="bg-brand-500"
-                    textClass="text-fg"
-                />
-                {breakdown.secondary.length > 0 && (
-                    <MuscleLegendRow
-                        label="Secondary"
-                        regions={breakdown.secondary}
-                        dotClass="bg-brand-500/35"
-                        textClass="text-fg-muted"
-                    />
-                )}
-            </div>
-        </div>
-    );
-}
-
-function MuscleLegendRow({
-    label,
-    regions,
-    dotClass,
-    textClass,
-}: {
-    label: string;
-    regions: MuscleRegion[];
-    dotClass: string;
-    textClass: string;
-}) {
-    if (regions.length === 0) return null;
-
-    return (
-        <div className="flex items-start gap-2">
-            <span className={cn("w-2 h-2 rounded-full mt-1 shrink-0", dotClass)} />
-            <div className="min-w-0">
-                <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle mr-1.5">
-                    {label}
-                </span>
-                <span className={cn("text-[11px] font-semibold", textClass)}>
-                    {regions.map((region) => MUSCLE_REGION_LABELS[region]).join(" · ")}
-                </span>
-            </div>
-        </div>
-    );
-}
-
-/** Single-line muscle summary for tight spaces such as the active workout header. */
 export function MuscleChips({
-    breakdown,
-    className,
+  breakdown,
+  className = "",
 }: {
-    breakdown: WorkoutMuscleBreakdown;
-    className?: string;
+  breakdown: WorkoutMuscleBreakdown;
+  className?: string;
 }) {
-    if (!hasMuscleData(breakdown)) {
-        if (breakdown.activityGroups.length === 0) return null;
-        return (
-            <div className={cn("flex flex-wrap items-center gap-1.5", className)}>
-                {breakdown.activityGroups.map((group) => (
-                    <span
-                        key={group}
-                        className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-surface-muted/50 text-fg-subtle border border-surface-border/60"
-                    >
-                        {group}
-                    </span>
-                ))}
-            </div>
-        );
-    }
-
-    return (
-        <div className={cn("flex flex-wrap items-center gap-1.5", className)}>
-            {breakdown.primary.map((region) => (
-                <span
-                    key={region}
-                    className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-brand-500/15 text-brand-300 border border-brand-500/25"
-                >
-                    {MUSCLE_REGION_LABELS[region]}
-                </span>
-            ))}
-            {breakdown.secondary.map((region) => (
-                <span
-                    key={region}
-                    className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-surface-muted/50 text-fg-subtle border border-surface-border/60"
-                >
-                    {MUSCLE_REGION_LABELS[region]}
-                </span>
-            ))}
-        </div>
-    );
+  const items = [
+    ...breakdown.primary.map((r) => ({
+      region: r,
+      heat: (breakdown.heat[r] ?? "high") as MuscleHeatLevel,
+    })),
+    ...breakdown.secondary.map((r) => ({
+      region: r,
+      heat: (breakdown.heat[r] ?? "low") as MuscleHeatLevel,
+    })),
+  ];
+  if (items.length === 0) return null;
+  return (
+    <div className={`flex flex-wrap gap-1 ${className}`}>
+      {items.map(({ region, heat }) => (
+        <HeatChip key={region} region={region} heat={heat} />
+      ))}
+    </div>
+  );
 }
