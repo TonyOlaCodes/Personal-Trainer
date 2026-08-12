@@ -1690,19 +1690,30 @@ export function WorkoutLogClient({
                             height: viewport ? `${Math.max(260, viewport.height - 8)}px` : undefined,
                         }}
                     >
-                        <div className="text-center space-y-1 shrink-0 pb-2">
-                            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-brand rounded-2xl flex items-center justify-center mx-auto shadow-glow-brand">
-                                <Plus className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+                        <div className="flex items-start justify-between gap-3 shrink-0 pb-2">
+                            <div className="min-w-0 pt-0.5">
+                                <h3 className="text-lg sm:text-xl font-black text-fg tracking-tighter uppercase">
+                                    {isSubstituting ? "Substitute Exercise" : "Add Exercise"}
+                                </h3>
+                                <p className="text-[11px] text-fg-subtle font-medium mt-0.5">
+                                    {isSubstituting ? "Tap a match to swap instantly." : "Tap a match to add."}
+                                </p>
                             </div>
-                            <h3 className="text-lg sm:text-xl font-black text-fg tracking-tighter uppercase">
-                                {isSubstituting ? "Substitute Exercise" : "Add Exercise"}
-                            </h3>
-                            <p className="text-[11px] text-fg-subtle font-medium">
-                                {isSubstituting ? "Tap a match to swap instantly." : "Tap a match to add, or add a custom name."}
-                            </p>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setIsSubstituting(null);
+                                    setIsAddingExercise(false);
+                                    setSearchQuery("");
+                                }}
+                                className="btn-ghost h-9 px-3 text-xs font-black uppercase tracking-widest text-fg-muted shrink-0"
+                                aria-label="Cancel"
+                            >
+                                Cancel
+                            </button>
                         </div>
 
-                        <div className="min-h-0 flex-1 flex flex-col">
+                        <div className="min-h-0 flex-1 flex flex-col pb-[max(0.25rem,env(safe-area-inset-bottom))]">
                             <label className="text-[10px] font-black uppercase tracking-widest text-fg-subtle px-1 shrink-0 mb-1.5">Search Exercises</label>
                             <ExerciseAutocomplete
                                 value={searchQuery}
@@ -1716,28 +1727,6 @@ export function WorkoutLogClient({
                                 className="input h-12 font-bold border-brand-500/20 focus:border-brand-500"
                                 placeholder="Search e.g. Bench Press..."
                             />
-                        </div>
-
-                        <div className="flex gap-3 pt-3 shrink-0 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
-                            <button
-                                onClick={() => {
-                                    setIsSubstituting(null);
-                                    setIsAddingExercise(false);
-                                    setSearchQuery("");
-                                }}
-                                className="btn-secondary h-11 flex-1"
-                            >
-                                Cancel
-                            </button>
-                            {!isSubstituting && (
-                                <button
-                                    onClick={() => handleAddExercise(searchQuery)}
-                                    disabled={!searchQuery.trim()}
-                                    className="btn-primary h-11 flex-[2] shadow-glow-brand"
-                                >
-                                    Add custom
-                                </button>
-                            )}
                         </div>
                     </div>
                 </div>
