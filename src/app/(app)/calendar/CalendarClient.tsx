@@ -37,6 +37,8 @@ import {
     WORKOUT_DAY_STATUS_STYLES,
     type WorkoutDayStatus,
 } from "@/lib/workoutDayStatus";
+import { CalendarComplianceSummary } from "@/components/calendar/CalendarComplianceSummary";
+import type { CalendarComplianceInput } from "@/lib/calendarCompliance";
 
 /* ─────────────────────────── Types ─────────────────────────── */
 interface PlanExercise { id: string; name: string; sets: number; reps: string; order?: number; weightTargetKg?: number | null; }
@@ -496,6 +498,25 @@ export function CalendarClient({
         return `${rounded}kg`;
     };
 
+    const complianceInput = useMemo<CalendarComplianceInput>(
+        () => ({
+            activePlan,
+            planStartedAt,
+            loggedDates,
+            scheduleRevisions,
+            excusedMissedWorkoutKeys: localExcusedKeys,
+            historicalMissedSessions,
+        }),
+        [
+            activePlan,
+            planStartedAt,
+            loggedDates,
+            scheduleRevisions,
+            localExcusedKeys,
+            historicalMissedSessions,
+        ]
+    );
+
     return (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fade-in">
             {/* ── Main Grid ── */}
@@ -555,6 +576,13 @@ export function CalendarClient({
                         </button>
                     </div>
                 </div>
+
+                <CalendarComplianceSummary
+                    complianceInput={complianceInput}
+                    calendarView={view}
+                    now={now}
+                    excludeTodayUntilLogged={isCoachView}
+                />
 
                 <div className="card overflow-hidden shadow-glow-sm border-brand-500/10">
                     <div className="grid grid-cols-7 bg-surface-muted/20 border-b border-surface-border">

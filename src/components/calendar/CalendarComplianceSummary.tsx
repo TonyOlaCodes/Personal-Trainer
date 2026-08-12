@@ -55,10 +55,23 @@ function ComplianceCard({
                 </span>
             </div>
             <p className={cn("text-2xl sm:text-3xl font-black tabular-nums", valueClass)}>
-                {percent !== null ? `${percent}%` : "—"}
+                {due > 0 ? (
+                    <>
+                        {completed}
+                        <span className="text-lg sm:text-xl font-bold text-fg-muted">/{due}</span>
+                    </>
+                ) : (
+                    completed > 0 ? completed : "—"
+                )}
             </p>
             <p className="text-[9px] sm:text-[10px] text-fg-muted font-bold mt-0.5 leading-tight">
-                {due > 0 ? `${completed}/${due} workouts` : "No sessions due yet"} · {sublabel}
+                {due > 0
+                    ? `${completed === 1 ? "1 workout done" : `${completed} workouts done`}${percent !== null ? ` · ${percent}%` : ""}`
+                    : completed > 0
+                        ? `${completed} logged · no plan sessions due`
+                        : "No sessions due yet"}
+                {" · "}
+                {sublabel}
             </p>
         </div>
     );
@@ -134,13 +147,33 @@ export function CalendarComplianceSummary({
         );
     }
 
+    // Browsing another month: show that month, plus live week/month so coaches & clients
+    // always see how many sessions are done recently.
     return (
-        <ComplianceCard
-            label={`${MONTHS[calendarView.month]} ${calendarView.year}`}
-            sublabel={isViewingFutureMonth ? "Month not started yet" : "Workouts done in month"}
-            completed={isViewingFutureMonth ? 0 : viewedMonthCompliance.completed}
-            due={isViewingFutureMonth ? 0 : viewedMonthCompliance.due}
-            percent={isViewingFutureMonth ? null : viewedMonthCompliance.percent}
-        />
+        <div className="space-y-2 sm:space-y-3">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                <ComplianceCard
+                    label="This Week"
+                    sublabel="So far this week"
+                    completed={weekCompliance.completed}
+                    due={weekCompliance.due}
+                    percent={weekCompliance.percent}
+                />
+                <ComplianceCard
+                    label="This Month"
+                    sublabel="So far this month"
+                    completed={monthCompliance.completed}
+                    due={monthCompliance.due}
+                    percent={monthCompliance.percent}
+                />
+            </div>
+            <ComplianceCard
+                label={`${MONTHS[calendarView.month]} ${calendarView.year}`}
+                sublabel={isViewingFutureMonth ? "Month not started yet" : "Workouts done in month"}
+                completed={isViewingFutureMonth ? 0 : viewedMonthCompliance.completed}
+                due={isViewingFutureMonth ? 0 : viewedMonthCompliance.due}
+                percent={isViewingFutureMonth ? null : viewedMonthCompliance.percent}
+            />
+        </div>
     );
 }
