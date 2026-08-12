@@ -123,7 +123,6 @@ export default async function ProgressPage() {
                         hiddenGoals={hiddenGoals}
                         todayWorkoutHref={todayWorkoutHref}
                         canAccessCheckIns={canAccessCheckIns(user.role, user.coachId)}
-                        workoutStreak={streak}
                     />
                 </main>
             </div>
