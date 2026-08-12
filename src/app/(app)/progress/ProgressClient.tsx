@@ -10,7 +10,7 @@ import {
     TrendingUp, TrendingDown, Loader2,
     Dumbbell, Activity, Search, ChevronRight,
     Scale, Zap, BarChart2,
-    Flame, ArrowUpRight, ArrowDownRight, X,
+    ArrowUpRight, ArrowDownRight, X,
     Pin, Minus, ClipboardList
 } from "lucide-react";
 import Link from "next/link";
@@ -19,7 +19,6 @@ import { useScrollLock } from "@/hooks/useScrollLock";
 import { workoutFeelingEmoji } from "@/lib/workoutFeeling";
 import { PremiumLockScreen } from "@/components/shared/PremiumLockScreen";
 import { ReturnLink } from "@/components/shared/ReturnLink";
-import { StreakBadge } from "@/components/shared/StreakBadge";
 import { ExerciseHistoryTooltipContent } from "@/components/shared/ExerciseHistoryTooltip";
 import { deriveOneRMFromBestSet } from "@/lib/exerciseHistory";
 import { MAX_PINNED_EXERCISES, normalizePinnedExercises, orderExerciseNames } from "@/lib/pinnedExercises";
@@ -31,7 +30,6 @@ interface Props {
     hiddenGoals: string[];
     todayWorkoutHref?: string | null;
     canAccessCheckIns?: boolean;
-    workoutStreak?: number;
 }
 
 type BodyweightHistoryPoint = { date: string; dateKey: string; weight: number };
@@ -205,7 +203,7 @@ function isWeightChangeTowardGoal(
     }
 }
 
-export function ProgressClient({ userRole, hiddenGoals, todayWorkoutHref = null, canAccessCheckIns = false, workoutStreak = 0 }: Props) {
+export function ProgressClient({ userRole, hiddenGoals, todayWorkoutHref = null, canAccessCheckIns = false }: Props) {
     const isPremium = ["PREMIUM", "GENERAL_PREMIUM", "COACH", "SUPER_ADMIN"].includes(userRole);
     const showFreeAccessLock = !isPremium;
     const [data, setData] = useState<any>(null);
@@ -417,9 +415,6 @@ export function ProgressClient({ userRole, hiddenGoals, todayWorkoutHref = null,
         );
     }
 
-    const consistencyPct = (data?.consistency?.target ?? 0) > 0
-        ? Math.min(Math.round(((data?.consistency?.thisWeek ?? 0) / (data?.consistency?.target ?? 4)) * 100), 100) : 0;
-
     return (
         <div className="relative">
             <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-8 animate-fade-in mb-24 lg:mb-12 transition-all duration-300">
@@ -435,81 +430,6 @@ export function ProgressClient({ userRole, hiddenGoals, todayWorkoutHref = null,
                     </Link>
                 </div>
             )}
-
-            {/* ── WEEKLY PULSE ── */}
-            <section>
-                <h2 className="text-xs font-black text-fg-subtle uppercase tracking-[0.2em] mb-5 flex items-center gap-2">
-                    <Flame className="w-4 h-4 text-brand-400" />
-                    AI Overview
-                </h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                    {/* Plan streak */}
-                    <div className="card p-5 flex items-center gap-4">
-                        <div className="w-14 h-14 rounded-2xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center shrink-0">
-                            {workoutStreak > 0 ? (
-                                <StreakBadge streak={workoutStreak} size="lg" />
-                            ) : (
-                                <Flame className="w-6 h-6 text-orange-500/40" />
-                            )}
-                        </div>
-                        <div>
-                            <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest">Plan Streak</p>
-                            <p className="text-xs text-fg-muted mt-0.5">
-                                {workoutStreak > 0
-                                    ? `${workoutStreak} day${workoutStreak === 1 ? "" : "s"} on plan — workouts completed or rest days without a miss`
-                                    : "Complete your first workout to start your streak"}
-                            </p>
-                        </div>
-                    </div>
-
-                    {/* Consistency Ring */}
-                    <div className="card p-5 flex items-center gap-4">
-                        <div className="relative w-14 h-14 shrink-0">
-                            <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
-                                <path
-                                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                                    fill="none" stroke="#1E293B" strokeWidth="3"
-                                />
-                                <path
-                                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                                    fill="none" stroke={consistencyPct >= 100 ? "#10B981" : "#8B5CF6"} strokeWidth="3"
-                                    strokeDasharray={`${consistencyPct}, 100`}
-                                    strokeLinecap="round"
-                                    className="transition-all duration-1000 ease-out"
-                                />
-                            </svg>
-                            <div className="absolute inset-0 flex items-center justify-center">
-                                <span className="text-xs font-black text-fg">{data?.consistency?.thisWeek ?? 0}/{data?.consistency?.target ?? 4}</span>
-                            </div>
-                        </div>
-                        <div>
-                            <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest">Workouts</p>
-                            <p className="text-xs text-fg-muted mt-0.5">
-                                {consistencyPct >= 100 ? "On track! 🔥" : `${(data?.consistency?.target ?? 4) - (data?.consistency?.thisWeek ?? 0)} to go`}
-                            </p>
-                        </div>
-                    </div>
-
-                    {/* Volume This Week */}
-                    <div className="card p-5">
-                        <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1">Training Volume · This Week</p>
-                        <div className="flex items-baseline gap-1">
-                            <span className="text-xl font-black text-fg">
-                                {(data.weeklySummary?.totalVolume ?? 0).toLocaleString()}
-                            </span>
-                            <span className="text-[10px] font-bold text-fg-muted">kg</span>
-                        </div>
-                        <div className="mt-2">
-                            <VolumeComparisonBadge
-                                current={data.weeklySummary?.totalVolume ?? 0}
-                                previous={data.weeklySummary?.lastWeekVolume ?? 0}
-                                vsLabel={weekToDateVsLabel}
-                            />
-                        </div>
-                    </div>
-
-                </div>
-            </section>
 
             {/* ── LAST WORKOUT ── */}
             {data.lastWorkout && (

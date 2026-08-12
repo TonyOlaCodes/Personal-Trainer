@@ -172,13 +172,6 @@ export function CalendarClient({
     const detailPanelRef = useRef<HTMLDivElement>(null);
     const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
 
-    const scrollToDetailPanel = useCallback(() => {
-        setMobileDetailOpen(true);
-        window.setTimeout(() => {
-            detailPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-        }, 50);
-    }, []);
-
     useEffect(() => {
         if (!initialSelectedDateKey) return;
         setSelectedDateKey(initialSelectedDateKey);
@@ -675,26 +668,6 @@ export function CalendarClient({
                             );
                         })}
                     </div>
-                </div>
-
-                {/* Mobile: quick access to selected day */}
-                <div className="lg:hidden sticky bottom-4 z-20 flex justify-center px-2 pointer-events-none">
-                    <button
-                        type="button"
-                        onClick={scrollToDetailPanel}
-                        className="pointer-events-auto flex items-center gap-2 rounded-2xl border border-brand-500/30 bg-surface-card/95 backdrop-blur-md px-4 py-3 shadow-glow-brand text-left max-w-full"
-                    >
-                        <div className="min-w-0 flex-1">
-                            <p className="text-[9px] font-black uppercase tracking-widest text-brand-400">
-                                {selectedStatusStyle.label}
-                            </p>
-                            <p className="text-xs font-black text-fg truncate">
-                                {selectedDate.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
-                                {selectedPlanned ? ` · ${displayWorkoutName(selectedPlanned.name)}` : ""}
-                            </p>
-                        </div>
-                        <ChevronUp className="w-4 h-4 text-brand-400 shrink-0" />
-                    </button>
                 </div>
             </div>
 
