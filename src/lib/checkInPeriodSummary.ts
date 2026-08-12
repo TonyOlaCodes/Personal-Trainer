@@ -49,7 +49,11 @@ export type CheckInPeriodSummary = {
         message: string;
         detail: string;
     };
-    overallMessage: string;
+    overallHeadline: string;
+    overallProgress: string[];
+    overallAttention: string[];
+    overallNextSteps: string[];
+    overallUnassessed: string[];
 };
 
 export function getCheckInPeriodDays(schedule: Pick<CheckInSchedule, "frequencyWeeks">): number {
@@ -164,48 +168,43 @@ function buildWeightAdvice(
 ): { message: string; detail: string } {
     if (!hasPreviousCheckIn) {
         return {
-            message: "First check-in baseline",
-            detail: `Keep logging your weight ${weightWindowLabel}. Next check-in will have a cleaner trend to compare against.`,
+            message: "Building your baseline",
+            detail: "Keep logging weight when you can. Your next check-in will have a clearer trend to compare against.",
         };
     }
 
     if (changeKg === null) {
         return {
-            message: "No weight data yet",
-            detail: `Log your weight a few times ${weightWindowLabel} so we can compare against your last check-in.`,
+            message: "Not enough weight data",
+            detail: "There is not enough weight data logged since your last check-in to assess the trend yet.",
         };
     }
 
     const isBulking = goal === "GAIN_MUSCLE" || goal === "STRENGTH";
     const isCutting = goal === "LOSE_WEIGHT";
-    const isMaintenance = !isBulking && !isCutting;
 
     if (towardGoal === true) {
         if (Math.abs(changeKg) < 0.15) {
             return {
-                message: isMaintenance ? "Holding steady" : "Minimal change",
-                detail: isMaintenance
-                    ? "Your average stayed close to last check-in. That's exactly what you want on maintenance."
-                    : isBulking
-                        ? "Weight barely moved since last check-in. Add a little more food if the goal is to gain."
-                        : "Weight barely moved since last check-in. Tighten food quality or portions slightly if the goal is a steadier cut.",
+                message: "Holding steady",
+                detail: `Your average stayed close to your last check-in (${changeKg > 0 ? "+" : ""}${changeKg.toFixed(1)} kg).`,
             };
         }
         if (isBulking) {
             return {
                 message: "Gradual gain on track",
-                detail: `Up ${Math.abs(changeKg).toFixed(1)} kg since last check-in — a steady bulk pace. Keep protein high and training consistent.`,
+                detail: `Up ${Math.abs(changeKg).toFixed(1)} kg since last check-in. That pace looks reasonable for your goal.`,
             };
         }
         if (isCutting) {
             return {
                 message: "Gradual loss on track",
-                detail: `Down ${Math.abs(changeKg).toFixed(1)} kg since last check-in — a sustainable cut pace. Keep logging and protect recovery.`,
+                detail: `Down ${Math.abs(changeKg).toFixed(1)} kg since last check-in. That pace looks reasonable for your goal.`,
             };
         }
         return {
             message: "Staying on target",
-            detail: `Your average stayed close to last check-in (${changeKg > 0 ? "+" : ""}${changeKg.toFixed(1)} kg). Solid maintenance work.`,
+            detail: `Your average moved ${changeKg > 0 ? "+" : ""}${changeKg.toFixed(1)} kg since last check-in and remains in a reasonable range.`,
         };
     }
 
@@ -213,28 +212,28 @@ function buildWeightAdvice(
         if (isBulking) {
             return changeKg < 0
                 ? {
-                    message: "Weight dipped",
-                    detail: `Down ${Math.abs(changeKg).toFixed(1)} kg since last check-in while gaining. Add a little more food or reduce extra cardio if this keeps happening.`,
+                    message: "Weight moved the wrong way",
+                    detail: `Down ${Math.abs(changeKg).toFixed(1)} kg since last check-in while your goal is to gain. Discuss this with your coach if it continues.`,
                 }
                 : {
-                    message: "Gain came too fast",
-                    detail: `Up ${changeKg.toFixed(1)} kg since last check-in. That's faster than ideal for a lean gain, so keep an eye on waist and photos.`,
+                    message: "Gain came faster than ideal",
+                    detail: `Up ${changeKg.toFixed(1)} kg since last check-in. That is faster than ideal for a lean gain — worth reviewing with your coach.`,
                 };
         }
         if (isCutting) {
             return changeKg > 0
                 ? {
                     message: "Weight crept up",
-                    detail: `Up ${changeKg.toFixed(1)} kg since last check-in while cutting. Review portions, weekend intake, and daily steps.`,
+                    detail: `Up ${changeKg.toFixed(1)} kg since last check-in while your goal is to lose. Review consistency with your coach if needed.`,
                 }
                 : {
-                    message: "Loss came too fast",
-                    detail: `Down ${Math.abs(changeKg).toFixed(1)} kg since last check-in. That's fast, so protect training performance and recovery.`,
+                    message: "Loss came faster than ideal",
+                    detail: `Down ${Math.abs(changeKg).toFixed(1)} kg since last check-in. That is a sharp change — mention it to your coach if recovery or performance is affected.`,
                 };
         }
         return {
-            message: "Bigger swing than planned",
-            detail: `${changeKg > 0 ? "+" : ""}${changeKg.toFixed(1)} kg since last check-in — larger than ideal for maintenance. Review intake and activity.`,
+            message: "Larger shift than planned",
+            detail: `${changeKg > 0 ? "+" : ""}${changeKg.toFixed(1)} kg since last check-in. Review intake and activity with your coach if this was not intended.`,
         };
     }
 
@@ -244,29 +243,31 @@ function buildWeightAdvice(
     };
 }
 
-function buildStepsAdvice(average: number | null, target: number | null, metGoal: boolean | null): { message: string; detail: string } {
-    if (average === null || target === null) {
+function buildStepsAdvice(average: number | null, target: number | null, metGoal: boolean | null, daysLogged: number): { message: string; detail: string } {
+    if (average === null) {
         return {
-            message: average === null ? "No step logs" : "No step target set",
-            detail: average === null
-                ? "Log steps on the dashboard when you can — consistency matters more than perfection."
-                : "Set a step target with your coach if you want this tracked.",
+            message: "Not enough step data",
+            detail: "There is not enough step data logged this period to assess daily movement.",
+        };
+    }
+
+    if (target === null) {
+        return {
+            message: "No step target set",
+            detail: "Steps were logged, but no step target is set. Your coach can add one if you want this tracked.",
         };
     }
 
     if (metGoal) {
         return {
-            message: "Steps looking good",
-            detail: "You hit your step goal on average. Keep the daily movement up.",
+            message: "Steps on target",
+            detail: `You averaged ${average.toLocaleString()} steps per day across ${daysLogged} logged day${daysLogged === 1 ? "" : "s"}.`,
         };
     }
 
-    const gap = target - average;
     return {
         message: "Below step target",
-        detail: gap > 3000
-            ? "Steps were well short — try a 10–15 min walk after one meal each day."
-            : "Close to target. One extra walk per day usually closes the gap.",
+        detail: `You averaged ${average.toLocaleString()} steps per day versus a target of ${target.toLocaleString()}. Improving daily movement consistency may help.`,
     };
 }
 
@@ -299,7 +300,7 @@ function buildWorkoutAdvice(completed: number, target: number): { message: strin
         return {
             completionPercent: percent,
             message: "Strong consistency",
-            detail: `${sessionLabel} done. That's a very good week; aim to repeat it and pick up the missed session if recovery allows.`,
+            detail: `${sessionLabel} completed. That is a solid training period.`,
         };
     }
 
@@ -307,7 +308,7 @@ function buildWorkoutAdvice(completed: number, target: number): { message: strin
         return {
             completionPercent: percent,
             message: "Decent consistency",
-            detail: `${sessionLabel} done. That's okay, but there is clear room to be more consistent next period.`,
+            detail: `${sessionLabel} completed. There is room to improve consistency next period.`,
         };
     }
 
@@ -315,15 +316,15 @@ function buildWorkoutAdvice(completed: number, target: number): { message: strin
         return {
             completionPercent: percent,
             message: "Patchy consistency",
-            detail: `${sessionLabel} done. Some work got done, but too many sessions slipped. Make the next week easier to execute.`,
+            detail: `${sessionLabel} completed. Several planned sessions were missed this period.`,
         };
     }
 
     if (percent >= 20) {
         return {
             completionPercent: percent,
-            message: "Something got in the way",
-            detail: `${sessionLabel} done. That usually means schedule, recovery, motivation, or life got in the way. Reset with one non-negotiable session first.`,
+            message: "Low consistency",
+            detail: `${sessionLabel} completed. Training consistency dropped this period — discuss barriers with your coach if needed.`,
         };
     }
 
@@ -331,28 +332,84 @@ function buildWorkoutAdvice(completed: number, target: number): { message: strin
         return {
             completionPercent: percent,
             message: "Very low consistency",
-            detail: `Training was minimal this period. Focus on rebuilding your routine one session at a time (${sessionLabel} — ${percent}%).`,
+            detail: `Training was minimal this period (${sessionLabel}). Rebuilding routine one session at a time is a sensible next step.`,
         };
     }
 
     return {
         completionPercent: percent,
         message: "No workouts completed",
-        detail: `You didn't complete any planned workouts this period (${completed}/${target}). Start with the first planned session and rebuild from there.`,
+        detail: `No planned workouts were completed this period (${completed}/${target}). Start with the next scheduled session and rebuild from there.`,
     };
 }
 
-function buildOverallMessage(parts: { good: number; bad: number; neutral: number }): string {
-    if (parts.bad === 0 && parts.good >= 2) {
-        return "Strong period overall. Keep the same habits rolling into next week.";
+function buildOverallOverview(input: {
+    weight: CheckInPeriodSummary["weight"];
+    steps: CheckInPeriodSummary["steps"];
+    workouts: CheckInPeriodSummary["workouts"];
+    isWeightHidden: boolean;
+    stepsTracked: boolean;
+}): Pick<CheckInPeriodSummary, "overallHeadline" | "overallProgress" | "overallAttention" | "overallNextSteps" | "overallUnassessed"> {
+    const progress: string[] = [];
+    const attention: string[] = [];
+    const nextSteps: string[] = [];
+    const unassessed: string[] = [];
+
+    if (!input.isWeightHidden) {
+        if (!input.weight || input.weight.currentKg == null) {
+            unassessed.push("Weight trend");
+        } else if (input.weight.towardGoal === true) {
+            progress.push("Weight trend looks aligned with your goal.");
+        } else if (input.weight.towardGoal === false) {
+            attention.push("Weight trend moved away from your goal this period.");
+        }
     }
-    if (parts.bad >= 2) {
-        return "A few things slipped this period. Pick one fix first: training schedule, daily movement, or recovery.";
+
+    if (input.stepsTracked) {
+        if (!input.steps || input.steps.average == null) {
+            unassessed.push("Daily steps");
+        } else if (input.steps.metGoal) {
+            progress.push("Daily step average met your target.");
+        } else if (input.steps.metGoal === false) {
+            attention.push("Daily step average was below target.");
+        }
     }
-    if (parts.good >= 1 && parts.bad === 1) {
-        return "Mixed period: some wins, some gaps. Keep the good habit and fix the one area that flagged red.";
+
+    if (input.workouts.completionPercent >= 80) {
+        progress.push("Training consistency was strong this period.");
+    } else if (input.workouts.completionPercent < 50) {
+        attention.push("Several planned workouts were missed this period.");
     }
-    return "Decent baseline. Keep logging consistently so the next adjustment is based on a clearer trend.";
+
+    if (attention.some((line) => line.includes("workout")) || input.workouts.completionPercent < 80) {
+        nextSteps.push("Aim to complete your scheduled workouts where possible.");
+    }
+    if (unassessed.length > 0) {
+        nextSteps.push("Log missing metrics so the next overview can be more complete.");
+    }
+    if (attention.length > 0) {
+        nextSteps.push("Raise anything you are unsure about with your coach.");
+    }
+    if (nextSteps.length === 0) {
+        nextSteps.push("Keep your current habits consistent into the next period.");
+    }
+
+    let headline = "A steady period based on the data available.";
+    if (progress.length >= 2 && attention.length === 0) {
+        headline = "A strong period overall based on your logged data.";
+    } else if (attention.length >= 2) {
+        headline = "A few areas need attention this period.";
+    } else if (progress.length >= 1 && attention.length >= 1) {
+        headline = "A mixed period with some wins and some gaps.";
+    }
+
+    return {
+        overallHeadline: headline,
+        overallProgress: progress,
+        overallAttention: attention,
+        overallNextSteps: nextSteps,
+        overallUnassessed: unassessed,
+    };
 }
 
 function getCheckInPeriodBounds(
@@ -545,7 +602,7 @@ export async function getCheckInPeriodSummary(
         const average = rows[0]?.averageSteps != null ? Math.round(rows[0].averageSteps) : null;
         const target = metricTargets.targetSteps;
         const metGoal = average != null && target != null ? average >= target : null;
-        const advice = buildStepsAdvice(average, target, metGoal);
+        const advice = buildStepsAdvice(average, target, metGoal, Number(rows[0]?.entries ?? 0));
         stepsSummary = {
             average,
             target,
@@ -568,19 +625,21 @@ export async function getCheckInPeriodSummary(
     const targetWorkouts = workoutsPerWeek * frequencyWeeks;
     const skipped = Math.max(0, targetWorkouts - completed);
     const workoutAdvice = buildWorkoutAdvice(completed, targetWorkouts);
-
-    let good = 0;
-    let bad = 0;
-    let neutral = 0;
-    const tally = (met: boolean | null) => {
-        if (met === true) good += 1;
-        else if (met === false) bad += 1;
-        else neutral += 1;
-    };
-    if (weightSummary) tally(weightSummary.towardGoal);
-    if (stepsSummary) tally(stepsSummary.metGoal);
-    const workoutPercent = workoutAdvice.completionPercent;
-    tally(workoutPercent >= 80 ? true : workoutPercent >= 50 ? null : false);
+    const stepsTracked = !hiddenGoals.includes("steps");
+    const overall = buildOverallOverview({
+        weight: weightSummary,
+        steps: stepsSummary,
+        workouts: {
+            completed,
+            skipped,
+            target: targetWorkouts,
+            completionPercent: workoutAdvice.completionPercent,
+            message: workoutAdvice.message,
+            detail: workoutAdvice.detail,
+        },
+        isWeightHidden,
+        stepsTracked,
+    });
 
     return {
         periodDays,
@@ -597,6 +656,6 @@ export async function getCheckInPeriodSummary(
             message: workoutAdvice.message,
             detail: workoutAdvice.detail,
         },
-        overallMessage: buildOverallMessage({ good, bad, neutral }),
+        ...overall,
     };
 }

@@ -1,17 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CalendarClient, type CalendarView } from "./CalendarClient";
-import { CalendarComplianceSummary } from "@/components/calendar/CalendarComplianceSummary";
 import type { ClientCalendarPayload } from "@/lib/clientCalendarData";
 import { toDateKey } from "@/lib/utils";
 import { useCurrentDate } from "@/hooks/useCurrentDate";
 
 interface Props {
     calendar: ClientCalendarPayload;
+    coachId?: string | null;
 }
 
-export function PersonalCalendarClient({ calendar }: Props) {
+export function PersonalCalendarClient({ calendar, coachId }: Props) {
     const now = useCurrentDate();
     const todayKey = toDateKey(now);
     const prevTodayKeyRef = useRef(todayKey);
@@ -36,29 +36,8 @@ export function PersonalCalendarClient({ calendar }: Props) {
         });
     }, [todayKey]);
 
-    const complianceInput = useMemo(
-        () => ({
-            activePlan: calendar.activePlan,
-            planStartedAt: calendar.planStartedAt,
-            loggedDates: calendar.loggedDates,
-            scheduleRevisions: calendar.scheduleRevisions,
-            excusedMissedWorkoutKeys: calendar.excusedMissedWorkoutKeys,
-            historicalMissedSessions: calendar.historicalMissedSessions,
-        }),
-        [calendar]
-    );
-
     return (
-        <div className="space-y-6 animate-fade-in">
-            {calendar.activePlan && (
-                <CalendarComplianceSummary
-                    complianceInput={complianceInput}
-                    calendarView={calendarView}
-                    now={now}
-                    excludeTodayUntilLogged
-                />
-            )}
-
+        <div className="animate-fade-in">
             <CalendarClient
                 activePlan={calendar.activePlan}
                 planStartedAt={calendar.planStartedAt}
@@ -67,6 +46,7 @@ export function PersonalCalendarClient({ calendar }: Props) {
                 scheduleRevisions={calendar.scheduleRevisions}
                 excusedMissedWorkoutKeys={calendar.excusedMissedWorkoutKeys}
                 historicalMissedSessions={calendar.historicalMissedSessions}
+                coachId={coachId}
                 view={calendarView}
                 onViewChange={setCalendarView}
             />

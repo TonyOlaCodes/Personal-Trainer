@@ -1,10 +1,9 @@
 "use client";
 
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, UserCircle } from "lucide-react";
 import { CalendarClient, type CalendarView } from "@/app/(app)/calendar/CalendarClient";
-import { CalendarComplianceSummary } from "@/components/calendar/CalendarComplianceSummary";
 import { toDateKey } from "@/lib/utils";
 import { useCurrentDate } from "@/hooks/useCurrentDate";
 import type { ClientCalendarPayload } from "@/lib/clientCalendarData";
@@ -52,18 +51,6 @@ export function CoachCalendarClient({ clients, selectedClientId, selectedClientN
             return current;
         });
     }, [todayKey]);
-
-    const complianceInput = useMemo(
-        () => ({
-            activePlan: calendar?.activePlan ?? null,
-            planStartedAt: calendar?.planStartedAt ?? null,
-            loggedDates: calendar?.loggedDates ?? [],
-            scheduleRevisions: calendar?.scheduleRevisions ?? [],
-            excusedMissedWorkoutKeys: calendar?.excusedMissedWorkoutKeys ?? [],
-            historicalMissedSessions: calendar?.historicalMissedSessions ?? [],
-        }),
-        [calendar]
-    );
 
     const onClientChange = (clientId: string) => {
         localStorage.setItem(LAST_COACH_CALENDAR_CLIENT_KEY, clientId);
@@ -128,15 +115,6 @@ export function CoachCalendarClient({ clients, selectedClientId, selectedClientN
                     <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-fg-subtle pointer-events-none" />
                 </div>
             </div>
-
-            {calendar?.activePlan && (
-                <CalendarComplianceSummary
-                    complianceInput={complianceInput}
-                    calendarView={calendarView}
-                    now={now}
-                    excludeTodayUntilLogged
-                />
-            )}
 
             {!calendar?.activePlan ? (
                 <div className="card p-10 text-center space-y-4 border-dashed">

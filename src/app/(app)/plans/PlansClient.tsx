@@ -10,7 +10,6 @@ import {
 import { cn, formatDate } from "@/lib/utils";
 import { PLAN_TEMPLATES } from "@/lib/templates";
 import { isCoachRole } from "@/lib/roles";
-import { ActiveSessionBanner, type ActiveSessionInfo } from "@/components/shared/ActiveSessionBanner";
 import { DeletePlanConfirmModal } from "@/components/shared/DeletePlanConfirmModal";
 import { ModalOverlay } from "@/components/shared/ModalOverlay";
 
@@ -33,7 +32,6 @@ interface Plan {
 interface Props {
     plans: Plan[];
     userRole: string;
-    activeSession?: ActiveSessionInfo | null;
     coachClients?: { id: string; name: string }[];
 }
 
@@ -88,7 +86,7 @@ const PREBUILT_TEMPLATES = Object.values(PLAN_TEMPLATES).map((template) => ({
     icon: TEMPLATE_ICONS[template.id] ?? "GYM",
 }));
 
-export function PlansClient({ plans, userRole, activeSession = null, coachClients = [] }: Props) {
+export function PlansClient({ plans, userRole, coachClients = [] }: Props) {
     const isCoach = isCoachRole(userRole);
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -127,7 +125,6 @@ export function PlansClient({ plans, userRole, activeSession = null, coachClient
     }
 
     const activePlan = localPlans.find((p) => p.isActive);
-    const [localActiveSession, setLocalActiveSession] = useState(activeSession);
     const canPublishToProfile = !isCoach && localPlans.some((p) => p.isActive);
 
     const setActive = async (planId: string | null, weekStartDay?: number | null) => {
@@ -440,13 +437,6 @@ export function PlansClient({ plans, userRole, activeSession = null, coachClient
                     New Plan
                 </Link>
             </div>
-
-            {localActiveSession && !isCoach && (
-                <ActiveSessionBanner
-                    session={localActiveSession}
-                    onDiscarded={() => setLocalActiveSession(null)}
-                />
-            )}
 
             {/* Active plan banner */}
             {activePlan && (

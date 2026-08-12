@@ -440,7 +440,7 @@ export function ProgressClient({ userRole, hiddenGoals, todayWorkoutHref = null,
             <section>
                 <h2 className="text-xs font-black text-fg-subtle uppercase tracking-[0.2em] mb-5 flex items-center gap-2">
                     <Flame className="w-4 h-4 text-brand-400" />
-                    Weekly Overview
+                    AI Overview
                 </h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     {/* Plan streak */}
@@ -456,8 +456,8 @@ export function ProgressClient({ userRole, hiddenGoals, todayWorkoutHref = null,
                             <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest">Plan Streak</p>
                             <p className="text-xs text-fg-muted mt-0.5">
                                 {workoutStreak > 0
-                                    ? `${workoutStreak} day${workoutStreak === 1 ? "" : "s"} without missing a scheduled workout`
-                                    : "Complete workouts or rest days to build your streak"}
+                                    ? `${workoutStreak} day${workoutStreak === 1 ? "" : "s"} on plan — workouts completed or rest days without a miss`
+                                    : "Complete your first workout to start your streak"}
                             </p>
                         </div>
                     </div>

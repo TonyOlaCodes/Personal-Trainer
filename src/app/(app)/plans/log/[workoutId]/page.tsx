@@ -11,6 +11,16 @@ import { logSetDisplayOrderBy } from "@/lib/logSetGrouping";
 import { canAccessClient } from "@/lib/apiAuth";
 import { isInactiveAccount } from "@/lib/userDeactivation";
 import { defaultHomeForRole, isCoachRole } from "@/lib/roles";
+import { loadWorkoutHistorySessions } from "@/lib/workoutHistory";
+import {
+    buildExerciseRecords,
+    findPreviousSessionPerformance,
+    type ExerciseRecords,
+    type PreviousSessionPerformance,
+} from "@/lib/exercisePrs";
+import { exerciseIdentityKey } from "@/lib/exerciseIdentity";
+import { canonicalExerciseName } from "@/lib/exerciseCanonical";
+import { getLogExerciseNotes } from "@/lib/logExerciseNotes";
 
 export const metadata = { title: "Logging session" };
 const NEW_ACCOUNT_WORKOUT_HINT_DAYS = 30;
@@ -97,47 +107,36 @@ export default async function WorkoutLogPage({
         include: activeLogInclude,
     });
 
-    const recentCompletedSets = await prisma.logSet.findMany({
-        where: {
-            isCompleted: true,
-            workoutLog: {
-                userId: subjectUserId,
-                status: "COMPLETED",
-            },
-        },
-        include: {
-            exercise: { select: { name: true } },
-            workoutLog: { select: { loggedAt: true } },
-        },
-        orderBy: { workoutLog: { loggedAt: "desc" } },
-        take: 1000,
-    });
+    /**
+     * Previous-session data and all-time records come from one history read, keyed by
+     * canonical exercise identity so "Pull Ups" and "Pull-Up" share a single history.
+     *
+     * `previousSessions` holds only the most recent session in which each exercise was
+     * actually performed, which is what keeps a set 3 placeholder empty when last time
+     * only two sets were done. Records exclude the session being logged so a PR badge
+     * cannot compare a set against itself.
+     */
+    const history = await loadWorkoutHistorySessions(subjectUserId, { excludeLogId: activeLog?.id });
 
-    const seenSetKeys = new Set<string>();
-    const lastWorkoutLogSets: Array<{
-        exerciseId: string;
-        exerciseName: string;
-        setNumber: number;
-        weightKg: number | null;
-        reps: number | null;
-        rpe: number | null;
-    }> = [];
+    const historyExerciseNames = [
+        ...workout.exercises.map((exercise) => exercise.name),
+        ...(activeLog?.sets ?? []).map((set) => resolveLogSetExerciseName(set)),
+    ];
 
-    for (const set of recentCompletedSets) {
-        const exerciseName = resolveLogSetExerciseName(set);
-        if (!exerciseName || exerciseName === "Unknown") continue;
-        const key = `${set.exerciseId}::${set.setNumber}`;
-        if (seenSetKeys.has(key)) continue;
-        seenSetKeys.add(key);
-        lastWorkoutLogSets.push({
-            exerciseId: set.exerciseId,
-            exerciseName,
-            setNumber: set.setNumber,
-            weightKg: set.weightKg,
-            reps: set.reps,
-            rpe: set.rpe,
-        });
+    const previousSessions: Record<string, PreviousSessionPerformance> = {};
+    const exerciseRecords: Record<string, ExerciseRecords> = {};
+
+    for (const rawName of historyExerciseNames) {
+        const name = canonicalExerciseName(rawName);
+        const key = exerciseIdentityKey(name);
+        if (!key || previousSessions[key] || exerciseRecords[key]) continue;
+
+        const previous = findPreviousSessionPerformance(history, name);
+        if (previous) previousSessions[key] = previous;
+        exerciseRecords[key] = buildExerciseRecords(history, name);
     }
+
+    const initialExerciseNotes = activeLog ? await getLogExerciseNotes(activeLog.id) : {};
 
     const mediaByName = await getExerciseMediaByNames(workout.exercises.map((exercise) => exercise.name));
     const exerciseMedia = Object.fromEntries(mediaByName.entries());
@@ -184,7 +183,9 @@ export default async function WorkoutLogPage({
                 logDate={date}
                 clientId={clientId && clientId !== actor.id ? clientId : undefined}
                 clientName={clientName}
-                lastWorkoutLogSets={lastWorkoutLogSets}
+                previousSessions={previousSessions}
+                exerciseRecords={exerciseRecords}
+                initialExerciseNotes={initialExerciseNotes}
                 initialActiveLog={initialActiveLog}
                 showWorkoutInputHint={showWorkoutInputHint}
                 />

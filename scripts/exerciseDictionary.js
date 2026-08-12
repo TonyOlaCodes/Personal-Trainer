@@ -44,8 +44,8 @@ const EXERCISE_DICTIONARY = [
     { name: "Archer Push-Up", muscleGroup: "Chest" },
     { name: "Deficit Push-Up", muscleGroup: "Chest" },
     { name: "Ring Push-Up", muscleGroup: "Chest" },
-    { name: "Chest Dips", muscleGroup: "Chest" },
-    { name: "Weighted Dips", muscleGroup: "Chest" },
+    { name: "Chest Dip", muscleGroup: "Chest" },
+    { name: "Weighted Dip", muscleGroup: "Chest" },
 
     // ─── BACK ───────────────────────────────────────────────────────────────
     { name: "Deadlift", muscleGroup: "Back" },
@@ -167,8 +167,8 @@ const EXERCISE_DICTIONARY = [
     { name: "Single-Arm Cable Extension", muscleGroup: "Triceps" },
     { name: "Close-Grip Bench Press", muscleGroup: "Triceps" },
     { name: "Close Grip Bench Press", muscleGroup: "Triceps" },
-    { name: "Tricep Dips", muscleGroup: "Triceps" },
-    { name: "Bench Dips", muscleGroup: "Triceps" },
+    { name: "Tricep Dip", muscleGroup: "Triceps" },
+    { name: "Bench Dip", muscleGroup: "Triceps" },
     { name: "Tricep Kickback", muscleGroup: "Triceps" },
     { name: "Cable Kickback", muscleGroup: "Triceps" },
     { name: "JM Press", muscleGroup: "Triceps" },
@@ -182,11 +182,11 @@ const EXERCISE_DICTIONARY = [
     { name: "Suitcase Carry", muscleGroup: "Forearms" },
     { name: "Plate Pinch Hold", muscleGroup: "Forearms" },
     { name: "Dead Hang", muscleGroup: "Forearms" },
-    { name: "Shrugs", muscleGroup: "Traps" },
-    { name: "Barbell Shrugs", muscleGroup: "Traps" },
-    { name: "Dumbbell Shrugs", muscleGroup: "Traps" },
-    { name: "Trap Bar Shrugs", muscleGroup: "Traps" },
-    { name: "Behind-the-Back Shrugs", muscleGroup: "Traps" },
+    { name: "Shrug", muscleGroup: "Traps" },
+    { name: "Barbell Shrug", muscleGroup: "Traps" },
+    { name: "Dumbbell Shrug", muscleGroup: "Traps" },
+    { name: "Trap Bar Shrug", muscleGroup: "Traps" },
+    { name: "Behind-the-Back Shrug", muscleGroup: "Traps" },
     { name: "Rack Pull Shrug", muscleGroup: "Traps" },
 
     // ─── QUADS / LEGS ───────────────────────────────────────────────────────

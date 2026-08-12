@@ -49,7 +49,22 @@ const EMPTY_RESULT: WorkoutAdherenceResult = {
     scheduledHits: 0,
 };
 
-type StreakDayStatus = "kept" | "missed" | "pending";
+/**
+ * Streak semantics (one definition, used everywhere):
+ *
+ *   completed — a workout was completed that day. Increments the streak.
+ *   carry     — planned rest, or a coach-excused missed session. Keeps the chain
+ *               alive but does not increment, so rest days cannot inflate a streak.
+ *   pending   — today's scheduled workout is not done yet. Keeps the chain alive
+ *               until the day is over.
+ *   missed    — a scheduled workout was not completed and was not excused, or the
+ *               day falls outside any active plan. Breaks the chain immediately.
+ *   neutral   — before the user's first ever completed workout. Ignored.
+ *
+ * Because days after a plan ends count as `missed`, a single old completed workout
+ * can never hold a streak open indefinitely.
+ */
+type StreakDayStatus = "completed" | "carry" | "missed" | "pending" | "neutral";
 
 interface StreakDay {
     dateKey: string;
@@ -93,35 +108,46 @@ function collectPlanWorkoutIds(activeUserPlan: ActiveUserPlanLike): Set<string> 
     return ids;
 }
 
-function isScheduledWorkoutKept(
+/**
+ * True when the user completed a workout from their plan on this calendar day.
+ *
+ * Matched by day rather than by exact scheduled slot so that plan edits, swapped
+ * sessions and workouts caught up on a rest day all still count as training.
+ */
+function didTrainOnDay(
     dateKey: string,
-    workoutId: string,
-    completedLogSet: Set<string>,
-    excusedKeys: Set<string>
-): boolean {
-    const slotKey = `${dateKey}:${workoutId}`;
-    return completedLogSet.has(slotKey) || excusedKeys.has(slotKey);
-}
-
-/** Past days: accept any completed log for a workout still on the plan (handles plan edits). */
-function isTrainingDayKept(
-    dateKey: string,
-    workoutId: string,
     completedLogs: CompletedWorkoutLog[],
-    completedLogSet: Set<string>,
-    excusedKeys: Set<string>,
-    planWorkoutIds: Set<string>,
-    allowLegacySameDayMatch: boolean
+    planWorkoutIds: Set<string>
 ): boolean {
-    if (isScheduledWorkoutKept(dateKey, workoutId, completedLogSet, excusedKeys)) {
-        return true;
-    }
-    if (!allowLegacySameDayMatch) return false;
     return completedLogs.some(
         (log) => log.dateKey === dateKey && planWorkoutIds.has(log.workoutId)
     );
 }
 
+/** Earliest calendar day the user completed a plan workout; the streak cannot start before this. */
+function findFirstCompletedWorkoutDateKey(
+    activeUserPlan: ActiveUserPlanLike,
+    completedLogs: CompletedWorkoutLog[],
+    today: Date
+): string | null {
+    const todayKey = toDateKey(today);
+    const planWorkoutIds = collectPlanWorkoutIds(activeUserPlan);
+
+    const trainingDays = completedLogs
+        .filter((log) => planWorkoutIds.has(log.workoutId) && log.dateKey <= todayKey)
+        .map((log) => log.dateKey)
+        .sort();
+
+    return trainingDays[0] ?? null;
+}
+
+/**
+ * One status per calendar day from the user's first completed workout up to today.
+ *
+ * Every day in the window gets a status — including days after the plan ended, which
+ * are `missed`. That is what stops an old completed workout from showing a streak
+ * forever after the user goes inactive.
+ */
 function buildStreakDays(
     activeUserPlan: ActiveUserPlanLike,
     completedLogs: CompletedWorkoutLog[],
@@ -133,61 +159,65 @@ function buildStreakDays(
     const planStartKey = getPlanStartDateKey(activeUserPlan.startedAt);
     if (planStartKey > todayKey) return [];
 
+    const firstCompletedKey = findFirstCompletedWorkoutDateKey(activeUserPlan, completedLogs, today);
+    if (firstCompletedKey === null) return [];
+
     const weekCount = activeUserPlan.plan.weeks.length;
     const planWorkoutIds = collectPlanWorkoutIds(activeUserPlan);
     const historicalByDate = new Map(
         historicalMissedSessions.map((session) => [session.dateKey, session] as const)
     );
-    const completedLogSet = buildCompletedLogSet(completedLogs);
     const days: StreakDay[] = [];
 
     for (const dateKey of eachDateKeyInclusive(planStartKey, todayKey)) {
         if (isDateBeforePlanStart(activeUserPlan.startedAt, dateKey)) continue;
-        if (isDateAfterPlanEnd(activeUserPlan.startedAt, weekCount, dateKey)) continue;
 
-        const allowLegacy = dateKey < todayKey;
-        const day = parseLogDate(dateKey);
+        if (dateKey < firstCompletedKey) {
+            days.push({ dateKey, status: "neutral" });
+            continue;
+        }
+
+        // Training always counts, even on a rest day or after the plan window closed.
+        if (didTrainOnDay(dateKey, completedLogs, planWorkoutIds)) {
+            days.push({ dateKey, status: "completed" });
+            continue;
+        }
+
+        if (isDateAfterPlanEnd(activeUserPlan.startedAt, weekCount, dateKey)) {
+            days.push({ dateKey, status: "missed" });
+            continue;
+        }
+
         const historical = historicalByDate.get(dateKey);
-        if (historical) {
-            const kept = isTrainingDayKept(
-                dateKey,
-                historical.workoutId,
-                completedLogs,
-                completedLogSet,
-                excusedKeys,
-                planWorkoutIds,
-                allowLegacy
-            );
-            days.push({
-                dateKey,
-                status: kept ? "kept" : dateKey === todayKey ? "pending" : "missed",
-            });
+        const scheduledWorkoutId = historical
+            ? historical.workoutId
+            : resolveScheduledTrainingWorkoutId(activeUserPlan, dateKey, today);
+
+        if (!scheduledWorkoutId) {
+            days.push({ dateKey, status: "carry" });
             continue;
         }
 
-        const planned = getPlannedWorkoutForDate(activeUserPlan, day, { today, dateKey });
-        if (!planned || isRestPlanWorkout(planned)) {
-            days.push({ dateKey, status: "kept" });
+        if (excusedKeys.has(`${dateKey}:${scheduledWorkoutId}`)) {
+            days.push({ dateKey, status: "carry" });
             continue;
         }
 
-        const kept = isTrainingDayKept(
-            dateKey,
-            planned.id,
-            completedLogs,
-            completedLogSet,
-            excusedKeys,
-            planWorkoutIds,
-            allowLegacy
-        );
-        if (dateKey === todayKey) {
-            days.push({ dateKey, status: kept ? "kept" : "pending" });
-        } else {
-            days.push({ dateKey, status: kept ? "kept" : "missed" });
-        }
+        days.push({ dateKey, status: dateKey === todayKey ? "pending" : "missed" });
     }
 
     return days;
+}
+
+/** The scheduled training workout for a day, or null when the day is rest or unscheduled. */
+function resolveScheduledTrainingWorkoutId(
+    activeUserPlan: ActiveUserPlanLike,
+    dateKey: string,
+    today: Date
+): string | null {
+    const planned = getPlannedWorkoutForDate(activeUserPlan, parseLogDate(dateKey), { today, dateKey });
+    if (!planned || isRestPlanWorkout(planned)) return null;
+    return planned.id;
 }
 
 function buildScheduledSlots(
@@ -241,6 +271,10 @@ function markSlotCompletion(
     return hits;
 }
 
+/**
+ * Today's unfinished workout must not break the streak before the day is over, so a
+ * trailing `pending` day is dropped rather than evaluated.
+ */
 function streakDaysForEvaluation(days: StreakDay[], todayKey: string): StreakDay[] {
     if (days.length === 0) return days;
     const last = days[days.length - 1];
@@ -250,33 +284,39 @@ function streakDaysForEvaluation(days: StreakDay[], todayKey: string): StreakDay
     return days;
 }
 
-/** Consecutive calendar days kept: completed scheduled workout or planned rest; breaks on missed workouts only. */
+/**
+ * Days trained in the current unbroken chain.
+ *
+ * Walks back from today: completed days count, rest and excused days are stepped over
+ * without counting, and the first missed day ends the walk.
+ */
 export function computeCurrentStreak(days: StreakDay[], todayKey: string): number {
     const evalDays = streakDaysForEvaluation(days, todayKey);
     let streak = 0;
 
     for (let i = evalDays.length - 1; i >= 0; i--) {
-        if (evalDays[i].status === "kept") {
-            streak++;
-            continue;
-        }
-        break;
+        const status = evalDays[i].status;
+        if (status === "missed") break;
+        if (status === "completed") streak++;
     }
 
     return streak;
 }
 
+/** Longest chain of trained days that was never broken by a missed day. */
 export function computeMaxStreak(days: StreakDay[], todayKey: string): number {
     const evalDays = streakDaysForEvaluation(days, todayKey);
     let max = 0;
     let run = 0;
 
     for (const day of evalDays) {
-        if (day.status === "kept") {
+        if (day.status === "missed") {
+            run = 0;
+            continue;
+        }
+        if (day.status === "completed") {
             run++;
             max = Math.max(max, run);
-        } else {
-            run = 0;
         }
     }
 
@@ -459,4 +499,244 @@ export async function getWorkoutAdherenceForUser(userId: string): Promise<Workou
 export async function getWorkoutStreak(userId: string): Promise<number> {
     const result = await getWorkoutAdherenceForUser(userId);
     return result.currentStreak;
+}
+
+/** Lightweight scenario checks for CI; returns failing case labels. */
+export function runStreakScenarioChecks(): string[] {
+    const failures: string[] = [];
+    const planStart = "2026-01-05"; // Monday
+
+    const basePlan: ActiveUserPlanLike = {
+        startedAt: new Date(`${planStart}T12:00:00Z`),
+        plan: {
+            weeks: [
+                {
+                    weekNumber: 1,
+                    workouts: [
+                        { id: "w-mon", name: "Push", dayNumber: 1, dayOfWeek: 0, exercises: [{ id: "e1" }] },
+                        { id: "w-tue", name: "Rest", dayNumber: 2, dayOfWeek: 1, exercises: [] },
+                        { id: "w-wed", name: "Pull", dayNumber: 3, dayOfWeek: 2, exercises: [{ id: "e2" }] },
+                        { id: "w-thu", name: "Rest", dayNumber: 4, dayOfWeek: 3, exercises: [] },
+                        { id: "w-fri", name: "Legs", dayNumber: 5, dayOfWeek: 4, exercises: [{ id: "e3" }] },
+                    ],
+                },
+            ],
+        },
+        scheduleRevisions: [],
+    };
+
+    const streakFor = (
+        input: Partial<Omit<WorkoutAdherenceInput, "activeUserPlan" | "today">> & { todayKey: string }
+    ) =>
+        computeWorkoutAdherence({
+            activeUserPlan: basePlan,
+            completedLogs: input.completedLogs ?? [],
+            excusedMissedWorkoutKeys: input.excusedMissedWorkoutKeys,
+            historicalMissedSessions: input.historicalMissedSessions,
+            today: parseLogDate(input.todayKey),
+        }).currentStreak;
+
+    const expect = (name: string, actual: number, expected: number) => {
+        if (actual !== expected) failures.push(`${name}: expected ${expected}, got ${actual}`);
+    };
+
+    // 1. New user with no workouts
+    expect("no workouts", streakFor({ todayKey: "2026-01-07" }), 0);
+
+    // 2. First workout completed
+    expect(
+        "first workout completed",
+        streakFor({
+            todayKey: "2026-01-05",
+            completedLogs: [{ dateKey: "2026-01-05", workoutId: "w-mon" }],
+        }),
+        1
+    );
+
+    // 3. A rest day keeps the chain alive without inflating it
+    expect(
+        "rest day does not inflate",
+        streakFor({
+            todayKey: "2026-01-06",
+            completedLogs: [{ dateKey: "2026-01-05", workoutId: "w-mon" }],
+        }),
+        1
+    );
+
+    // 4. Two training days completed with a rest day between them
+    expect(
+        "two completed days",
+        streakFor({
+            todayKey: "2026-01-07",
+            completedLogs: [
+                { dateKey: "2026-01-05", workoutId: "w-mon" },
+                { dateKey: "2026-01-07", workoutId: "w-wed" },
+            ],
+        }),
+        2
+    );
+
+    // 5. Scheduled workout missed with no completion history
+    expect("missed workout before first completion", streakFor({ todayKey: "2026-01-06" }), 0);
+
+    // 6. Coach-excused missed workout keeps the chain without adding to it
+    expect(
+        "excused missed workout keeps chain",
+        streakFor({
+            todayKey: "2026-01-08",
+            completedLogs: [{ dateKey: "2026-01-05", workoutId: "w-mon" }],
+            excusedMissedWorkoutKeys: ["2026-01-07:w-wed"],
+        }),
+        1
+    );
+
+    // 7. Excused day bridges two completed days
+    expect(
+        "excused day bridges training",
+        streakFor({
+            todayKey: "2026-01-09",
+            completedLogs: [
+                { dateKey: "2026-01-05", workoutId: "w-mon" },
+                { dateKey: "2026-01-09", workoutId: "w-fri" },
+            ],
+            excusedMissedWorkoutKeys: ["2026-01-07:w-wed"],
+        }),
+        2
+    );
+
+    // 8. Multiple rest days between workouts must not inflate the streak
+    const restHeavyPlan: ActiveUserPlanLike = {
+        ...basePlan,
+        plan: {
+            weeks: [
+                {
+                    weekNumber: 1,
+                    workouts: [
+                        { id: "w-mon", name: "Push", dayNumber: 1, dayOfWeek: 1, exercises: [{ id: "e1" }] },
+                        { id: "w-tue", name: "Rest", dayNumber: 2, dayOfWeek: 2, exercises: [] },
+                        { id: "w-wed", name: "Rest Day", dayNumber: 3, dayOfWeek: 3, exercises: [] },
+                        { id: "w-thu", name: "Rest", dayNumber: 4, dayOfWeek: 4, exercises: [] },
+                        { id: "w-fri", name: "Legs", dayNumber: 5, dayOfWeek: 5, exercises: [{ id: "e3" }] },
+                    ],
+                },
+            ],
+        },
+    };
+    expect(
+        "rest days between workouts",
+        computeWorkoutAdherence({
+            activeUserPlan: restHeavyPlan,
+            completedLogs: [
+                { dateKey: "2026-01-05", workoutId: "w-mon" },
+                { dateKey: "2026-01-09", workoutId: "w-fri" },
+            ],
+            today: parseLogDate("2026-01-09"),
+        }).currentStreak,
+        2
+    );
+
+    // 9. Today's scheduled workout still pending should not count yet
+    expect(
+        "pending today excluded",
+        streakFor({
+            todayKey: "2026-01-05",
+            completedLogs: [],
+        }),
+        0
+    );
+
+    // 10. Deleted / removed logs recalculate to zero
+    expect(
+        "deleted logs",
+        streakFor({
+            todayKey: "2026-01-07",
+            completedLogs: [],
+        }),
+        0
+    );
+
+    // 11. A missed day breaks the chain even with workouts either side of it
+    expect(
+        "missed day breaks chain",
+        streakFor({
+            todayKey: "2026-01-09",
+            completedLogs: [
+                { dateKey: "2026-01-05", workoutId: "w-mon" },
+                { dateKey: "2026-01-09", workoutId: "w-fri" },
+            ],
+        }),
+        1
+    );
+
+    // 12. Weeks of inactivity after one old workout must reset to zero
+    expect(
+        "long inactivity resets to zero",
+        streakFor({
+            todayKey: "2026-01-20",
+            completedLogs: [{ dateKey: "2026-01-05", workoutId: "w-mon" }],
+        }),
+        0
+    );
+
+    // 13. One workout after a long lay-off counts as exactly one
+    expect(
+        "single workout after inactivity",
+        streakFor({
+            todayKey: "2026-01-19",
+            completedLogs: [
+                { dateKey: "2026-01-05", workoutId: "w-mon" },
+                { dateKey: "2026-01-19", workoutId: "w-mon" },
+            ],
+        }),
+        1
+    );
+
+    // 14. Training on an unscheduled rest day still counts
+    expect(
+        "workout logged on a rest day counts",
+        streakFor({
+            todayKey: "2026-01-06",
+            completedLogs: [
+                { dateKey: "2026-01-05", workoutId: "w-mon" },
+                { dateKey: "2026-01-06", workoutId: "w-mon" },
+            ],
+        }),
+        2
+    );
+
+    // 15. A finished multi-week plan must not hold a streak open forever
+    const finishedPlan: ActiveUserPlanLike = {
+        startedAt: new Date("2026-01-05T12:00:00Z"),
+        plan: {
+            weeks: [
+                {
+                    weekNumber: 1,
+                    workouts: [
+                        { id: "p1-mon", name: "Push", dayNumber: 1, dayOfWeek: 0, exercises: [{ id: "e1" }] },
+                    ],
+                },
+                {
+                    weekNumber: 2,
+                    workouts: [
+                        { id: "p2-mon", name: "Push", dayNumber: 1, dayOfWeek: 0, exercises: [{ id: "e1" }] },
+                    ],
+                },
+            ],
+        },
+        scheduleRevisions: [],
+    };
+    expect(
+        "streak resets after plan ends",
+        computeWorkoutAdherence({
+            activeUserPlan: finishedPlan,
+            completedLogs: [
+                { dateKey: "2026-01-05", workoutId: "p1-mon" },
+                { dateKey: "2026-01-12", workoutId: "p2-mon" },
+            ],
+            today: parseLogDate("2026-02-02"),
+        }).currentStreak,
+        0
+    );
+
+    return failures;
 }

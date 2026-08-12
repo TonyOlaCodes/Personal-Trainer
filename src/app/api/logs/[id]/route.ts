@@ -5,6 +5,7 @@ import { withResolvedLogSetMedia } from "@/lib/uploadUrls";
 import { resolveLogSetExerciseName } from "@/lib/logSetExerciseName";
 import { logSetDisplayOrderBy } from "@/lib/logSetGrouping";
 import { getWorkoutNotes } from "@/lib/workoutNotes";
+import { getLogExerciseNotes } from "@/lib/logExerciseNotes";
 import { canEditWorkoutLog, canViewWorkoutLog } from "@/lib/userProfile";
 import { triggerAchievementSync } from "@/lib/achievements";
 import { z } from "zod";
@@ -43,7 +44,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         const canView = await canViewWorkoutLog(user, { ...log, user: log.user });
         if (!canView) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-        const coachNotes = await getWorkoutNotes(log.id);
+        const [coachNotes, exerciseNotes] = await Promise.all([
+            getWorkoutNotes(log.id),
+            getLogExerciseNotes(log.id),
+        ]);
 
         return NextResponse.json({
             id: log.id,
@@ -66,12 +70,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
                 rpe: set.rpe,
                 isWarmup: set.isWarmup,
                 isCompleted: set.isCompleted,
+                isPR: set.isPR,
                 videoUrl: set.videoUrl,
                 exercise: {
                     ...set.exercise,
                     name: resolveLogSetExerciseName(set),
                 },
             })),
+            exerciseNotes,
             coachNotes: coachNotes.map((note) => ({
                 ...note,
                 createdAt: note.createdAt instanceof Date ? note.createdAt.toISOString() : note.createdAt,

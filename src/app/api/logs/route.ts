@@ -9,6 +9,11 @@ import { normalizeStoredUploadUrl } from "@/lib/uploadUrls";
 import { ensureLogSetExerciseNameColumn } from "@/lib/logSetExerciseName";
 import { ensureLogSetExerciseOrderColumn, resolvePersistedExerciseOrder } from "@/lib/logSetExerciseOrder";
 import { logSetDisplayOrderBy } from "@/lib/logSetGrouping";
+import { canonicalExerciseName } from "@/lib/exerciseCanonical";
+import { buildRecordsByExercise, evaluateSessionPrs } from "@/lib/exercisePrs";
+import { loadWorkoutHistorySessions } from "@/lib/workoutHistory";
+import { EXERCISE_NOTE_MAX_LENGTH, saveLogExerciseNotes } from "@/lib/logExerciseNotes";
+import { closeOtherActiveSessions, resumableSessionSince } from "@/lib/activeWorkoutSession";
 import { z } from "zod";
 
 const logSchema = z.object({
@@ -31,6 +36,16 @@ const logSchema = z.object({
         isCompleted: z.boolean().default(true),
         videoUrl: z.string().optional(),
     })),
+    /** Optional per-exercise notes for this session. Never required to finish a workout. */
+    exerciseNotes: z
+        .array(
+            z.object({
+                exerciseId: z.string(),
+                exerciseName: z.string().optional(),
+                text: z.string().max(EXERCISE_NOTE_MAX_LENGTH),
+            })
+        )
+        .optional(),
 });
 
 type ParsedLogSet = z.infer<typeof logSchema>["sets"][number];
@@ -61,6 +76,7 @@ export async function POST(req: Request) {
     const { workoutId, clientId, duration, notes, feeling, status, loggedAt } = parsed.data;
     const sets = parsed.data.sets.map((set) => ({
         ...set,
+        exerciseName: set.exerciseName ? canonicalExerciseName(set.exerciseName) : set.exerciseName,
         isCompleted: set.isCompleted || hasPerformedSetData(set),
     }));
 
@@ -90,27 +106,6 @@ export async function POST(req: Request) {
             workoutLogId: workoutLog.id,
         });
     };
-
-    // Detect PRs: only for completed sets that aren't warmups
-    const prExerciseIds = new Set<string>();
-    if (status === "COMPLETED") {
-        for (const s of sets) {
-            if (!s.weightKg || s.isWarmup || !s.isCompleted) continue;
-            const prev = await prisma.logSet.findFirst({
-                where: {
-                    exerciseId: s.exerciseId,
-                    workoutLog: { userId: subjectUserId },
-                    weightKg: { not: null },
-                    isWarmup: false,
-                    isCompleted: true,
-                },
-                orderBy: { weightKg: "desc" },
-            });
-            if (!prev?.weightKg || s.weightKg > prev.weightKg) {
-                prExerciseIds.add(s.exerciseId);
-            }
-        }
-    }
 
     const targetDate = loggedAt ? parseLogDate(loggedAt) : new Date();
     const { start: startOfDay, end: endOfDay } = getLocalDayBounds(targetDate);
@@ -144,6 +139,17 @@ export async function POST(req: Request) {
                     lte: endOfDay,
                 },
             },
+        });
+    }
+
+    // One active workout per user: starting or resuming this session retires any other
+    // in-progress draft so Dashboard, Plans and Calendar can never offer two Resumes.
+    if (status === "IN_PROGRESS") {
+        await closeOtherActiveSessions({
+            userId: subjectUserId,
+            keepWorkoutId: workoutId,
+            keepDayStart: startOfDay,
+            keepDayEnd: endOfDay,
         });
     }
 
@@ -235,9 +241,37 @@ export async function POST(req: Request) {
         );
     }
 
-    const setsCreate = setsWithRealIds.map((s) => ({
+    const resolvedSetName = (set: (typeof setsWithRealIds)[number]) =>
+        exerciseNameById.get(set.exerciseId) ?? set.exerciseName?.trim() ?? "Unknown";
+
+    /**
+     * PRs are judged against history that excludes this session, so re-saving or
+     * finishing an in-progress log cannot make a set compete with itself and flip its
+     * own badge off. Warmups and incomplete sets never earn a record.
+     */
+    const prBySetIndex = new Map<number, boolean>();
+    if (status === "COMPLETED") {
+        const excludeLogId = existingInProgress?.id ?? existingCompleted?.id;
+        const history = await loadWorkoutHistorySessions(subjectUserId, { excludeLogId });
+        const records = buildRecordsByExercise(history);
+        const evaluated = evaluateSessionPrs(
+            setsWithRealIds.map((set) => ({
+                exerciseName: resolvedSetName(set),
+                weightKg: set.weightKg ?? null,
+                reps: set.reps ?? null,
+                isWarmup: set.isWarmup,
+                isCompleted: set.isCompleted,
+            })),
+            records
+        );
+        evaluated.forEach((entry, index) => {
+            if (entry.pr.isPr) prBySetIndex.set(index, true);
+        });
+    }
+
+    const setsCreate = setsWithRealIds.map((s, index) => ({
         exerciseId: s.exerciseId,
-        exerciseName: exerciseNameById.get(s.exerciseId) ?? s.exerciseName?.trim() ?? "Unknown",
+        exerciseName: resolvedSetName(s),
         exerciseOrder: exerciseOrderById.get(s.exerciseId) ?? 999,
         setNumber: s.setNumber,
         reps: s.reps,
@@ -245,9 +279,26 @@ export async function POST(req: Request) {
         rpe: s.rpe,
         isWarmup: s.isWarmup,
         isCompleted: s.isCompleted,
-        isPR: prExerciseIds.has(s.exerciseId),
+        isPR: prBySetIndex.get(index) ?? false,
         videoUrl: s.videoUrl ? normalizeStoredUploadUrl(s.videoUrl) ?? s.videoUrl : undefined,
     }));
+
+    /** Notes are keyed by the resolved exercise id so swapped-in exercises keep theirs. */
+    const exerciseNotesToSave = (parsed.data.exerciseNotes ?? []).map((note) => ({
+        exerciseId: tempToRealId.get(note.exerciseId) ?? note.exerciseId,
+        exerciseName: note.exerciseName,
+        text: note.text,
+    }));
+
+    /** Notes must never take a workout save down with them. */
+    const persistExerciseNotes = async (workoutLogId: string) => {
+        if (parsed.data.exerciseNotes === undefined) return;
+        try {
+            await saveLogExerciseNotes(workoutLogId, exerciseNotesToSave);
+        } catch (error) {
+            console.error("[logs] Failed to save exercise notes", workoutLogId, error);
+        }
+    };
 
     if (status === "COMPLETED" && existingInProgress) {
         if (existingCompleted && existingCompleted.id !== existingInProgress.id) {
@@ -267,6 +318,7 @@ export async function POST(req: Request) {
                 });
                 return updatedCompleted;
             });
+            await persistExerciseNotes(workoutLog.id);
             triggerAchievementSync(subjectUserId);
             return NextResponse.json(workoutLog, { status: 200 });
         }
@@ -276,6 +328,7 @@ export async function POST(req: Request) {
             data: { ...logPayload, sets: { create: setsCreate } },
             include: { sets: true, workout: { select: { name: true } } },
         });
+        await persistExerciseNotes(workoutLog.id);
         await maybeNotifyCoach(workoutLog);
         triggerAchievementSync(subjectUserId);
         return NextResponse.json(workoutLog, { status: 200 });
@@ -288,6 +341,7 @@ export async function POST(req: Request) {
             data: { ...logPayload, sets: { create: setsCreate } },
             include: { sets: true, workout: { select: { name: true } } },
         });
+        await persistExerciseNotes(workoutLog.id);
         triggerAchievementSync(subjectUserId);
         return NextResponse.json(workoutLog, { status: 200 });
     }
@@ -299,6 +353,7 @@ export async function POST(req: Request) {
             data: { ...logPayload, sets: { create: setsCreate } },
             include: { sets: true, workout: { select: { name: true } } },
         });
+        await persistExerciseNotes(workoutLog.id);
         triggerAchievementSync(subjectUserId);
         return NextResponse.json(workoutLog, { status: 200 });
     }
@@ -325,6 +380,7 @@ export async function POST(req: Request) {
         });
     }
 
+    await persistExerciseNotes(workoutLog.id);
     await maybeNotifyCoach(workoutLog);
 
     triggerAchievementSync(subjectUserId);
@@ -387,12 +443,11 @@ export async function GET(req: Request) {
             return NextResponse.json(activeLog);
         }
 
-        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
         const activeLog = await prisma.workoutLog.findFirst({
             where: {
                 userId: user.id,
                 status: "IN_PROGRESS",
-                updatedAt: { gte: twentyFourHoursAgo },
+                updatedAt: { gte: resumableSessionSince() },
             },
             include: activeInclude,
             orderBy: { updatedAt: "desc" },

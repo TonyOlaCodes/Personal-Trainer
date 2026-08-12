@@ -6,7 +6,6 @@ import Link from "next/link";
 import { DashboardAnnouncementBanners } from "@/components/shared/DashboardAnnouncementBanners";
 import { RecentSessionsExplorer, PREVIEW_LIMIT } from "@/components/shared/RecentSessionsExplorer";
 import { ReturnLink } from "@/components/shared/ReturnLink";
-import { ActiveSessionBanner } from "@/components/shared/ActiveSessionBanner";
 import { CheckInsClient } from "@/app/(app)/checkins/CheckInsClient";
 import { Dumbbell, ChevronRight, Clock, Flame, Activity, Calendar, Ticket, Check, Edit3, Trash2, Scale, AlertCircle, X } from "lucide-react";
 import { formatCheckInDueSubtitle, formatCheckInPeriodTitle } from "@/lib/checkInLabels";
@@ -470,7 +469,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                     <div>
                         <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Bodyweight trend</p>
                         <p className="text-lg font-black text-fg mt-0.5">
-                            {latestWeight ? `${latestWeight.toFixed(1)} kg` : "--"}
+                            {latestWeight ? `${latestWeight.toFixed(2)} kg` : "--"}
                         </p>
                     </div>
                     <span className="text-[9px] font-black uppercase tracking-widest text-brand-400">
@@ -769,13 +768,8 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                 )}
             </div>
 
-            {/* Active Session Prompt */}
-            {localActiveSession && (
-                <ActiveSessionBanner
-                    session={localActiveSession}
-                    onDiscarded={() => setLocalActiveSession(null)}
-                />
-            )}
+            {/* An active session is surfaced app-wide by ResumeWorkoutBar; the card below
+                switches its CTA to Resume when today's workout is the active one. */}
 
             {/* Today's Workout — first priority on dashboard */}
             {shouldPrioritizeCheckIn && renderCheckInWidget()}

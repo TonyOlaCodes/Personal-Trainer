@@ -292,6 +292,7 @@ model WorkoutLog {
   workout Workout  @relation(fields: [workoutId], references: [id], onDelete: Cascade)
   sets    LogSet[]
   coachNotes WorkoutNote[]
+  exerciseNotes LogExerciseNote[]
 
   @@map("workout_logs")
 }
@@ -309,6 +310,24 @@ model WorkoutNote {
   @@index([workoutLogId])
   @@index([coachId])
   @@map("workout_notes")
+}
+
+/// Athlete's own note for one exercise within one logged session.
+/// Kept off LogSet because set rows are replaced on every save; notes must survive that.
+model LogExerciseNote {
+  id           String   @id @default(cuid())
+  workoutLogId String
+  exerciseId   String
+  exerciseName String
+  text         String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  workoutLog WorkoutLog @relation(fields: [workoutLogId], references: [id], onDelete: Cascade)
+
+  @@unique([workoutLogId, exerciseId])
+  @@index([workoutLogId])
+  @@map("log_exercise_notes")
 }
 
 model LogSet {

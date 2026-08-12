@@ -1,53 +1,83 @@
 export type OverviewTier = "bad" | "decent" | "good";
 export type OverviewTone = "bad" | "warn" | "neutral" | "good" | "great";
 
-/** Four overview axes (81 combos): recovery, energy, stress, load — load links stress + training feel. */
-export type OverviewKey = `${OverviewTier}${OverviewTier}${OverviewTier}${OverviewTier}`;
+export interface CheckInOverviewSummary {
+    headline: string;
+    progress: string[];
+    attention: string[];
+    nextSteps: string[];
+    unassessed: string[];
+    tone: OverviewTone;
+}
 
-const TIER_ORDER: OverviewTier[] = ["bad", "decent", "good"];
+type MetricDimension = "sleep" | "energy" | "stress" | "training";
 
-const RECOVERY: Record<OverviewTier, string> = {
-    bad: "Recovery was weak",
-    decent: "Recovery was okay",
-    good: "Recovery was solid",
-};
-
-const ENERGY: Record<OverviewTier, string> = {
-    bad: "energy ran low",
-    decent: "energy was fair",
-    good: "energy was strong",
-};
-
-const STRESS: Record<OverviewTier, string> = {
-    bad: "stress stayed high",
-    decent: "stress was manageable",
-    good: "stress stayed low",
-};
-
-const LOAD: Record<OverviewTier, string> = {
-    bad: "training output was low",
-    decent: "training was moderate",
-    good: "training output was strong",
-};
-
-const FOCUS: Record<OverviewTier, Record<"recovery" | "energy" | "stress" | "load", string>> = {
-    bad: {
-        recovery: "Protect sleep and keep meals regular before pushing harder.",
-        energy: "Eat enough and sleep earlier before adding training volume.",
-        stress: "Cut optional stressors and keep sessions lighter next week.",
-        load: "Keep the next session simple and rebuild momentum.",
+const PROGRESS_COPY: Record<MetricDimension, Record<OverviewTier, string | null>> = {
+    sleep: {
+        bad: null,
+        decent: "Sleep was fair this week.",
+        good: "Sleep looked solid this week.",
     },
-    decent: {
-        recovery: "Tighten bedtime by 30 minutes and keep meals regular.",
-        energy: "Add a snack on training days to avoid mid-week dips.",
-        stress: "Keep stress from spilling into sleep — one unwind habit helps.",
-        load: "Progress one small thing if recovery holds up.",
+    energy: {
+        bad: null,
+        decent: "Energy was steady across the week.",
+        good: "Energy levels looked strong this week.",
     },
-    good: {
-        recovery: "Keep the same sleep and meal rhythm.",
-        energy: "Ride the momentum and keep food timing steady on busy days.",
-        stress: "Stay proactive so stress doesn't creep up mid-week.",
-        load: "Progress gradually — don't jump volume just because you feel good.",
+    stress: {
+        bad: null,
+        decent: "Stress stayed manageable this week.",
+        good: "Stress stayed relatively low this week.",
+    },
+    training: {
+        bad: null,
+        decent: "Training involvement was moderate this week.",
+        good: "Training effort looked strong this week.",
+    },
+};
+
+const ATTENTION_COPY: Record<MetricDimension, Record<OverviewTier, string | null>> = {
+    sleep: {
+        bad: "Sleep quality was low this week.",
+        decent: null,
+        good: null,
+    },
+    energy: {
+        bad: "Energy ran low this week.",
+        decent: null,
+        good: null,
+    },
+    stress: {
+        bad: "Stress was elevated this week.",
+        decent: null,
+        good: null,
+    },
+    training: {
+        bad: "Training output was limited this week.",
+        decent: null,
+        good: null,
+    },
+};
+
+const NEXT_STEP_COPY: Record<MetricDimension, Record<OverviewTier, string>> = {
+    sleep: {
+        bad: "Focus on recovery habits you can keep consistent, and raise sleep with your coach if it keeps slipping.",
+        decent: "Keep recovery steady and mention any sleep changes to your coach if they continue.",
+        good: "Keep your current recovery rhythm going.",
+    },
+    energy: {
+        bad: "Look for patterns affecting energy across the week and discuss them with your coach if needed.",
+        decent: "Keep routines steady and flag any energy dips to your coach.",
+        good: "Maintain the habits that are supporting your energy.",
+    },
+    stress: {
+        bad: "Keep training load realistic while stress is high, and talk through concerns with your coach.",
+        decent: "Stay aware of stress through the week so it does not build unnoticed.",
+        good: "Keep doing what is helping you manage stress well.",
+    },
+    training: {
+        bad: "Aim for better consistency with scheduled workouts and rebuild one session at a time.",
+        decent: "Keep building consistency with your planned training.",
+        good: "Maintain your current training rhythm and progress gradually.",
     },
 };
 
@@ -63,120 +93,29 @@ export function ratingToTier(value: number, inverse = false): OverviewTier | nul
     return "good";
 }
 
-export function recoveryTier(sleep: number, sleepHidden: boolean): OverviewTier {
-    const tiers: OverviewTier[] = [];
-    if (!sleepHidden && sleep > 0) {
-        const tier = ratingToTier(sleep);
-        if (tier) tiers.push(tier);
-    }
-    if (tiers.length === 0) return "decent";
-    if (tiers.includes("bad")) return "bad";
-    if (tiers.every((t) => t === "good")) return "good";
-    return "decent";
-}
-
-/** Metrics 4+5 (stress & training) share one load tier — blend inverted stress with training. */
-export function loadTier(stress: number, training: number): OverviewTier {
-    const scores: number[] = [];
-    if (stress > 0) scores.push(scoreValue(stress, true));
-    if (training > 0) scores.push(scoreValue(training, false));
-    if (scores.length === 0) return "decent";
-    const avg = scores.reduce((sum, v) => sum + v, 0) / scores.length;
-    if (avg <= 2) return "bad";
-    if (avg <= 3.5) return "decent";
-    return "good";
-}
-
-export function buildOverviewKey(opts: {
-    sleep: number;
-    diet?: number;
-    energy: number;
-    stress: number;
-    training: number;
-    sleepHidden?: boolean;
-}): OverviewKey | null {
-    const { sleep, energy, stress, training, sleepHidden = false } = opts;
-    const hasAny = (!sleepHidden && sleep > 0) || energy > 0 || stress > 0 || training > 0;
-    if (!hasAny) return null;
-
-    const r = recoveryTier(sleep, sleepHidden);
-    const e = energy > 0 ? ratingToTier(energy) ?? "decent" : "decent";
-    const s = stress > 0 ? ratingToTier(stress, true) ?? "decent" : "decent";
-    const l = loadTier(stress, training);
-
-    return `${r}${e}${s}${l}`;
-}
-
-function parseOverviewKey(key: OverviewKey): [OverviewTier, OverviewTier, OverviewTier, OverviewTier] {
-    const tiers: OverviewTier[] = [];
-    let rest = key;
-
-    while (rest.length > 0) {
-        if (rest.startsWith("decent")) {
-            tiers.push("decent");
-            rest = rest.slice(6);
-        } else if (rest.startsWith("good")) {
-            tiers.push("good");
-            rest = rest.slice(4);
-        } else if (rest.startsWith("bad")) {
-            tiers.push("bad");
-            rest = rest.slice(3);
-        } else {
-            throw new Error(`Invalid overview key: ${key}`);
-        }
-    }
-
-    if (tiers.length !== 4) {
-        throw new Error(`Invalid overview key: ${key}`);
-    }
-
-    return tiers as [OverviewTier, OverviewTier, OverviewTier, OverviewTier];
-}
-
-function overallTone(key: OverviewKey): OverviewTone {
-    const tiers = parseOverviewKey(key);
-    const badCount = tiers.filter((t) => t === "bad").length;
-    const goodCount = tiers.filter((t) => t === "good").length;
-    if (badCount >= 2) return "bad";
-    if (badCount === 1 && goodCount === 0) return "warn";
-    if (goodCount >= 3 && badCount === 0) return "great";
-    if (goodCount >= 2 && badCount === 0) return "good";
+function overallTone(progressCount: number, attentionCount: number): OverviewTone {
+    if (attentionCount >= 2) return "bad";
+    if (attentionCount === 1 && progressCount === 0) return "warn";
+    if (progressCount >= 2 && attentionCount === 0) return "great";
+    if (progressCount >= 1 && attentionCount === 0) return "good";
     return "neutral";
 }
 
-function buildMessage(key: OverviewKey): string {
-    const [r, e, s, l] = parseOverviewKey(key);
-    const headline =
-        r === "good" && e === "good" && s === "good" && l === "good"
-            ? "Excellent week overall."
-            : r === "bad" && e === "bad" && s === "bad" && l === "bad"
-                ? "Rough week across the board."
-                : r === "good" && l === "good" && (s === "bad" || e === "bad")
-                    ? "Good training week, but recovery or stress needs attention."
-                    : l === "bad" && r === "good"
-                        ? "Recovery was there, but training output lagged."
-                        : r === "bad" && l === "good"
-                            ? "You pushed training despite weak recovery — watch for a crash."
-                            : s === "bad" && l === "good"
-                                ? "High stress but you still trained — prioritize rest next week."
-                                : "Mixed week — some areas strong, others need work.";
-
-    const body = `${RECOVERY[r]}, ${ENERGY[e]}, ${STRESS[s]}, and ${LOAD[l]}.`;
-    const tierByDimension: Record<"recovery" | "energy" | "stress" | "load", OverviewTier> = {
-        recovery: r,
-        energy: e,
-        stress: s,
-        load: l,
-    };
-    const rank: Record<OverviewTier, number> = { bad: 0, decent: 1, good: 2 };
-    const focusKey = ([ "recovery", "energy", "stress", "load" ] as const)
-        .slice()
-        .sort((a, b) => rank[tierByDimension[a]] - rank[tierByDimension[b]])[0];
-
-    return `${headline} ${body} Next week: ${FOCUS[tierByDimension[focusKey]][focusKey]}`;
+function buildHeadline(progressCount: number, attentionCount: number): string {
+    if (progressCount >= 2 && attentionCount === 0) {
+        return "A strong week across the metrics you logged.";
+    }
+    if (attentionCount >= 2) {
+        return "A few areas need attention based on what you logged.";
+    }
+    if (progressCount >= 1 && attentionCount >= 1) {
+        return "A mixed week — some positives and a few areas to watch.";
+    }
+    if (attentionCount === 1) {
+        return "Mostly steady, with one area that stood out.";
+    }
+    return "A steady week based on the metrics you logged.";
 }
-
-const SUMMARY_CACHE = new Map<OverviewKey, { message: string; tone: OverviewTone }>();
 
 export function getCheckInOverviewSummary(opts: {
     sleep: number;
@@ -185,32 +124,71 @@ export function getCheckInOverviewSummary(opts: {
     stress: number;
     training: number;
     sleepHidden?: boolean;
-}): { message: string; tone: OverviewTone } | null {
-    const key = buildOverviewKey(opts);
-    if (!key) return null;
+}): CheckInOverviewSummary | null {
+    const { sleep, energy, stress, training, sleepHidden = false } = opts;
 
-    const cached = SUMMARY_CACHE.get(key);
-    if (cached) return cached;
+    const logged: Array<{ dimension: MetricDimension; tier: OverviewTier; inverse: boolean }> = [];
+    const unassessed: string[] = [];
 
-    const summary = { message: buildMessage(key), tone: overallTone(key) };
-    SUMMARY_CACHE.set(key, summary);
-    return summary;
-}
-
-/** Pre-warm all 81 combinations for consistent copy. */
-export function warmCheckInOverviewSummaries() {
-    for (const r of TIER_ORDER) {
-        for (const e of TIER_ORDER) {
-            for (const s of TIER_ORDER) {
-                for (const l of TIER_ORDER) {
-                    const key = `${r}${e}${s}${l}` as OverviewKey;
-                    if (!SUMMARY_CACHE.has(key)) {
-                        SUMMARY_CACHE.set(key, { message: buildMessage(key), tone: overallTone(key) });
-                    }
-                }
-            }
+    if (!sleepHidden) {
+        if (sleep > 0) {
+            const tier = ratingToTier(sleep);
+            if (tier) logged.push({ dimension: "sleep", tier, inverse: false });
+        } else {
+            unassessed.push("Sleep");
         }
     }
-}
 
-warmCheckInOverviewSummaries();
+    if (energy > 0) {
+        const tier = ratingToTier(energy);
+        if (tier) logged.push({ dimension: "energy", tier, inverse: false });
+    } else {
+        unassessed.push("Energy");
+    }
+
+    if (stress > 0) {
+        const tier = ratingToTier(stress, true);
+        if (tier) logged.push({ dimension: "stress", tier, inverse: true });
+    } else {
+        unassessed.push("Stress");
+    }
+
+    if (training > 0) {
+        const tier = ratingToTier(training);
+        if (tier) logged.push({ dimension: "training", tier, inverse: false });
+    } else {
+        unassessed.push("Training");
+    }
+
+    if (logged.length === 0) return null;
+
+    const progress: string[] = [];
+    const attention: string[] = [];
+
+    for (const item of logged) {
+        const progressLine = PROGRESS_COPY[item.dimension][item.tier];
+        const attentionLine = ATTENTION_COPY[item.dimension][item.tier];
+        if (progressLine) progress.push(progressLine);
+        if (attentionLine) attention.push(attentionLine);
+    }
+
+    const rank: Record<OverviewTier, number> = { bad: 0, decent: 1, good: 2 };
+    const focus = logged
+        .slice()
+        .sort((a, b) => rank[a.tier] - rank[b.tier])[0];
+
+    const nextSteps = [NEXT_STEP_COPY[focus.dimension][focus.tier]];
+    if (unassessed.length > 0) {
+        nextSteps.push("Log any missing metrics next time for a fuller picture.");
+    }
+    nextSteps.push("Share anything you are unsure about with your coach.");
+
+    return {
+        headline: buildHeadline(progress.length, attention.length),
+        progress,
+        attention,
+        nextSteps,
+        unassessed,
+        tone: overallTone(progress.length, attention.length),
+    };
+}

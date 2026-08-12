@@ -3,7 +3,12 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { CheckInStatus, Prisma } from "@prisma/client";
 import { z } from "zod";
-import { createNotification, notifyCoachOfClientCheckIn, userWantsNotification } from "@/lib/notifications";
+import {
+    createNotification,
+    notifyCoachOfClientCheckIn,
+    notifyCoachOfClientCheckInEdited,
+    userWantsNotification,
+} from "@/lib/notifications";
 import { triggerAchievementSync } from "@/lib/achievements";
 import { withResolvedCheckInMedia, normalizeStoredUploadUrl } from "@/lib/uploadUrls";
 import { isInactiveAccount } from "@/lib/userDeactivation";
@@ -52,7 +57,7 @@ export async function POST(req: Request) {
                 userId: user.id,
                 ...parsed.data,
                 bodyweightKg: parsed.data.bodyweightKg ? Math.round(parsed.data.bodyweightKg * 100) / 100 : undefined,
-                feedback: parsed.data.feedback || "Check-in completed.",
+                feedback: parsed.data.feedback?.trim() || null,
                 frontImageUrl: normalizeStoredUploadUrl(parsed.data.frontImageUrl) ?? undefined,
                 sideImageUrl: normalizeStoredUploadUrl(parsed.data.sideImageUrl) ?? undefined,
                 videoUrl: normalizeStoredUploadUrl(parsed.data.videoUrl) ?? undefined,
@@ -188,9 +193,9 @@ export async function PATCH(req: Request) {
                 coachLastSeenAt: new Date(),
             };
         } else {
-            // User edit
+            // User edit — always returns to pending for coach review
             data = {
-                feedback: feedback || "Check-in updated.",
+                feedback: typeof feedback === "string" ? feedback.trim() || null : undefined,
                 notes,
                 videoUrl: normalizeStoredUploadUrl(videoUrl) ?? undefined,
                 bodyweightKg: bodyweightKg ? Math.round(parseFloat(bodyweightKg) * 100) / 100 : undefined,
@@ -205,12 +210,31 @@ export async function PATCH(req: Request) {
                 lastUpdatedByClientAt: new Date(),
                 status: "PENDING",
             };
+
+            if (existing.status === "REVIEWED") {
+                data.coachResponse = null;
+                data.coachVideoUrl = null;
+                data.respondedAt = null;
+            }
         }
 
         const updated = await prisma.checkIn.update({
             where: { id },
             data,
         });
+
+        if (!isCoach && existing.user.coachId) {
+            const client = await prisma.user.findUnique({
+                where: { id: user.id },
+                select: { name: true, email: true },
+            });
+            const clientName = client?.name ?? client?.email ?? "Client";
+            await notifyCoachOfClientCheckInEdited({
+                coachId: existing.user.coachId,
+                clientName,
+                checkInId: existing.id,
+            });
+        }
 
         if (isCoach && (await userWantsNotification(existing.userId, "notifyOnCheckInReview"))) {
             await createNotification({

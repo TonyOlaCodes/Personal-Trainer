@@ -8,6 +8,7 @@ import {
     PlayCircle,
     Zap, Hash, Flame,
     User, PencilLine,
+    MessageSquare, ChevronUp,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -24,13 +25,18 @@ import {
     isDateBeforePlanStart,
     type PlanScheduleRevisionRecord,
 } from "@/lib/planSchedule";
-import { groupLogSetsByExercise, formatLoggedWeight } from "@/lib/logSetGrouping";
+import { groupLogSetsByExercise } from "@/lib/logSetGrouping";
 import { serializePlanWeeksForSchedule } from "@/lib/planScheduleHistory";
 import {
     resolvePlannedWorkoutWithExercisesForDate,
     sortPlannedExercises,
 } from "@/lib/plannedWorkoutResolve";
-import { getPreviousExercisePerformance } from "@/lib/exercisePerformance";
+import { isRestPlanWorkout } from "@/lib/planTrainingTarget";
+import {
+    resolveWorkoutDayStatus,
+    WORKOUT_DAY_STATUS_STYLES,
+    type WorkoutDayStatus,
+} from "@/lib/workoutDayStatus";
 
 /* ─────────────────────────── Types ─────────────────────────── */
 interface PlanExercise { id: string; name: string; sets: number; reps: string; order?: number; weightTargetKg?: number | null; }
@@ -91,6 +97,7 @@ interface Props {
     onViewChange?: (view: CalendarView) => void;
     initialSelectedDateKey?: string;
     focusSelection?: boolean;
+    coachId?: string | null;
 }
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -98,6 +105,35 @@ const MONTHS = [
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December",
 ];
+
+type DayWorkoutStatus = WorkoutDayStatus;
+
+const STATUS_CONFIG = WORKOUT_DAY_STATUS_STYLES;
+
+function resolveDayStatus(input: {
+    log: LoggedDate | null;
+    dayInProgress: InProgressSession | null;
+    planned: PlanWorkout | null;
+    isPast: boolean;
+    isTodayDay: boolean;
+    isBeforePlan: boolean;
+    isAfterPlan?: boolean;
+    isExcused: boolean;
+}): DayWorkoutStatus {
+    return resolveWorkoutDayStatus({
+        hasCompletedLog: Boolean(input.log),
+        hasActiveSession: Boolean(input.dayInProgress),
+        hasScheduledTraining: Boolean(input.planned) && !isRestPlanWorkout(input.planned!),
+        isOutsidePlanRange: input.isBeforePlan || Boolean(input.isAfterPlan),
+        isPast: input.isPast,
+        isToday: input.isTodayDay,
+        isExcused: input.isExcused,
+    });
+}
+
+function displayWorkoutName(name: string): string {
+    return name.trim();
+}
 
 export function CalendarClient({
     activePlan,
@@ -112,6 +148,7 @@ export function CalendarClient({
     onViewChange,
     initialSelectedDateKey,
     focusSelection = false,
+    coachId = null,
 }: Props) {
     const isCoachView = Boolean(coachView);
     const router = useRouter();
@@ -133,6 +170,14 @@ export function CalendarClient({
     };
     const [selectedDateKey, setSelectedDateKey] = useState<string>(initialSelectedDateKey ?? todayKey);
     const detailPanelRef = useRef<HTMLDivElement>(null);
+    const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
+
+    const scrollToDetailPanel = useCallback(() => {
+        setMobileDetailOpen(true);
+        window.setTimeout(() => {
+            detailPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 50);
+    }, []);
 
     useEffect(() => {
         if (!initialSelectedDateKey) return;
@@ -144,6 +189,7 @@ export function CalendarClient({
     useEffect(() => {
         if (!focusSelection || !initialSelectedDateKey) return;
         if (selectedDateKey !== initialSelectedDateKey) return;
+        if (window.innerWidth < 1024) setMobileDetailOpen(true);
         const timer = window.setTimeout(() => {
             detailPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
         }, 150);
@@ -353,9 +399,17 @@ export function CalendarClient({
     }, [selectedDateKey]);
     const selectedLogs = logMap[selectedDateKey] ?? [];
     const selectedPlanned = resolvePlannedWorkoutForDate(selectedDate, selectedDateKey);
-    const resumeSession = selectedPlanned
-        ? inProgressByDate[selectedDateKey]?.find((s) => s.workoutId === selectedPlanned.id) ?? null
-        : null;
+    // An active session must stay resumable even when the day is scheduled as rest or
+    // the plan has since moved a different workout onto this date.
+    const resumeSession = useMemo(() => {
+        const sessions = inProgressByDate[selectedDateKey] ?? [];
+        if (sessions.length === 0) return null;
+        if (selectedPlanned) {
+            const matching = sessions.find((s) => s.workoutId === selectedPlanned.id);
+            if (matching) return matching;
+        }
+        return sessions[0];
+    }, [inProgressByDate, selectedDateKey, selectedPlanned]);
     const workoutLogHref = selectedPlanned
         ? `/plans/log/${selectedPlanned.id}?date=${selectedDateKey}${coachView ? `&clientId=${coachView.clientId}` : ""}`
         : "";
@@ -370,6 +424,40 @@ export function CalendarClient({
         && planWeekCount > 1
         && isDateAfterPlanEnd(planStartedAt, planWeekCount, selectedDateKey)
     );
+
+    const selectedStatus: DayWorkoutStatus = useMemo(() => {
+        const primaryLog = selectedLogs[0] ?? null;
+        const isPast = selectedDateKey < todayKey;
+        const isTodayDay = selectedDateKey === todayKey;
+        const isBeforePlan = Boolean(planStartedAt && isDateBeforePlanStart(planStartedAt, selectedDateKey));
+        const isExcused = Boolean(
+            selectedPlanned
+            && isPast
+            && !primaryLog
+            && isWorkoutExcused(selectedDateKey, selectedPlanned.id)
+        );
+        return resolveDayStatus({
+            log: primaryLog,
+            dayInProgress: resumeSession,
+            planned: selectedPlanned,
+            isPast,
+            isTodayDay,
+            isBeforePlan,
+            isAfterPlan: selectedIsAfterPlan,
+            isExcused,
+        });
+    }, [
+        selectedIsAfterPlan,
+        selectedLogs,
+        selectedDateKey,
+        todayKey,
+        planStartedAt,
+        selectedPlanned,
+        resumeSession,
+        isWorkoutExcused,
+    ]);
+
+    const selectedStatusStyle = STATUS_CONFIG[selectedStatus];
 
     const updateWorkoutStatus = useCallback(async (status: "excused" | "missed") => {
         if (!coachView || !selectedPlanned || statusUpdating) return;
@@ -408,17 +496,6 @@ export function CalendarClient({
             setStatusUpdating(false);
         }
     }, [coachView, selectedPlanned, selectedDateKey, statusUpdating, router]);
-    
-    const calculateVolume = (sets: LogSet[]) => {
-        return Math.round(sets.reduce((acc, s) => acc + ((s.reps || 0) * (s.weightKg || 1)), 0)); // weight 1 if bodyweight
-    };
-
-    const getPreviousPerformance = (exercise: PlanExercise, beforeDate: Date) =>
-        getPreviousExercisePerformance(loggedDates, {
-            exerciseId: exercise.id,
-            exerciseName: exercise.name,
-            beforeDateKey: toDateKey(beforeDate),
-        });
 
     const formatTargetWeight = (weightKg?: number | null) => {
         if (weightKg == null || weightKg <= 0) return null;
@@ -514,24 +591,39 @@ export function CalendarClient({
                                 planStartedAt && isDateBeforePlanStart(planStartedAt, dateKey)
                             );
                             const programWeek = planned ? getProgramWeekForDateKey(dateKey) : null;
-
-                            // Status logic
-                            let status: 'completed' | 'in-progress' | 'missed' | 'excused' | 'scheduled' | 'rest' = 'rest';
-                            if (dayLogs && dayLogs.length > 0) status = 'completed';
-                            else if (dayInProgress) status = 'in-progress';
-                            else if (planned) {
-                                if (isBeforePlan) status = 'rest';
-                                else if (isPast && isWorkoutExcused(dateKey, planned.id)) status = 'excused';
-                                else if (isPast) status = 'missed';
-                                else status = 'scheduled';
-                            }
+                            const isExcused = Boolean(
+                                planned && isPast && !log && isWorkoutExcused(dateKey, planned.id)
+                            );
+                            const status = resolveDayStatus({
+                                log,
+                                dayInProgress,
+                                planned,
+                                isPast,
+                                isTodayDay,
+                                isBeforePlan,
+                                isAfterPlan,
+                                isExcused,
+                            });
+                            const statusStyle = STATUS_CONFIG[status];
+                            const workoutLabel = log
+                                ? displayWorkoutName(log.workoutName)
+                                : dayInProgress
+                                    ? displayWorkoutName(dayInProgress.workoutName)
+                                    : planned
+                                        ? displayWorkoutName(planned.name)
+                                        : null;
 
                             return (
                                 <button 
                                     key={dateKey} 
-                                    onClick={() => setSelectedDateKey(dateKey)}
+                                    onClick={() => {
+                                        setSelectedDateKey(dateKey);
+                                        if (window.innerWidth < 1024) {
+                                            setMobileDetailOpen(true);
+                                        }
+                                    }}
                                     className={cn(
-                                        "min-h-[92px] sm:min-h-[130px] p-1.5 sm:p-2 border-b border-r border-surface-border/50 last:border-r-0 transition-all group flex flex-col items-start gap-1 relative overflow-hidden",
+                                        "min-h-[76px] sm:min-h-[120px] lg:min-h-[130px] p-1 sm:p-1.5 lg:p-2 border-b border-r border-surface-border/50 last:border-r-0 transition-all group flex flex-col items-start gap-0.5 sm:gap-1 relative overflow-hidden",
                                         "cursor-pointer hover:bg-surface-muted/20",
                                         !inCurrentMonth && "bg-surface-muted/10 opacity-55 hover:opacity-80",
                                         selected && "bg-brand-950/20",
@@ -539,287 +631,237 @@ export function CalendarClient({
                                         isBeforePlan && "opacity-70"
                                     )}
                                 >
-                                    <>
-                                            <div className="w-full flex justify-between items-start sm:mb-1">
-                                                <span className={cn(
-                                                    "text-xs sm:text-sm font-black flex items-center justify-center w-6 h-6 sm:w-7 sm:h-7 rounded-lg transition-all",
-                                                    isTodayDay ? "bg-brand-400 text-white shadow-glow-brand" : (selected ? "bg-fg text-surface" : "text-fg-subtle group-hover:text-fg"),
-                                                    !inCurrentMonth && !isTodayDay && !selected && "text-fg-subtle/60"
-                                                )}>
-                                                    {day}
-                                                </span>
-                                                
-                                                {/* Status Dot */}
-                                                <div className={cn(
-                                                    "w-1.5 h-1.5 rounded-full mt-1.5 mr-1",
-                                                    status === 'completed' ? "bg-success shadow-glow-success animate-pulse" :
-                                                    status === 'in-progress' ? "bg-warning shadow-glow-warning animate-pulse" :
-                                                    status === 'excused' ? "bg-emerald-700 shadow-[0_0_8px_rgba(4,120,87,0.45)]" :
-                                                    status === 'missed' ? "bg-danger shadow-glow-danger" :
-                                                    status === 'scheduled' ? "bg-brand-400 shadow-glow-brand" :
-                                                    "bg-surface-border"
-                                                )} />
-                                            </div>
+                                    <div className="w-full flex justify-between items-start">
+                                        <span className={cn(
+                                            "text-[11px] sm:text-sm font-black flex items-center justify-center w-5 h-5 sm:w-7 sm:h-7 rounded-lg transition-all",
+                                            isTodayDay ? "bg-brand-400 text-white shadow-glow-brand" : (selected ? "bg-fg text-surface" : "text-fg-subtle group-hover:text-fg"),
+                                            !inCurrentMonth && !isTodayDay && !selected && "text-fg-subtle/60"
+                                        )}>
+                                            {day}
+                                        </span>
+                                        {status !== "rest" && (
+                                            <div className={cn("w-1.5 h-1.5 rounded-full mt-1 mr-0.5 shrink-0", statusStyle.dot)} />
+                                        )}
+                                    </div>
 
-                                            {/* Visual Cues */}
-                                            <div className="w-full space-y-1.5 mt-auto">
-                                                {log ? (
-                                                    <div className="space-y-1">
-                                                        <div className="h-1 rounded-full bg-success/20 overflow-hidden">
-                                                            <div className="w-full h-full bg-success" />
-                                                        </div>
-                                                        <span className="text-[9px] font-black uppercase tracking-tighter text-success truncate block">
-                                                            {log.workoutName.replace(/workout/gi, '').trim()}
-                                                            {dayLogs && dayLogs.length > 1 ? ` +${dayLogs.length - 1}` : ""}
-                                                        </span>
-                                                    </div>
-                                                ) : dayInProgress ? (
-                                                    <div className="space-y-1">
-                                                        <div className="h-1 rounded-full bg-warning/20 overflow-hidden">
-                                                            <div className="w-2/3 h-full bg-warning animate-pulse" />
-                                                        </div>
-                                                        <span className="text-[9px] font-black uppercase tracking-tighter text-warning truncate block">
-                                                            {dayInProgress.workoutName.replace(/workout/gi, '').trim()}
-                                                        </span>
-                                                    </div>
-                                                ) : planned ? (
-                                                    <div className="space-y-1">
-                                                        {programWeek && (
-                                                            <span className="text-[8px] font-black uppercase tracking-widest text-fg-subtle/80">
-                                                                Week {programWeek}
-                                                            </span>
-                                                        )}
-                                                        <div className={cn(
-                                                            "h-1 rounded-full overflow-hidden",
-                                                            status === 'excused' ? "bg-emerald-900/30" :
-                                                            isPast ? "bg-danger/20" : "bg-brand-400/20"
-                                                        )}>
-                                                            <div className={cn(
-                                                                "w-full h-full",
-                                                                status === 'excused' ? "bg-emerald-700" :
-                                                                isPast ? "bg-danger" : "bg-brand-400 animate-pulse"
-                                                            )} />
-                                                        </div>
-                                                        <span className={cn(
-                                                            "text-[9px] font-black uppercase tracking-tighter truncate block",
-                                                            status === 'excused' ? "text-emerald-700" :
-                                                            isPast ? "text-danger opacity-60" : "text-brand-400"
-                                                        )}>
-                                                            {status === 'excused' ? "Excused · " : ""}
-                                                            {planned.name.replace(/workout/gi, '').trim()}
-                                                        </span>
-                                                    </div>
-                                                ) : isAfterPlan ? null : (
-                                                    <div className="h-0.5 rounded-full bg-surface-border opacity-30 mt-auto" />
+                                    <div className="w-full space-y-1 mt-auto min-w-0">
+                                        {workoutLabel ? (
+                                            <div className="space-y-1">
+                                                {programWeek && status !== "completed" && (
+                                                    <span className="hidden sm:block text-[8px] font-black uppercase tracking-widest text-fg-subtle/80">
+                                                        Week {programWeek}
+                                                    </span>
                                                 )}
+                                                <div className={cn("h-1 rounded-full overflow-hidden", statusStyle.barBg)}>
+                                                    <div className={cn("h-full", statusStyle.barFill, status === "in-progress" ? "w-2/3" : "w-full")} />
+                                                </div>
+                                                <span className={cn(
+                                                    "text-[8px] sm:text-[9px] font-black uppercase tracking-tighter truncate block leading-tight",
+                                                    statusStyle.text
+                                                )}>
+                                                    {workoutLabel}
+                                                    {dayLogs && dayLogs.length > 1 ? ` +${dayLogs.length - 1}` : ""}
+                                                </span>
+                                                <span className={cn(
+                                                    "inline-flex sm:hidden text-[7px] font-black uppercase tracking-widest px-1 py-0.5 rounded border",
+                                                    statusStyle.badge
+                                                )}>
+                                                    {statusStyle.shortLabel}
+                                                </span>
                                             </div>
+                                        ) : isAfterPlan ? null : status === "rest" ? (
+                                            <span className="text-[7px] sm:text-[8px] font-black uppercase tracking-widest text-fg-subtle/50">
+                                                Rest
+                                            </span>
+                                        ) : null}
+                                    </div>
 
-                                            {selected && <div className="absolute inset-x-0 bottom-0 h-0.5 bg-brand-400 shadow-glow-brand" />}
-                                    </>
+                                    {selected && <div className="absolute inset-x-0 bottom-0 h-0.5 bg-brand-400 shadow-glow-brand" />}
                                 </button>
                             );
                         })}
                     </div>
                 </div>
+
+                {/* Mobile: quick access to selected day */}
+                <div className="lg:hidden sticky bottom-4 z-20 flex justify-center px-2 pointer-events-none">
+                    <button
+                        type="button"
+                        onClick={scrollToDetailPanel}
+                        className="pointer-events-auto flex items-center gap-2 rounded-2xl border border-brand-500/30 bg-surface-card/95 backdrop-blur-md px-4 py-3 shadow-glow-brand text-left max-w-full"
+                    >
+                        <div className="min-w-0 flex-1">
+                            <p className="text-[9px] font-black uppercase tracking-widest text-brand-400">
+                                {selectedStatusStyle.label}
+                            </p>
+                            <p className="text-xs font-black text-fg truncate">
+                                {selectedDate.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+                                {selectedPlanned ? ` · ${displayWorkoutName(selectedPlanned.name)}` : ""}
+                            </p>
+                        </div>
+                        <ChevronUp className="w-4 h-4 text-brand-400 shrink-0" />
+                    </button>
+                </div>
             </div>
 
-            {/* ── Sidebar Details ── */}
-            <div ref={detailPanelRef} className="lg:col-span-4 space-y-6 lg:sticky lg:top-10 lg:h-fit">
+            {/* ── Day details ── */}
+            <div
+                ref={detailPanelRef}
+                className={cn(
+                    "lg:col-span-4 space-y-6 lg:sticky lg:top-10 lg:h-fit scroll-mt-4",
+                    mobileDetailOpen ? "block" : "hidden lg:block"
+                )}
+            >
                 <div className={cn(
-                    "card p-6 border-brand-500/20 bg-gradient-to-br from-surface-card to-brand-950/10 shadow-glow-sm min-h-[400px]",
-                    focusSelection
-                        && selectedPlanned
-                        && selectedDateKey < todayKey
-                        && selectedLogs.length === 0
-                        && !resumeSession
+                    "card p-6 border-brand-500/20 bg-gradient-to-br from-surface-card to-brand-950/10 shadow-glow-sm min-h-[320px] lg:min-h-[400px]",
+                    selectedStatus === "missed"
                         && !selectedIsExcused
                         && "border-danger/40 ring-2 ring-danger/30 streak-fire-glow"
                 )}>
-                    <div className="flex items-center justify-between mb-8">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-surface-card flex items-center justify-center border border-surface-border shadow-inner">
-                                <History className="w-5 h-5 text-brand-400" />
-                            </div>
-                            <div>
-                                <h3 className="text-sm font-black text-fg uppercase tracking-widest leading-none mb-1">
-                                    {selectedDateKey === todayKey ? "Today" : "Review"}
-                                </h3>
-                                <p className="text-[10px] text-fg-muted font-bold opacity-60 uppercase tracking-tighter">
-                                    {selectedDate.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}
-                                </p>
-                            </div>
+                    <div className="flex items-start justify-between mb-6 gap-3">
+                        <div className="min-w-0">
+                            <p className="text-[10px] font-black text-fg-muted uppercase tracking-widest mb-1">
+                                {selectedDate.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+                            </p>
+                            <span className={cn(
+                                "inline-flex text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg border",
+                                selectedStatusStyle.badge
+                            )}>
+                                {selectedStatusStyle.label}
+                            </span>
                         </div>
-                        <div className="flex gap-1">
-                            <div className={cn(
-                                "w-2.5 h-2.5 rounded-full",
-                                selectedLogs.length > 0 ? "bg-success" :
-                                resumeSession ? "bg-warning animate-pulse" :
-                                selectedIsExcused ? "bg-emerald-700" :
-                                (selectedPlanned ? (selectedDateKey < todayKey ? "bg-danger" : "bg-brand-400") : "bg-surface-border")
-                            )} />
-                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setMobileDetailOpen(false)}
+                            className="lg:hidden w-8 h-8 rounded-lg border border-surface-border flex items-center justify-center text-fg-muted shrink-0"
+                            aria-label="Close day details"
+                        >
+                            <ChevronUp className="w-4 h-4 rotate-180" />
+                        </button>
                     </div>
 
                     <div className="space-y-6 animate-slide-up">
                         {selectedLogs.length > 0 ? (
                             <div className="space-y-6">
-                                {selectedLogs.map((sessionLog) => (
-                            <div key={sessionLog.id} className="space-y-6">
-                                {/* Header Info */}
-                                <div className="p-4 rounded-2xl bg-success-950/20 border border-success-500/20 shadow-glow-success-sm">
-                                    <div className="flex items-start justify-between">
-                                        <div>
-                                            <p className="text-[10px] font-black text-success uppercase tracking-widest mb-1">Session Logged</p>
-                                            <p className="text-lg font-black text-fg tracking-tight">{sessionLog.workoutName}</p>
-                                        </div>
-                                        <div className="text-right">
-                                            <p className="text-[10px] font-black text-fg-subtle uppercase">Volume</p>
-                                            <p className="text-sm font-black text-fg">{calculateVolume(sessionLog.sets).toLocaleString()}kg</p>
-                                        </div>
-                                    </div>
-                                    {sessionLog.duration && (
-                                        <div className="mt-4 flex items-center gap-2 text-xs text-fg-muted font-bold">
-                                            <Clock className="w-3.5 h-3.5 text-success" />
-                                            {sessionLog.duration} minutes active
-                                        </div>
-                                    )}
-                                </div>
+                                {selectedLogs.map((sessionLog) => {
+                                    const exerciseGroups = groupLogSetsByExercise(sessionLog.sets);
+                                    const totalSets = sessionLog.sets.length;
+                                    const previewExercises = exerciseGroups.slice(0, 4);
+                                    const moreExercises = exerciseGroups.length - previewExercises.length;
 
-                                {/* Exercise List */}
-                                <div className="space-y-3">
-                                    <p className="text-[10px] font-black text-fg-subtle uppercase px-2 tracking-[0.2em] flex items-center gap-2">
-                                        <Zap className="w-3 h-3 text-brand-400" /> PERFORMANCE
-                                    </p>
-                                    <div className="space-y-0.5">
-                                        {groupLogSetsByExercise(sessionLog.sets).map((exerciseGroup) => {
-                                            const exSets = exerciseGroup.sets;
-                                            const exName = exerciseGroup.name;
-                                            return (
-                                                <div key={exerciseGroup.exerciseId} className="p-4 bg-surface-muted/20 border border-surface-border/50 rounded-2xl mb-2 group transition-all hover:border-brand-500/30">
-                                                    <div className="flex items-center justify-between mb-2">
+                                    return (
+                                        <div key={sessionLog.id} className="space-y-5">
+                                            <div className={cn("p-4 rounded-2xl border", selectedStatusStyle.panelBg, selectedStatusStyle.panelBorder)}>
+                                                <p className={cn("text-[10px] font-black uppercase tracking-widest mb-1", selectedStatusStyle.panelLabel)}>
+                                                    {displayWorkoutName(sessionLog.workoutName)}
+                                                </p>
+                                                <div className="flex flex-wrap gap-4 mt-3">
+                                                    <div>
+                                                        <p className="text-[9px] font-black text-fg-subtle uppercase">Total sets</p>
+                                                        <p className="text-sm font-black text-fg">{totalSets}</p>
+                                                    </div>
+                                                    {sessionLog.duration != null && (
                                                         <div>
-                                                            <span className="text-xs font-black text-fg group-hover:text-brand-400 transition-colors uppercase italic tracking-tighter">{exName}</span>
-                                                            {(() => {
-                                                                const prev = getPreviousPerformance({ id: exerciseGroup.exerciseId, name: exName, sets: 0, reps: "" }, selectedDate);
-                                                                if (!prev) return null;
-                                                                return (
-                                                                    <p className="text-[8px] font-black text-brand-400/60 uppercase tracking-widest mt-0.5">
-                                                                        Prev: {prev.weight}kg x {prev.reps}
-                                                                    </p>
-                                                                );
-                                                            })()}
+                                                            <p className="text-[9px] font-black text-fg-subtle uppercase">Duration</p>
+                                                            <p className="text-sm font-black text-fg flex items-center gap-1">
+                                                                <Clock className="w-3.5 h-3.5 text-success" />
+                                                                {sessionLog.duration} min
+                                                            </p>
                                                         </div>
-                                                        <span className="text-[10px] font-black text-fg-subtle opacity-60">{exSets.length} sets</span>
-                                                    </div>
-                                                    <div className="flex flex-wrap gap-1.5">
-                                                        {exSets.map((s) => (
-                                                            <div key={`${exerciseGroup.exerciseId}-${s.setNumber}`} className="text-[9px] font-black px-2 py-1 bg-surface-card border border-surface-border rounded-lg text-fg opacity-80">
-                                                                {s.reps ?? "—"} <span className="text-fg-subtle opacity-50">x</span> {formatLoggedWeight(s.weightKg)}
-                                                            </div>
-                                                        ))}
-                                                    </div>
+                                                    )}
                                                 </div>
-                                            );
-                                        })}
-                                    </div>
-                                    <ReturnLink 
-                                        href={`/plans/log/view/${sessionLog.id}`}
-                                        className="btn-primary w-full h-11 text-[10px] font-black uppercase tracking-[.2em] group flex items-center justify-center gap-2 mt-2 shadow-glow-brand"
-                                    >
-                                        <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                                        Review Session
-                                    </ReturnLink>
-                                    {isCoachView && coachView && (
-                                        <Link
-                                            href={`/coach/client/${coachView.clientId}`}
-                                            className="btn-secondary w-full h-11 text-[10px] font-black uppercase tracking-[.2em] flex items-center justify-center gap-2"
-                                        >
-                                            <User className="w-4 h-4" />
-                                            View Client
-                                        </Link>
-                                    )}
-                                </div>
-                            </div>
-                                ))}
-                            </div>
-                        ) : selectedPlanned ? (
-                            <div className="space-y-6">
-                                <div className={cn(
-                                    "p-4 rounded-2xl border",
-                                    resumeSession
-                                        ? "bg-warning-950/20 border-warning-500/20 shadow-glow-warning-sm"
-                                        : selectedIsExcused
-                                            ? "bg-emerald-950/35 border-emerald-700/35 shadow-[0_0_12px_rgba(4,120,87,0.12)]"
-                                        : selectedDateKey < todayKey
-                                            ? "bg-danger-950/20 border-danger-500/20"
-                                            : "bg-brand-950/20 border-brand-500/20 shadow-glow-brand-sm"
-                                )}>
-                                    <div className="flex items-start justify-between">
-                                        <div>
-                                            <p className={cn(
-                                                "text-[10px] font-black uppercase tracking-widest mb-1",
-                                                resumeSession
-                                                    ? "text-warning"
-                                                    : selectedIsExcused
-                                                        ? "text-emerald-700"
-                                                    : selectedDateKey < todayKey
-                                                        ? "text-danger"
-                                                        : "text-brand-400"
-                                            )}>
-                                                {resumeSession
-                                                    ? "Session In Progress"
-                                                    : selectedIsExcused
-                                                        ? "Excused by coach"
-                                                    : selectedDateKey < todayKey
-                                                        ? "Missed Session"
-                                                        : "Upcoming Session"}
-                                            </p>
-                                            <p className="text-lg font-black text-fg tracking-tight">{selectedPlanned.name}</p>
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <p className="text-[10px] font-black text-fg-subtle uppercase px-1 tracking-[0.2em] flex items-center gap-2">
+                                                    <Zap className="w-3 h-3 text-brand-400" /> Exercises
+                                                </p>
+                                                <div className="space-y-1.5">
+                                                    {previewExercises.map((exerciseGroup) => (
+                                                        <div
+                                                            key={exerciseGroup.exerciseId}
+                                                            className="flex items-center justify-between py-2 px-3 bg-surface-muted/15 rounded-xl border border-surface-border/40"
+                                                        >
+                                                            <span className="text-xs font-bold text-fg truncate">{exerciseGroup.name}</span>
+                                                            <span className="text-[10px] font-black text-fg-subtle shrink-0 ml-2">
+                                                                {exerciseGroup.sets.length} sets
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                    {moreExercises > 0 && (
+                                                        <p className="text-[10px] font-bold text-fg-muted px-1">
+                                                            +{moreExercises} more in session review
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            <ReturnLink
+                                                href={`/plans/log/view/${sessionLog.id}`}
+                                                className="btn-primary w-full h-11 text-[10px] font-black uppercase tracking-[.2em] group flex items-center justify-center gap-2 shadow-glow-brand"
+                                            >
+                                                <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                                                Review Session
+                                            </ReturnLink>
+                                            {isCoachView && coachView && (
+                                                <Link
+                                                    href={`/coach/client/${coachView.clientId}`}
+                                                    className="btn-secondary w-full h-11 text-[10px] font-black uppercase tracking-[.2em] flex items-center justify-center gap-2"
+                                                >
+                                                    <User className="w-4 h-4" />
+                                                    View Client
+                                                </Link>
+                                            )}
                                         </div>
-                                        <Layout className={cn(
-                                            "w-5 h-5",
-                                            resumeSession
-                                                ? "text-warning opacity-60"
-                                                : selectedIsExcused
-                                                    ? "text-emerald-700 opacity-60"
-                                                : selectedDateKey < todayKey
-                                                    ? "text-danger opacity-40"
-                                                    : "text-brand-400"
-                                        )} />
+                                    );
+                                })}
+                            </div>
+                        ) : selectedPlanned && !isRestPlanWorkout(selectedPlanned) ? (
+                            <div className="space-y-5">
+                                <div className={cn("p-4 rounded-2xl border", selectedStatusStyle.panelBg, selectedStatusStyle.panelBorder)}>
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <p className="text-lg font-black text-fg tracking-tight truncate">
+                                                {displayWorkoutName(selectedPlanned.name)}
+                                            </p>
+                                            {selectedIsExcused && (
+                                                <p className="text-[10px] font-bold text-emerald-700 mt-1">
+                                                    Excused by your coach — not counted as missed.
+                                                </p>
+                                            )}
+                                        </div>
+                                        <Layout className={cn("w-5 h-5 shrink-0 opacity-50", selectedStatusStyle.panelLabel)} />
                                     </div>
                                 </div>
 
-                                <div className="space-y-4">
-                                    <p className="text-[10px] font-black text-fg-subtle uppercase px-2 tracking-[0.2em] flex items-center gap-2">
-                                        <Hash className="w-3 h-3 text-brand-400" /> TARGETS
-                                    </p>
-                                    <div className="space-y-3">
-                                        {sortPlannedExercises(selectedPlanned.exercises).map((ex) => {
-                                            const targetWeight = formatTargetWeight(ex.weightTargetKg);
-                                            const previous = targetWeight ? null : getPreviousPerformance(ex, selectedDate);
-
-                                            return (
-                                                <div key={ex.id} className="flex items-center justify-between py-2.5 px-3 bg-surface-muted/10 rounded-xl border border-surface-border/40 hover:bg-brand-950/10 transition-colors group">
-                                                    <div className="flex flex-col">
-                                                        <span className="text-xs font-bold text-fg leading-tight group-hover:text-brand-400 transition-colors lowercase italic">{ex.name}</span>
-                                                        {targetWeight ? (
-                                                            <p className="text-[8px] font-black text-brand-400/60 uppercase tracking-widest mt-1">
-                                                                Target: {targetWeight}
-                                                            </p>
-                                                        ) : previous ? (
-                                                            <p className="text-[8px] font-black text-brand-400/60 uppercase tracking-widest mt-1">
-                                                                Last: {previous.weight}kg x {previous.reps}
-                                                            </p>
-                                                        ) : null}
+                                {sortPlannedExercises(selectedPlanned.exercises).length > 0 && (
+                                    <div className="space-y-2">
+                                        <p className="text-[10px] font-black text-fg-subtle uppercase px-1 tracking-[0.2em] flex items-center gap-2">
+                                            <Hash className="w-3 h-3 text-brand-400" /> Exercises
+                                        </p>
+                                        <div className="space-y-1.5">
+                                            {sortPlannedExercises(selectedPlanned.exercises).slice(0, 4).map((ex) => {
+                                                const targetWeight = formatTargetWeight(ex.weightTargetKg);
+                                                return (
+                                                    <div
+                                                        key={ex.id}
+                                                        className="flex items-center justify-between py-2 px-3 bg-surface-muted/10 rounded-xl border border-surface-border/40"
+                                                    >
+                                                        <span className="text-xs font-bold text-fg truncate">{ex.name}</span>
+                                                        <span className="text-[10px] font-black text-brand-400 shrink-0 ml-2">
+                                                            {ex.sets}×{ex.reps}{targetWeight ? ` @ ${targetWeight}` : ""}
+                                                        </span>
                                                     </div>
-                                                    <span className="text-[10px] font-black text-brand-400 bg-brand-400/5 px-2.5 py-1 rounded-lg uppercase tracking-widest border border-brand-400/20">
-                                                        {ex.sets}x{ex.reps}{targetWeight ? ` @ ${targetWeight}` : ""}
-                                                    </span>
-                                                </div>
-                                            );
-                                        })}
+                                                );
+                                            })}
+                                            {selectedPlanned.exercises.length > 4 && (
+                                                <p className="text-[10px] font-bold text-fg-muted px-1">
+                                                    +{selectedPlanned.exercises.length - 4} more exercises
+                                                </p>
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
+                                )}
 
                                 {isCoachView && coachView && selectedDateKey < todayKey && selectedLogs.length === 0 && !resumeSession && (
                                     <div className="flex gap-2">
@@ -851,18 +893,18 @@ export function CalendarClient({
                                             href={workoutLogHref}
                                             className={cn(
                                                 "w-full h-12 text-xs font-black uppercase tracking-[0.15em] group hover:scale-[1.02] transition-all flex items-center justify-center",
-                                                resumeSession
+                                                resumeSession || selectedStatus === "in-progress"
                                                     ? "btn-primary shadow-glow-success bg-success border-success hover:bg-success-600"
                                                     : "btn-primary shadow-glow-brand"
                                             )}
                                         >
-                                            {resumeSession ? (
+                                            {resumeSession || selectedStatus === "in-progress" ? (
                                                 <Flame className="w-4 h-4 mr-2 animate-pulse group-hover:scale-110 transition-transform" />
                                             ) : (
                                                 <PlayCircle className="w-4 h-4 mr-2 group-hover:rotate-12 transition-transform" />
                                             )}
-                                            {resumeSession
-                                                ? "Resume Workout"
+                                            {resumeSession || selectedStatus === "in-progress"
+                                                ? "Continue Workout"
                                                 : selectedDateKey < todayKey
                                                     ? "Log Workout"
                                                     : "Start Workout"}
@@ -884,38 +926,58 @@ export function CalendarClient({
                                             </Link>
                                         )}
                                     </div>
-                                ) : selectedDateKey < todayKey ? (
+                                ) : selectedStatus === "in-progress" ? (
                                     <ReturnLink
                                         href={workoutLogHref}
-                                        className={cn(
-                                            "w-full h-12 text-xs font-black uppercase tracking-[0.15em] group hover:scale-[1.02] transition-all flex items-center justify-center",
-                                            resumeSession
-                                                ? "btn-primary shadow-glow-success bg-success border-success hover:bg-success-600"
-                                                : "btn-secondary"
-                                        )}
+                                        className="btn-primary w-full h-12 text-xs font-black uppercase tracking-[0.15em] shadow-glow-success bg-success border-success hover:bg-success-600 group hover:scale-[1.02] transition-all flex items-center justify-center"
                                     >
-                                        {resumeSession ? (
-                                            <Flame className="w-4 h-4 mr-2 animate-pulse group-hover:scale-110 transition-transform" />
-                                        ) : (
-                                            <PlayCircle className="w-4 h-4 mr-2 group-hover:rotate-12 transition-transform" />
+                                        <Flame className="w-4 h-4 mr-2 animate-pulse group-hover:scale-110 transition-transform" />
+                                        Continue Workout
+                                    </ReturnLink>
+                                ) : selectedStatus === "missed" ? (
+                                    <div className="space-y-2">
+                                        <ReturnLink
+                                            href={workoutLogHref}
+                                            className="btn-secondary w-full h-12 text-xs font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2"
+                                        >
+                                            <History className="w-4 h-4" />
+                                            View Workout
+                                        </ReturnLink>
+                                        {coachId && (
+                                            <Link
+                                                href={`/chat?with=${coachId}`}
+                                                className="btn-primary w-full h-12 text-xs font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2 shadow-glow-brand"
+                                            >
+                                                <MessageSquare className="w-4 h-4" />
+                                                Message Coach
+                                            </Link>
                                         )}
-                                        {resumeSession ? "Resume Workout" : "View Workout"}
+                                    </div>
+                                ) : selectedStatus === "excused" ? (
+                                    <ReturnLink
+                                        href={workoutLogHref}
+                                        className="btn-secondary w-full h-12 text-xs font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2"
+                                    >
+                                        <History className="w-4 h-4" />
+                                        View Workout
                                     </ReturnLink>
                                 ) : (
-                                    <ReturnLink
-                                        href={workoutLogHref}
-                                        className={cn(
-                                            "btn-primary w-full h-14 text-xs font-black uppercase tracking-[0.2em] shadow-glow-brand group hover:scale-[1.02] transition-all flex items-center justify-center",
-                                            resumeSession && "shadow-glow-success bg-success border-success hover:bg-success-600"
-                                        )}
-                                    >
-                                        {resumeSession ? (
-                                            <Flame className="w-5 h-5 mr-3 animate-pulse group-hover:scale-110 transition-transform" />
-                                        ) : (
-                                            <PlayCircle className="w-5 h-5 mr-3 group-hover:rotate-12 transition-transform" />
-                                        )}
-                                        {resumeSession ? "Resume Workout" : "View Workout"}
-                                    </ReturnLink>
+                                    <div className="space-y-2">
+                                        <ReturnLink
+                                            href={workoutLogHref}
+                                            className="btn-secondary w-full h-12 text-xs font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2"
+                                        >
+                                            <History className="w-4 h-4" />
+                                            View Workout
+                                        </ReturnLink>
+                                        <ReturnLink
+                                            href={workoutLogHref}
+                                            className="btn-primary w-full h-12 text-xs font-black uppercase tracking-[0.15em] shadow-glow-brand group hover:scale-[1.02] transition-all flex items-center justify-center"
+                                        >
+                                            <PlayCircle className="w-4 h-4 mr-2 group-hover:rotate-12 transition-transform" />
+                                            Start Workout
+                                        </ReturnLink>
+                                    </div>
                                 )}
                             </div>
                         ) : selectedIsAfterPlan ? (
@@ -936,8 +998,8 @@ export function CalendarClient({
                                     <Info className="w-8 h-8 text-fg-subtle opacity-30" />
                                 </div>
                                 <div className="max-w-[200px]">
-                                    <p className="text-xs font-black text-fg uppercase tracking-widest mb-1 opacity-80">Rest Optimization</p>
-                                    <p className="text-[10px] text-fg-subtle font-bold leading-relaxed">No training assigned for this date. Focus on recovery and nutrition.</p>
+                                    <p className="text-xs font-black text-fg uppercase tracking-widest mb-1 opacity-80">Rest day</p>
+                                    <p className="text-[10px] text-fg-subtle font-bold leading-relaxed">No training scheduled. Focus on recovery and nutrition.</p>
                                 </div>
                                 <Link
                                     href={isCoachView && coachView ? `/coach/client/${coachView.clientId}` : "/plans"}
@@ -960,31 +1022,15 @@ export function CalendarClient({
                 </div>
 
                 {/* Legend */}
-                <div className="card p-4 flex flex-wrap gap-4 justify-center bg-surface-muted/20 border-surface-border/40">
-                    <div className="flex items-center gap-1.5">
-                        <div className="w-1.5 h-1.5 rounded-full bg-success" />
-                        <span className="text-[8px] font-black uppercase tracking-tighter text-fg-subtle">Success</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                        <div className="w-1.5 h-1.5 rounded-full bg-danger" />
-                        <span className="text-[8px] font-black uppercase tracking-tighter text-fg-subtle">Missed</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                        <div className="w-1.5 h-1.5 rounded-full bg-warning" />
-                        <span className="text-[8px] font-black uppercase tracking-tighter text-fg-subtle">In Progress</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-700" />
-                        <span className="text-[8px] font-black uppercase tracking-tighter text-fg-subtle">Excused</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                        <div className="w-1.5 h-1.5 rounded-full bg-brand-400" />
-                        <span className="text-[8px] font-black uppercase tracking-tighter text-fg-subtle">Planned</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                        <div className="w-1.5 h-1.5 rounded-full bg-surface-border" />
-                        <span className="text-[8px] font-black uppercase tracking-tighter text-fg-subtle">Rest</span>
-                    </div>
+                <div className="card p-4 flex flex-wrap gap-x-4 gap-y-2 justify-center bg-surface-muted/20 border-surface-border/40">
+                    {(["completed", "today", "upcoming", "in-progress", "missed", "excused", "rest"] as DayWorkoutStatus[]).map((status) => (
+                        <div key={status} className="flex items-center gap-1.5">
+                            <div className={cn("w-1.5 h-1.5 rounded-full", STATUS_CONFIG[status].dot.split(" ")[0])} />
+                            <span className="text-[8px] font-black uppercase tracking-tighter text-fg-subtle">
+                                {STATUS_CONFIG[status].label}
+                            </span>
+                        </div>
+                    ))}
                 </div>
             </div>
         </div>

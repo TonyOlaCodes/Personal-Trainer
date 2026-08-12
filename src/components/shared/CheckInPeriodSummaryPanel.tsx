@@ -1,6 +1,6 @@
 "use client";
 
-import { Scale, Footprints, Dumbbell, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { Scale, Footprints, Dumbbell, TrendingUp, TrendingDown, Minus, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { CheckInPeriodSummary } from "@/lib/checkInPeriodSummary";
 
@@ -10,11 +10,39 @@ function toneClass(met: boolean | null) {
     return "text-fg-muted bg-surface-muted border-surface-border";
 }
 
-function StatAdvice({ message, detail, met }: { message: string; detail: string; met?: boolean | null }) {
+function StatAdvice({
+    category,
+    message,
+    detail,
+    met,
+}: {
+    category: "Progress" | "Attention" | "Insight";
+    message: string;
+    detail: string;
+    met?: boolean | null;
+}) {
     return (
         <div className={cn("rounded-xl border px-3 py-2.5 text-xs leading-relaxed", toneClass(met ?? null))}>
+            <p className="text-[9px] font-black uppercase tracking-widest opacity-70 mb-0.5">{category}</p>
             <p className="font-black uppercase tracking-widest text-[10px] mb-0.5">{message}</p>
             <p className="opacity-90">{detail}</p>
+        </div>
+    );
+}
+
+function OverviewList({ title, items }: { title: string; items: string[] }) {
+    if (items.length === 0) return null;
+    return (
+        <div>
+            <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle mb-1.5">{title}</p>
+            <ul className="space-y-1 text-xs text-fg-muted leading-relaxed">
+                {items.map((item) => (
+                    <li key={item} className="flex gap-2">
+                        <span className="text-brand-400 shrink-0">•</span>
+                        <span>{item}</span>
+                    </li>
+                ))}
+            </ul>
         </div>
     );
 }
@@ -31,7 +59,7 @@ export function CheckInPeriodSummaryPanel({
     if (loading) {
         return (
             <div className="rounded-2xl border border-surface-border bg-surface-muted/20 p-4 text-xs text-fg-muted animate-pulse">
-                Loading period summary...
+                Loading AI overview...
             </div>
         );
     }
@@ -47,11 +75,14 @@ export function CheckInPeriodSummaryPanel({
     return (
         <div className={cn("space-y-4", compact ? "" : "card p-5 border-surface-border")}>
             <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-fg-subtle">
-                    Period review
-                </p>
+                <div className="flex items-center gap-2">
+                    <Sparkles className="w-3.5 h-3.5 text-brand-400" />
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-fg-subtle">
+                        AI Overview
+                    </p>
+                </div>
                 <p className="text-xs text-fg-muted mt-1">
-                    Stats from {summary.periodLabel}
+                    Based on data from {summary.periodLabel}
                     {summary.frequencyWeeks > 1 ? ` (${summary.frequencyWeeks}-week check-in cycle)` : ""}.
                 </p>
             </div>
@@ -78,7 +109,12 @@ export function CheckInPeriodSummaryPanel({
                                 Goal {summary.weight.targetKg.toFixed(1)} kg · {Math.abs(summary.weight.currentKg - summary.weight.targetKg).toFixed(1)} kg away
                             </p>
                         )}
-                        <StatAdvice message={summary.weight.message} detail={summary.weight.detail} met={summary.weight.towardGoal} />
+                        <StatAdvice
+                            category={summary.weight.towardGoal === false ? "Attention" : summary.weight.towardGoal ? "Progress" : "Insight"}
+                            message={summary.weight.message}
+                            detail={summary.weight.detail}
+                            met={summary.weight.towardGoal}
+                        />
                     </div>
                 )}
 
@@ -102,6 +138,13 @@ export function CheckInPeriodSummaryPanel({
                                 : "Planned sessions"}
                     </p>
                     <StatAdvice
+                        category={
+                            summary.workouts.completionPercent >= 80
+                                ? "Progress"
+                                : summary.workouts.completionPercent < 50
+                                    ? "Attention"
+                                    : "Insight"
+                        }
                         message={summary.workouts.message}
                         detail={summary.workouts.detail}
                         met={summary.workouts.completionPercent >= 80 ? true : summary.workouts.completionPercent >= 50 ? null : false}
@@ -122,14 +165,27 @@ export function CheckInPeriodSummaryPanel({
                             Target {summary.steps.target?.toLocaleString() ?? "—"}
                             {summary.steps.daysLogged > 0 ? ` · ${summary.steps.daysLogged} days logged` : ""}
                         </p>
-                        <StatAdvice message={summary.steps.message} detail={summary.steps.detail} met={summary.steps.metGoal} />
+                        <StatAdvice
+                            category={summary.steps.metGoal ? "Progress" : summary.steps.metGoal === false ? "Attention" : "Insight"}
+                            message={summary.steps.message}
+                            detail={summary.steps.detail}
+                            met={summary.steps.metGoal}
+                        />
                     </div>
                 )}
             </div>
 
-            <div className="rounded-2xl border border-brand-500/20 bg-brand-500/5 px-4 py-3 text-sm text-fg leading-relaxed">
-                <p className="text-[10px] font-black uppercase tracking-widest text-brand-300 mb-1">Looking ahead</p>
-                {summary.overallMessage}
+            <div className="rounded-2xl border border-brand-500/20 bg-brand-500/5 px-4 py-4 space-y-3 text-sm text-fg leading-relaxed">
+                <p className="text-[10px] font-black uppercase tracking-widest text-brand-300">Summary</p>
+                <p className="font-bold text-fg">{summary.overallHeadline}</p>
+                <OverviewList title="What's going well" items={summary.overallProgress} />
+                <OverviewList title="Needs attention" items={summary.overallAttention} />
+                <OverviewList title="Practical next steps" items={summary.overallNextSteps} />
+                {summary.overallUnassessed.length > 0 && (
+                    <p className="text-xs text-fg-muted">
+                        Not enough data to assess: {summary.overallUnassessed.join(", ")}.
+                    </p>
+                )}
             </div>
         </div>
     );

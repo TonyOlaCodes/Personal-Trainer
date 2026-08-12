@@ -14,7 +14,7 @@ export default async function CalendarPage() {
 
     const user = await prisma.user.findUnique({
         where: { clerkId: userId },
-        select: { id: true, role: true },
+        select: { id: true, role: true, coachId: true },
     });
 
     if (!user) redirect("/sign-in");
@@ -29,7 +29,7 @@ export default async function CalendarPage() {
         <>
             <TopBar title="Calendar" subtitle="Your training schedule" />
             <div className="p-4 sm:p-6 lg:p-10 max-w-7xl mx-auto pb-20">
-                <PersonalCalendarClient calendar={calendar} />
+                <PersonalCalendarClient calendar={calendar} coachId={user.coachId} />
             </div>
         </>
     );

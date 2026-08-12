@@ -596,6 +596,20 @@ export async function notifyCoachOfClientCheckIn(input: {
     });
 }
 
+export async function notifyCoachOfClientCheckInEdited(input: {
+    coachId: string;
+    clientName: string;
+    checkInId: string;
+}) {
+    await deliverCoachNotification(input.coachId, "notifyOnCheckIn", {
+        type: "CLIENT_CHECKIN_EDITED",
+        message: `${input.clientName} edited a check-in — click to view`,
+        entityType: "CHECK_IN",
+        entityId: input.checkInId,
+        route: `/checkins?highlight=${input.checkInId}`,
+    });
+}
+
 export async function notifyCoachOfClientBodyweight(input: {
     coachId: string;
     clientId: string;

@@ -1,4 +1,4 @@
-import { getCheckInOverviewSummary } from "@/lib/checkInOverviewSummaries";
+import { getCheckInOverviewSummary, type CheckInOverviewSummary } from "@/lib/checkInOverviewSummaries";
 
 export type MetricKey = "sleep" | "diet" | "energy" | "stress" | "training";
 export type MetricTone = "bad" | "warn" | "neutral" | "good" | "great";
@@ -27,7 +27,7 @@ export const METRIC_TONE_CLASSES: Record<MetricTone, string> = {
 };
 
 export interface PerformanceFeedback {
-    overall: { message: string; tone: MetricTone } | null;
+    overview: CheckInOverviewSummary | null;
 }
 
 export function getPerformanceMetricsFeedback(opts: {
@@ -38,13 +38,7 @@ export function getPerformanceMetricsFeedback(opts: {
     training: number;
     sleepHidden?: boolean;
 }): PerformanceFeedback {
-    const summary = getCheckInOverviewSummary(opts);
-    if (!summary) return { overall: null };
-
     return {
-        overall: {
-            message: summary.message,
-            tone: summary.tone,
-        },
+        overview: getCheckInOverviewSummary(opts),
     };
 }

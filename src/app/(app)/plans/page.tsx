@@ -50,35 +50,11 @@ export default async function PlansPage() {
 
     if (!user) redirect("/onboarding");
 
-    let activeSession: {
-        id: string;
-        workoutId: string;
-        workoutName: string;
-        loggedAt: string;
-    } | null = null;
-
+    // The active session is surfaced app-wide by ResumeWorkoutBar in the layout, which
+    // reads it from `activeWorkoutSession`. Cleanup still runs here so a superseded
+    // draft cannot linger while the user is looking at their plans.
     if (!isCoachRole(user.role)) {
         await cleanupStaleInProgressSessions(user.id);
-
-        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-        const inProgressLog = await prisma.workoutLog.findFirst({
-            where: {
-                userId: user.id,
-                status: "IN_PROGRESS",
-                updatedAt: { gte: twentyFourHoursAgo },
-            },
-            include: { workout: true },
-            orderBy: { updatedAt: "desc" },
-        });
-
-        if (inProgressLog?.workout) {
-            activeSession = {
-                id: inProgressLog.id,
-                workoutId: inProgressLog.workoutId,
-                workoutName: inProgressLog.workout.name,
-                loggedAt: inProgressLog.loggedAt.toISOString(),
-            };
-        }
     }
 
     let plans;
@@ -177,7 +153,6 @@ export default async function PlansPage() {
                     <PlansClient
                         plans={plans}
                         userRole={user.role}
-                        activeSession={activeSession}
                         coachClients={coachClients}
                     />
                 </Suspense>

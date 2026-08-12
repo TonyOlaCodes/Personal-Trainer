@@ -18,6 +18,7 @@ import { ensureAchievementsTables } from "@/lib/achievements";
 import { ensureCoachAttentionActionsTable } from "@/lib/coachAttentionActions";
 import { ensurePlanMissedSessionHistoryTable } from "@/lib/planMissedSessionHistory";
 import { ensureGeneralPremiumRole } from "@/lib/ensureGeneralPremiumRole";
+import { ensureLogExerciseNotesTable } from "@/lib/logExerciseNotes";
 import { ensureLogSetExerciseNamesReady } from "@/lib/logSetExerciseName";
 import { ensureLogSetExerciseOrdersReady } from "@/lib/logSetExerciseOrder";
 import { ensureUserNicknamesTable } from "@/lib/userNicknames";
@@ -57,6 +58,7 @@ export async function ensureAppSchema() {
             ensureCoachAttentionActionsTable(),
             ensurePlanMissedSessionHistoryTable(),
             ensureGeneralPremiumRole(),
+            ensureLogExerciseNotesTable(),
             ensureLogSetExerciseNamesReady(),
             ensureLogSetExerciseOrdersReady(),
             ensureUserNicknamesTable(),

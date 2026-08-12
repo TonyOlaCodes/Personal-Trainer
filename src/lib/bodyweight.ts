@@ -222,18 +222,18 @@ export function formatWeightDistanceFromGoal(
     targetKg: number,
     goal?: string | null
 ): string {
-    const diff = Math.round((currentKg - targetKg) * 10) / 10;
+    const diff = Math.round((currentKg - targetKg) * 100) / 100;
     const abs = Math.abs(diff);
-    if (abs < 0.05) return "At goal";
+    if (abs < 0.005) return "At goal";
 
     if (goal === "LOSE_WEIGHT" || goal === "RECOMPOSITION") {
-        if (diff > 0) return `${abs.toFixed(1)} kg to goal`;
-        return `${abs.toFixed(1)} kg below goal`;
+        if (diff > 0) return `${abs.toFixed(2)} kg to goal`;
+        return `${abs.toFixed(2)} kg below goal`;
     }
     if (goal === "GAIN_MUSCLE" || goal === "STRENGTH") {
-        if (diff < 0) return `${abs.toFixed(1)} kg to goal`;
-        return `${abs.toFixed(1)} kg above goal`;
+        if (diff < 0) return `${abs.toFixed(2)} kg to goal`;
+        return `${abs.toFixed(2)} kg above goal`;
     }
 
-    return `${abs.toFixed(1)} kg from goal`;
+    return `${abs.toFixed(2)} kg from goal`;
 }

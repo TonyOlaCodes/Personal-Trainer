@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
     Timer, Flame, Check, HelpCircle,
-    Trash2, Plus, InfoIcon, Award, Play, Zap, X, ChevronLeft
+    Trash2, Plus, InfoIcon, Award, Play, Zap, X, ChevronLeft, StickyNote
 } from "lucide-react";
 import { cn, generateId, formatDate, isSameCalendarDay, parseLogDate, toDateKey, toLoggedAtIso, calculateOneRM } from "@/lib/utils";
 import { appendReturnTo, getReturnToFromSearchParams } from "@/lib/navigation";
@@ -12,6 +12,18 @@ import { notifyWorkoutStatsChanged } from "@/lib/workoutStatsRefresh";
 import { isCardio, ExerciseAutocomplete } from "@/components/shared/ExerciseAutocomplete";
 import { WorkoutFeelingPicker } from "@/components/shared/WorkoutFeelingPicker";
 import { useScrollLock } from "@/hooks/useScrollLock";
+import { useVisualViewportHeight } from "@/hooks/useVisualViewportHeight";
+import { exerciseIdentityKey } from "@/lib/exerciseIdentity";
+import {
+    EMPTY_EXERCISE_RECORDS,
+    evaluateSetPr,
+    formatPreviousSetLine,
+    type ExerciseRecords,
+    type PreviousSessionPerformance,
+} from "@/lib/exercisePrs";
+import { EXERCISE_NOTE_MAX_LENGTH } from "@/lib/logExerciseNotesShared";
+import { buildWorkoutMuscleBreakdown } from "@/lib/exerciseMuscles";
+import { MuscleMap, MuscleChips } from "@/components/shared/MuscleMap";
 interface Exercise {
     id: string;
     name: string;
@@ -218,14 +230,12 @@ interface Props {
     logDate?: string;
     clientId?: string;
     clientName?: string;
-    lastWorkoutLogSets?: Array<{
-        exerciseId: string;
-        exerciseName: string;
-        setNumber: number;
-        weightKg: number | null;
-        reps?: number | null;
-        rpe?: number | null;
-    }>;
+    /** Most recent session each exercise was actually performed, keyed by exercise identity. */
+    previousSessions?: Record<string, PreviousSessionPerformance>;
+    /** All-time records per exercise identity, excluding the session being logged. */
+    exerciseRecords?: Record<string, ExerciseRecords>;
+    /** Saved per-exercise notes for a resumed session, keyed by exercise id. */
+    initialExerciseNotes?: Record<string, string>;
     initialActiveLog?: InitialActiveLog | null;
     showWorkoutInputHint?: boolean;
 }
@@ -322,7 +332,9 @@ export function WorkoutLogClient({
     logDate,
     clientId,
     clientName,
-    lastWorkoutLogSets = [],
+    previousSessions = {},
+    exerciseRecords = {},
+    initialExerciseNotes = {},
     initialActiveLog = null,
     showWorkoutInputHint = false,
 }: Props) {
@@ -347,6 +359,9 @@ export function WorkoutLogClient({
     });
 
     const [logs, setLogs] = useState<Record<string, SetLog[]>>(initialSession.logs);
+    /** Optional per-exercise notes for this session, keyed by exercise id. */
+    const [exerciseNotes, setExerciseNotes] = useState<Record<string, string>>(initialExerciseNotes);
+    const [openNoteExerciseId, setOpenNoteExerciseId] = useState<string | null>(null);
     const [startTime, setStartTime] = useState(initialSession.startTime);
     const [elapsed, setElapsed] = useState(0);
     const [saving, setSaving] = useState(false);
@@ -376,6 +391,8 @@ export function WorkoutLogClient({
     const lastRemoteUpdatedAtRef = useRef(
         remoteUpdatedAtMs(initialActiveLog?.updatedAt)
     );
+    const exerciseNotesRef = useRef(exerciseNotes);
+    exerciseNotesRef.current = exerciseNotes;
     const isSavingRef = useRef(false);
     const progressSaveInFlightRef = useRef(false);
     const pendingProgressSaveRef = useRef<PendingProgressSave | null>(null);
@@ -388,34 +405,43 @@ export function WorkoutLogClient({
         setPreviewVideoStarted(false);
     }, [previewExercise?.media.videoUrl]);
 
-    const findLastCompletedSet = (exerciseId: string, exerciseName: string, setNumber: number) =>
-        lastWorkoutLogSets.find(
-            (s) =>
-                s.setNumber === setNumber
-                && (
-                    s.exerciseId === exerciseId
-                    || s.exerciseName.toLowerCase() === exerciseName.toLowerCase()
-                )
-        );
+    /**
+     * Previous performance is looked up by canonical exercise identity, so a renamed or
+     * differently-spelled variant still finds its own history.
+     */
+    const previousSessionFor = (exerciseName: string): PreviousSessionPerformance | null =>
+        previousSessions[exerciseIdentityKey(exerciseName)] ?? null;
 
-    const getWeightPlaceholder = (exerciseId: string, exerciseName: string, setNumber: number) => {
-        const lastSet = findLastCompletedSet(exerciseId, exerciseName, setNumber);
+    const recordsFor = (exerciseName: string): ExerciseRecords =>
+        exerciseRecords[exerciseIdentityKey(exerciseName)] ?? EMPTY_EXERCISE_RECORDS;
+
+    /**
+     * The matching set from the immediately previous session, or undefined.
+     *
+     * Deliberately does not fall back to older sessions: if only two sets were performed
+     * last time, set 3 has no placeholder rather than borrowing a stale number.
+     */
+    const findLastCompletedSet = (exerciseName: string, setNumber: number) =>
+        previousSessionFor(exerciseName)?.sets.find((set) => set.setNumber === setNumber);
+
+    const getWeightPlaceholder = (exerciseName: string, setNumber: number) => {
+        const lastSet = findLastCompletedSet(exerciseName, setNumber);
         if (lastSet?.weightKg != null && lastSet.weightKg > 0) {
             return lastSet.weightKg.toString();
         }
         return "";
     };
 
-    const getRepsPlaceholder = (exerciseId: string, exerciseName: string, setNumber: number) => {
-        const lastSet = findLastCompletedSet(exerciseId, exerciseName, setNumber);
+    const getRepsPlaceholder = (exerciseName: string, setNumber: number) => {
+        const lastSet = findLastCompletedSet(exerciseName, setNumber);
         if (lastSet?.reps != null && lastSet.reps > 0) {
             return String(lastSet.reps);
         }
         return "";
     };
 
-    const getRpePlaceholder = (exerciseId: string, exerciseName: string, setNumber: number) => {
-        const lastSet = findLastCompletedSet(exerciseId, exerciseName, setNumber);
+    const getRpePlaceholder = (exerciseName: string, setNumber: number) => {
+        const lastSet = findLastCompletedSet(exerciseName, setNumber);
         if (lastSet?.rpe != null) return String(lastSet.rpe);
         return "";
     };
@@ -666,6 +692,18 @@ export function WorkoutLogClient({
         return `${mins}:${secs.toString().padStart(2, "0")}`;
     };
 
+    /**
+     * Notes ride along with every save so they survive leaving and resuming the workout.
+     * Read from a ref because saves are debounced and must send the latest text, not the
+     * value captured when the save was queued.
+     */
+    const buildExerciseNotesPayload = () =>
+        activeExercises.map((exercise) => ({
+            exerciseId: exercise.id,
+            exerciseName: exercise.name,
+            text: exerciseNotesRef.current[exercise.id] ?? "",
+        }));
+
     const persistProgressSnapshot = async (snapshot: PendingProgressSave) => {
         if (!activeLogId || isCompletingRef.current) return;
 
@@ -700,6 +738,7 @@ export function WorkoutLogClient({
                     duration: elapsedMinutes,
                     loggedAt: toLoggedAtIso(logDate ?? new Date(finalStartTime)),
                     sets: flattenedSets,
+                    exerciseNotes: buildExerciseNotesPayload(),
                     ...logSubjectFields,
                 }),
             });

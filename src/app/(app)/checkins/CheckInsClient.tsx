@@ -104,12 +104,42 @@ function PerformanceMetricsFeedbackPanel({ sleep, energy, stress, training, slee
     sleep: number; energy: number; stress: number; training: number; sleepHidden?: boolean;
 }) {
     const feedback = getPerformanceMetricsFeedback({ sleep, energy, stress, training, sleepHidden });
-    if (!feedback.overall) return null;
+    const overview = feedback.overview;
+    if (!overview) return null;
 
     return (
-        <div className={cn("px-4 py-3 rounded-2xl border text-[13px] font-bold leading-relaxed transition-all animate-slide-up", METRIC_TONE_CLASSES[feedback.overall.tone])}>
-            <p className="text-[9px] font-black uppercase tracking-[0.2em] opacity-70 mb-1">Weekly overview</p>
-            {feedback.overall.message}
+        <div className={cn("px-4 py-4 rounded-2xl border text-[13px] leading-relaxed transition-all animate-slide-up space-y-3", METRIC_TONE_CLASSES[overview.tone])}>
+            <p className="text-[9px] font-black uppercase tracking-[0.2em] opacity-70">AI Overview</p>
+            <p className="font-bold text-fg">{overview.headline}</p>
+            {overview.progress.length > 0 && (
+                <div>
+                    <p className="text-[9px] font-black uppercase tracking-widest opacity-70 mb-1">What&apos;s going well</p>
+                    <ul className="space-y-1 text-xs font-medium">
+                        {overview.progress.map((item) => <li key={item}>• {item}</li>)}
+                    </ul>
+                </div>
+            )}
+            {overview.attention.length > 0 && (
+                <div>
+                    <p className="text-[9px] font-black uppercase tracking-widest opacity-70 mb-1">Needs attention</p>
+                    <ul className="space-y-1 text-xs font-medium">
+                        {overview.attention.map((item) => <li key={item}>• {item}</li>)}
+                    </ul>
+                </div>
+            )}
+            {overview.nextSteps.length > 0 && (
+                <div>
+                    <p className="text-[9px] font-black uppercase tracking-widest opacity-70 mb-1">Practical next steps</p>
+                    <ul className="space-y-1 text-xs font-medium">
+                        {overview.nextSteps.map((item) => <li key={item}>• {item}</li>)}
+                    </ul>
+                </div>
+            )}
+            {overview.unassessed.length > 0 && (
+                <p className="text-[11px] font-medium opacity-80">
+                    Not enough data to assess: {overview.unassessed.join(", ")}.
+                </p>
+            )}
         </div>
     );
 }
@@ -397,10 +427,12 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highl
                     </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                    {!isCoach && c.status === "PENDING" && onEdit && (
+                    {!isCoach && onEdit && (
                          <button 
                             onClick={(e) => { e.stopPropagation(); onEdit(c); }}
                             className="p-2 text-fg-subtle hover:text-brand-400 hover:bg-brand-500/10 rounded-lg transition-all"
+                            title="Edit check-in"
+                            aria-label="Edit check-in"
                         >
                             <Edit2 className="w-4 h-4" />
                         </button>
@@ -607,6 +639,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
 
     // Form
     const [editMode, setEditMode] = useState(false);
+    const [editingWasReviewed, setEditingWasReviewed] = useState(false);
     const [checkInId, setCheckInId] = useState<string | null>(null);
     const [energy, setEnergy] = useState(0);
     const [sleep, setSleep] = useState(0);
@@ -770,6 +803,14 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
         sleepHidden: isSleepHidden,
     });
 
+    const metricsComplete =
+        (isSleepHidden || sleep > 0)
+        && nutrition > 0
+        && energy > 0
+        && stress > 0
+        && aches > 0
+        && training > 0;
+
     const startLogging = () => {
         setCheckInId(null);
         setSelectedDate(new Date().toISOString().split("T")[0]);
@@ -783,6 +824,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
         setFrontImg("");
         setSideImg("");
         setEditMode(false);
+        setEditingWasReviewed(false);
         setIsLogging(true);
     };
 
@@ -792,7 +834,15 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
     };
 
     const editCheckIn = (c: CheckIn) => {
+        if (c.status === "REVIEWED") {
+            const confirmed = window.confirm(
+                "Editing will send this check-in back to your coach for review. Continue?"
+            );
+            if (!confirmed) return;
+        }
+
         setCheckInId(c.id);
+        setEditingWasReviewed(c.status === "REVIEWED");
         setSelectedDate(weekStartDateString(c.weekNumber, c.createdAt));
         setEnergy(c.energyRating || 0);
         setSleep(c.sleepRating || 0);
@@ -829,7 +879,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
             body: JSON.stringify({
                 id: checkInId || undefined,
                 bodyweightKg: currentBw ?? undefined,
-                feedback: notes || "No additional notes.",
+                feedback: notes.trim() || undefined,
                 weekNumber: selectedWeek,
                 energyRating: energy || undefined,
                 sleepRating: sleep || undefined,
@@ -850,6 +900,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
             }
             setIsLogging(false);
             setEditMode(false);
+            setEditingWasReviewed(false);
             setCheckInId(null);
         } else {
             const err = await res.json();
@@ -866,6 +917,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
             setCheckIns(prev => prev.filter(c => c.id !== id));
             setIsLogging(false);
             setEditMode(false);
+            setEditingWasReviewed(false);
             setCheckInId(null);
         }
         setSaving(false);
@@ -1212,10 +1264,16 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                                 <p className="text-[10px] font-black uppercase tracking-widest text-success mb-1.5">Coach Response</p>
                                 <p className="text-sm text-fg leading-relaxed font-medium">{currentWeekEntry.coachResponse}</p>
                             </div>
-                        ) : metricsFeedback.overall ? (
-                            <div className={cn("p-4 rounded-2xl border transition-all animate-slide-up text-xs font-bold leading-relaxed", METRIC_TONE_CLASSES[metricsFeedback.overall.tone])}>
-                                <p className="text-[8px] font-black uppercase tracking-[0.2em] mb-1 opacity-70">Weekly Performance Review</p>
-                                {metricsFeedback.overall.message}
+                        ) : metricsFeedback.overview ? (
+                            <div className={cn("p-4 rounded-2xl border transition-all animate-slide-up text-xs leading-relaxed space-y-2", METRIC_TONE_CLASSES[metricsFeedback.overview.tone])}>
+                                <p className="text-[8px] font-black uppercase tracking-[0.2em] opacity-70">AI Overview</p>
+                                <p className="font-bold text-fg">{metricsFeedback.overview.headline}</p>
+                                {metricsFeedback.overview.progress.length > 0 && (
+                                    <p className="text-[11px] font-medium mt-2">{metricsFeedback.overview.progress[0]}</p>
+                                )}
+                                {metricsFeedback.overview.attention.length > 0 && (
+                                    <p className="text-[11px] font-medium mt-1">{metricsFeedback.overview.attention[0]}</p>
+                                )}
                             </div>
                         ) : null}
                     </div>
@@ -1344,11 +1402,15 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                         {editMode ? `Edit ${formatCheckInWeekLabel(selectedWeek)} check-in` : "New Check-in"}
                     </h2>
                     <p className="text-xs text-fg-muted mt-0.5">
-                        {editMode ? "Modify your current submission" : `${formatCheckInWeekFromDate(selectedDate)} · Select date & log`}
+                        {editMode
+                            ? (editingWasReviewed
+                                ? "Changes will send this back to your coach for review"
+                                : "Modify your submission")
+                            : `${formatCheckInWeekFromDate(selectedDate)} · Select date & log`}
                     </p>
                 </div>
                 <button 
-                    onClick={() => { setIsLogging(false); setEditMode(false); }}
+                    onClick={() => { setIsLogging(false); setEditMode(false); setEditingWasReviewed(false); }}
                     className="btn-ghost text-[10px] font-black uppercase text-fg-muted hover:text-fg"
                 >
                     Cancel
@@ -1366,8 +1428,11 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                     </span>
                 </div>
                 <div 
-                    className="relative cursor-pointer group active:scale-[0.98] transition-all"
-                    onClick={(e) => {
+                    className={cn(
+                        "relative transition-all",
+                        editMode ? "" : "cursor-pointer group active:scale-[0.98]"
+                    )}
+                    onClick={editMode ? undefined : (e) => {
                         const input = e.currentTarget.querySelector<HTMLInputElement>('input');
                         if (!input) return;
                         const dateInput = input as HTMLInputElement & { showPicker?: () => void };
@@ -1382,11 +1447,17 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                         type="date"
                         value={selectedDate}
                         onChange={(e) => setSelectedDate(e.target.value)}
-                        className="input h-14 text-lg font-black px-4 bg-surface-muted/30 border-none focus:ring-2 focus:ring-brand-500/20 transition-all uppercase w-full pointer-events-none"
+                        readOnly={editMode}
+                        className={cn(
+                            "input h-14 text-lg font-black px-4 bg-surface-muted/30 border-none focus:ring-2 focus:ring-brand-500/20 transition-all uppercase w-full",
+                            editMode ? "pointer-events-none opacity-80" : "pointer-events-none"
+                        )}
                     />
-                    <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-fg-subtle group-hover:text-brand-400 transition-colors">
-                         <Edit2 className="w-4 h-4" />
-                    </div>
+                    {!editMode && (
+                        <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-fg-subtle group-hover:text-brand-400 transition-colors">
+                             <Edit2 className="w-4 h-4" />
+                        </div>
+                    )}
                 </div>
                 <div className={cn(
                     "px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider border inline-flex items-center gap-2",
@@ -1550,7 +1621,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
             <div className="flex flex-col gap-3 py-4">
                 <button
                     onClick={submit}
-                    disabled={!notes.trim() || saving}
+                    disabled={!metricsComplete || saving}
                     className="btn-primary w-full h-16 text-sm font-black uppercase tracking-[0.2em] shadow-glow-brand disabled:opacity-40 transition-all hover:scale-[1.01] active:scale-[0.98]"
                 >
                     {saving ? (
@@ -1568,6 +1639,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                         <button 
                             onClick={() => {
                                 setEditMode(false);
+                                setEditingWasReviewed(false);
                                 setCheckInId(null);
                                 setIsLogging(false);
                             }}

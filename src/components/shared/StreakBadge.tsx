@@ -38,7 +38,7 @@ export function StreakBadge({
 
     return (
         <div
-            title={`${streak} day${streak === 1 ? "" : "s"} — workouts completed or rest days without missing a scheduled session`}
+            title={`${streak} day${streak === 1 ? "" : "s"} — complete scheduled workouts or take planned rest days; starts after your first workout`}
             className={cn(
                 "inline-flex items-center cursor-default select-none",
                 s.wrap,

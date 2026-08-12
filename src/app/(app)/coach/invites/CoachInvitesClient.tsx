@@ -9,6 +9,7 @@ import { cn, formatDate } from "@/lib/utils";
 import { formatCoachPlanLabel } from "@/lib/coachPlans";
 import { getAccessCodeStatus } from "@/lib/accessCodeStatus";
 import Link from "next/link";
+import { ProfileLink } from "@/components/shared/ProfileLink";
 
 interface Code {
     id: string;
@@ -253,7 +254,16 @@ export function CoachInvitesClient({ plans, initialCodes }: Props) {
                                     <div className="text-right flex items-center gap-4">
                                         {codeStatus.key === "redeemed" ? (
                                             <div className="flex flex-col items-end">
-                                                <p className="text-xs font-bold text-fg">{c.usedByName}</p>
+                                                {c.usedById && !c.usedByDeleted ? (
+                                                    <ProfileLink
+                                                        userId={c.usedById}
+                                                        name={c.usedByName}
+                                                        className="hover:text-brand-400 transition-colors"
+                                                        nameClassName="text-xs font-bold text-fg"
+                                                    />
+                                                ) : (
+                                                    <p className="text-xs font-bold text-fg">{c.usedByName}</p>
+                                                )}
                                                 <p className="text-[10px] text-fg-subtle">{c.usedByEmail}</p>
                                             </div>
                                         ) : codeStatus.key === "expired" && c.usedByName ? (
