@@ -329,12 +329,12 @@ function getExerciseTargetSummary(ex: Exercise, cardio: boolean) {
 
 export function WorkoutLogClient({
     workout,
-    exerciseMedia = {},
+    exerciseMedia: initialExerciseMedia = {},
     logDate,
     clientId,
     clientName,
-    previousSessions = {},
-    exerciseRecords = {},
+    previousSessions: initialPreviousSessions = {},
+    exerciseRecords: initialExerciseRecords = {},
     initialExerciseNotes = {},
     initialActiveLog = null,
     showWorkoutInputHint = false,
@@ -346,6 +346,10 @@ export function WorkoutLogClient({
     const localStorageKey = `workout_start_time_${workout.id}_${targetDateStr}${clientId ? `_${clientId}` : ""}`;
     const logSubjectFields = clientId ? { clientId } : {};
     const isCoachForClient = Boolean(clientId);
+
+    const [previousSessions, setPreviousSessions] = useState(initialPreviousSessions);
+    const [exerciseRecords, setExerciseRecords] = useState(initialExerciseRecords);
+    const [mediaByName, setMediaByName] = useState(initialExerciseMedia);
 
     const [initialSession] = useState(() => {
         if (initialActiveLog) {
@@ -417,6 +421,73 @@ export function WorkoutLogClient({
 
     const recordsFor = (exerciseName: string): ExerciseRecords =>
         exerciseRecords[exerciseIdentityKey(exerciseName)] ?? EMPTY_EXERCISE_RECORDS;
+
+    /**
+     * Load last-session sets + PRs for a swapped/added exercise so placeholders and
+     * "Last session" appear immediately without leaving the workout.
+     */
+    const historyFetchedRef = useRef<Set<string>>(new Set(Object.keys(initialExerciseRecords)));
+
+    const fetchExerciseHistory = async (exerciseName: string) => {
+        const key = exerciseIdentityKey(exerciseName);
+        if (!key) return null;
+        if (historyFetchedRef.current.has(key)) {
+            return {
+                key,
+                name: exerciseName,
+                previousSession: previousSessions[key] ?? null,
+                records: exerciseRecords[key] ?? null,
+                media: mediaByName[exerciseName] ?? null,
+                muscleGroup: null as string | null,
+                fromCache: true,
+            };
+        }
+        historyFetchedRef.current.add(key);
+
+        try {
+            const params = new URLSearchParams({ name: exerciseName });
+            if (clientId) params.set("clientId", clientId);
+            if (activeLogId) params.set("excludeLogId", activeLogId);
+            const res = await fetch(`/api/exercises/history?${params}`);
+            if (!res.ok) {
+                historyFetchedRef.current.delete(key);
+                return null;
+            }
+            const data = await res.json();
+            if (!data?.key) return null;
+            return { ...data, fromCache: false };
+        } catch (err) {
+            historyFetchedRef.current.delete(key);
+            console.error("[WorkoutLog] Failed to load swapped exercise history", err);
+            return null;
+        }
+    };
+
+    const applyExerciseHistory = (exerciseName: string, data: {
+        key: string;
+        name?: string;
+        previousSession?: PreviousSessionPerformance | null;
+        records?: ExerciseRecords | null;
+        media?: ExercisePreviewMedia | null;
+        muscleGroup?: string | null;
+        fromCache?: boolean;
+    } | null) => {
+        if (!data?.key || data.fromCache) return;
+
+        if (data.previousSession) {
+            setPreviousSessions((prev) => ({ ...prev, [data.key]: data.previousSession! }));
+        }
+        if (data.records) {
+            setExerciseRecords((prev) => ({ ...prev, [data.key]: data.records! }));
+        }
+        if (data.media) {
+            setMediaByName((prev) => ({
+                ...prev,
+                [exerciseName]: data.media!,
+                ...(data.name && data.name !== exerciseName ? { [data.name]: data.media! } : {}),
+            }));
+        }
+    };
 
     /**
      * The matching set from the immediately previous session, or undefined.
@@ -887,20 +958,32 @@ export function WorkoutLogClient({
         });
     };
 
-    const handleReplace = (newName: string) => {
+    const handleReplace = async (newName: string) => {
         if (!isSubstituting || !newName) return;
-        
-        const originalEx = activeExercises.find(ex => ex.id === isSubstituting);
-        const newExId = `${isSubstituting}:sub:${generateId(4)}`;
+
+        const substitutingId = isSubstituting;
+        const originalEx = activeExercises.find(ex => ex.id === substitutingId);
+
+        // Fetch history first so last-session placeholders paint with the swapped card.
+        const history = await fetchExerciseHistory(newName);
+
+        const newExId = `${substitutingId}:sub:${generateId(4)}`;
         const nextExercises = activeExercises.map(ex => 
-            ex.id === isSubstituting ? { ...ex, id: newExId, name: newName } : ex
+            ex.id === substitutingId
+                ? {
+                    ...ex,
+                    id: newExId,
+                    name: newName,
+                    muscleGroup: history?.muscleGroup || ex.muscleGroup,
+                }
+                : ex
         );
-        
+
+        applyExerciseHistory(newName, history);
         setActiveExercises(nextExercises);
         setLogs(prev => {
             const next = { ...prev };
-            // Carry over any existing logs or initialize default sets based on original template
-            const existingSets = prev[isSubstituting] || [];
+            const existingSets = prev[substitutingId] || [];
             if (existingSets.length > 0) {
                 next[newExId] = existingSets;
             } else {
@@ -914,7 +997,7 @@ export function WorkoutLogClient({
                     isWarmup: false,
                 }));
             }
-            delete next[isSubstituting];
+            delete next[substitutingId];
             
             saveProgress(next, nextExercises);
             return next;
@@ -924,17 +1007,21 @@ export function WorkoutLogClient({
         setSearchQuery("");
     };
 
-    const handleAddExercise = (newName: string) => {
+    const handleAddExercise = async (newName: string) => {
         if (!newName) return;
-        
+
+        const history = await fetchExerciseHistory(newName);
+
         const newEx: Exercise = {
             id: `new-${generateId()}`,
             name: newName,
             sets: 3,
             reps: "10",
+            muscleGroup: history?.muscleGroup || undefined,
         };
 
         const nextExercises = [...activeExercises, newEx];
+        applyExerciseHistory(newName, history);
         setActiveExercises(nextExercises);
         setLogs(prev => {
             const next = {
@@ -1221,7 +1308,7 @@ export function WorkoutLogClient({
                     )}
 
                     {activeExercises.map((ex) => {
-                        const media = exerciseMedia[ex.name];
+                        const media = mediaByName[ex.name];
                         const hasPreview = !!(media?.videoUrl || media?.instructions);
                         const cardio = isCardio(ex.name, ex.muscleGroup);
                         const targetSummary = getExerciseTargetSummary(ex, cardio);
