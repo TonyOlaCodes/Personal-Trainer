@@ -809,12 +809,6 @@ module.exports = {
         "sourceUrl": "https://www.muscleandstrength.com/exercises/dumbbell-walking-lunge.html",
         "instructions": "Set up with your feet shoulder width apart and a dumbbell in each hand. Step forward with one leg and allow both knees to bend simultaneously. Descend until the back knee touches the floor. Drive through the front foot and extend the knee as you stand up fully and return to the starting position. Repeat on the opposite leg. Repeat the desired number of repetitions."
     },
-    "Reverse Wrist Curl": {
-        "videoUrl": "https://www.youtube.com/watch?v=cOBaYeX3bYo",
-        "thumbnailUrl": "https://img.youtube.com/vi/cOBaYeX3bYo/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/barbell-wrist-curl.html",
-        "instructions": "Select the desired weight, load it onto the bar, and assume a seated position with the forearms resting comfortably on your thighs. Utilize a supinated (palms up) grip and curl the bar towards your body using just the wrists. Once the forearm flexors are fully shortened, slowly lower the weight back to the starting position. Repeat for the desired number of repetitions."
-    },
     "Reverse-Grip Lat Pulldown": {
         "videoUrl": "https://www.youtube.com/watch?v=8DAFwftgZHQ",
         "thumbnailUrl": "https://img.youtube.com/vi/8DAFwftgZHQ/hqdefault.jpg",
@@ -1186,12 +1180,6 @@ module.exports = {
         "thumbnailUrl": "https://img.youtube.com/vi/0VWnOjUO7ks/hqdefault.jpg",
         "sourceUrl": "https://www.muscleandstrength.com/exercises/wood-chop.html",
         "instructions": "Assume an athletic position with your feet just outside of shoulder width and attach a rope to a cable stack overhead. Position the inside leg in hip flexion and set up with both hands grasping the rope at roughly shoulder width apart. Exhale, rotate the rope across your body, and chop to the down knee. Return to the starting position, repeat for the desired number of repetitions, and then switch sides."
-    },
-    "Wrist Curl": {
-        "videoUrl": "https://www.youtube.com/watch?v=cOBaYeX3bYo",
-        "thumbnailUrl": "https://img.youtube.com/vi/cOBaYeX3bYo/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/barbell-wrist-curl.html",
-        "instructions": "Select the desired weight, load it onto the bar, and assume a seated position with the forearms resting comfortably on your thighs. Utilize a supinated (palms up) grip and curl the bar towards your body using just the wrists. Once the forearm flexors are fully shortened, slowly lower the weight back to the starting position. Repeat for the desired number of repetitions."
     },
     "Y Raise": {
         "videoUrl": "https://www.youtube.com/watch?v=CsnKFGAx0Zc",
