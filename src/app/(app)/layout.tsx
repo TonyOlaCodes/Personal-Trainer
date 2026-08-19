@@ -12,6 +12,7 @@ import { deactivateCoachActivePlans, isCoachRole, canAccessCheckIns } from "@/li
 import { touchUserLastActive } from "@/lib/userPresence";
 import { PresenceHeartbeat } from "@/components/layout/PresenceHeartbeat";
 import { GlobalAnnouncements } from "@/components/shared/GlobalAnnouncements";
+import { CoachBroadcastPopup } from "@/components/chat/CoachBroadcastPopup";
 import { ChatUnreadProvider } from "@/components/chat/ChatUnreadProvider";
 import { AppUserProvider } from "@/lib/AppUserContext";
 import { getMaintenanceStatus } from "@/lib/maintenanceMode";
@@ -100,6 +101,7 @@ export default async function AppLayout({
             <ChatUnreadProvider>
             <PresenceHeartbeat />
             <GlobalAnnouncements />
+            <CoachBroadcastPopup />
             <div className="min-h-screen bg-surface w-full max-w-full">
                 {/* Prevent layout shifts by injecting sidebar width before browser renders */}
                 <style dangerouslySetInnerHTML={{ __html: `:root { --sidebar-width: ${isSidebarCollapsed ? '72px' : '260px'}; --maintenance-banner-height: ${scheduledMaintenanceAt ? MAINTENANCE_BANNER_HEIGHT : '0px'}; --maintenance-below-topbar-gap: ${scheduledMaintenanceAt ? '0.75rem' : '0px'}; }` }} />

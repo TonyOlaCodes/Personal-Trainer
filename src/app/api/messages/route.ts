@@ -157,17 +157,26 @@ export async function GET(req: Request) {
     const isDirectThread = Boolean(withUserId && !isGeneral);
 
     // Delivered: app received the message. Seen: recipient is viewing this thread.
+    // Coach broadcasts stay unseen until the client hits "Got it" on the announcement popup
+    // so opening chat alone cannot silently clear them.
+    const isBroadcast = (m: { actionType?: string | null }) => m.actionType === "BROADCAST";
+    const incomingBroadcastSentIds = messages
+        .filter((m) => m.senderId !== user.id && m.status === "SENT" && isBroadcast(m))
+        .map((m) => m.id);
     const incomingSentIds = messages
-        .filter((m) => m.senderId !== user.id && m.status === "SENT")
+        .filter((m) => m.senderId !== user.id && m.status === "SENT" && !isBroadcast(m))
         .map((m) => m.id);
     const incomingUnreadIds = messages
-        .filter((m) => m.senderId !== user.id && m.status !== "SEEN")
+        .filter((m) => m.senderId !== user.id && m.status !== "SEEN" && !isBroadcast(m))
         .map((m) => m.id);
 
     if (isDirectThread && incomingUnreadIds.length > 0) {
         await markMessagesSeen(incomingUnreadIds);
     } else if (incomingSentIds.length > 0) {
         await markMessagesDelivered(incomingSentIds);
+    }
+    if (incomingBroadcastSentIds.length > 0) {
+        await markMessagesDelivered(incomingBroadcastSentIds);
     }
 
     const statusOverrides = new Map<string, "DELIVERED" | "SEEN">();
@@ -176,6 +185,7 @@ export async function GET(req: Request) {
     } else {
         for (const id of incomingSentIds) statusOverrides.set(id, "DELIVERED");
     }
+    for (const id of incomingBroadcastSentIds) statusOverrides.set(id, "DELIVERED");
 
     const mappedMessages = messages.map(m => withResolvedUpload({
         ...m,
@@ -338,9 +348,9 @@ export async function PATCH(req: Request) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Mark as seen
+    // Mark as seen — broadcasts must be acknowledged via the announcement popup API
     if (action === "markSeen") {
-        if (msg.senderId !== user.id) {
+        if (msg.senderId !== user.id && msg.actionType !== "BROADCAST") {
             await markMessagesSeen([id]);
         }
         return NextResponse.json({ ok: true });
