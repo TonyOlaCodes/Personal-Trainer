@@ -52,6 +52,9 @@ export async function POST(req: Request) {
         const parsed = checkInSchema.safeParse(body);
         if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
+        const { maybeAutoResumeCoachPausedClient } = await import("@/lib/coachClientPause");
+        await maybeAutoResumeCoachPausedClient(user.id);
+
         const checkIn = await prisma.checkIn.create({
             data: {
                 userId: user.id,

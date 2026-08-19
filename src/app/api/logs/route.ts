@@ -89,6 +89,12 @@ export async function POST(req: Request) {
     if (subjectResult.error) return subjectResult.error;
     const subjectUserId = subjectResult.subjectUserId;
 
+    // Client starting/completing a workout clears a coach-only pause.
+    if (subjectUserId === user.id) {
+        const { maybeAutoResumeCoachPausedClient } = await import("@/lib/coachClientPause");
+        await maybeAutoResumeCoachPausedClient(user.id);
+    }
+
     if (!(await workoutAssignedToUser(subjectUserId, workoutId))) {
         return NextResponse.json({ error: "Workout is not part of your assigned plans" }, { status: 403 });
     }

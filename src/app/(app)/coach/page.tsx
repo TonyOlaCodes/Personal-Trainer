@@ -30,6 +30,7 @@ export default async function CoachDashboardPage() {
                 select: {
                     id: true, name: true, email: true, role: true, avatarUrl: true,
                     isDeleted: true, isDeactivated: true, lastActiveAt: true,
+                    isCoachPaused: true, coachPausedAt: true, coachResumedAt: true,
                     goal: true, targetWeightKg: true, weightKg: true,
                     workoutLogs: {
                         where: { status: "COMPLETED" },
@@ -183,6 +184,8 @@ export default async function CoachDashboardPage() {
                 hasCheckInSchedule: extra?.schedule?.day !== null,
                 checkInSchedule: extra?.schedule ?? { day: null, frequencyWeeks: null, startDate: null },
                 recentCheckInWeekNumbers: recentCheckInWeeksByUserId.get(client.id) ?? [],
+                isCoachPaused: Boolean(client.isCoachPaused),
+                coachResumedAt: client.coachResumedAt ?? null,
                 activeSession: activeSessions[client.id] ?? null,
             };
         }),
@@ -204,6 +207,7 @@ export default async function CoachDashboardPage() {
                             email: c.email,
                             avatarUrl: c.avatarUrl,
                             lastActiveAt: c.lastActiveAt?.toISOString() ?? null,
+                            isCoachPaused: Boolean(c.isCoachPaused),
                             goal: c.goal,
                             currentWeightKg: c.weightKg,
                             targetWeightKg: c.targetWeightKg,

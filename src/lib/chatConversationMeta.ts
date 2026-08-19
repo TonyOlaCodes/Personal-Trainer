@@ -7,6 +7,7 @@ import {
     resolveCoachClientCheckInDueState,
 } from "@/lib/coachOverdueCheckIns";
 import { isInactiveAccount } from "@/lib/userDeactivation";
+import { getCoachPauseStatusMap } from "@/lib/coachClientPause";
 
 export type CoachClientFilterFlags = {
     checkInDue: boolean;
@@ -38,7 +39,10 @@ export async function getCoachClientFilterFlags(
         },
     });
     const missedClientIds = new Set<string>();
-    const attentionActions = coachId ? await getCoachAttentionActions(coachId) : new Map();
+    const [attentionActions, pauseStatusByClient] = await Promise.all([
+        coachId ? getCoachAttentionActions(coachId) : Promise.resolve(new Map()),
+        getCoachPauseStatusMap(clientIds),
+    ]);
 
     if (coachId) {
         const openAttentionItems = await loadCoachAttentionInboxOpenOnly(coachId);
@@ -52,7 +56,7 @@ export async function getCoachClientFilterFlags(
     const result: Record<string, CoachClientFilterFlags> = {};
 
     await Promise.all(clients.map(async (client) => {
-        if (isInactiveAccount(client)) {
+        if (isInactiveAccount(client) || pauseStatusByClient.get(client.id)?.isCoachPaused) {
             result[client.id] = { checkInDue: false, missedWorkout: false };
             return;
         }

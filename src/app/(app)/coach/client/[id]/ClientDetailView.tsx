@@ -62,6 +62,7 @@ interface Client {
         href: string;
     } | null;
     hiddenGoals?: string[];
+    isCoachPaused?: boolean;
 }
 
 interface ClientLog {
@@ -128,6 +129,8 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
     const [importing, setImporting] = useState(false);
     const [removingPlan, setRemovingPlan] = useState(false);
     const [removing, setRemoving] = useState(false);
+    const [pausingClient, setPausingClient] = useState(false);
+    const [isCoachPaused, setIsCoachPaused] = useState(Boolean(client.isCoachPaused));
     const [confirmEmail, setConfirmEmail] = useState("");
     const [checkInDay, setCheckInDay] = useState(client.checkInSchedule.day ?? 6);
     const [checkInFrequency, setCheckInFrequency] = useState(client.checkInSchedule.frequencyWeeks ?? 1);
@@ -149,6 +152,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
         setTargetSteps(client.targetSteps ? String(client.targetSteps) : "");
         setTargetSleepHours(client.targetSleepHours ? String(client.targetSleepHours) : "");
         setIsEditingTargets(canEdit && client.checkInSchedule.day === null);
+        setIsCoachPaused(Boolean(client.isCoachPaused));
     }, [client, canEdit]);
 
     const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; date: string; weightKg: number } | null>(null);
@@ -279,6 +283,30 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
             alert("Network error.");
         } finally {
             setUpdating(false);
+        }
+    };
+
+    const handleTogglePauseClient = async () => {
+        if (!canEdit || pausingClient) return;
+        const nextPaused = !isCoachPaused;
+        setPausingClient(true);
+        try {
+            const res = await fetch("/api/coach/clients/pause", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ clientId: client.id, paused: nextPaused }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                alert(data.error ?? (nextPaused ? "Could not pause client." : "Could not resume client."));
+                return;
+            }
+            setIsCoachPaused(Boolean(data.isCoachPaused ?? nextPaused));
+            router.refresh();
+        } catch {
+            alert("Network error.");
+        } finally {
+            setPausingClient(false);
         }
     };
 
@@ -673,6 +701,11 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                         </div>
                         <p className="text-sm text-fg-muted mb-1 mt-1 sm:mt-0">{client.email}</p>
                         <div className="flex flex-wrap gap-2 mt-3 justify-center sm:justify-start">
+                            {isCoachPaused && (
+                                <span className="badge text-[9px] bg-surface-muted text-fg-muted border border-surface-border">
+                                    Paused
+                                </span>
+                            )}
                             {client.assignedCoachName && (
                                 <span className="badge text-[9px] bg-surface-muted text-fg-muted border border-surface-border">
                                     Coach: {client.assignedCoachName}
@@ -1782,6 +1815,40 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                      </div>
                  </div>
              </section>
+
+             {/* Coach-only pause — silences alerts without affecting the client's account */}
+             {canEdit && (
+             <div className="border-t border-surface-border pt-10 mt-10">
+                <div className="card p-6 border-surface-border bg-surface-muted/20">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
+                        <div className="space-y-1">
+                            <h4 className="text-sm font-black text-fg uppercase tracking-widest">
+                                {isCoachPaused ? "Client Paused" : "Pause Client"}
+                            </h4>
+                            <p className="text-xs text-fg-muted max-w-md mt-2">
+                                {isCoachPaused
+                                    ? "Missed workout and check-in alerts are silenced for you. Their account still works normally — they will not see this status. Resume anytime, or they auto-resume when they return to the app."
+                                    : "Temporarily silence missed workout and check-in alerts for an inactive client. Their account, plan, chat and history stay intact, and they will not see this status."}
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => void handleTogglePauseClient()}
+                            disabled={pausingClient || updating}
+                            className={cn(
+                                "btn-secondary text-[10px] font-black uppercase tracking-widest h-10 px-6 inline-flex items-center gap-2 disabled:opacity-60",
+                                isCoachPaused
+                                    ? "border-success/30 text-success hover:bg-success/10"
+                                    : "border-surface-border text-fg-muted hover:text-fg"
+                            )}
+                        >
+                            {pausingClient ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                            {isCoachPaused ? "Resume Client" : "Pause Client"}
+                        </button>
+                    </div>
+                </div>
+            </div>
+            )}
 
              {/* Danger Zone */}
              {canEdit && (

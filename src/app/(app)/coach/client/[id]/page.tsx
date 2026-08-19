@@ -284,6 +284,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                             targetCalories: clientMetricTargets.targetCalories,
                             targetSteps: clientMetricTargets.targetSteps,
                             targetSleepHours: clientMetricTargets.targetSleepHours,
+                            isCoachPaused: Boolean(target.isCoachPaused),
                         }}
                         currentUserId={actor.id}
                         availablePlans={availablePlans}

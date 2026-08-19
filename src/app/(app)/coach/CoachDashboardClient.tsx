@@ -35,6 +35,7 @@ interface Client {
     email: string;
     avatarUrl?: string | null;
     lastActiveAt?: string | null;
+    isCoachPaused?: boolean;
     activeSession?: { workoutName: string; logId: string; workoutId: string } | null;
     hasCheckInSchedule?: boolean;
     checkInSchedule: { day: number | null; frequencyWeeks: number | null; startDate: string | null };
@@ -281,8 +282,11 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
 
     const sortedClients = useMemo(() => {
         return [...clients].sort((a, b) => {
-            const aAttention = insights.clientInsights[a.id]?.needsAttention ? 0 : 1;
-            const bAttention = insights.clientInsights[b.id]?.needsAttention ? 0 : 1;
+            const aPaused = a.isCoachPaused ? 1 : 0;
+            const bPaused = b.isCoachPaused ? 1 : 0;
+            if (aPaused !== bPaused) return aPaused - bPaused;
+            const aAttention = !a.isCoachPaused && insights.clientInsights[a.id]?.needsAttention ? 0 : 1;
+            const bAttention = !b.isCoachPaused && insights.clientInsights[b.id]?.needsAttention ? 0 : 1;
             if (aAttention !== bAttention) return aAttention - bAttention;
             return (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base" });
         });
@@ -696,14 +700,19 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                                     href={`/coach/client/${c.id}`}
                                     className={cn(
                                         "card p-5 group transition-all",
-                                        insight?.needsAttention
-                                            ? "border-warning/25 hover:border-warning/40"
-                                            : "hover:border-brand-600/40"
+                                        c.isCoachPaused
+                                            ? "opacity-60 border-surface-border/60 hover:border-surface-border"
+                                            : insight?.needsAttention
+                                                ? "border-warning/25 hover:border-warning/40"
+                                                : "hover:border-brand-600/40"
                                     )}
                                 >
                                     <div className="flex items-center gap-4 mb-1">
                                         <div className="relative shrink-0">
-                                            <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-sm font-bold text-white shadow-glow-sm overflow-hidden bg-gradient-brand">
+                                            <div className={cn(
+                                                "w-12 h-12 rounded-2xl flex items-center justify-center text-sm font-bold text-white shadow-glow-sm overflow-hidden bg-gradient-brand",
+                                                c.isCoachPaused && "grayscale"
+                                            )}>
                                                 {c.avatarUrl ? <img src={resolveUploadUrl(c.avatarUrl)} alt="avatar" className="w-full h-full object-cover rounded-2xl" /> : getInitials(c.name)}
                                             </div>
                                             {session ? (
@@ -725,12 +734,17 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                                             <div className="flex items-center gap-2 flex-wrap">
                                                 <p className="font-bold text-fg group-hover:text-brand-400 transition-colors truncate">{c.name}</p>
                                                 <SevenDayWeightBadge client={c} />
-                                                {!c.hasCheckInSchedule && (
+                                                {c.isCoachPaused && (
+                                                    <span className="text-[8px] uppercase font-black px-2 py-0.5 rounded-full border border-surface-border bg-surface-muted/50 text-fg-muted shrink-0">
+                                                        Paused
+                                                    </span>
+                                                )}
+                                                {!c.isCoachPaused && !c.hasCheckInSchedule && (
                                                     <span className="text-[8px] uppercase font-black px-2 py-0.5 rounded-full border border-warning/30 bg-warning/10 text-warning shrink-0">
                                                         Setup needed
                                                     </span>
                                                 )}
-                                                {insight?.needsAttention && (
+                                                {!c.isCoachPaused && insight?.needsAttention && (
                                                     <span className="text-[8px] uppercase font-black px-2 py-0.5 rounded-full border border-warning/30 bg-warning/10 text-warning shrink-0">
                                                         Needs attention
                                                     </span>

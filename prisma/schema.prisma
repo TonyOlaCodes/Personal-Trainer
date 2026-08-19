@@ -81,6 +81,10 @@ model User {
   deletedAt         DateTime?
   deletedName       String?
   deletedEmail      String?
+  /// Coach-only: suppress missed alerts / Needs Attention without affecting the client account.
+  isCoachPaused     Boolean  @default(false)
+  coachPausedAt     DateTime?
+  coachResumedAt    DateTime?
   onboardingDone    Boolean  @default(false)
   walkthroughDone   Boolean  @default(false)
   createdAt         DateTime @default(now())

@@ -53,6 +53,10 @@ export async function POST(req: Request) {
         const parsed = saveSchema.parse(await req.json());
         const date = normalizeBodyweightDate(parsed.date);
         const weightKg = normalizeBodyweight(parsed.weightKg);
+
+        const { maybeAutoResumeCoachPausedClient } = await import("@/lib/coachClientPause");
+        await maybeAutoResumeCoachPausedClient(user.id);
+
         const summary = await saveBodyweightEntry(user.id, date, weightKg);
 
         if (user.coachId) {

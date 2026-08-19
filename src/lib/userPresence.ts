@@ -61,6 +61,14 @@ export async function touchUserLastActive(userId: string): Promise<void> {
         },
         data: { lastActiveAt: new Date() },
     });
+
+    // Opening/using the app is enough to clear a coach-only pause.
+    try {
+        const { maybeAutoResumeCoachPausedClient } = await import("@/lib/coachClientPause");
+        await maybeAutoResumeCoachPausedClient(userId);
+    } catch {
+        // Pause columns may not exist yet on first boot — ignore.
+    }
 }
 
 export function getPresenceIndicator(

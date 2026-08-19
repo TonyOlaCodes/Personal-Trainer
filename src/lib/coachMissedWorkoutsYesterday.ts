@@ -5,6 +5,10 @@ import { getPlannedWorkoutForDate, activeWorkoutWhere } from "@/lib/planSchedule
 import { loadPlanScheduleRevisionsByPlanIds } from "@/lib/planScheduleHistory";
 import { parseLogDate } from "@/lib/utils";
 import { isInactiveAccount } from "@/lib/userDeactivation";
+import {
+    getCoachPauseStatusMap,
+    shouldSuppressCoachMissedAttention,
+} from "@/lib/coachClientPause";
 import { loadNicknameMap, pickDisplayName } from "@/lib/userNicknames";
 
 export interface MissedWorkoutYesterdayRow {
@@ -111,9 +115,21 @@ export async function getMissedWorkoutsYesterdayForCoach(
     const dateLabel = formatScheduledDateLabel(yesterdayKey, todayKey);
 
     const missed: MissedWorkoutYesterdayRow[] = [];
+    const pauseStatusByClient = await getCoachPauseStatusMap(clients.map((c) => c.id));
 
     for (const client of clients) {
         if (isInactiveAccount(client)) continue;
+        if (
+            shouldSuppressCoachMissedAttention(
+                {
+                    isCoachPaused: pauseStatusByClient.get(client.id)?.isCoachPaused,
+                    coachResumedAt: pauseStatusByClient.get(client.id)?.coachResumedAt ?? null,
+                },
+                yesterdayKey
+            )
+        ) {
+            continue;
+        }
 
         const activeUserPlan = client.plans[0] ?? null;
         const plannedWorkout = getPlannedWorkoutForDate(

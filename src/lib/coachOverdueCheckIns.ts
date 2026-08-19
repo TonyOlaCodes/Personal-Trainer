@@ -14,8 +14,12 @@ import {
 } from "@/lib/coachAttentionActions";
 import { getLocalTimeParts } from "@/lib/coachNotificationSchedule";
 import { formatCheckInDueDate, formatCheckInWeekLabel, getIsoWeekYear } from "@/lib/checkInLabels";
-import { getWeekNumber, parseLogDate } from "@/lib/utils";
+import { getWeekNumber, parseLogDate, toDateKey } from "@/lib/utils";
 import { isInactiveAccount } from "@/lib/userDeactivation";
+import {
+    getCoachPauseStatusMap,
+    shouldSuppressCoachMissedAttention,
+} from "@/lib/coachClientPause";
 import { loadNicknameMap, pickDisplayName } from "@/lib/userNicknames";
 
 export interface OverdueCheckInClient {
@@ -102,9 +106,13 @@ export async function getOverdueCheckInClientsForCoach(coachId: string): Promise
     });
 
     const overdue: OverdueCheckInClient[] = [];
+    const pauseStatusByClient = await getCoachPauseStatusMap(clients.map((c) => c.id));
 
     for (const client of clients) {
         if (isInactiveAccount(client)) continue;
+
+        const pauseStatus = pauseStatusByClient.get(client.id);
+        if (pauseStatus?.isCoachPaused) continue;
 
         const schedule = await getUserCheckInSchedule(client.id);
         const clientActions = await getClientAttentionActions(client.id);
@@ -118,6 +126,21 @@ export async function getOverdueCheckInClientsForCoach(coachId: string): Promise
         const submittedWeeks = client.checkIns.map((c) => c.weekNumber);
         const hasSubmission = hasCheckInForOutstandingPeriod(dueState, submittedWeeks);
         if (!isCoachClientCheckInAttentionNeeded(dueState, hasSubmission)) continue;
+
+        const periodDateKey = dueState.currentPeriodDueDate
+            ? toDateKey(new Date(dueState.currentPeriodDueDate))
+            : null;
+        if (
+            shouldSuppressCoachMissedAttention(
+                {
+                    isCoachPaused: false,
+                    coachResumedAt: pauseStatus?.coachResumedAt ?? null,
+                },
+                periodDateKey
+            )
+        ) {
+            continue;
+        }
 
         const periodWeek = dueState.outstandingWeekNumber ?? dueState.weekNumber;
         const dueDateLabel = formatCheckInDueDate(dueState.currentPeriodDueDate);

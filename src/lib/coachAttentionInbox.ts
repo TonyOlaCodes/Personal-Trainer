@@ -19,6 +19,10 @@ import { getPlannedWorkoutForDate, type ActiveUserPlanLike } from "@/lib/planSch
 import { loadPlanScheduleRevisionsByPlanIds } from "@/lib/planScheduleHistory";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
 import { isInactiveAccount } from "@/lib/userDeactivation";
+import {
+    getCoachPauseStatusMap,
+    shouldSuppressCoachMissedAttention,
+} from "@/lib/coachClientPause";
 import { formatCheckInDueDate, formatCheckInWeekFromCheckIn } from "@/lib/checkInLabels";
 import {
     getCoachAppToday,
@@ -171,9 +175,12 @@ export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAtt
     ]);
 
     const clientIds = clients.map((c) => c.id);
-    const unreadCounts = clientIds.length > 0
-        ? await getUnreadCountsByPeer(coachId, clientIds)
-        : {};
+    const [unreadCounts, pauseStatusByClient] = await Promise.all([
+        clientIds.length > 0
+            ? getUnreadCountsByPeer(coachId, clientIds)
+            : Promise.resolve({} as Record<string, number>),
+        getCoachPauseStatusMap(clientIds),
+    ]);
 
     const planIds = [
         ...new Set(
@@ -190,6 +197,13 @@ export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAtt
 
     for (const client of clients) {
         if (isInactiveAccount(client)) continue;
+
+        const pauseStatus = pauseStatusByClient.get(client.id);
+        const isPaused = Boolean(pauseStatus?.isCoachPaused);
+        const pauseClient = {
+            isCoachPaused: pauseStatus?.isCoachPaused ?? false,
+            coachResumedAt: pauseStatus?.coachResumedAt ?? null,
+        };
 
         const clientLastActiveAt = client.lastActiveAt;
         const clientName = client.name ?? client.email ?? "Client";
@@ -211,9 +225,11 @@ export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAtt
             )
         );
 
-        if (activeUserPlan) {
+        // Missed workouts suppressed while paused; no backlog for dates before resume.
+        if (!isPaused && activeUserPlan) {
             for (let offset = 1; offset <= MISSED_LOOKBACK_DAYS; offset++) {
                 const dateKey = shiftDateKey(todayKey, -offset);
+                if (shouldSuppressCoachMissedAttention(pauseClient, dateKey)) continue;
                 const date = parseLogDate(dateKey);
                 const planned = getPlannedWorkoutForDate(activeUserPlan, date, { today });
                 if (!planned) continue;
@@ -252,8 +268,15 @@ export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAtt
         );
         const submittedWeeks = client.checkIns.map((c) => c.weekNumber);
         const hasCheckInForPeriod = hasCheckInForOutstandingPeriod(dueState, submittedWeeks);
+        const periodDueKey = dueState.currentPeriodDueDate
+            ? toDateKey(new Date(dueState.currentPeriodDueDate))
+            : null;
 
-        if (isCoachClientCheckInAttentionNeeded(dueState, hasCheckInForPeriod)) {
+        if (
+            !isPaused
+            && isCoachClientCheckInAttentionNeeded(dueState, hasCheckInForPeriod)
+            && !shouldSuppressCoachMissedAttention(pauseClient, periodDueKey)
+        ) {
             const periodWeek = dueState.outstandingWeekNumber ?? weekNumber;
             const alertKey = buildCheckInAlertKey(client.id, periodWeek);
             const category: CoachAttentionCategory = dueState.isOverdue
@@ -285,7 +308,7 @@ export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAtt
             });
         }
 
-        if (!dueState.isConfigured) {
+        if (!isPaused && !dueState.isConfigured) {
             const alertKey = buildSetupNeededAlertKey(client.id);
             if (!isAlertDismissed(actions, alertKey, clientLastActiveAt, now)) {
                 items.push({

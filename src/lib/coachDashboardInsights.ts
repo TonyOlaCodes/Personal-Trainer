@@ -110,6 +110,8 @@ interface ActiveClientRow {
     checkInSchedule: CheckInSchedule;
     /** Recent check-in ISO week numbers (for matching outstanding periods). */
     recentCheckInWeekNumbers: number[];
+    isCoachPaused?: boolean;
+    coachResumedAt?: Date | null;
     activeSession: { workoutName: string } | null;
 }
 
@@ -368,13 +370,27 @@ export async function loadCoachDashboardInsights(input: {
         );
         const { status: checkInStatus, label: checkInLabel } = buildCheckInLabel(dueState, hasCheckInForPeriod);
 
-        if (isCoachClientCheckInAttentionNeeded(dueState, hasCheckInForPeriod)) {
-            overdueCheckIns++;
-            clientsNeedingAttentionIds.add(client.id);
+        const isPaused = Boolean(client.isCoachPaused);
+        if (
+            !isPaused
+            && isCoachClientCheckInAttentionNeeded(dueState, hasCheckInForPeriod)
+        ) {
+            const periodDueKey = dueState.currentPeriodDueDate
+                ? toDateKey(new Date(dueState.currentPeriodDueDate))
+                : null;
+            // Avoid backlog for periods before the latest resume.
+            const resumedAt = client.coachResumedAt;
+            const resumedKey = resumedAt ? toDateKey(resumedAt) : null;
+            const isPreResumeBacklog = Boolean(periodDueKey && resumedKey && periodDueKey < resumedKey);
+            if (!isPreResumeBacklog) {
+                overdueCheckIns++;
+                clientsNeedingAttentionIds.add(client.id);
+            }
         }
 
         if (
-            !client.hasCheckInSchedule
+            !isPaused
+            && !client.hasCheckInSchedule
             && !isDismissedAlertCurrentlyHidden(
                 attentionActions.get(buildSetupNeededAlertKey(client.id)),
                 client.lastActiveAt
@@ -420,9 +436,12 @@ export async function loadCoachDashboardInsights(input: {
             }).currentStreak
             : 0;
 
-        const checkInNeedsAttention = isCoachClientCheckInAttentionNeeded(dueState, hasCheckInForPeriod);
+        const checkInNeedsAttention =
+            !isPaused
+            && isCoachClientCheckInAttentionNeeded(dueState, hasCheckInForPeriod);
         const setupNeedsAttention =
-            !client.hasCheckInSchedule
+            !isPaused
+            && !client.hasCheckInSchedule
             && !isDismissedAlertCurrentlyHidden(
                 attentionActions.get(buildSetupNeededAlertKey(client.id)),
                 client.lastActiveAt
@@ -434,7 +453,9 @@ export async function loadCoachDashboardInsights(input: {
                 client.lastActiveAt
             );
 
-        const missedWorkoutNeedsAttention = openMissedWorkoutsYesterday.some(
+        const missedWorkoutNeedsAttention =
+            !isPaused
+            && openMissedWorkoutsYesterday.some(
             (row) =>
                 row.clientId === client.id
                 && !isDismissedAlertCurrentlyHidden(
@@ -481,6 +502,9 @@ export async function loadCoachDashboardInsights(input: {
             getCheckInDueState(client.checkInSchedule, today),
             client.recentCheckInWeekNumbers
         );
+
+        // Paused clients stay on the roster but shouldn't clutter upcoming attention surfaces.
+        if (client.isCoachPaused) continue;
 
         for (let dayOffset = 0; dayOffset <= UPCOMING_LOOKAHEAD_DAYS; dayOffset++) {
             const dateKey = shiftDateKey(todayKey, dayOffset);

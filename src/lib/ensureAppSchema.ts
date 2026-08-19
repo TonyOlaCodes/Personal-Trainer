@@ -3,6 +3,7 @@ import { ensureBodyweightTable } from "@/lib/bodyweight";
 import { ensureCheckInScheduleColumns } from "@/lib/checkInSchedule";
 import { ensureDailyMetricsTable, ensureDailyMetricTargetColumns } from "@/lib/dailyMetrics";
 import { ensureUserAccountStatusColumns } from "@/lib/userDeactivation";
+import { ensureCoachClientPauseColumns } from "@/lib/coachClientPause";
 import { ensureExerciseDictionary } from "@/lib/exerciseDictionary";
 import { ensureUnitSystemColumn } from "@/lib/units";
 import { ensureNotificationPreferenceColumns, ensureNotificationsTable, ensurePendingCoachNotificationsTable } from "@/lib/notifications";
@@ -37,6 +38,7 @@ export async function ensureAppSchema() {
         await Promise.all([
             ensureDbSchema(),
             ensureUserAccountStatusColumns(),
+            ensureCoachClientPauseColumns(),
             ensureCheckInScheduleColumns(),
             ensureDailyMetricTargetColumns(),
             ensureDailyMetricsTable(),
