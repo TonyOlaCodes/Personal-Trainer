@@ -16,6 +16,8 @@ const { shouldersDictionaryEntries } = require("./catalog/shoulders");
 const { bicepsDictionaryEntries } = require("./catalog/biceps");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { tricepsDictionaryEntries } = require("./catalog/triceps");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { forearmsDictionaryEntries } = require("./catalog/forearms");
 
 const EXERCISE_DICTIONARY = [
     // ─── CHEST (canonical catalog) ───────────────────────────────────────────
@@ -33,14 +35,10 @@ const EXERCISE_DICTIONARY = [
     // ─── TRICEPS (canonical catalog) ─────────────────────────────────────────
     ...tricepsDictionaryEntries(),
 
-    // ─── FOREARMS / TRAPS ───────────────────────────────────────────────────
-    { name: "Wrist Curl", muscleGroup: "Forearms" },
-    { name: "Reverse Wrist Curl", muscleGroup: "Forearms" },
-    { name: "Farmer's Carry", muscleGroup: "Forearms" },
-    { name: "Farmers Walk", muscleGroup: "Forearms" },
-    { name: "Suitcase Carry", muscleGroup: "Forearms" },
-    { name: "Plate Pinch Hold", muscleGroup: "Forearms" },
-    { name: "Dead Hang", muscleGroup: "Forearms" },
+    // ─── FOREARMS (canonical catalog) ────────────────────────────────────────
+    ...forearmsDictionaryEntries(),
+
+    // ─── TRAPS ──────────────────────────────────────────────────────────────
     { name: "Shrug", muscleGroup: "Traps" },
     { name: "Barbell Shrug", muscleGroup: "Traps" },
     { name: "Dumbbell Shrug", muscleGroup: "Traps" },

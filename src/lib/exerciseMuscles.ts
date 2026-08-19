@@ -278,6 +278,15 @@ const EXERCISE_MUSCLE_OVERRIDES: Record<string, MuscleHit> = {
     "burpee": { primary: ["chest", "quads", "shoulders"], secondary: ["core", "triceps", "glutes"] },
     "kettlebell swing": { primary: ["glutes", "hamstrings"], secondary: ["core", "shoulders", "forearms"] },
     "farmer carry": { primary: ["forearms", "traps", "core"], secondary: ["shoulders", "glutes"] },
+    "suitcase carry": { primary: ["forearms", "core"], secondary: ["traps", "obliques"] },
+    "barbell wrist curl": { primary: ["forearms"], secondary: [] },
+    "barbell reverse wrist curl": { primary: ["forearms"], secondary: [] },
+    "dumbbell wrist curl": { primary: ["forearms"], secondary: [] },
+    "dead hang": { primary: ["forearms"], secondary: ["lats", "shoulders"] },
+    "plate pinch hold": { primary: ["forearms"], secondary: [] },
+    "hand gripper": { primary: ["forearms"], secondary: [] },
+    "wrist roller": { primary: ["forearms"], secondary: [] },
+    "barbell hold": { primary: ["forearms"], secondary: ["traps"] },
 };
 
 /** Keyword heuristics when no exact override exists — checked in order. */

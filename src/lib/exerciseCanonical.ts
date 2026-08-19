@@ -104,6 +104,14 @@ const CANONICAL_NAME_OVERRIDES: Record<string, string> = {
     "jm press": "JM Press",
     "tate press": "Tate Press",
     "tricep dip": "Tricep Dip",
+    // Forearms catalog preferred spellings
+    "barbell wrist curl": "Barbell Wrist Curl",
+    "barbell reverse wrist curl": "Barbell Reverse Wrist Curl",
+    "farmer carry": "Farmer's Carry",
+    "plate pinch hold": "Plate Pinch Hold",
+    "dead hang": "Dead Hang",
+    "hand gripper": "Hand Gripper",
+    "wrist roller": "Wrist Roller",
 };
 
 /**

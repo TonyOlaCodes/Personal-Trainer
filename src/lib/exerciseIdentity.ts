@@ -14,6 +14,7 @@
 import { BACK_KEY_ALIASES } from "@/lib/catalog/backKeyAliases";
 import { BICEPS_KEY_ALIASES } from "@/lib/catalog/bicepsKeyAliases";
 import { CHEST_KEY_ALIASES } from "@/lib/catalog/chestKeyAliases";
+import { FOREARMS_KEY_ALIASES } from "@/lib/catalog/forearmsKeyAliases";
 import { SHOULDERS_KEY_ALIASES } from "@/lib/catalog/shouldersKeyAliases";
 import { TRICEPS_KEY_ALIASES } from "@/lib/catalog/tricepsKeyAliases";
 
@@ -86,6 +87,7 @@ const KEY_ALIASES: Record<string, string> = {
     ...SHOULDERS_KEY_ALIASES,
     ...BICEPS_KEY_ALIASES,
     ...TRICEPS_KEY_ALIASES,
+    ...FOREARMS_KEY_ALIASES,
 };
 
 /** Ambiguous plurals where dropping the trailing "s" would change the movement. */

@@ -21,7 +21,8 @@
     "migrate:back": "npx tsx scripts/migrate-back-catalog.ts",
     "migrate:shoulders": "npx tsx scripts/migrate-shoulders-catalog.ts",
     "migrate:biceps": "npx tsx scripts/migrate-biceps-catalog.ts",
-    "migrate:triceps": "npx tsx scripts/migrate-triceps-catalog.ts"
+    "migrate:triceps": "npx tsx scripts/migrate-triceps-catalog.ts",
+    "migrate:forearms": "npx tsx scripts/migrate-forearms-catalog.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.0.5",
