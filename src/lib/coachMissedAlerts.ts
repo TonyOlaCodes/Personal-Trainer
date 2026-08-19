@@ -29,7 +29,10 @@ async function processMissedCheckInsForClients(dateKey: string, timezone: string
     const weekStartKey = startOfIsoWeek(dateKey, timezone);
     const [wy, wm, wd] = weekStartKey.split("-").map(Number);
     const weekStart = new Date(Date.UTC(wy, wm - 1, wd, 0, 0, 0, 0));
-    const weekNumber = getWeekNumber(new Date(`${dateKey}T12:00:00.000Z`));
+    const [sy, sm, sd] = dateKey.split("-").map(Number);
+    const scanDate = new Date(Date.UTC(sy, sm - 1, sd, 12, 0, 0, 0));
+    const lookback = new Date(scanDate);
+    lookback.setUTCDate(lookback.getUTCDate() - 90);
 
     const clients = await prisma.user.findMany({
         where: {
@@ -41,9 +44,8 @@ async function processMissedCheckInsForClients(dateKey: string, timezone: string
             isDeleted: true,
             isDeactivated: true,
             checkIns: {
-                where: { weekNumber },
-                select: { id: true },
-                take: 1,
+                where: { createdAt: { gte: lookback } },
+                select: { id: true, weekNumber: true },
             },
         },
     });
@@ -51,17 +53,17 @@ async function processMissedCheckInsForClients(dateKey: string, timezone: string
     let sent = 0;
     for (const client of clients) {
         if (isInactiveAccount(client)) continue;
-        if (client.checkIns.length > 0) continue;
         if (!(await userWantsNotification(client.id, "notifyOnMissedCheckIn"))) continue;
 
         const schedule = await getUserCheckInSchedule(client.id);
-        const [sy, sm, sd] = dateKey.split("-").map(Number);
-        const scanDate = new Date(Date.UTC(sy, sm - 1, sd, 12, 0, 0, 0));
         const dueState = getCheckInDueState(schedule, scanDate);
         if (!dueState.isConfigured) continue;
         if (!dueState.isDueToday && !dueState.isOverdue) continue;
 
-        const dedupeEntityId = `${client.id}:${weekNumber}`;
+        const periodWeek = dueState.outstandingWeekNumber ?? getWeekNumber(scanDate);
+        if (client.checkIns.some((c) => c.weekNumber === periodWeek)) continue;
+
+        const dedupeEntityId = `${client.id}:${periodWeek}`;
         const alreadySent = await hasNotificationSince({
             userId: client.id,
             type: "MISSED_CHECKIN",
@@ -74,7 +76,9 @@ async function processMissedCheckInsForClients(dateKey: string, timezone: string
         await createNotification({
             userId: client.id,
             type: "MISSED_CHECKIN",
-            message: "You haven't completed your check-in this week — tap to submit it now.",
+            message: dueState.isOverdue
+                ? "Your check-in is overdue — tap to submit it now."
+                : "You haven't completed your check-in this week — tap to submit it now.",
             entityType: "CHECK_IN",
             entityId: dedupeEntityId,
             route: "/checkins",

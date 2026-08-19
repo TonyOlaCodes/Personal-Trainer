@@ -10,7 +10,6 @@ import { ensureBodyweightTable } from "@/lib/bodyweight";
 import { dedupeCoachPlansByName, normalizePlanIdForPicker } from "@/lib/coachPlans";
 import { getActiveSessionsForClients } from "@/lib/coachChat";
 import { loadCoachDashboardInsights } from "@/lib/coachDashboardInsights";
-import { getWeekNumber, parseLogDate, toDateKey } from "@/lib/utils";
 import { loadNicknameMap, pickDisplayName } from "@/lib/userNicknames";
 
 export const metadata = { title: "Coach Dashboard" };
@@ -151,14 +150,20 @@ export default async function CoachDashboardPage() {
     const extraDataByClientId = new Map(clientExtraData.map((item) => [item.id, item]));
     const activeSessions = await getActiveSessionsForClients(clientIds);
 
-    const currentIsoWeek = getWeekNumber(parseLogDate(toDateKey(new Date())));
-    const weekCheckIns = clientIds.length > 0
+    const checkInLookback = new Date();
+    checkInLookback.setDate(checkInLookback.getDate() - 90);
+    const periodCheckIns = clientIds.length > 0
         ? await prisma.checkIn.findMany({
-            where: { userId: { in: clientIds }, weekNumber: currentIsoWeek },
-            select: { id: true, userId: true },
+            where: { userId: { in: clientIds }, createdAt: { gte: checkInLookback } },
+            select: { userId: true, weekNumber: true },
         })
         : [];
-    const weekCheckInByUserId = new Map(weekCheckIns.map((row) => [row.userId, row.id]));
+    const recentCheckInWeeksByUserId = new Map<string, number[]>();
+    for (const row of periodCheckIns) {
+        const weeks = recentCheckInWeeksByUserId.get(row.userId) ?? [];
+        weeks.push(row.weekNumber);
+        recentCheckInWeeksByUserId.set(row.userId, weeks);
+    }
 
     const clientNicknameMap = await loadNicknameMap(coach.id, clientIds);
     const clientLabel = (client: { id: string; name: string | null; email: string }) =>
@@ -177,7 +182,7 @@ export default async function CoachDashboardPage() {
                 lastActiveAt: client.lastActiveAt,
                 hasCheckInSchedule: extra?.schedule?.day !== null,
                 checkInSchedule: extra?.schedule ?? { day: null, frequencyWeeks: null, startDate: null },
-                currentWeekCheckInId: weekCheckInByUserId.get(client.id) ?? null,
+                recentCheckInWeekNumbers: recentCheckInWeeksByUserId.get(client.id) ?? [],
                 activeSession: activeSessions[client.id] ?? null,
             };
         }),

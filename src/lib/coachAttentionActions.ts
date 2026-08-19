@@ -2,6 +2,9 @@ import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 import {
     getCheckInDueState,
+    getFirstEligibleDueDate,
+    getNextScheduledDueDateAfter,
+    toCheckInCalendarDate,
     type CheckInDueState,
     type CheckInSchedule,
 } from "@/lib/checkInSchedule";
@@ -193,7 +196,55 @@ export function isDismissedAlertCurrentlyHidden(
     return true;
 }
 
-/** Client-facing: overdue/due-week check-in hidden after coach dismisses for that week. */
+/**
+ * Clear due/overdue flags and surface the next scheduled due date (fixed cadence).
+ * Used after dismiss or after the client submits for the outstanding period.
+ */
+export function clearOutstandingCheckInPeriod(
+    dueState: CheckInDueState,
+    today = new Date()
+): CheckInDueState {
+    if (!dueState.isConfigured) return dueState;
+    if (!dueState.isOverdue && !dueState.isDueToday && !dueState.isDueWeek) return dueState;
+
+    const cleanToday = toCheckInCalendarDate(today);
+    const frequencyWeeks = dueState.frequencyWeeks ?? 1;
+    const day = dueState.day;
+    let nextDue: Date | null = dueState.nextDueDate ? toCheckInCalendarDate(dueState.nextDueDate) : null;
+
+    if (day != null && day >= 0 && day <= 6) {
+        const start = dueState.startDate
+            ? toCheckInCalendarDate(dueState.startDate)
+            : cleanToday;
+        const firstEligible = getFirstEligibleDueDate(start, day);
+        const after = dueState.currentPeriodDueDate
+            ? toCheckInCalendarDate(dueState.currentPeriodDueDate)
+            : cleanToday;
+        nextDue = getNextScheduledDueDateAfter(firstEligible, frequencyWeeks, after);
+    }
+
+    const daysUntilNext = nextDue
+        ? Math.max(0, Math.round((nextDue.getTime() - cleanToday.getTime()) / 86400000))
+        : dueState.daysUntilNext;
+
+    return {
+        ...dueState,
+        isDueWeek: false,
+        isDueToday: false,
+        isOverdue: false,
+        daysOverdue: null,
+        currentPeriodDueDate: null,
+        outstandingWeekNumber: null,
+        daysUntilNext,
+        nextDueDate: nextDue?.toISOString() ?? dueState.nextDueDate,
+        dueDayLabel: dueState.dueDayLabel,
+    };
+}
+
+/**
+ * Client-facing: overdue/due check-in hidden after coach dismisses that outstanding period.
+ * Uses the period's week number (not "today's" week) so a Monday dismiss of Saturday's miss sticks.
+ */
 export function applyCheckInAttentionOverrides(
     dueState: CheckInDueState,
     clientActions: CoachAttentionActionRow[],
@@ -202,7 +253,8 @@ export function applyCheckInAttentionOverrides(
     today = new Date(),
     clientLastActiveAt: Date | null | undefined = null
 ): CheckInDueState {
-    const alertKey = buildCheckInAlertKey(clientId, weekNumber);
+    const periodWeek = dueState.outstandingWeekNumber ?? weekNumber;
+    const alertKey = buildCheckInAlertKey(clientId, periodWeek);
     const dismissRow =
         clientActions.find(
             (row) => row.alertKey === alertKey && row.action === "dismissed"
@@ -211,50 +263,14 @@ export function applyCheckInAttentionOverrides(
             (row) =>
                 (row.category === "check_in_overdue" || row.category === "check_in_missed")
                 && row.action === "dismissed"
-                && row.weekNumber === weekNumber
+                && row.weekNumber === periodWeek
         );
     const dismissed = dismissRow
         ? isDismissedAlertCurrentlyHidden(dismissRow, clientLastActiveAt, today)
         : false;
 
-    if (!dismissed || !dueState.isConfigured) return dueState;
-    if (!dueState.isOverdue && !dueState.isDueToday && !dueState.isDueWeek) return dueState;
-
-    // When overdue, getCheckInDueState already computed daysUntilNext for the next cycle.
-    if (dueState.isOverdue && dueState.daysUntilNext != null) {
-        return {
-            ...dueState,
-            isDueWeek: false,
-            isDueToday: false,
-            isOverdue: false,
-        };
-    }
-
-    const schedule: CheckInSchedule = {
-        day: dueState.day,
-        frequencyWeeks: dueState.frequencyWeeks,
-        startDate: dueState.startDate,
-    };
-    const freqWeeks = dueState.frequencyWeeks ?? 1;
-    const probe = new Date(today);
-    probe.setDate(probe.getDate() + freqWeeks * 7);
-    const nextState = getCheckInDueState(schedule, probe);
-
-    const cleanToday = new Date(today);
-    cleanToday.setHours(0, 0, 0, 0);
-    const nextDue = nextState.nextDueDate ? new Date(nextState.nextDueDate) : probe;
-    nextDue.setHours(0, 0, 0, 0);
-    const daysUntilNext = Math.max(0, Math.ceil((nextDue.getTime() - cleanToday.getTime()) / 86400000));
-
-    return {
-        ...dueState,
-        isDueWeek: false,
-        isDueToday: false,
-        isOverdue: false,
-        daysUntilNext,
-        nextDueDate: nextState.nextDueDate,
-        dueDayLabel: nextState.dueDayLabel,
-    };
+    if (!dismissed) return dueState;
+    return clearOutstandingCheckInPeriod(dueState, today);
 }
 
 export async function getEffectiveCheckInDueStateForUser(
@@ -263,15 +279,22 @@ export async function getEffectiveCheckInDueStateForUser(
     today = new Date()
 ): Promise<CheckInDueState> {
     const dueState = getCheckInDueState(schedule, today);
-    const weekNumber = getWeekNumber(today);
-    const [clientActions, user] = await Promise.all([
+    const weekNumber = dueState.outstandingWeekNumber ?? getWeekNumber(today);
+    const [clientActions, user, periodCheckIn] = await Promise.all([
         getClientAttentionActions(userId),
         prisma.user.findUnique({
             where: { id: userId },
             select: { lastActiveAt: true },
         }),
+        dueState.outstandingWeekNumber != null
+            ? prisma.checkIn.findFirst({
+                where: { userId, weekNumber: dueState.outstandingWeekNumber },
+                select: { id: true },
+            })
+            : Promise.resolve(null),
     ]);
-    return applyCheckInAttentionOverrides(
+
+    let effective = applyCheckInAttentionOverrides(
         dueState,
         clientActions,
         userId,
@@ -279,6 +302,15 @@ export async function getEffectiveCheckInDueStateForUser(
         today,
         user?.lastActiveAt ?? null
     );
+
+    if (
+        periodCheckIn
+        && (effective.isOverdue || effective.isDueToday || effective.isDueWeek)
+    ) {
+        effective = clearOutstandingCheckInPeriod(effective, today);
+    }
+
+    return effective;
 }
 
 export function getExcusedMissedWorkoutKeys(clientActions: CoachAttentionActionRow[]): Set<string> {

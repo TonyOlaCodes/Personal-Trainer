@@ -96,12 +96,18 @@ export default async function DashboardPage() {
         const today = parseLogDate(todayDate);
 
         const currentIsoWeek = getWeekNumber(today);
+        const checkInSchedule = await getUserCheckInSchedule(user.id);
+        const checkInDueState = await getEffectiveCheckInDueStateForUser(
+            user.id,
+            checkInSchedule,
+            today
+        );
+        const coveringWeek = checkInDueState.outstandingWeekNumber ?? currentIsoWeek;
 
         const currentCheckin = await prisma.checkIn.findFirst({
-            where: { userId: user.id, weekNumber: currentIsoWeek },
+            where: { userId: user.id, weekNumber: coveringWeek },
             orderBy: { createdAt: "desc" },
         });
-
         const activeUserPlan = user.plans[0] ?? null;
         const activePlan = activeUserPlan?.plan ?? null;
         const activeUserPlanLike = activeUserPlan && activePlan
@@ -211,8 +217,6 @@ export default async function DashboardPage() {
             getBodyweightSummary(user.id, todayDate),
             getBodyweightHistory(user.id, 14),
         ]);
-        const checkInSchedule = await getUserCheckInSchedule(user.id);
-        const checkInDueState = await getEffectiveCheckInDueStateForUser(user.id, checkInSchedule, new Date());
 
         const checkInPanel = canAccessCheckIns(user.role, user.coachId)
             ? {

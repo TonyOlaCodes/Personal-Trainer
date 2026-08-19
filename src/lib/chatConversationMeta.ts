@@ -1,9 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { getCoachAttentionActions } from "@/lib/coachAttentionActions";
-import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
+import { getUserCheckInSchedule, hasCheckInForOutstandingPeriod } from "@/lib/checkInSchedule";
 import { loadCoachAttentionInboxOpenOnly } from "@/lib/coachAttentionInbox";
 import {
-    getCoachAppToday,
     isCoachClientCheckInAttentionNeeded,
     resolveCoachClientCheckInDueState,
 } from "@/lib/coachOverdueCheckIns";
@@ -20,8 +19,9 @@ export async function getCoachClientFilterFlags(
 ): Promise<Record<string, CoachClientFilterFlags>> {
     if (clientIds.length === 0) return {};
 
-    const { weekNumber } = getCoachAppToday();
     const clientIdSet = new Set(clientIds);
+    const lookback = new Date();
+    lookback.setDate(lookback.getDate() - 90);
 
     const clients = await prisma.user.findMany({
         where: { id: { in: clientIds } },
@@ -32,9 +32,8 @@ export async function getCoachClientFilterFlags(
             email: true,
             lastActiveAt: true,
             checkIns: {
-                where: { weekNumber },
-                select: { id: true },
-                take: 1,
+                where: { createdAt: { gte: lookback } },
+                select: { id: true, weekNumber: true },
             },
         },
     });
@@ -58,18 +57,19 @@ export async function getCoachClientFilterFlags(
             return;
         }
 
-        let checkInDue = false;
-        if (client.checkIns.length === 0) {
-            const schedule = await getUserCheckInSchedule(client.id);
-            const clientAttentionRows = [...attentionActions.values()].filter((row) => row.clientId === client.id);
-            const dueState = resolveCoachClientCheckInDueState(
-                schedule,
-                clientAttentionRows,
-                client.id,
-                client.lastActiveAt
-            );
-            checkInDue = isCoachClientCheckInAttentionNeeded(dueState, false);
-        }
+        const schedule = await getUserCheckInSchedule(client.id);
+        const clientAttentionRows = [...attentionActions.values()].filter((row) => row.clientId === client.id);
+        const dueState = resolveCoachClientCheckInDueState(
+            schedule,
+            clientAttentionRows,
+            client.id,
+            client.lastActiveAt
+        );
+        const hasSubmission = hasCheckInForOutstandingPeriod(
+            dueState,
+            client.checkIns.map((c) => c.weekNumber)
+        );
+        const checkInDue = isCoachClientCheckInAttentionNeeded(dueState, hasSubmission);
 
         result[client.id] = { checkInDue, missedWorkout: missedClientIds.has(client.id) };
     }));

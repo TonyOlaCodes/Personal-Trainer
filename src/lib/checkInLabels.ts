@@ -89,7 +89,7 @@ export function formatCheckInDueSubtitle(
     dueState: Pick<
         CheckInDueState,
         "isConfigured" | "isDueToday" | "isOverdue" | "daysUntilNext" | "currentPeriodDueDate" | "nextDueDate"
-    >
+    > & { daysOverdue?: number | null }
 ): string {
     if (!dueState.isConfigured) {
         return "No check-in due — your coach hasn't set a schedule yet";
@@ -97,8 +97,14 @@ export function formatCheckInDueSubtitle(
 
     const periodDate = formatCheckInDueDate(dueState.currentPeriodDueDate);
     const nextDate = formatCheckInDueDate(dueState.nextDueDate);
+    const daysOverdue = dueState.daysOverdue ?? null;
 
-    if (dueState.isOverdue && periodDate) return `Check-in overdue · due ${periodDate}`;
+    if (dueState.isOverdue && periodDate) {
+        if (daysOverdue != null && daysOverdue > 1) {
+            return `Check-in overdue · due ${periodDate} · ${daysOverdue} days overdue`;
+        }
+        return `Check-in overdue · due ${periodDate}`;
+    }
     if (dueState.isDueToday && periodDate) return `Check-in due · ${periodDate}`;
     if (dueState.daysUntilNext === 1 && nextDate) return `Next check-in tomorrow · ${nextDate}`;
     if (dueState.daysUntilNext != null && dueState.daysUntilNext > 0 && nextDate) {

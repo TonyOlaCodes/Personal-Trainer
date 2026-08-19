@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { APP_TIMEZONE } from "@/lib/appTimezone";
-import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
+import { getUserCheckInSchedule, hasCheckInForOutstandingPeriod } from "@/lib/checkInSchedule";
 import { getLocalTimeParts, shiftDateKey } from "@/lib/coachNotificationSchedule";
 import { getUnreadCountsByPeer } from "@/lib/chatUnread";
 import {
@@ -153,9 +153,8 @@ export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAtt
                     select: { workoutId: true, loggedAt: true },
                 },
                 checkIns: {
-                    where: { weekNumber },
-                    select: { id: true },
-                    take: 1,
+                    where: { createdAt: { gte: parseLogDate(lookbackStart) } },
+                    select: { id: true, weekNumber: true },
                 },
             },
             orderBy: { name: "asc" },
@@ -244,7 +243,6 @@ export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAtt
         }
 
         const schedule = await getUserCheckInSchedule(client.id);
-        const hasCheckInThisWeek = client.checkIns.length > 0;
         const clientAttentionRows = [...actions.values()].filter((row) => row.clientId === client.id);
         const dueState = resolveCoachClientCheckInDueState(
             schedule,
@@ -252,12 +250,16 @@ export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAtt
             client.id,
             clientLastActiveAt
         );
+        const submittedWeeks = client.checkIns.map((c) => c.weekNumber);
+        const hasCheckInForPeriod = hasCheckInForOutstandingPeriod(dueState, submittedWeeks);
 
-        if (isCoachClientCheckInAttentionNeeded(dueState, hasCheckInThisWeek)) {
-            const alertKey = buildCheckInAlertKey(client.id, weekNumber);
+        if (isCoachClientCheckInAttentionNeeded(dueState, hasCheckInForPeriod)) {
+            const periodWeek = dueState.outstandingWeekNumber ?? weekNumber;
+            const alertKey = buildCheckInAlertKey(client.id, periodWeek);
             const category: CoachAttentionCategory = dueState.isOverdue
                 ? "check_in_overdue"
                 : "check_in_missed";
+            const daysOverdue = dueState.daysOverdue;
             items.push({
                 id: alertKey,
                 category,
@@ -267,13 +269,17 @@ export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAtt
                     ? ISSUE_LABELS.check_in_overdue
                     : ISSUE_LABELS.check_in_missed,
                 dateKey: todayKey,
-                dateLabel: dueState.isOverdue ? "Overdue" : "Due today",
+                dateLabel: dueState.isOverdue
+                    ? (daysOverdue != null && daysOverdue > 1
+                        ? `${daysOverdue} days overdue`
+                        : "Overdue")
+                    : "Due today",
                 explanation: dueState.isOverdue
-                    ? `Weekly check-in was due ${formatCheckInDueDate(dueState.currentPeriodDueDate) ?? "on schedule"} and has not been submitted.`
+                    ? `Weekly check-in was due ${formatCheckInDueDate(dueState.currentPeriodDueDate) ?? "on schedule"}${daysOverdue != null ? ` (${daysOverdue} day${daysOverdue === 1 ? "" : "s"} overdue)` : ""} and has not been submitted.`
                     : `Weekly check-in is due today${formatCheckInDueDate(dueState.currentPeriodDueDate) ? ` · ${formatCheckInDueDate(dueState.currentPeriodDueDate)}` : ""}.`,
                 status: getItemStatus(actions, alertKey, clientLastActiveAt, now),
                 urgent: dueState.isOverdue,
-                weekNumber,
+                weekNumber: periodWeek,
                 href: `/coach/client/${client.id}`,
                 chatHref,
             });

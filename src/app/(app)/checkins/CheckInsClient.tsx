@@ -64,9 +64,11 @@ interface Props {
         isDueToday: boolean;
         isOverdue: boolean;
         daysUntilNext: number | null;
+        daysOverdue?: number | null;
         dueDayLabel: string | null;
         currentPeriodDueDate?: string | null;
         nextDueDate?: string | null;
+        outstandingWeekNumber?: number | null;
         frequencyWeeks: number | null;
         startDate?: string | null;
     };
@@ -82,7 +84,10 @@ interface Props {
         label: string;
         weekNumber: number;
         periodLabel?: string;
+        dueDateLabel?: string | null;
+        daysOverdue?: number | null;
         isOverdue: boolean;
+        isDueToday?: boolean;
     }>;
 }
 
@@ -747,7 +752,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
         );
     }
 
-    const currentWeekReal = getWeekNumber();
+    const currentWeekReal = checkInDueState.outstandingWeekNumber ?? getWeekNumber();
     const currentWeekEntry = checkIns.find(c => c.weekNumber === currentWeekReal);
     const hasTodayEntry = !!currentWeekEntry;
 
@@ -813,7 +818,11 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
 
     const startLogging = () => {
         setCheckInId(null);
-        setSelectedDate(new Date().toISOString().split("T")[0]);
+        // When overdue/due, submit against the outstanding period so it clears correctly.
+        const periodDate = checkInDueState.currentPeriodDueDate
+            ? checkInDueState.currentPeriodDueDate.split("T")[0]
+            : new Date().toISOString().split("T")[0];
+        setSelectedDate(periodDate);
         setEnergy(0);
         setSleep(0);
         setNutrition(0);
@@ -974,7 +983,11 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                 <div className="mb-4">
                     <h2 className="text-xl font-black text-fg">Client Check-ins</h2>
                     <p className="text-xs text-fg-muted mt-0.5">
-                        {visibleOverdueClients.length} overdue · {checkIns.filter(c => c.status === "PENDING").length} pending review · {checkIns.length} submitted
+                        {visibleOverdueClients.filter((c) => c.isOverdue).length} overdue
+                        {visibleOverdueClients.some((c) => c.isDueToday) && (
+                            <> · {visibleOverdueClients.filter((c) => c.isDueToday).length} due today</>
+                        )}
+                        {" "}· {checkIns.filter(c => c.status === "PENDING").length} pending review · {checkIns.length} submitted
                     </p>
                 </div>
 
@@ -1028,25 +1041,42 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                             {visibleOverdueClients.map((client) => {
                                 const alertKey = getOverdueCheckInAlertKey(client);
                                 const isDismissing = dismissingCheckInKey === alertKey;
+                                const dueLabel = client.dueDateLabel ?? client.periodLabel ?? formatCheckInWeekLabel(client.weekNumber);
+                                const overdueDetail = client.isOverdue
+                                    ? (client.daysOverdue != null && client.daysOverdue > 1
+                                        ? `${client.daysOverdue} days overdue`
+                                        : "1 day overdue")
+                                    : null;
 
                                 return (
                                 <div
                                     key={alertKey}
                                     className={cn(
                                         "card p-4 flex flex-col gap-3 transition-all sm:flex-row sm:items-center sm:justify-between",
-                                        client.isOverdue && "border-warning/30 bg-warning/5"
+                                        client.isOverdue ? "border-warning/30 bg-warning/5" : "border-brand-500/20 bg-brand-500/5"
                                     )}
                                 >
                                     <Link href={`/coach/client/${client.id}`} className="min-w-0 flex-1 group">
                                     <div className="min-w-0">
-                                        <p className="text-sm font-black text-fg truncate group-hover:text-brand-400 transition-colors">
-                                            {client.name}
-                                        </p>
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <p className="text-sm font-black text-fg truncate group-hover:text-brand-400 transition-colors">
+                                                {client.name}
+                                            </p>
+                                            <span className={cn(
+                                                "text-[10px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md",
+                                                client.isOverdue
+                                                    ? "bg-warning/20 text-warning"
+                                                    : "bg-brand-500/20 text-brand-300"
+                                            )}>
+                                                {client.isOverdue ? "Overdue / Missed" : "Due Today"}
+                                            </span>
+                                        </div>
                                         <p className={cn(
-                                            "text-xs mt-0.5",
+                                            "text-xs mt-1",
                                             client.isOverdue ? "text-warning font-semibold" : "text-fg-muted"
                                         )}>
-                                            {client.label} · {client.periodLabel ?? formatCheckInWeekLabel(client.weekNumber)}
+                                            Due {dueLabel}
+                                            {overdueDetail ? ` · ${overdueDetail}` : ""}
                                         </p>
                                         <p className="text-[10px] text-fg-subtle mt-1">
                                             Waiting for client to submit — nothing to review yet

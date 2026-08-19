@@ -1,6 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { APP_TIMEZONE } from "@/lib/appTimezone";
-import { getCheckInDueState, type CheckInSchedule } from "@/lib/checkInSchedule";
+import {
+    getCheckInDueState,
+    hasCheckInForOutstandingPeriod,
+    type CheckInSchedule,
+} from "@/lib/checkInSchedule";
 import { getLocalTimeParts, shiftDateKey } from "@/lib/coachNotificationSchedule";
 import {
     computeWeeklyCompliance,
@@ -104,13 +108,14 @@ interface ActiveClientRow {
     lastActiveAt: Date | null;
     hasCheckInSchedule: boolean;
     checkInSchedule: CheckInSchedule;
-    currentWeekCheckInId: string | null;
+    /** Recent check-in ISO week numbers (for matching outstanding periods). */
+    recentCheckInWeekNumbers: number[];
     activeSession: { workoutName: string } | null;
 }
 
 function buildCheckInLabel(
     dueState: ReturnType<typeof getCheckInDueState>,
-    hasCheckInThisWeek: boolean
+    hasCheckInForPeriod: boolean
 ): { status: ClientCheckInStatus; label: string } {
     const periodDate = formatCheckInDueDate(dueState.currentPeriodDueDate);
     const nextDate = formatCheckInDueDate(dueState.nextDueDate);
@@ -118,7 +123,7 @@ function buildCheckInLabel(
     if (!dueState.isConfigured) {
         return { status: "not_configured", label: "No check-in schedule" };
     }
-    if (hasCheckInThisWeek) {
+    if (hasCheckInForPeriod) {
         if (dueState.daysUntilNext === 1 && nextDate) {
             return { status: "scheduled", label: `Next check-in tomorrow · ${nextDate}` };
         }
@@ -129,9 +134,14 @@ function buildCheckInLabel(
         return { status: "scheduled", label: "Next check-in scheduled" };
     }
     if (dueState.isOverdue) {
+        const days = dueState.daysOverdue;
         return {
             status: "overdue",
-            label: periodDate ? `Overdue · due ${periodDate}` : "Check-in overdue",
+            label: periodDate
+                ? (days != null && days > 1
+                    ? `Overdue · due ${periodDate} · ${days} days`
+                    : `Overdue · due ${periodDate}`)
+                : "Check-in overdue",
         };
     }
     if (dueState.isDueToday) {
@@ -348,14 +358,17 @@ export async function loadCoachDashboardInsights(input: {
             dueStateRaw,
             clientAttentionRows,
             client.id,
-            currentIsoWeek,
+            dueStateRaw.outstandingWeekNumber ?? currentIsoWeek,
             today,
             client.lastActiveAt
         );
-        const hasCheckInThisWeek = Boolean(client.currentWeekCheckInId);
-        const { status: checkInStatus, label: checkInLabel } = buildCheckInLabel(dueState, hasCheckInThisWeek);
+        const hasCheckInForPeriod = hasCheckInForOutstandingPeriod(
+            dueState,
+            client.recentCheckInWeekNumbers
+        );
+        const { status: checkInStatus, label: checkInLabel } = buildCheckInLabel(dueState, hasCheckInForPeriod);
 
-        if (isCoachClientCheckInAttentionNeeded(dueState, hasCheckInThisWeek)) {
+        if (isCoachClientCheckInAttentionNeeded(dueState, hasCheckInForPeriod)) {
             overdueCheckIns++;
             clientsNeedingAttentionIds.add(client.id);
         }
@@ -407,7 +420,7 @@ export async function loadCoachDashboardInsights(input: {
             }).currentStreak
             : 0;
 
-        const checkInNeedsAttention = isCoachClientCheckInAttentionNeeded(dueState, hasCheckInThisWeek);
+        const checkInNeedsAttention = isCoachClientCheckInAttentionNeeded(dueState, hasCheckInForPeriod);
         const setupNeedsAttention =
             !client.hasCheckInSchedule
             && !isDismissedAlertCurrentlyHidden(
@@ -464,7 +477,10 @@ export async function loadCoachDashboardInsights(input: {
             };
         }
 
-        const hasCheckInThisWeek = Boolean(client.currentWeekCheckInId);
+        const hasOutstandingCheckInCovered = hasCheckInForOutstandingPeriod(
+            getCheckInDueState(client.checkInSchedule, today),
+            client.recentCheckInWeekNumbers
+        );
 
         for (let dayOffset = 0; dayOffset <= UPCOMING_LOOKAHEAD_DAYS; dayOffset++) {
             const dateKey = shiftDateKey(todayKey, dayOffset);
@@ -490,7 +506,7 @@ export async function loadCoachDashboardInsights(input: {
                 });
             }
 
-            if (!hasCheckInThisWeek && client.checkInSchedule) {
+            if (!hasOutstandingCheckInCovered && client.checkInSchedule) {
                 const dueOnDate = getCheckInDueState(client.checkInSchedule, date);
                 if (dueOnDate.isConfigured && dueOnDate.isDueToday) {
                     upcomingEvents.push({

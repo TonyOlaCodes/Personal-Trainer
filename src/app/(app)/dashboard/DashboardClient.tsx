@@ -74,10 +74,12 @@ interface Props {
         isDueToday: boolean;
         isOverdue: boolean;
         daysUntilNext: number | null;
+        daysOverdue?: number | null;
         dueDayLabel: string | null;
         frequencyWeeks: number | null;
         currentPeriodDueDate?: string | null;
         nextDueDate?: string | null;
+        outstandingWeekNumber?: number | null;
     };
     checkInPanel?: {
         checkIns: Array<{
@@ -512,7 +514,11 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
         }
     };
 
-    const shouldPrioritizeCheckIn = Boolean(checkInPanel && !currentCheckin && checkInDueState.isDueToday);
+    const shouldPrioritizeCheckIn = Boolean(
+        checkInPanel
+        && !currentCheckin
+        && (checkInDueState.isDueToday || checkInDueState.isOverdue)
+    );
     const isBodyweightEnabled = !user.hiddenGoals?.includes("weight");
     const isPremium = PREMIUM_ROLES.has(user.role);
     const metricsBeforeWorkout = Boolean(todayCompleted || !todayWorkout);
@@ -698,7 +704,8 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
             >
                 <div className={cn(
                     "card p-4 flex items-center justify-between transition-all hover:shadow-glow-sm",
-                    shouldPrioritizeCheckIn && "border-warning/30 bg-warning/10 shadow-glow-warning-sm",
+                    shouldPrioritizeCheckIn && checkInDueState.isOverdue && "border-danger/40 bg-danger/10 shadow-glow-danger-sm",
+                    shouldPrioritizeCheckIn && !checkInDueState.isOverdue && "border-warning/30 bg-warning/10 shadow-glow-warning-sm",
                     !shouldPrioritizeCheckIn && currentCheckin
                         ? "border-success/20 bg-success/5 shadow-glow-success-sm"
                         : !shouldPrioritizeCheckIn && !checkInDueState.isConfigured
@@ -738,9 +745,11 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                                         currentCheckin.weekNumber,
                                         currentCheckin.createdAt
                                     )
-                                    : shouldPrioritizeCheckIn
-                                        ? "Weekly Check-in Due Today"
-                                        : "Weekly Check-in"}
+                                    : shouldPrioritizeCheckIn && checkInDueState.isOverdue
+                                        ? "Weekly Check-in Overdue"
+                                        : shouldPrioritizeCheckIn
+                                            ? "Weekly Check-in Due Today"
+                                            : "Weekly Check-in"}
                             </p>
                             <p className="text-xs text-fg-muted mt-0.5">
                                 {currentCheckin

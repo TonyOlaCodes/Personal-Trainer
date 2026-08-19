@@ -1,6 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import { APP_TIMEZONE } from "@/lib/appTimezone";
-import { getCheckInDueState, getUserCheckInSchedule, type CheckInDueState, type CheckInSchedule } from "@/lib/checkInSchedule";
+import {
+    getCheckInDueState,
+    getUserCheckInSchedule,
+    hasCheckInForOutstandingPeriod,
+    type CheckInDueState,
+    type CheckInSchedule,
+} from "@/lib/checkInSchedule";
 import {
     applyCheckInAttentionOverrides,
     getClientAttentionActions,
@@ -18,7 +24,10 @@ export interface OverdueCheckInClient {
     label: string;
     weekNumber: number;
     periodLabel: string;
+    dueDateLabel: string | null;
+    daysOverdue: number | null;
     isOverdue: boolean;
+    isDueToday: boolean;
 }
 
 /** App-timezone "today" for coach check-in overdue / attention logic. */
@@ -43,25 +52,32 @@ export function resolveCoachClientCheckInDueState(
         dueStateRaw,
         clientActions,
         clientId,
-        weekNumber,
+        dueStateRaw.outstandingWeekNumber ?? weekNumber,
         today,
         lastActiveAt
     );
-    return { ...dueState, weekNumber, todayKey };
+    return {
+        ...dueState,
+        weekNumber: dueState.outstandingWeekNumber ?? weekNumber,
+        todayKey,
+    };
 }
 
+/** Needs coach attention: due today or overdue, not submitted, not dismissed. */
 export function isCoachClientCheckInAttentionNeeded(
     dueState: CheckInDueState,
-    hasCheckInThisWeek: boolean
+    hasCheckInForPeriod: boolean
 ): boolean {
     return dueState.isConfigured
-        && !hasCheckInThisWeek
-        && dueState.isOverdue;
+        && !hasCheckInForPeriod
+        && (dueState.isOverdue || dueState.isDueToday);
 }
 
-/** Clients assigned to this coach who owe a check-in but have not submitted one this week. */
+/** Clients assigned to this coach who owe a check-in (due today or overdue) without a submission. */
 export async function getOverdueCheckInClientsForCoach(coachId: string): Promise<OverdueCheckInClient[]> {
-    const { weekNumber } = getCoachAppToday();
+    const { today } = getCoachAppToday();
+    const lookback = new Date(today);
+    lookback.setDate(lookback.getDate() - 90);
 
     const clients = await prisma.user.findMany({
         where: {
@@ -78,9 +94,8 @@ export async function getOverdueCheckInClientsForCoach(coachId: string): Promise
             isDeleted: true,
             isDeactivated: true,
             checkIns: {
-                where: { weekNumber },
-                select: { id: true },
-                take: 1,
+                where: { createdAt: { gte: lookback } },
+                select: { id: true, weekNumber: true },
             },
         },
         orderBy: { name: "asc" },
@@ -90,7 +105,6 @@ export async function getOverdueCheckInClientsForCoach(coachId: string): Promise
 
     for (const client of clients) {
         if (isInactiveAccount(client)) continue;
-        if (client.checkIns.length > 0) continue;
 
         const schedule = await getUserCheckInSchedule(client.id);
         const clientActions = await getClientAttentionActions(client.id);
@@ -100,22 +114,42 @@ export async function getOverdueCheckInClientsForCoach(coachId: string): Promise
             client.id,
             client.lastActiveAt
         );
-        if (!isCoachClientCheckInAttentionNeeded(dueState, false)) continue;
+
+        const submittedWeeks = client.checkIns.map((c) => c.weekNumber);
+        const hasSubmission = hasCheckInForOutstandingPeriod(dueState, submittedWeeks);
+        if (!isCoachClientCheckInAttentionNeeded(dueState, hasSubmission)) continue;
+
+        const periodWeek = dueState.outstandingWeekNumber ?? dueState.weekNumber;
+        const dueDateLabel = formatCheckInDueDate(dueState.currentPeriodDueDate);
+        const daysOverdue = dueState.isOverdue ? (dueState.daysOverdue ?? null) : null;
 
         overdue.push({
             id: client.id,
             name: client.name ?? client.email ?? "Client",
-            label: dueState.isOverdue ? "Check-in overdue" : "Due today",
-            weekNumber,
+            label: dueState.isOverdue
+                ? (daysOverdue != null && daysOverdue > 1
+                    ? `OVERDUE · ${daysOverdue} days overdue`
+                    : "OVERDUE / MISSED")
+                : "DUE TODAY",
+            weekNumber: periodWeek,
             periodLabel:
-                formatCheckInDueDate(dueState.currentPeriodDueDate)
-                ?? formatCheckInWeekLabel(weekNumber, getIsoWeekYear(parseLogDate(dueState.todayKey))),
+                dueDateLabel
+                ?? formatCheckInWeekLabel(periodWeek, getIsoWeekYear(today)),
+            dueDateLabel,
+            daysOverdue,
             isOverdue: dueState.isOverdue,
+            isDueToday: dueState.isDueToday,
         });
     }
 
+    // Most overdue first, then due today, then name
     overdue.sort((a, b) => {
         if (a.isOverdue !== b.isOverdue) return a.isOverdue ? -1 : 1;
+        if (a.isOverdue && b.isOverdue) {
+            const da = a.daysOverdue ?? 0;
+            const db = b.daysOverdue ?? 0;
+            if (da !== db) return db - da;
+        }
         return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
     });
 

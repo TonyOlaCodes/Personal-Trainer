@@ -78,21 +78,22 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             ? "Inactive account"
             : pickDisplayName(target.name, target.email, clientNickname, target.name || "Client");
 
-        const checkInWeekNumber = getWeekNumber(new Date());
+        const checkInSchedule = await getUserCheckInSchedule(target.id);
+        const checkInDueState = await getEffectiveCheckInDueStateForUser(target.id, checkInSchedule, new Date());
+        const periodWeek = checkInDueState.outstandingWeekNumber ?? getWeekNumber(new Date());
+        const hasCheckInForPeriod = await prisma.checkIn.findFirst({
+            where: { userId: target.id, weekNumber: periodWeek },
+            select: { id: true },
+        }).then((row) => row != null);
 
         const activeUserPlan = target.plans[0] ?? null;
-        const [activePlan, availablePlans, checkInSchedule, hasCheckInThisWeek, bodyweightRows, workoutNotesRows, completedLogs, clientMetricTargets, pinnedExercises] = await Promise.all([
+        const [activePlan, availablePlans, bodyweightRows, workoutNotesRows, completedLogs, clientMetricTargets, pinnedExercises] = await Promise.all([
             Promise.resolve(target.plans[0]?.plan ?? null),
             prisma.plan.findMany({
                 where: { creatorId: actor.id },
                 select: { id: true, name: true, type: true, updatedAt: true },
                 orderBy: { updatedAt: "desc" },
             }).then((plans) => dedupeCoachPlansByName(plans).map(({ updatedAt: _updatedAt, ...plan }) => plan)),
-            getUserCheckInSchedule(target.id),
-            prisma.checkIn.findFirst({
-                where: { userId: target.id, weekNumber: checkInWeekNumber },
-                select: { id: true },
-            }).then((row) => row != null),
             prisma.$queryRaw<Array<{ date: string; weightKg: number }>>`
                 SELECT "loggedDate"::text AS "date", "weightKg"
                 FROM "bodyweight_logs"
@@ -230,19 +231,22 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                 }
                 : null;
 
-        const checkInDueState = await getEffectiveCheckInDueStateForUser(target.id, checkInSchedule, new Date());
         const awaitingCheckIn =
             checkInDueState.isConfigured &&
-            !hasCheckInThisWeek &&
+            !hasCheckInForPeriod &&
             (checkInDueState.isOverdue || checkInDueState.isDueToday);
         const checkInStatus = awaitingCheckIn
             ? {
-                label: checkInDueState.isOverdue ? "Check-in overdue" : "Check-in due today",
+                label: checkInDueState.isOverdue
+                    ? (checkInDueState.daysOverdue != null && checkInDueState.daysOverdue > 1
+                        ? `Check-in overdue · ${checkInDueState.daysOverdue} days`
+                        : "Check-in overdue")
+                    : "Check-in due today",
                 isOverdue: checkInDueState.isOverdue,
-                weekNumber: checkInWeekNumber,
+                weekNumber: periodWeek,
                 periodLabel:
                     formatCheckInDueDate(checkInDueState.currentPeriodDueDate)
-                    ?? formatCheckInWeekLabel(checkInWeekNumber, getIsoWeekYear(new Date())),
+                    ?? formatCheckInWeekLabel(periodWeek, getIsoWeekYear(new Date())),
             }
             : null;
 

@@ -118,9 +118,11 @@ export default async function CheckInsPage() {
                 isDueToday: false,
                 isOverdue: false,
                 daysUntilNext: null,
+                daysOverdue: null,
                 nextDueDate: null,
                 dueDayLabel: null,
                 currentPeriodDueDate: null,
+                outstandingWeekNumber: null,
             };
 
         return (
