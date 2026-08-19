@@ -25,6 +25,11 @@ import {
 import { EXERCISE_NOTE_MAX_LENGTH } from "@/lib/logExerciseNotesShared";
 import { buildWorkoutMuscleBreakdown } from "@/lib/exerciseMuscles";
 import { MuscleMap, MuscleChips } from "@/components/shared/MuscleMap";
+import {
+    ActiveSessionConflictModal,
+    parseActiveSessionConflict,
+    type ConflictingActiveSession,
+} from "@/components/shared/ActiveSessionConflictModal";
 interface Exercise {
     id: string;
     name: string;
@@ -387,6 +392,7 @@ export function WorkoutLogClient({
     const [activeLogId, setActiveLogId] = useState<string | null>(initialSession.activeLogId);
     const [isDiscarding, setIsDiscarding] = useState(false);
     const [isStarting, setIsStarting] = useState(false);
+    const [conflictSession, setConflictSession] = useState<ConflictingActiveSession | null>(null);
     const [isCheckingSession, setIsCheckingSession] = useState(!initialActiveLog);
     const sessionActive = Boolean(activeLogId);
     const [previewExercise, setPreviewExercise] = useState<{ name: string; media: ExercisePreviewMedia } | null>(null);
@@ -403,7 +409,7 @@ export function WorkoutLogClient({
     const pendingProgressSaveRef = useRef<PendingProgressSave | null>(null);
     const isCompletingRef = useRef(false);
 
-    const modalOpen = Boolean(previewExercise) || isSubstituting !== null || isAddingExercise || showFinishModal;
+    const modalOpen = Boolean(previewExercise) || isSubstituting !== null || isAddingExercise || showFinishModal || Boolean(conflictSession);
     const exercisePickerOpen = isSubstituting !== null || isAddingExercise;
     useScrollLock(modalOpen);
     useIsolateScroll(exercisePickerOpen);
@@ -706,8 +712,8 @@ export function WorkoutLogClient({
         };
     }, [startTime, editStartedAt, sessionActive]);
 
-    const handleStartWorkout = async () => {
-        if (sessionActive || isStarting || isCheckingSession) return;
+    const startWorkoutSession = async (replaceActiveSession = false) => {
+        if (sessionActive || isStarting || isCheckingSession) return false;
         setIsStarting(true);
 
         try {
@@ -738,13 +744,25 @@ export function WorkoutLogClient({
                     status: "IN_PROGRESS",
                     loggedAt: toLoggedAtIso(logDate ?? new Date(now)),
                     sets: flattenedSets,
+                    ...(replaceActiveSession ? { replaceActiveSession: true } : {}),
                     ...logSubjectFields,
                 }),
             });
 
+            if (createRes.status === 409) {
+                const payload = await createRes.json().catch(() => null);
+                const conflict = parseActiveSessionConflict(payload);
+                if (conflict) {
+                    setConflictSession(conflict);
+                    return false;
+                }
+                alert(payload?.message || "A workout is already in progress.");
+                return false;
+            }
+
             if (!createRes.ok) {
                 alert("Could not start workout session.");
-                return;
+                return false;
             }
 
             const saved = await createRes.json();
@@ -752,12 +770,19 @@ export function WorkoutLogClient({
             if (saved.updatedAt) {
                 lastRemoteUpdatedAtRef.current = remoteUpdatedAtMs(saved.updatedAt);
             }
+            setConflictSession(null);
+            return true;
         } catch (e) {
             console.error("Failed to start workout session:", e);
             alert("Could not start workout session.");
+            return false;
         } finally {
             setIsStarting(false);
         }
+    };
+
+    const handleStartWorkout = async () => {
+        await startWorkoutSession(false);
     };
 
     const formatTime = (s: number) => {
@@ -1859,6 +1884,26 @@ export function WorkoutLogClient({
                     {isCheckingSession ? "Checking..." : isStarting ? "Starting..." : "Start Workout"}
                 </button>
             </div>
+            )}
+
+            {conflictSession && (
+                <ActiveSessionConflictModal
+                    session={conflictSession}
+                    pendingWorkoutName={workout.name}
+                    busy={isStarting}
+                    onCancel={() => setConflictSession(null)}
+                    onResume={() => {
+                        let href = conflictSession.resumeHref;
+                        if (clientId) {
+                            href += `${href.includes("?") ? "&" : "?"}clientId=${encodeURIComponent(clientId)}`;
+                        }
+                        setConflictSession(null);
+                        router.push(appendReturnTo(href, returnTo));
+                    }}
+                    onEndAndStart={async () => {
+                        await startWorkoutSession(true);
+                    }}
+                />
             )}
 
             {showFinishModal && (

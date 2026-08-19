@@ -1,7 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma, ensureDbSchema } from "@/lib/prisma";
-import { getLocalDayBounds, parseLogDate } from "@/lib/utils";
+import { getLocalDayBounds, parseLogDate, toDateKey } from "@/lib/utils";
 import { requireAuthUser, resolveWorkoutLogReadUserId, resolveWorkoutLogSubjectUserId, workoutAssignedToUser } from "@/lib/apiAuth";
 import { notifyCoachOfClientWorkout } from "@/lib/notifications";
 import { triggerAchievementSync } from "@/lib/achievements";
@@ -13,7 +13,7 @@ import { canonicalExerciseName } from "@/lib/exerciseCanonical";
 import { buildRecordsByExercise, evaluateSessionPrs } from "@/lib/exercisePrs";
 import { loadWorkoutHistorySessions } from "@/lib/workoutHistory";
 import { EXERCISE_NOTE_MAX_LENGTH, saveLogExerciseNotes } from "@/lib/logExerciseNotes";
-import { closeOtherActiveSessions, resumableSessionSince } from "@/lib/activeWorkoutSession";
+import { closeOtherActiveSessions, getActiveWorkoutSession, resumeWorkoutHref, resumableSessionSince } from "@/lib/activeWorkoutSession";
 import { z } from "zod";
 
 const logSchema = z.object({
@@ -24,6 +24,11 @@ const logSchema = z.object({
     feeling: z.number().min(1).max(5).optional(),
     status: z.enum(["IN_PROGRESS", "COMPLETED"]).default("COMPLETED"),
     loggedAt: z.string().optional(), // ISO date string for retroactive logging
+    /**
+     * Explicit confirmation that any other in-progress session may be discarded so this
+     * one can start. Without it, a conflicting active session returns 409.
+     */
+    replaceActiveSession: z.boolean().optional(),
     sets: z.array(z.object({
         exerciseId: z.string(),
         exerciseName: z.string().optional(),
@@ -73,7 +78,7 @@ export async function POST(req: Request) {
     const parsed = logSchema.safeParse(body);
     if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-    const { workoutId, clientId, duration, notes, feeling, status, loggedAt } = parsed.data;
+    const { workoutId, clientId, duration, notes, feeling, status, loggedAt, replaceActiveSession } = parsed.data;
     const sets = parsed.data.sets.map((set) => ({
         ...set,
         exerciseName: set.exerciseName ? canonicalExerciseName(set.exerciseName) : set.exerciseName,
@@ -142,9 +147,37 @@ export async function POST(req: Request) {
         });
     }
 
-    // One active workout per user: starting or resuming this session retires any other
-    // in-progress draft so Dashboard, Plans and Calendar can never offer two Resumes.
+    // One active workout per user. Starting a different session requires explicit
+    // replaceActiveSession confirmation — otherwise return 409 with the live session.
     if (status === "IN_PROGRESS") {
+        const active = await getActiveWorkoutSession(subjectUserId);
+        const targetDateKey = toDateKey(targetDate);
+        const isSameSession = Boolean(
+            active
+            && active.workoutId === workoutId
+            && active.dateKey === targetDateKey
+        );
+
+        if (active && !isSameSession && !replaceActiveSession) {
+            return NextResponse.json(
+                {
+                    error: "ACTIVE_SESSION_EXISTS",
+                    message: "A workout is already in progress. Resume it or end it before starting another.",
+                    activeSession: {
+                        id: active.id,
+                        workoutId: active.workoutId,
+                        workoutName: active.workoutName,
+                        dateKey: active.dateKey,
+                        resumeHref: resumeWorkoutHref(active),
+                        completedSetCount: active.completedSetCount,
+                        totalSetCount: active.totalSetCount,
+                        isBackdated: active.isBackdated,
+                    },
+                },
+                { status: 409 }
+            );
+        }
+
         await closeOtherActiveSessions({
             userId: subjectUserId,
             keepWorkoutId: workoutId,

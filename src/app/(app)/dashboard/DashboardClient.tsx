@@ -17,6 +17,11 @@ import { useCurrentDate } from "@/hooks/useCurrentDate";
 import { useScrollLock } from "@/hooks/useScrollLock";
 import { formatWeightDistanceFromGoal } from "@/lib/bodyweight";
 import { isCardio } from "@/components/shared/ExerciseAutocomplete";
+import {
+    ActiveSessionConflictModal,
+    parseActiveSessionConflict,
+    type ConflictingActiveSession,
+} from "@/components/shared/ActiveSessionConflictModal";
 
 interface Exercise {
     id: string;
@@ -184,8 +189,16 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
     const [sessionsExplorerInitialId, setSessionsExplorerInitialId] = useState<string | null>(null);
     const [showCheckInPanel, setShowCheckInPanel] = useState(false);
     const [startingWorkout, setStartingWorkout] = useState(false);
+    const [startConflict, setStartConflict] = useState<ConflictingActiveSession | null>(null);
+    const [pendingReopen, setPendingReopen] = useState<{
+        logId: string;
+        workoutId: string;
+        loggedAt?: string;
+    } | null>(null);
+    /** When set, End & start retries starting today's workout after discarding the conflict. */
+    const [pendingStartToday, setPendingStartToday] = useState(false);
 
-    useScrollLock(showCheckInPanel);
+    useScrollLock(showCheckInPanel || Boolean(startConflict));
 
     useEffect(() => {
         setLocalActiveSession(activeSession);
@@ -238,14 +251,29 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
         }
     };
 
-    const uncompleteLog = async (logId: string, workoutId: string, loggedAt?: string) => {
+    const uncompleteLog = async (logId: string, workoutId: string, loggedAt?: string, replaceActiveSession = false) => {
         try {
             const res = await fetch(`/api/logs/${logId}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ status: "IN_PROGRESS" })
+                body: JSON.stringify({
+                    status: "IN_PROGRESS",
+                    ...(replaceActiveSession ? { replaceActiveSession: true } : {}),
+                })
             });
+            if (res.status === 409) {
+                const payload = await res.json().catch(() => null);
+                const conflict = parseActiveSessionConflict(payload);
+                if (conflict) {
+                    setPendingStartToday(false);
+                    setPendingReopen({ logId, workoutId, loggedAt });
+                    setStartConflict(conflict);
+                    return;
+                }
+            }
             if (res.ok) {
+                setStartConflict(null);
+                setPendingReopen(null);
                 const dateQuery = loggedAt
                     ? `?date=${encodeURIComponent(toDateKey(parseLogDate(loggedAt)))}`
                     : "";
@@ -370,17 +398,36 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
         return "/plans";
     }, [todayWorkout, nextTrainingDay, activePlan?.id, todayDate, currentPath]);
 
-    const handleStartTodayWorkout = async () => {
-        if (!todayWorkout || startingWorkout) return;
+    const startTodayWorkoutSession = async (replaceActiveSession = false) => {
+        if (!todayWorkout || startingWorkout) return false;
 
-        if (localActiveSession?.workoutId === todayWorkout.id) {
+        if (!replaceActiveSession && localActiveSession?.workoutId === todayWorkout.id) {
             goToWorkoutLog(
                 todayWorkout.id,
                 localActiveSession.loggedAt
                     ? toDateKey(parseLogDate(localActiveSession.loggedAt))
                     : todayDate
             );
-            return;
+            return true;
+        }
+
+        if (!replaceActiveSession && localActiveSession && localActiveSession.workoutId !== todayWorkout.id) {
+            const dateKey = localActiveSession.loggedAt
+                ? toDateKey(parseLogDate(localActiveSession.loggedAt))
+                : todayDate;
+            setPendingReopen(null);
+            setPendingStartToday(true);
+            setStartConflict({
+                id: localActiveSession.id,
+                workoutId: localActiveSession.workoutId,
+                workoutName: localActiveSession.workoutName,
+                dateKey,
+                resumeHref: `/plans/log/${localActiveSession.workoutId}?date=${encodeURIComponent(dateKey)}`,
+                completedSetCount: 0,
+                totalSetCount: 0,
+                isBackdated: dateKey !== todayDate,
+            });
+            return false;
         }
 
         setStartingWorkout(true);
@@ -405,22 +452,44 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                     status: "IN_PROGRESS",
                     loggedAt: toLoggedAtIso(todayDate),
                     sets: flattenedSets,
+                    ...(replaceActiveSession ? { replaceActiveSession: true } : {}),
                 }),
             });
 
-            if (!res.ok) {
-                alert("Could not start workout. Try again.");
-                return;
+            if (res.status === 409) {
+                const payload = await res.json().catch(() => null);
+                const conflict = parseActiveSessionConflict(payload);
+                if (conflict) {
+                    setPendingReopen(null);
+                    setPendingStartToday(true);
+                    setStartConflict(conflict);
+                    return false;
+                }
+                alert(payload?.message || "A workout is already in progress.");
+                return false;
             }
 
+            if (!res.ok) {
+                alert("Could not start workout. Try again.");
+                return false;
+            }
+
+            setStartConflict(null);
+            setPendingStartToday(false);
             goToWorkoutLog(todayWorkout.id, todayDate);
             router.refresh();
+            return true;
         } catch (e) {
             console.error(e);
             alert("Could not start workout.");
+            return false;
         } finally {
             setStartingWorkout(false);
         }
+    };
+
+    const handleStartTodayWorkout = async () => {
+        await startTodayWorkoutSession(false);
     };
 
     const redeemCode = async () => {
@@ -1029,6 +1098,41 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                         </div>
                     </div>
                 </div>
+            )}
+
+            {startConflict && (
+                <ActiveSessionConflictModal
+                    session={startConflict}
+                    pendingWorkoutName={
+                        pendingStartToday
+                            ? todayWorkout?.name
+                            : pendingReopen
+                                ? recentLogs.find((l) => l.id === pendingReopen.logId)?.workoutName
+                                : undefined
+                    }
+                    busy={startingWorkout}
+                    onCancel={() => {
+                        setStartConflict(null);
+                        setPendingReopen(null);
+                        setPendingStartToday(false);
+                    }}
+                    onResume={() => {
+                        const href = startConflict.resumeHref;
+                        setStartConflict(null);
+                        setPendingReopen(null);
+                        setPendingStartToday(false);
+                        router.push(appendReturnTo(href, currentPath));
+                    }}
+                    onEndAndStart={async () => {
+                        if (pendingReopen) {
+                            const { logId, workoutId, loggedAt } = pendingReopen;
+                            setStartConflict(null);
+                            await uncompleteLog(logId, workoutId, loggedAt, true);
+                            return;
+                        }
+                        await startTodayWorkoutSession(true);
+                    }}
+                />
             )}
         </div>
     );

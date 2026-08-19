@@ -8,12 +8,20 @@ import { getWorkoutNotes } from "@/lib/workoutNotes";
 import { getLogExerciseNotes } from "@/lib/logExerciseNotes";
 import { canEditWorkoutLog, canViewWorkoutLog } from "@/lib/userProfile";
 import { triggerAchievementSync } from "@/lib/achievements";
+import {
+    closeOtherActiveSessions,
+    getActiveWorkoutSession,
+    resumeWorkoutHref,
+} from "@/lib/activeWorkoutSession";
+import { getLocalDayBounds } from "@/lib/utils";
 import { z } from "zod";
 
 const patchLogSchema = z.object({
     status: z.enum(["IN_PROGRESS", "COMPLETED"]).optional(),
     feeling: z.number().int().min(1).max(5).optional(),
     duration: z.number().int().min(0).max(1440).nullable().optional(),
+    /** Required when reopening a completed log while another session is already active. */
+    replaceActiveSession: z.boolean().optional(),
 }).refine((data) => data.status !== undefined || data.feeling !== undefined || data.duration !== undefined, {
     message: "Provide status, feeling, or duration to update",
 });
@@ -138,6 +146,39 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     if (parsed.data.duration !== undefined) {
         data.duration = parsed.data.duration;
+    }
+
+    // Reopening a completed log as IN_PROGRESS must not create a second live session.
+    if (data.status === "IN_PROGRESS" && existing.status !== "IN_PROGRESS") {
+        const active = await getActiveWorkoutSession(existing.userId);
+        if (active && active.id !== existing.id) {
+            if (!parsed.data.replaceActiveSession) {
+                return NextResponse.json(
+                    {
+                        error: "ACTIVE_SESSION_EXISTS",
+                        message: "A workout is already in progress. Resume it or end it before reopening another.",
+                        activeSession: {
+                            id: active.id,
+                            workoutId: active.workoutId,
+                            workoutName: active.workoutName,
+                            dateKey: active.dateKey,
+                            resumeHref: resumeWorkoutHref(active),
+                            completedSetCount: active.completedSetCount,
+                            totalSetCount: active.totalSetCount,
+                            isBackdated: active.isBackdated,
+                        },
+                    },
+                    { status: 409 }
+                );
+            }
+            const { start, end } = getLocalDayBounds(existing.loggedAt);
+            await closeOtherActiveSessions({
+                userId: existing.userId,
+                keepWorkoutId: existing.workoutId,
+                keepDayStart: start,
+                keepDayEnd: end,
+            });
+        }
     }
 
     const updated = await prisma.workoutLog.update({
