@@ -13,6 +13,7 @@
 
 import { BACK_KEY_ALIASES } from "@/lib/catalog/backKeyAliases";
 import { CHEST_KEY_ALIASES } from "@/lib/catalog/chestKeyAliases";
+import { SHOULDERS_KEY_ALIASES } from "@/lib/catalog/shouldersKeyAliases";
 
 /** Tokens written as one word in some places and two in others. */
 const COMPOUND_TOKEN_SPLITS: Record<string, string> = {
@@ -75,11 +76,12 @@ const KEY_ALIASES: Record<string, string> = {
     "ghd hamstring curl": "glute ham raise",
     "barbell bicep curl": "barbell curl",
     "cable bicep curl": "cable curl",
-    "ohp": "overhead press",
+    // ohp / overhead press resolved via SHOULDERS_KEY_ALIASES → barbell overhead press
 
-    // Chest / Back catalog aliases — keep in sync with scripts/catalog/*
+    // Catalog aliases — keep in sync with scripts/catalog/*
     ...CHEST_KEY_ALIASES,
     ...BACK_KEY_ALIASES,
+    ...SHOULDERS_KEY_ALIASES,
 };
 
 /** Ambiguous plurals where dropping the trailing "s" would change the movement. */

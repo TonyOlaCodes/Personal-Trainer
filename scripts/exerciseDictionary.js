@@ -10,6 +10,8 @@
 const { chestDictionaryEntries } = require("./catalog/chest");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { backDictionaryEntries } = require("./catalog/back");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { shouldersDictionaryEntries } = require("./catalog/shoulders");
 
 const EXERCISE_DICTIONARY = [
     // ─── CHEST (canonical catalog) ───────────────────────────────────────────
@@ -18,39 +20,8 @@ const EXERCISE_DICTIONARY = [
     // ─── BACK (canonical catalog; includes RDL as Hamstrings) ────────────────
     ...backDictionaryEntries(),
 
-    // ─── SHOULDERS ──────────────────────────────────────────────────────────
-    { name: "Overhead Press", muscleGroup: "Shoulders" },
-    { name: "Barbell Overhead Press", muscleGroup: "Shoulders" },
-    { name: "Military Press", muscleGroup: "Shoulders" },
-    { name: "Push Press", muscleGroup: "Shoulders" },
-    { name: "Dumbbell Shoulder Press", muscleGroup: "Shoulders" },
-    { name: "Seated Dumbbell Press", muscleGroup: "Shoulders" },
-    { name: "Arnold Press", muscleGroup: "Shoulders" },
-    { name: "Machine Shoulder Press", muscleGroup: "Shoulders" },
-    { name: "Smith Machine Shoulder Press", muscleGroup: "Shoulders" },
-    { name: "Landmine Shoulder Press", muscleGroup: "Shoulders" },
-    { name: "Lateral Raise", muscleGroup: "Shoulders" },
-    { name: "Dumbbell Lateral Raise", muscleGroup: "Shoulders" },
-    { name: "Cable Lateral Raise", muscleGroup: "Shoulders" },
-    { name: "Machine Lateral Raise", muscleGroup: "Shoulders" },
-    { name: "Leaning Cable Lateral Raise", muscleGroup: "Shoulders" },
-    { name: "Front Raise", muscleGroup: "Shoulders" },
-    { name: "Dumbbell Front Raise", muscleGroup: "Shoulders" },
-    { name: "Plate Front Raise", muscleGroup: "Shoulders" },
-    { name: "Cable Front Raise", muscleGroup: "Shoulders" },
-    { name: "Rear Delt Fly", muscleGroup: "Shoulders" },
-    { name: "Dumbbell Rear Delt Fly", muscleGroup: "Shoulders" },
-    { name: "Cable Rear Delt Fly", muscleGroup: "Shoulders" },
-    { name: "Face Pull", muscleGroup: "Shoulders" },
-    { name: "Reverse Pec Deck", muscleGroup: "Shoulders" },
-    { name: "Upright Row", muscleGroup: "Shoulders" },
-    { name: "Barbell Upright Row", muscleGroup: "Shoulders" },
-    { name: "Cable Upright Row", muscleGroup: "Shoulders" },
-    { name: "Lu Raise", muscleGroup: "Shoulders" },
-    { name: "Bradford Press", muscleGroup: "Shoulders" },
-    { name: "Cuban Press", muscleGroup: "Shoulders" },
-    { name: "Y Raise", muscleGroup: "Shoulders" },
-    { name: "W Raise", muscleGroup: "Shoulders" },
+    // ─── SHOULDERS (canonical catalog) ───────────────────────────────────────
+    ...shouldersDictionaryEntries(),
 
     // ─── BICEPS ─────────────────────────────────────────────────────────────
     { name: "Barbell Curl", muscleGroup: "Biceps" },
@@ -265,10 +236,7 @@ const EXERCISE_DICTIONARY = [
     { name: "Muscle-Up", muscleGroup: "Calisthenics" },
     { name: "Bar Muscle-Up", muscleGroup: "Calisthenics" },
     { name: "Ring Muscle-Up", muscleGroup: "Calisthenics" },
-    { name: "Handstand Push-Up", muscleGroup: "Calisthenics" },
-    { name: "Pike Push-Up", muscleGroup: "Calisthenics" },
-    { name: "Handstand Hold", muscleGroup: "Calisthenics" },
-    { name: "Wall Handstand Hold", muscleGroup: "Calisthenics" },
+    // Pike / handstand variations live in the Shoulders catalog
     { name: "L-Sit Hold", muscleGroup: "Calisthenics" },
     { name: "Front Lever", muscleGroup: "Calisthenics" },
     { name: "Back Lever", muscleGroup: "Calisthenics" },

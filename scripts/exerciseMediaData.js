@@ -23,12 +23,6 @@ module.exports = {
         "sourceUrl": "https://www.muscleandstrength.com/exercises/push-up.html",
         "instructions": "Assume a quadruped position on the floor with your hands under your shoulders, toes tucked, and knees under hips. Extend one leg at a time and assume a pushup position with the legs straight, elbows extended, and head in a neutral position looking at the floor. Slowly descend to the floor by retracting the shoulder blades and unlocking the elbows. Descend until the upper arms are parallel or your chest touches the floor. Push back to the starting point by extending the elbows and driving your palms into the floor. Repeat for the desired number of repetitions."
     },
-    "Arnold Press": {
-        "videoUrl": "https://www.youtube.com/watch?v=hmnZKRpYaV8",
-        "thumbnailUrl": "https://img.youtube.com/vi/hmnZKRpYaV8/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/seated-arnold-press.html",
-        "instructions": "Set up an adjustable angle bench to 90 degrees and select the desired weight from the rack. Pick up the dumbbells from the floor using a neutral grip (palms facing in). Position the end of the dumbbells on your knees and sit down on the bench. Using a safe and controlled motion, kick your knees up one at a time in order to get each dumbbell into place. Once the dumbbells are in place, rotate your palms so they are facing you. Take a deep breath then press the dumbbells overhead by extending the elbows and contracting the deltoids. As you press, rotate the dumbbells until your palms are facing "
-    },
     "Assault Bike": {
         "videoUrl": "https://www.youtube.com/watch?v=vV_sKNCpiVM",
         "thumbnailUrl": "https://img.youtube.com/vi/vV_sKNCpiVM/hqdefault.jpg",
@@ -65,12 +59,6 @@ module.exports = {
         "sourceUrl": "https://www.muscleandstrength.com/exercises/deadlifts.html",
         "instructions": "Position the bar over the top of your shoelaces and assume a hip width stance. Push your hips back and hinge forward until your torso is nearly parallel with the floor. Reach down and grasp the bar using a shoulder width, double overhand grip. Inhale and pull up slightly on the bar while allowing your hips to drop in a seesaw fashion. This phenomenon is commonly referred to as “pulling the slack out of the bar”. As you drop the hips and pull up on the bar, set the lats (imagine you’re trying to squeeze oranges in your armpits) and ensure your armpits are positioned directly over the bar. Drive"
     },
-    "Barbell Overhead Press": {
-        "videoUrl": "https://www.youtube.com/watch?v=tuwHzzPdaGc",
-        "thumbnailUrl": "https://img.youtube.com/vi/tuwHzzPdaGc/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/barbell-bench-press.html",
-        "instructions": "Lie flat on a bench and set your hands just outside of shoulder width. Set your shoulder blades by pinching them together and driving them into the bench. Take a deep breath and allow your spotter to help you with the lift off in order to maintain tightness through your upper back. Let the weight settle and ensure your upper back remains tight after lift off. Inhale and allow the bar to descend slowly by unlocking the elbows. Lower the bar in a straight line to the base of the sternum (breastbone) and touch the chest. Push the bar back up in a straight line by pressing yourself into the bench,"
-    },
     "Barbell Romanian Deadlift": {
         "videoUrl": "https://www.youtube.com/watch?v=CkrqLaDGvOA",
         "thumbnailUrl": "https://img.youtube.com/vi/CkrqLaDGvOA/hqdefault.jpg",
@@ -100,12 +88,6 @@ module.exports = {
         "thumbnailUrl": "https://img.youtube.com/vi/kHW23afzaUs/hqdefault.jpg",
         "sourceUrl": "https://www.muscleandstrength.com/exercises/machine-t-bar-row.html",
         "instructions": "Lie prone on the pad of a T-Bar machine and grasp the handle with a neutral or pronated grip depending upon preference or programming. Begin the movement by driving the elbows behind the body while retracting the shoulder blades. Pull the weight towards your body until the elbows are at (or just past) the midline and then slowly lower the weight back to the starting position under control. Repeat for the desired number of repetitions."
-    },
-    "Barbell Upright Row": {
-        "videoUrl": "https://www.youtube.com/watch?v=kZpdmn_djFI",
-        "thumbnailUrl": "https://img.youtube.com/vi/kZpdmn_djFI/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/cable-upright-row.html",
-        "instructions": "Position a cable at the lowest position possible and attach a straight bar. Reach down and grab the handle with a pronated grip and stand up with the arms straight. Take a deep breath then pull the handle high directly up the front of your body by driving your elbows high. Slowly lower the handle back to the starting position under control. Repeat for the desired number of repetitions."
     },
     "Bayesian Curl": {
         "videoUrl": "https://www.youtube.com/watch?v=UeleXjsE-98",
@@ -215,12 +197,6 @@ module.exports = {
         "sourceUrl": "https://www.muscleandstrength.com/exercises/overhead-tricep-extension.html",
         "instructions": "Attach a rope to a cable stack as high as possible and assume a standing position. Utilize a split stance, grasp the rope overhead with a neutral grip (palms facing), and lean forward by hinging at the hips. Initiate the movement by extending the elbows and flexing the triceps. Pull the rope downward until the elbows are almost locked out and then slowly lower under control back to the starting position. Repeat for the desired number of repetitions."
     },
-    "Cable Rear Delt Fly": {
-        "videoUrl": "https://www.youtube.com/watch?v=-lcbvOddoi8",
-        "thumbnailUrl": "https://img.youtube.com/vi/-lcbvOddoi8/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/dumbbell-flys.html",
-        "instructions": "Pick up the dumbbells off the floor using a neutral grip (palms facing in). Position the ends of the dumbbells in your hip crease, and sit down on the bench. To get into position, lay back and keep the weights close to your chest. Once you are in position, take a deep breath, then press the dumbbells to lockout at the top. Slightly retract your shoulder blades, unlock your elbows, and slowly lower the dumbbells laterally while maintaining the angle at your elbow. Once the dumbbells reach chest level, reverse the movement by squeezing your pecs together and bringing the dumbbells back to their "
-    },
     "Cable Upright Row": {
         "videoUrl": "https://www.youtube.com/watch?v=kZpdmn_djFI",
         "thumbnailUrl": "https://img.youtube.com/vi/kZpdmn_djFI/hqdefault.jpg",
@@ -310,12 +286,6 @@ module.exports = {
         "thumbnailUrl": "https://img.youtube.com/vi/6kHg3JAFNFo/hqdefault.jpg",
         "sourceUrl": "https://www.muscleandstrength.com/exercises/weighted-crunch.html",
         "instructions": "Lay supine in a relaxed position with your knees bent. Hold a weight plate directly over your chest and press it to extension. Raise your knees to 90 degrees, at which point they will be perpendicular to the floor. Exhale as you reach towards your toes with the weight plate. Once your abs are fully contracted and your upper back is off the floor, slowly lower yourself back to the starting position. Complete for the assigned number of repetitions."
-    },
-    "Cuban Press": {
-        "videoUrl": "https://www.youtube.com/watch?v=j7ULT6dznNc",
-        "thumbnailUrl": "https://img.youtube.com/vi/j7ULT6dznNc/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/military-press.html",
-        "instructions": "Adjust the barbell to just below shoulder height then load the desired weight onto the bar. Assume a shoulder width stance and place your hands at (or just outside of) shoulder width with a pronated grip on the bar. Step underneath the bar and unrack it while keeping the spine in a neutral position. Take two steps back, inhale, brace, tuck the chin, then press the bar to lockout overhead. Exhale once the bar gets to lockout and reverse the movement slowly while controlling the bar back to your chest. Repeat for the desired number of repetitions."
     },
     "Curtsy Lunge": {
         "videoUrl": "https://www.youtube.com/watch?v=uRSsOoZG9z8",
@@ -419,23 +389,11 @@ module.exports = {
         "sourceUrl": "https://www.muscleandstrength.com/exercises/incline-dumbbell-curl.html",
         "instructions": "Position an incline bench at roughly 55-65 degrees, select the desired weight from the rack, and sit upright with your back flat against the pad. Using a supinated (palms up) grip, take a deep breath and curl both dumbbells towards your shoulders. Once the biceps are fully shortened, slowly lower the weights back to the starting position. Repeat for the desired number of repetitions."
     },
-    "Dumbbell Front Raise": {
-        "videoUrl": "https://www.youtube.com/watch?v=CsnKFGAx0Zc",
-        "thumbnailUrl": "https://img.youtube.com/vi/CsnKFGAx0Zc/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/cable-front-raise.html",
-        "instructions": "Assume a shoulder width stance with the cable running between your legs and grasp the handle with both hands using a pronated grip. Inhale, brace your abs, and raise the arms vertically while keeping the elbows slightly bent. Once the arms are parallel with the floor, slowly lower the handle back to the starting position. Repeat for the desired number of repetitions."
-    },
     "Dumbbell Overhead Tricep Extension": {
         "videoUrl": "https://www.youtube.com/watch?v=NRENeEgaIgA",
         "thumbnailUrl": "https://img.youtube.com/vi/NRENeEgaIgA/hqdefault.jpg",
         "sourceUrl": "https://www.muscleandstrength.com/exercises/overhead-tricep-extension.html",
         "instructions": "Attach a rope to a cable stack as high as possible and assume a standing position. Utilize a split stance, grasp the rope overhead with a neutral grip (palms facing), and lean forward by hinging at the hips. Initiate the movement by extending the elbows and flexing the triceps. Pull the rope downward until the elbows are almost locked out and then slowly lower under control back to the starting position. Repeat for the desired number of repetitions."
-    },
-    "Dumbbell Rear Delt Fly": {
-        "videoUrl": "https://www.youtube.com/watch?v=-lcbvOddoi8",
-        "thumbnailUrl": "https://img.youtube.com/vi/-lcbvOddoi8/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/dumbbell-flys.html",
-        "instructions": "Pick up the dumbbells off the floor using a neutral grip (palms facing in). Position the ends of the dumbbells in your hip crease, and sit down on the bench. To get into position, lay back and keep the weights close to your chest. Once you are in position, take a deep breath, then press the dumbbells to lockout at the top. Slightly retract your shoulder blades, unlock your elbows, and slowly lower the dumbbells laterally while maintaining the angle at your elbow. Once the dumbbells reach chest level, reverse the movement by squeezing your pecs together and bringing the dumbbells back to their "
     },
     "Dumbbell Romanian Deadlift": {
         "videoUrl": "https://www.youtube.com/watch?v=CkrqLaDGvOA",
@@ -448,12 +406,6 @@ module.exports = {
         "thumbnailUrl": "https://img.youtube.com/vi/YZgVEy6cmaY/hqdefault.jpg",
         "sourceUrl": "https://www.muscleandstrength.com/exercises/one-arm-dumbbell-row.html",
         "instructions": "Assume a standing position while holding a dumbbell in one hand with a neutral grip. Hinge forward until your torso is roughly parallel with the floor (or slightly above) and then begin the movement by driving the elbow behind the body while retracting the shoulder blade. Pull the dumbbell towards your body until the elbow is at (or just past) the midline and then slowly lower the dumbbell back to the starting position under control. Repeat for the desired number of repetitions on both sides."
-    },
-    "Dumbbell Shoulder Press": {
-        "videoUrl": "https://www.youtube.com/watch?v=dGqI0Z5ul4k",
-        "thumbnailUrl": "https://img.youtube.com/vi/dGqI0Z5ul4k/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/dumbbell-bench-press.html",
-        "instructions": "Pick up the dumbbells off the floor using a neutral grip (palms facing in). Position the ends of the dumbbells in your hip crease, and sit down on the bench. To get into position, lay back and keep the weights close to your chest. Once you are in position, take a deep breath, and press the dumbbells to lockout at the top. Slowly lower the dumbbells under control as far as comfortably possible (the handles should be about level with your chest). Contract the chest and push the dumbbells back up to the starting position. Repeat for the desired number of repetitions. **Dropping the dumbbells to t"
     },
     "Dumbbell Shrugs": {
         "videoUrl": "https://www.youtube.com/watch?v=dj2Gm628kas",
@@ -496,12 +448,6 @@ module.exports = {
         "thumbnailUrl": "https://img.youtube.com/vi/uRSsOoZG9z8/hqdefault.jpg",
         "sourceUrl": "https://www.muscleandstrength.com/exercises/dumbbell-walking-lunge.html",
         "instructions": "Set up with your feet shoulder width apart and a dumbbell in each hand. Step forward with one leg and allow both knees to bend simultaneously. Descend until the back knee touches the floor. Drive through the front foot and extend the knee as you stand up fully and return to the starting position. Repeat on the opposite leg. Repeat the desired number of repetitions."
-    },
-    "Front Raise": {
-        "videoUrl": "https://www.youtube.com/watch?v=CsnKFGAx0Zc",
-        "thumbnailUrl": "https://img.youtube.com/vi/CsnKFGAx0Zc/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/cable-front-raise.html",
-        "instructions": "Assume a shoulder width stance with the cable running between your legs and grasp the handle with both hands using a pronated grip. Inhale, brace your abs, and raise the arms vertically while keeping the elbows slightly bent. Once the arms are parallel with the floor, slowly lower the handle back to the starting position. Repeat for the desired number of repetitions."
     },
     "Front Squat": {
         "videoUrl": "https://www.youtube.com/watch?v=9xAkoz95IFE",
@@ -761,12 +707,6 @@ module.exports = {
         "sourceUrl": "https://www.muscleandstrength.com/exercises/dumbbell-walking-lunge.html",
         "instructions": "Set up with your feet shoulder width apart and a dumbbell in each hand. Step forward with one leg and allow both knees to bend simultaneously. Descend until the back knee touches the floor. Drive through the front foot and extend the knee as you stand up fully and return to the starting position. Repeat on the opposite leg. Repeat the desired number of repetitions."
     },
-    "Lateral Raise": {
-        "videoUrl": "https://www.youtube.com/watch?v=CsnKFGAx0Zc",
-        "thumbnailUrl": "https://img.youtube.com/vi/CsnKFGAx0Zc/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/cable-front-raise.html",
-        "instructions": "Assume a shoulder width stance with the cable running between your legs and grasp the handle with both hands using a pronated grip. Inhale, brace your abs, and raise the arms vertically while keeping the elbows slightly bent. Once the arms are parallel with the floor, slowly lower the handle back to the starting position. Repeat for the desired number of repetitions."
-    },
     "Leaning Cable Lateral Raise": {
         "videoUrl": "https://www.youtube.com/watch?v=CsnKFGAx0Zc",
         "thumbnailUrl": "https://img.youtube.com/vi/CsnKFGAx0Zc/hqdefault.jpg",
@@ -833,18 +773,6 @@ module.exports = {
         "sourceUrl": "https://www.muscleandstrength.com/exercises/hack-squat.html",
         "instructions": "Load the machine with the desired weight and position your shoulders and back against the pads. Position your feet at shoulder width, extend your legs, and release the safety handles. Slowly lower the weight by bending your knees until your thighs are approximately at 90 degrees. Reverse the movement by driving into the platform and extending the knees and hips. Repeat for the desired number of repetitions."
     },
-    "Machine Shoulder Press": {
-        "videoUrl": "https://www.youtube.com/watch?v=dGqI0Z5ul4k",
-        "thumbnailUrl": "https://img.youtube.com/vi/dGqI0Z5ul4k/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/dumbbell-bench-press.html",
-        "instructions": "Pick up the dumbbells off the floor using a neutral grip (palms facing in). Position the ends of the dumbbells in your hip crease, and sit down on the bench. To get into position, lay back and keep the weights close to your chest. Once you are in position, take a deep breath, and press the dumbbells to lockout at the top. Slowly lower the dumbbells under control as far as comfortably possible (the handles should be about level with your chest). Contract the chest and push the dumbbells back up to the starting position. Repeat for the desired number of repetitions. **Dropping the dumbbells to t"
-    },
-    "Military Press": {
-        "videoUrl": "https://www.youtube.com/watch?v=j7ULT6dznNc",
-        "thumbnailUrl": "https://img.youtube.com/vi/j7ULT6dznNc/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/military-press.html",
-        "instructions": "Adjust the barbell to just below shoulder height then load the desired weight onto the bar. Assume a shoulder width stance and place your hands at (or just outside of) shoulder width with a pronated grip on the bar. Step underneath the bar and unrack it while keeping the spine in a neutral position. Take two steps back, inhale, brace, tuck the chin, then press the bar to lockout overhead. Exhale once the bar gets to lockout and reverse the movement slowly while controlling the bar back to your chest. Repeat for the desired number of repetitions."
-    },
     "Muscle-Up": {
         "videoUrl": "https://www.youtube.com/watch?v=KEFQyLkDYtI",
         "thumbnailUrl": "https://img.youtube.com/vi/KEFQyLkDYtI/hqdefault.jpg",
@@ -880,12 +808,6 @@ module.exports = {
         "thumbnailUrl": "https://img.youtube.com/vi/APokXtUhFzc/hqdefault.jpg",
         "sourceUrl": "https://www.muscleandstrength.com/exercises/dumbbell-hamstring-curl.html",
         "instructions": "Set up for the dumbbell hamstring curl by elevating a flat bench on a block or step. You can use a grounded flat bench, but elevating it gives you a better range of motion and more efficiently recruits the hamstrings. Now choose the appropriate dumbbell and set it on the ground near the lower end of the bench. Lie face down on the bench and position yourself so that your knees are at the edge of the bench. Pick up the dumbbell from the floor with your feet, securing it between the arches of your two feet. Your legs should be fully extended and you can wrap your arms around the bench for stabil"
-    },
-    "Overhead Press": {
-        "videoUrl": "https://www.youtube.com/watch?v=j7ULT6dznNc",
-        "thumbnailUrl": "https://img.youtube.com/vi/j7ULT6dznNc/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/military-press.html",
-        "instructions": "Adjust the barbell to just below shoulder height then load the desired weight onto the bar. Assume a shoulder width stance and place your hands at (or just outside of) shoulder width with a pronated grip on the bar. Step underneath the bar and unrack it while keeping the spine in a neutral position. Take two steps back, inhale, brace, tuck the chin, then press the bar to lockout overhead. Exhale once the bar gets to lockout and reverse the movement slowly while controlling the bar back to your chest. Repeat for the desired number of repetitions."
     },
     "Overhead Squat": {
         "videoUrl": "https://www.youtube.com/watch?v=eJQffNbakL4",
@@ -935,12 +857,6 @@ module.exports = {
         "sourceUrl": "https://www.muscleandstrength.com/exercises/squat.html",
         "instructions": "Set up for the exercise by setting the barbell to just below shoulder height and loading the weight you want to use. Stand under the bar with your feet at about shoulder width apart. Position the bar so that it is resting on the muscles on the top of your back, not on the back of your neck. The bar should feel comfortable. If it doesn't, try adding some padding to the bar. Now take your hands over the back and grip the bar with a wide grip for stability. You should now bend at the knees and straighten your back in preparation to take the weight off the rack. Keeping your back straight and eyes"
     },
-    "Plate Front Raise": {
-        "videoUrl": "https://www.youtube.com/watch?v=CsnKFGAx0Zc",
-        "thumbnailUrl": "https://img.youtube.com/vi/CsnKFGAx0Zc/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/cable-front-raise.html",
-        "instructions": "Assume a shoulder width stance with the cable running between your legs and grasp the handle with both hands using a pronated grip. Inhale, brace your abs, and raise the arms vertically while keeping the elbows slightly bent. Once the arms are parallel with the floor, slowly lower the handle back to the starting position. Repeat for the desired number of repetitions."
-    },
     "Power Clean": {
         "videoUrl": "https://www.youtube.com/watch?v=R2dMsNhN3DE",
         "thumbnailUrl": "https://img.youtube.com/vi/R2dMsNhN3DE/hqdefault.jpg",
@@ -988,18 +904,6 @@ module.exports = {
         "thumbnailUrl": "https://img.youtube.com/vi/KEFQyLkDYtI/hqdefault.jpg",
         "sourceUrl": "https://www.muscleandstrength.com/exercises/push-up.html",
         "instructions": "Assume a quadruped position on the floor with your hands under your shoulders, toes tucked, and knees under hips. Extend one leg at a time and assume a pushup position with the legs straight, elbows extended, and head in a neutral position looking at the floor. Slowly descend to the floor by retracting the shoulder blades and unlocking the elbows. Descend until the upper arms are parallel or your chest touches the floor. Push back to the starting point by extending the elbows and driving your palms into the floor. Repeat for the desired number of repetitions."
-    },
-    "Rear Delt Cable Fly": {
-        "videoUrl": "https://www.youtube.com/watch?v=-lcbvOddoi8",
-        "thumbnailUrl": "https://img.youtube.com/vi/-lcbvOddoi8/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/dumbbell-flys.html",
-        "instructions": "Pick up the dumbbells off the floor using a neutral grip (palms facing in). Position the ends of the dumbbells in your hip crease, and sit down on the bench. To get into position, lay back and keep the weights close to your chest. Once you are in position, take a deep breath, then press the dumbbells to lockout at the top. Slightly retract your shoulder blades, unlock your elbows, and slowly lower the dumbbells laterally while maintaining the angle at your elbow. Once the dumbbells reach chest level, reverse the movement by squeezing your pecs together and bringing the dumbbells back to their "
-    },
-    "Rear Delt Fly": {
-        "videoUrl": "https://www.youtube.com/watch?v=-lcbvOddoi8",
-        "thumbnailUrl": "https://img.youtube.com/vi/-lcbvOddoi8/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/dumbbell-flys.html",
-        "instructions": "Pick up the dumbbells off the floor using a neutral grip (palms facing in). Position the ends of the dumbbells in your hip crease, and sit down on the bench. To get into position, lay back and keep the weights close to your chest. Once you are in position, take a deep breath, then press the dumbbells to lockout at the top. Slightly retract your shoulder blades, unlock your elbows, and slowly lower the dumbbells laterally while maintaining the angle at your elbow. Once the dumbbells reach chest level, reverse the movement by squeezing your pecs together and bringing the dumbbells back to their "
     },
     "Reverse Lunge": {
         "videoUrl": "https://www.youtube.com/watch?v=uRSsOoZG9z8",
@@ -1174,12 +1078,6 @@ module.exports = {
         "thumbnailUrl": "https://img.youtube.com/vi/uIzbJX5EVIY/hqdefault.jpg",
         "sourceUrl": "https://www.muscleandstrength.com/exercises/incline-bench-press.html",
         "instructions": "Lie flat on an incline bench and set your hands just outside of shoulder width. Set your shoulder blades by pinching them together and driving them into the bench. Take a deep breath and allow your spotter to help you with the lift off in order to maintain tightness through your upper back. Let the weight settle and ensure your upper back remains tight after lift off. Inhale and allow the bar to descend slowly by unlocking the elbows. Lower the bar in a straight line to the base of the sternum (breastbone) and touch the chest. Push the bar back up in a straight line by pressing yourself into t"
-    },
-    "Smith Machine Shoulder Press": {
-        "videoUrl": "https://www.youtube.com/watch?v=dGqI0Z5ul4k",
-        "thumbnailUrl": "https://img.youtube.com/vi/dGqI0Z5ul4k/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/dumbbell-bench-press.html",
-        "instructions": "Pick up the dumbbells off the floor using a neutral grip (palms facing in). Position the ends of the dumbbells in your hip crease, and sit down on the bench. To get into position, lay back and keep the weights close to your chest. Once you are in position, take a deep breath, and press the dumbbells to lockout at the top. Slowly lower the dumbbells under control as far as comfortably possible (the handles should be about level with your chest). Contract the chest and push the dumbbells back up to the starting position. Repeat for the desired number of repetitions. **Dropping the dumbbells to t"
     },
     "Smith Machine Squat": {
         "videoUrl": "https://www.youtube.com/watch?v=BtfMX4WqUBo",
@@ -1361,12 +1259,6 @@ module.exports = {
         "sourceUrl": "https://www.muscleandstrength.com/exercises/rope-tricep-extension.html",
         "instructions": "Attach a rope to a cable stack as high as possible and assume a standing position. Grasp the rope with a neutral grip (palms facing in) and lean forward slightly by hinging at the hips. Initiate the movement by extending the elbows and flexing the triceps. Pull the rope downward until the elbows are almost locked out and then slowly lower under control back to the starting position. Repeat for the desired number of repetitions."
     },
-    "Upright Row": {
-        "videoUrl": "https://www.youtube.com/watch?v=kZpdmn_djFI",
-        "thumbnailUrl": "https://img.youtube.com/vi/kZpdmn_djFI/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/cable-upright-row.html",
-        "instructions": "Position a cable at the lowest position possible and attach a straight bar. Reach down and grab the handle with a pronated grip and stand up with the arms straight. Take a deep breath then pull the handle high directly up the front of your body by driving your elbows high. Slowly lower the handle back to the starting position under control. Repeat for the desired number of repetitions."
-    },
     "V-Bar Tricep Pushdown": {
         "videoUrl": "https://www.youtube.com/watch?v=KYGarkmUqvk",
         "thumbnailUrl": "https://img.youtube.com/vi/KYGarkmUqvk/hqdefault.jpg",
@@ -1378,12 +1270,6 @@ module.exports = {
         "thumbnailUrl": "https://img.youtube.com/vi/MQDopvLZOS8/hqdefault.jpg",
         "sourceUrl": "https://www.muscleandstrength.com/exercises/sit-up.html",
         "instructions": "Lay supine in a relaxed position with your knees up and hands across your chest. Exhale and squeeze your abs as you curl your upper body off the floor. Once your torso is perpendicular to the floor, slowly lower yourself back to the starting position. Complete for the assigned number of repetitions."
-    },
-    "W Raise": {
-        "videoUrl": "https://www.youtube.com/watch?v=CsnKFGAx0Zc",
-        "thumbnailUrl": "https://img.youtube.com/vi/CsnKFGAx0Zc/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/cable-front-raise.html",
-        "instructions": "Assume a shoulder width stance with the cable running between your legs and grasp the handle with both hands using a pronated grip. Inhale, brace your abs, and raise the arms vertically while keeping the elbows slightly bent. Once the arms are parallel with the floor, slowly lower the handle back to the starting position. Repeat for the desired number of repetitions."
     },
     "Walk": {
         "videoUrl": "https://www.youtube.com/watch?v=uRSsOoZG9z8",

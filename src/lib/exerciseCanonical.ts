@@ -64,6 +64,22 @@ const CANONICAL_NAME_OVERRIDES: Record<string, string> = {
     "t bar row": "T-Bar Row",
     "iso lateral row": "Iso-Lateral Row",
     "romanian deadlift": "Romanian Deadlift",
+    // Shoulders catalog preferred spellings
+    "barbell overhead press": "Barbell Overhead Press",
+    "seated dumbbell shoulder press": "Seated Dumbbell Shoulder Press",
+    "standing dumbbell shoulder press": "Standing Dumbbell Shoulder Press",
+    "dumbbell lateral raise": "Dumbbell Lateral Raise",
+    "dumbbell front raise": "Dumbbell Front Raise",
+    "dumbbell rear delt fly": "Dumbbell Rear Delt Fly",
+    "cable rear delt fly": "Cable Rear Delt Fly",
+    "reverse pec deck": "Reverse Pec Deck",
+    "barbell upright row": "Barbell Upright Row",
+    "face pull": "Face Pull",
+    "dumbbell y raise": "Dumbbell Y Raise",
+    "barbell z press": "Barbell Z Press",
+    "plate loaded shoulder press": "Plate Loaded Shoulder Press",
+    "handstand push up": "Handstand Push-Up",
+    "pike push up": "Pike Push-Up",
 };
 
 /**
