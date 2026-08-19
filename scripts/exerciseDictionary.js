@@ -3,70 +3,20 @@
  * Each entry: { name, muscleGroup }
  * muscleGroup = primary muscle(s) or activity category trained.
  *
- * Muscle-group catalogs (Chest first) live under scripts/catalog/ and list only
+ * Muscle-group catalogs (Chest, Back, …) live under scripts/catalog/ and list only
  * canonical names. Aliases are for search/identity — never separate seed rows.
  */
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { chestDictionaryEntries } = require("./catalog/chest");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { backDictionaryEntries } = require("./catalog/back");
 
 const EXERCISE_DICTIONARY = [
     // ─── CHEST (canonical catalog) ───────────────────────────────────────────
     ...chestDictionaryEntries(),
 
-    // ─── BACK ───────────────────────────────────────────────────────────────
-    { name: "Deadlift", muscleGroup: "Back" },
-    { name: "Barbell Deadlift", muscleGroup: "Back" },
-    { name: "Conventional Deadlift", muscleGroup: "Back" },
-    { name: "Romanian Deadlift", muscleGroup: "Hamstrings" },
-    { name: "Barbell Romanian Deadlift", muscleGroup: "Hamstrings" },
-    { name: "Dumbbell Romanian Deadlift", muscleGroup: "Hamstrings" },
-    { name: "Single-Leg Romanian Deadlift", muscleGroup: "Hamstrings" },
-    { name: "Stiff-Leg Deadlift", muscleGroup: "Hamstrings" },
-    { name: "Stiff Leg Deadlift", muscleGroup: "Hamstrings" },
-    { name: "Sumo Deadlift", muscleGroup: "Glutes" },
-    { name: "Trap Bar Deadlift", muscleGroup: "Back" },
-    { name: "Deficit Deadlift", muscleGroup: "Back" },
-    { name: "Rack Pull", muscleGroup: "Back" },
-    { name: "Barbell Row", muscleGroup: "Back" },
-    { name: "Pendlay Row", muscleGroup: "Back" },
-    { name: "Yates Row", muscleGroup: "Back" },
-    { name: "Dumbbell Row", muscleGroup: "Back" },
-    { name: "Single-Arm Dumbbell Row", muscleGroup: "Back" },
-    { name: "Single Arm Dumbbell Row", muscleGroup: "Back" },
-    { name: "Chest-Supported Row", muscleGroup: "Back" },
-    { name: "T-Bar Row", muscleGroup: "Back" },
-    { name: "Meadows Row", muscleGroup: "Back" },
-    { name: "Lat Pulldown", muscleGroup: "Back" },
-    { name: "Wide-Grip Lat Pulldown", muscleGroup: "Back" },
-    { name: "Close-Grip Lat Pulldown", muscleGroup: "Back" },
-    { name: "Neutral-Grip Lat Pulldown", muscleGroup: "Back" },
-    { name: "Reverse-Grip Lat Pulldown", muscleGroup: "Back" },
-    { name: "Lat Pullover", muscleGroup: "Back" },
-    { name: "Cable Lat Pullover", muscleGroup: "Back" },
-    { name: "Dumbbell Pullover", muscleGroup: "Back" },
-    { name: "Machine Pullover", muscleGroup: "Back" },
-    { name: "Straight-Arm Pulldown", muscleGroup: "Back" },
-    { name: "Seated Cable Row", muscleGroup: "Back" },
-    { name: "Wide-Grip Cable Row", muscleGroup: "Back" },
-    { name: "Close-Grip Cable Row", muscleGroup: "Back" },
-    { name: "Machine Row", muscleGroup: "Back" },
-    { name: "Pull-Up", muscleGroup: "Back" },
-    { name: "Wide-Grip Pull-Up", muscleGroup: "Back" },
-    { name: "Close-Grip Pull-Up", muscleGroup: "Back" },
-    { name: "Weighted Pull-Up", muscleGroup: "Back" },
-    { name: "Chin-Up", muscleGroup: "Back" },
-    { name: "Neutral-Grip Pull-Up", muscleGroup: "Back" },
-    { name: "Inverted Row", muscleGroup: "Back" },
-    { name: "Ring Row", muscleGroup: "Back" },
-    { name: "Face Pull", muscleGroup: "Shoulders" },
-    { name: "Rear Delt Cable Fly", muscleGroup: "Shoulders" },
-    { name: "Good Morning", muscleGroup: "Hamstrings" },
-    { name: "Hyperextension", muscleGroup: "Back" },
-    { name: "Back Extension", muscleGroup: "Back" },
-    { name: "45-Degree Back Extension", muscleGroup: "Back" },
-    { name: "Reverse Hyperextension", muscleGroup: "Glutes" },
-    { name: "Superman", muscleGroup: "Back" },
-    { name: "Bird Dog", muscleGroup: "Back" },
+    // ─── BACK (canonical catalog; includes RDL as Hamstrings) ────────────────
+    ...backDictionaryEntries(),
 
     // ─── SHOULDERS ──────────────────────────────────────────────────────────
     { name: "Overhead Press", muscleGroup: "Shoulders" },
@@ -91,6 +41,7 @@ const EXERCISE_DICTIONARY = [
     { name: "Rear Delt Fly", muscleGroup: "Shoulders" },
     { name: "Dumbbell Rear Delt Fly", muscleGroup: "Shoulders" },
     { name: "Cable Rear Delt Fly", muscleGroup: "Shoulders" },
+    { name: "Face Pull", muscleGroup: "Shoulders" },
     { name: "Reverse Pec Deck", muscleGroup: "Shoulders" },
     { name: "Upright Row", muscleGroup: "Shoulders" },
     { name: "Barbell Upright Row", muscleGroup: "Shoulders" },
@@ -198,6 +149,11 @@ const EXERCISE_DICTIONARY = [
     { name: "Glute-Ham Raise", muscleGroup: "Hamstrings" },
     { name: "GHD Hamstring Curl", muscleGroup: "Hamstrings" },
     { name: "Cable Pull-Through", muscleGroup: "Hamstrings" },
+    // Romanian Deadlift is seeded via the Back catalog (Hamstrings category).
+    { name: "Dumbbell Romanian Deadlift", muscleGroup: "Hamstrings" },
+    { name: "Single-Leg Romanian Deadlift", muscleGroup: "Hamstrings" },
+    { name: "Stiff-Leg Deadlift", muscleGroup: "Hamstrings" },
+    { name: "Stiff Leg Deadlift", muscleGroup: "Hamstrings" },
 
     // ─── GLUTES ─────────────────────────────────────────────────────────────
     { name: "Hip Thrust", muscleGroup: "Glutes" },
@@ -384,13 +340,13 @@ const EXERCISE_DICTIONARY = [
     { name: "Rope Climb", muscleGroup: "CrossFit" },
     { name: "Legless Rope Climb", muscleGroup: "CrossFit" },
     { name: "GHD Sit-Up", muscleGroup: "CrossFit" },
-    { name: "GHD Back Extension", muscleGroup: "CrossFit" },
+    // GHD Back Extension → 90 Degree Back Extension (Back catalog alias)
     { name: "Ring Handstand Push-Up", muscleGroup: "CrossFit" },
     { name: "Overhead Squat", muscleGroup: "CrossFit" },
     { name: "Barbell Complex", muscleGroup: "Full Body" },
     { name: "Dumbbell Complex", muscleGroup: "Full Body" },
     { name: "Clean and Press", muscleGroup: "Full Body" },
-    { name: "Renegade Row", muscleGroup: "Full Body" },
+    // Renegade Row lives in the Back catalog
     { name: "Bear Complex", muscleGroup: "Full Body" },
     { name: "Ground to Overhead", muscleGroup: "Full Body" },
     { name: "Shoulder to Overhead", muscleGroup: "Full Body" },
@@ -410,10 +366,18 @@ const EXERCISES = EXERCISE_DICTIONARY
     if (seen.has(ex.name)) return false;
     seen.add(ex.name);
     return true;
-}).map((ex) => ({
-    ...ex,
-    ...(EXERCISE_MEDIA[ex.name] ?? {}),
-}));
+}).map((ex) => {
+    const media = EXERCISE_MEDIA[ex.name] ?? {};
+    // Catalog instructions win over scraped media (often mismatched).
+    // Media only supplies video/thumbnail/source when present.
+    return {
+        ...ex,
+        ...(media.videoUrl ? { videoUrl: media.videoUrl } : {}),
+        ...(media.thumbnailUrl ? { thumbnailUrl: media.thumbnailUrl } : {}),
+        ...(media.sourceUrl ? { sourceUrl: media.sourceUrl } : {}),
+        instructions: ex.instructions ?? media.instructions,
+    };
+});
 
 module.exports = { EXERCISES, MUSCLE_GROUPS: [
     "Chest", "Back", "Shoulders", "Biceps", "Triceps", "Forearms", "Traps",

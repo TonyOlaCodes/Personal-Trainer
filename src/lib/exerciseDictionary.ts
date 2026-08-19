@@ -21,13 +21,21 @@ const { chestSearchAliasRows } = require("../../scripts/catalog/chest.js") as {
     chestSearchAliasRows: () => Array<{ alias: string; name: string; muscleGroup: string }>;
 };
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { backSearchAliasRows } = require("../../scripts/catalog/back.js") as {
+    backSearchAliasRows: () => Array<{ alias: string; name: string; muscleGroup: string }>;
+};
+
 export function getDictionaryExercises(): DictionaryExercise[] {
     return EXERCISES;
 }
 
-/** Search aliases that resolve to a canonical catalog name (Chest first; extend later). */
+/** Search aliases that resolve to a canonical catalog name. */
 export function getDictionarySearchAliases(): Array<{ alias: string; name: string }> {
-    return chestSearchAliasRows().map((row) => ({ alias: row.alias, name: row.name }));
+    return [
+        ...chestSearchAliasRows(),
+        ...backSearchAliasRows(),
+    ].map((row) => ({ alias: row.alias, name: row.name }));
 }
 
 let dictionarySynced = false;
