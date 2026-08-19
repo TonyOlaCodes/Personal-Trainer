@@ -98,13 +98,27 @@ export function scoreExerciseMatch(query: string, name: string): number {
 export function searchExercises<T extends { name: string }>(
     query: string,
     exercises: T[],
-    limit = EXERCISE_SEARCH_LIMIT
+    limit = EXERCISE_SEARCH_LIMIT,
+    options?: { aliases?: Array<{ alias: string; name: string }> }
 ): T[] {
     const q = query.trim();
     if (!q) return exercises.slice(0, limit);
 
+    const aliasesByCanonical = new Map<string, string[]>();
+    for (const row of options?.aliases ?? []) {
+        const list = aliasesByCanonical.get(row.name) ?? [];
+        list.push(row.alias);
+        aliasesByCanonical.set(row.name, list);
+    }
+
     return exercises
-        .map((ex) => ({ ex, score: scoreExerciseMatch(q, ex.name) }))
+        .map((ex) => {
+            let score = scoreExerciseMatch(q, ex.name);
+            for (const alias of aliasesByCanonical.get(ex.name) ?? []) {
+                score = Math.min(score, scoreExerciseMatch(q, alias) + 0.05);
+            }
+            return { ex, score };
+        })
         .filter((item) => item.score < 999)
         .sort((a, b) => a.score - b.score || a.ex.name.length - b.ex.name.length)
         .slice(0, limit)

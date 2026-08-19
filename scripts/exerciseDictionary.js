@@ -2,50 +2,16 @@
  * Global exercise dictionary — single source of truth for seeding.
  * Each entry: { name, muscleGroup }
  * muscleGroup = primary muscle(s) or activity category trained.
+ *
+ * Muscle-group catalogs (Chest first) live under scripts/catalog/ and list only
+ * canonical names. Aliases are for search/identity — never separate seed rows.
  */
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { chestDictionaryEntries } = require("./catalog/chest");
+
 const EXERCISE_DICTIONARY = [
-    // ─── CHEST ───────────────────────────────────────────────────────────────
-    { name: "Bench Press", muscleGroup: "Chest" },
-    { name: "Barbell Bench Press", muscleGroup: "Chest" },
-    { name: "Incline Bench Press", muscleGroup: "Chest" },
-    { name: "Incline Barbell Bench Press", muscleGroup: "Chest" },
-    { name: "Decline Bench Press", muscleGroup: "Chest" },
-    { name: "Decline Barbell Bench Press", muscleGroup: "Chest" },
-    { name: "Dumbbell Bench Press", muscleGroup: "Chest" },
-    { name: "Incline Dumbbell Bench Press", muscleGroup: "Chest" },
-    { name: "Decline Dumbbell Bench Press", muscleGroup: "Chest" },
-    { name: "Incline Dumbbell Press", muscleGroup: "Chest" },
-    { name: "Flat Dumbbell Fly", muscleGroup: "Chest" },
-    { name: "Chest Fly", muscleGroup: "Chest" },
-    { name: "Dumbbell Chest Fly", muscleGroup: "Chest" },
-    { name: "Incline Dumbbell Fly", muscleGroup: "Chest" },
-    { name: "Incline Dumbbell Chest Fly", muscleGroup: "Chest" },
-    { name: "Cable Chest Fly", muscleGroup: "Chest" },
-    { name: "Cable Fly", muscleGroup: "Chest" },
-    { name: "Low Cable Fly", muscleGroup: "Chest" },
-    { name: "High Cable Fly", muscleGroup: "Chest" },
-    { name: "Pec Deck Fly", muscleGroup: "Chest" },
-    { name: "Pec Deck", muscleGroup: "Chest" },
-    { name: "Machine Chest Press", muscleGroup: "Chest" },
-    { name: "Incline Machine Press", muscleGroup: "Chest" },
-    { name: "Smith Machine Bench Press", muscleGroup: "Chest" },
-    { name: "Smith Machine Incline Press", muscleGroup: "Chest" },
-    { name: "Landmine Press", muscleGroup: "Chest" },
-    { name: "Svend Press", muscleGroup: "Chest" },
-    { name: "Floor Press", muscleGroup: "Chest" },
-    { name: "Push-Up", muscleGroup: "Chest" },
-    { name: "Pushup", muscleGroup: "Chest" },
-    { name: "Wide Push-Up", muscleGroup: "Chest" },
-    { name: "Diamond Push-Up", muscleGroup: "Chest" },
-    { name: "Incline Push-Up", muscleGroup: "Chest" },
-    { name: "Decline Push-Up", muscleGroup: "Chest" },
-    { name: "Wall Push-Up", muscleGroup: "Chest" },
-    { name: "Wall Pushup", muscleGroup: "Chest" },
-    { name: "Archer Push-Up", muscleGroup: "Chest" },
-    { name: "Deficit Push-Up", muscleGroup: "Chest" },
-    { name: "Ring Push-Up", muscleGroup: "Chest" },
-    { name: "Chest Dip", muscleGroup: "Chest" },
-    { name: "Weighted Dip", muscleGroup: "Chest" },
+    // ─── CHEST (canonical catalog) ───────────────────────────────────────────
+    ...chestDictionaryEntries(),
 
     // ─── BACK ───────────────────────────────────────────────────────────────
     { name: "Deadlift", muscleGroup: "Back" },
@@ -165,8 +131,7 @@ const EXERCISE_DICTIONARY = [
     { name: "Dumbbell Overhead Tricep Extension", muscleGroup: "Triceps" },
     { name: "Cable Overhead Tricep Extension", muscleGroup: "Triceps" },
     { name: "Single-Arm Cable Extension", muscleGroup: "Triceps" },
-    { name: "Close-Grip Bench Press", muscleGroup: "Triceps" },
-    { name: "Close Grip Bench Press", muscleGroup: "Triceps" },
+    // Close Grip Barbell Bench Press is in the Chest catalog (canonical for this movement).
     { name: "Tricep Dip", muscleGroup: "Triceps" },
     { name: "Bench Dip", muscleGroup: "Triceps" },
     { name: "Tricep Kickback", muscleGroup: "Triceps" },

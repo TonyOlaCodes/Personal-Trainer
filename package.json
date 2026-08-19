@@ -16,7 +16,8 @@
     "audit:streak": "node scripts/audit-streak-logic.js",
     "audit:prs": "npx tsx scripts/audit-exercise-prs.ts",
     "audit:exercises": "npx tsx scripts/audit-exercise-duplicates.ts",
-    "merge:exercises": "npx tsx scripts/merge-duplicate-exercises.ts"
+    "merge:exercises": "npx tsx scripts/merge-duplicate-exercises.ts",
+    "migrate:chest": "npx tsx scripts/migrate-chest-catalog.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.0.5",

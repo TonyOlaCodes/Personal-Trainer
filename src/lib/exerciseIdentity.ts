@@ -6,10 +6,12 @@
  * the identity key rather than the raw stored name, so plural/spelling variants
  * ("Pull Ups" vs "Pull-Up") share a single continuous history.
  *
- * Isomorphic and dependency-free: safe to import from client components, server
- * routes and scripts. Display-name resolution against the seed dictionary lives in
- * `exerciseCanonical.ts` (server only) to keep the dictionary out of client bundles.
+ * Isomorphic and dependency-free aside from catalog alias maps: safe to import
+ * from client components, server routes and scripts. Display-name resolution
+ * against the seed dictionary lives in `exerciseCanonical.ts` (server only).
  */
+
+import { CHEST_KEY_ALIASES } from "@/lib/catalog/chestKeyAliases";
 
 /** Tokens written as one word in some places and two in others. */
 const COMPOUND_TOKEN_SPLITS: Record<string, string> = {
@@ -66,11 +68,7 @@ const KEY_ALIASES: Record<string, string> = {
     "skipping": "jump rope",
     "skip rope": "jump rope",
 
-    // Naming variants for the same lift
-    "pec deck fly": "pec deck",
-    "cable chest fly": "cable fly",
-    "incline dumbbell chest fly": "incline dumbbell fly",
-    "flat dumbbell fly": "dumbbell chest fly",
+    // Naming variants for the same lift (non-chest leftovers)
     "nordic hamstring curl": "nordic curl",
     "farmer walk": "farmer carry",
     "ghd hamstring curl": "glute ham raise",
@@ -78,6 +76,9 @@ const KEY_ALIASES: Record<string, string> = {
     "cable bicep curl": "cable curl",
     "rdl": "romanian deadlift",
     "ohp": "overhead press",
+
+    // Chest catalog aliases — keep in sync with scripts/catalog/chest.js
+    ...CHEST_KEY_ALIASES,
 };
 
 /** Ambiguous plurals where dropping the trailing "s" would change the movement. */

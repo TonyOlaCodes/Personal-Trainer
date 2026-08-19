@@ -23,6 +23,24 @@ const CANONICAL_NAME_OVERRIDES: Record<string, string> = {
     "farmer carry": "Farmer's Carry",
     "dumbbell chest fly": "Dumbbell Chest Fly",
     "jog": "Jogging",
+    // Chest catalog preferred spellings (identity key → display name)
+    "barbell bench press": "Barbell Bench Press",
+    "incline barbell bench press": "Incline Barbell Bench Press",
+    "decline barbell bench press": "Decline Barbell Bench Press",
+    "close grip barbell bench press": "Close Grip Barbell Bench Press",
+    "pec deck fly": "Pec Deck Fly",
+    "cable chest fly": "Cable Chest Fly",
+    "low to high cable fly": "Low to High Cable Fly",
+    "high to low cable fly": "High to Low Cable Fly",
+    "incline dumbbell chest fly": "Incline Dumbbell Chest Fly",
+    "incline dumbbell bench press": "Incline Dumbbell Bench Press",
+    "smith machine incline bench press": "Smith Machine Incline Bench Press",
+    "incline machine chest press": "Incline Machine Chest Press",
+    "landmine chest press": "Landmine Chest Press",
+    "barbell floor press": "Barbell Floor Press",
+    "weighted chest dip": "Weighted Chest Dip",
+    "wide grip push up": "Wide Grip Push-Up",
+    "push up": "Push-Up",
 };
 
 /**

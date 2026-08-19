@@ -16,8 +16,18 @@ const { EXERCISES } = require("../../scripts/exerciseDictionary.js") as {
     EXERCISES: DictionaryExercise[];
 };
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { chestSearchAliasRows } = require("../../scripts/catalog/chest.js") as {
+    chestSearchAliasRows: () => Array<{ alias: string; name: string; muscleGroup: string }>;
+};
+
 export function getDictionaryExercises(): DictionaryExercise[] {
     return EXERCISES;
+}
+
+/** Search aliases that resolve to a canonical catalog name (Chest first; extend later). */
+export function getDictionarySearchAliases(): Array<{ alias: string; name: string }> {
+    return chestSearchAliasRows().map((row) => ({ alias: row.alias, name: row.name }));
 }
 
 let dictionarySynced = false;
@@ -64,5 +74,5 @@ export function searchDictionary(
     exercises: DictionaryExercise[],
     limit = EXERCISE_SEARCH_LIMIT
 ): DictionaryExercise[] {
-    return searchExercises(query, exercises, limit);
+    return searchExercises(query, exercises, limit, { aliases: getDictionarySearchAliases() });
 }
