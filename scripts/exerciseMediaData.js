@@ -11,12 +11,6 @@ module.exports = {
         "sourceUrl": "https://www.muscleandstrength.com/exercises/abdominal-air-bike.html",
         "instructions": "Lay supine in a relaxed position with your arms behind your head and legs straight. Exhale as you raise one knee towards your face while driving the opposite elbow to the knee. Once your abs are fully contracted, slowly lower yourself back to the starting position and repeat on the opposite side. Complete for the assigned number of repetitions."
     },
-    "Alternating Dumbbell Curl": {
-        "videoUrl": "https://www.youtube.com/watch?v=UeleXjsE-98",
-        "thumbnailUrl": "https://img.youtube.com/vi/UeleXjsE-98/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/incline-dumbbell-curl.html",
-        "instructions": "Position an incline bench at roughly 55-65 degrees, select the desired weight from the rack, and sit upright with your back flat against the pad. Using a supinated (palms up) grip, take a deep breath and curl both dumbbells towards your shoulders. Once the biceps are fully shortened, slowly lower the weights back to the starting position. Repeat for the desired number of repetitions."
-    },
     "Archer Push-Up": {
         "videoUrl": "https://www.youtube.com/watch?v=KEFQyLkDYtI",
         "thumbnailUrl": "https://img.youtube.com/vi/KEFQyLkDYtI/hqdefault.jpg",
@@ -46,12 +40,6 @@ module.exports = {
         "thumbnailUrl": "https://img.youtube.com/vi/tuwHzzPdaGc/hqdefault.jpg",
         "sourceUrl": "https://www.muscleandstrength.com/exercises/barbell-bench-press.html",
         "instructions": "Lie flat on a bench and set your hands just outside of shoulder width. Set your shoulder blades by pinching them together and driving them into the bench. Take a deep breath and allow your spotter to help you with the lift off in order to maintain tightness through your upper back. Let the weight settle and ensure your upper back remains tight after lift off. Inhale and allow the bar to descend slowly by unlocking the elbows. Lower the bar in a straight line to the base of the sternum (breastbone) and touch the chest. Push the bar back up in a straight line by pressing yourself into the bench,"
-    },
-    "Barbell Curl": {
-        "videoUrl": "https://www.youtube.com/watch?v=UeleXjsE-98",
-        "thumbnailUrl": "https://img.youtube.com/vi/UeleXjsE-98/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/incline-dumbbell-curl.html",
-        "instructions": "Position an incline bench at roughly 55-65 degrees, select the desired weight from the rack, and sit upright with your back flat against the pad. Using a supinated (palms up) grip, take a deep breath and curl both dumbbells towards your shoulders. Once the biceps are fully shortened, slowly lower the weights back to the starting position. Repeat for the desired number of repetitions."
     },
     "Barbell Deadlift": {
         "videoUrl": "https://www.youtube.com/watch?v=wjsu6ceEkAQ",
@@ -88,12 +76,6 @@ module.exports = {
         "thumbnailUrl": "https://img.youtube.com/vi/kHW23afzaUs/hqdefault.jpg",
         "sourceUrl": "https://www.muscleandstrength.com/exercises/machine-t-bar-row.html",
         "instructions": "Lie prone on the pad of a T-Bar machine and grasp the handle with a neutral or pronated grip depending upon preference or programming. Begin the movement by driving the elbows behind the body while retracting the shoulder blades. Pull the weight towards your body until the elbows are at (or just past) the midline and then slowly lower the weight back to the starting position under control. Repeat for the desired number of repetitions."
-    },
-    "Bayesian Curl": {
-        "videoUrl": "https://www.youtube.com/watch?v=UeleXjsE-98",
-        "thumbnailUrl": "https://img.youtube.com/vi/UeleXjsE-98/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/incline-dumbbell-curl.html",
-        "instructions": "Position an incline bench at roughly 55-65 degrees, select the desired weight from the rack, and sit upright with your back flat against the pad. Using a supinated (palms up) grip, take a deep breath and curl both dumbbells towards your shoulders. Once the biceps are fully shortened, slowly lower the weights back to the starting position. Repeat for the desired number of repetitions."
     },
     "Behind-the-Back Shrugs": {
         "videoUrl": "https://www.youtube.com/watch?v=dj2Gm628kas",
@@ -160,12 +142,6 @@ module.exports = {
         "thumbnailUrl": "https://img.youtube.com/vi/6kHg3JAFNFo/hqdefault.jpg",
         "sourceUrl": "https://www.muscleandstrength.com/exercises/weighted-crunch.html",
         "instructions": "Lay supine in a relaxed position with your knees bent. Hold a weight plate directly over your chest and press it to extension. Raise your knees to 90 degrees, at which point they will be perpendicular to the floor. Exhale as you reach towards your toes with the weight plate. Once your abs are fully contracted and your upper back is off the floor, slowly lower yourself back to the starting position. Complete for the assigned number of repetitions."
-    },
-    "Cable Curl": {
-        "videoUrl": "https://www.youtube.com/watch?v=UeleXjsE-98",
-        "thumbnailUrl": "https://img.youtube.com/vi/UeleXjsE-98/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/incline-dumbbell-curl.html",
-        "instructions": "Position an incline bench at roughly 55-65 degrees, select the desired weight from the rack, and sit upright with your back flat against the pad. Using a supinated (palms up) grip, take a deep breath and curl both dumbbells towards your shoulders. Once the biceps are fully shortened, slowly lower the weights back to the starting position. Repeat for the desired number of repetitions."
     },
     "Cable Fly": {
         "videoUrl": "https://www.youtube.com/watch?v=zrnnlaC0kew",
@@ -256,12 +232,6 @@ module.exports = {
         "thumbnailUrl": "https://img.youtube.com/vi/tgDl9PlA4-Q/hqdefault.jpg",
         "sourceUrl": "https://www.muscleandstrength.com/exercises/close-grip-pull-up.html",
         "instructions": "Using a pronated grip, grasp the pull bar with a shoulder width grip. Take a deep breath, squeeze your glutes and brace your abs. Depress the shoulder blades and then drive the elbows straight down to the floor while activating the lats. Pull your chin towards the bar until the lats are fully contracted, then slowly lower yourself back to the start position and repeat for the assigned number of repetitions."
-    },
-    "Concentration Curl": {
-        "videoUrl": "https://www.youtube.com/watch?v=LHDwya1KY8M",
-        "thumbnailUrl": "https://img.youtube.com/vi/LHDwya1KY8M/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/concentration-cur.html",
-        "instructions": "Select the desired weight from the rack, and sit in an upright position on a flat bench. Hinge forward and position your elbow near the base of your knee. Place your free hand on the other knee to stabilize yourself. Using a supinated (palms facing up) grip, take a deep breath and curl the dumbbell towards your shoulder. Once the bicep is fully shortened, slowly lower the weight back to the starting position. Repeat for the desired number of repetitions on both sides."
     },
     "Conventional Deadlift": {
         "videoUrl": "https://www.youtube.com/watch?v=wjsu6ceEkAQ",
@@ -383,12 +353,6 @@ module.exports = {
         "sourceUrl": "https://www.muscleandstrength.com/exercises/dumbbell-flys.html",
         "instructions": "Pick up the dumbbells off the floor using a neutral grip (palms facing in). Position the ends of the dumbbells in your hip crease, and sit down on the bench. To get into position, lay back and keep the weights close to your chest. Once you are in position, take a deep breath, then press the dumbbells to lockout at the top. Slightly retract your shoulder blades, unlock your elbows, and slowly lower the dumbbells laterally while maintaining the angle at your elbow. Once the dumbbells reach chest level, reverse the movement by squeezing your pecs together and bringing the dumbbells back to their "
     },
-    "Dumbbell Curl": {
-        "videoUrl": "https://www.youtube.com/watch?v=UeleXjsE-98",
-        "thumbnailUrl": "https://img.youtube.com/vi/UeleXjsE-98/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/incline-dumbbell-curl.html",
-        "instructions": "Position an incline bench at roughly 55-65 degrees, select the desired weight from the rack, and sit upright with your back flat against the pad. Using a supinated (palms up) grip, take a deep breath and curl both dumbbells towards your shoulders. Once the biceps are fully shortened, slowly lower the weights back to the starting position. Repeat for the desired number of repetitions."
-    },
     "Dumbbell Overhead Tricep Extension": {
         "videoUrl": "https://www.youtube.com/watch?v=NRENeEgaIgA",
         "thumbnailUrl": "https://img.youtube.com/vi/NRENeEgaIgA/hqdefault.jpg",
@@ -491,12 +455,6 @@ module.exports = {
         "sourceUrl": "https://www.muscleandstrength.com/exercises/hack-squat.html",
         "instructions": "Load the machine with the desired weight and position your shoulders and back against the pads. Position your feet at shoulder width, extend your legs, and release the safety handles. Slowly lower the weight by bending your knees until your thighs are approximately at 90 degrees. Reverse the movement by driving into the platform and extending the knees and hips. Repeat for the desired number of repetitions."
     },
-    "Hammer Curl": {
-        "videoUrl": "https://www.youtube.com/watch?v=UeleXjsE-98",
-        "thumbnailUrl": "https://img.youtube.com/vi/UeleXjsE-98/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/incline-dumbbell-curl.html",
-        "instructions": "Position an incline bench at roughly 55-65 degrees, select the desired weight from the rack, and sit upright with your back flat against the pad. Using a supinated (palms up) grip, take a deep breath and curl both dumbbells towards your shoulders. Once the biceps are fully shortened, slowly lower the weights back to the starting position. Repeat for the desired number of repetitions."
-    },
     "Handstand Hold": {
         "videoUrl": "https://www.youtube.com/watch?v=KEFQyLkDYtI",
         "thumbnailUrl": "https://img.youtube.com/vi/KEFQyLkDYtI/hqdefault.jpg",
@@ -568,12 +526,6 @@ module.exports = {
         "thumbnailUrl": "https://img.youtube.com/vi/beazxb8q-SA/hqdefault.jpg",
         "sourceUrl": "https://www.muscleandstrength.com/exercises/incline-dumbbell-flys.html",
         "instructions": "Pick up the dumbbells off the floor using a neutral grip (palms facing in). Position the ends of the dumbbells in your hip crease, and sit down on an incline bench. To get into position, lay back and keep the weights close to your chest. Once you are in position, take a deep breath, then press the dumbbells to lockout at the top. Slightly retract your shoulder blades, unlock your elbows, and slowly lower the dumbbells laterally while maintaining the angle at your elbow. Once the dumbbells reach chest level, reverse the movement by squeezing your pecs together and bringing the dumbbells back to"
-    },
-    "Incline Dumbbell Curl": {
-        "videoUrl": "https://www.youtube.com/watch?v=UeleXjsE-98",
-        "thumbnailUrl": "https://img.youtube.com/vi/UeleXjsE-98/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/incline-dumbbell-curl.html",
-        "instructions": "Position an incline bench at roughly 55-65 degrees, select the desired weight from the rack, and sit upright with your back flat against the pad. Using a supinated (palms up) grip, take a deep breath and curl both dumbbells towards your shoulders. Once the biceps are fully shortened, slowly lower the weights back to the starting position. Repeat for the desired number of repetitions."
     },
     "Incline Dumbbell Fly": {
         "videoUrl": "https://www.youtube.com/watch?v=beazxb8q-SA",
@@ -869,12 +821,6 @@ module.exports = {
         "sourceUrl": "https://www.muscleandstrength.com/exercises/squat.html",
         "instructions": "Set up for the exercise by setting the barbell to just below shoulder height and loading the weight you want to use. Stand under the bar with your feet at about shoulder width apart. Position the bar so that it is resting on the muscles on the top of your back, not on the back of your neck. The bar should feel comfortable. If it doesn't, try adding some padding to the bar. Now take your hands over the back and grip the bar with a wide grip for stability. You should now bend at the knees and straighten your back in preparation to take the weight off the rack. Keeping your back straight and eyes"
     },
-    "Preacher Curl": {
-        "videoUrl": "https://www.youtube.com/watch?v=UeleXjsE-98",
-        "thumbnailUrl": "https://img.youtube.com/vi/UeleXjsE-98/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/incline-dumbbell-curl.html",
-        "instructions": "Position an incline bench at roughly 55-65 degrees, select the desired weight from the rack, and sit upright with your back flat against the pad. Using a supinated (palms up) grip, take a deep breath and curl both dumbbells towards your shoulders. Once the biceps are fully shortened, slowly lower the weights back to the starting position. Repeat for the desired number of repetitions."
-    },
     "Pull-Up": {
         "videoUrl": "https://www.youtube.com/watch?v=1EJ3A3rEtlo",
         "thumbnailUrl": "https://img.youtube.com/vi/1EJ3A3rEtlo/hqdefault.jpg",
@@ -1090,12 +1036,6 @@ module.exports = {
         "thumbnailUrl": "https://img.youtube.com/vi/R2dMsNhN3DE/hqdefault.jpg",
         "sourceUrl": "https://www.muscleandstrength.com/exercises/squat.html",
         "instructions": "Set up for the exercise by setting the barbell to just below shoulder height and loading the weight you want to use. Stand under the bar with your feet at about shoulder width apart. Position the bar so that it is resting on the muscles on the top of your back, not on the back of your neck. The bar should feel comfortable. If it doesn't, try adding some padding to the bar. Now take your hands over the back and grip the bar with a wide grip for stability. You should now bend at the knees and straighten your back in preparation to take the weight off the rack. Keeping your back straight and eyes"
-    },
-    "Spider Curl": {
-        "videoUrl": "https://www.youtube.com/watch?v=UeleXjsE-98",
-        "thumbnailUrl": "https://img.youtube.com/vi/UeleXjsE-98/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/incline-dumbbell-curl.html",
-        "instructions": "Position an incline bench at roughly 55-65 degrees, select the desired weight from the rack, and sit upright with your back flat against the pad. Using a supinated (palms up) grip, take a deep breath and curl both dumbbells towards your shoulders. Once the biceps are fully shortened, slowly lower the weights back to the starting position. Repeat for the desired number of repetitions."
     },
     "Spin Bike": {
         "videoUrl": "https://www.youtube.com/watch?v=vV_sKNCpiVM",
@@ -1360,12 +1300,6 @@ module.exports = {
         "thumbnailUrl": "https://img.youtube.com/vi/paCfxhgW6bI/hqdefault.jpg",
         "sourceUrl": "https://www.muscleandstrength.com/exercises/bent-over-barbell-row.html",
         "instructions": "Assume a standing position while holding the bar using a double overhand grip. Hinge forward until your torso is roughly parallel with the floor (or slightly above) and then begin the movement by driving the elbows behind the body while retracting the shoulder blades. Pull the bar towards your belly button until it touches your body and then slowly lower the bar back to the starting position under control. Repeat for the desired number of repetitions."
-    },
-    "Zottman Curl": {
-        "videoUrl": "https://www.youtube.com/watch?v=rVEwDJdHE2c",
-        "thumbnailUrl": "https://img.youtube.com/vi/rVEwDJdHE2c/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/zottman-curl.html",
-        "instructions": "Select the desired weight from the rack and assume a shoulder width stance. Using a supinated grip, take a deep breath and curl the dumbbells towards your shoulders. Once the biceps are fully shortened, rotate the forearms to a pronated position (palms down) and slowly lower the weight back to the starting position. Repeat for the desired number of repetitions."
     },
     "Back Extension": {
         "videoUrl": "https://www.youtube.com/watch?v=BZMnTSobIAQ",

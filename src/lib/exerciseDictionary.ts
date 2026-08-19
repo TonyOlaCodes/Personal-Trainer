@@ -31,6 +31,11 @@ const { shouldersSearchAliasRows } = require("../../scripts/catalog/shoulders.js
     shouldersSearchAliasRows: () => Array<{ alias: string; name: string; muscleGroup: string }>;
 };
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { bicepsSearchAliasRows } = require("../../scripts/catalog/biceps.js") as {
+    bicepsSearchAliasRows: () => Array<{ alias: string; name: string; muscleGroup: string }>;
+};
+
 export function getDictionaryExercises(): DictionaryExercise[] {
     return EXERCISES;
 }
@@ -41,6 +46,7 @@ export function getDictionarySearchAliases(): Array<{ alias: string; name: strin
         ...chestSearchAliasRows(),
         ...backSearchAliasRows(),
         ...shouldersSearchAliasRows(),
+        ...bicepsSearchAliasRows(),
     ].map((row) => ({ alias: row.alias, name: row.name }));
 }
 

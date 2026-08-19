@@ -80,6 +80,18 @@ const CANONICAL_NAME_OVERRIDES: Record<string, string> = {
     "plate loaded shoulder press": "Plate Loaded Shoulder Press",
     "handstand push up": "Handstand Push-Up",
     "pike push up": "Pike Push-Up",
+    // Biceps catalog preferred spellings
+    "barbell curl": "Barbell Curl",
+    "ez bar curl": "EZ Bar Curl",
+    "dumbbell curl": "Dumbbell Curl",
+    "cable curl": "Cable Curl",
+    "hammer curl": "Hammer Curl",
+    "cross body hammer curl": "Cross Body Hammer Curl",
+    "ez bar preacher curl": "EZ Bar Preacher Curl",
+    "ez bar spider curl": "EZ Bar Spider Curl",
+    "machine bicep curl": "Machine Bicep Curl",
+    "bayesian curl": "Bayesian Curl",
+    "21": "21s",
 };
 
 /**

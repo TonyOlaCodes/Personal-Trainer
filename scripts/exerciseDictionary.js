@@ -12,6 +12,8 @@ const { chestDictionaryEntries } = require("./catalog/chest");
 const { backDictionaryEntries } = require("./catalog/back");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { shouldersDictionaryEntries } = require("./catalog/shoulders");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { bicepsDictionaryEntries } = require("./catalog/biceps");
 
 const EXERCISE_DICTIONARY = [
     // ─── CHEST (canonical catalog) ───────────────────────────────────────────
@@ -23,24 +25,8 @@ const EXERCISE_DICTIONARY = [
     // ─── SHOULDERS (canonical catalog) ───────────────────────────────────────
     ...shouldersDictionaryEntries(),
 
-    // ─── BICEPS ─────────────────────────────────────────────────────────────
-    { name: "Barbell Curl", muscleGroup: "Biceps" },
-    { name: "Barbell Bicep Curl", muscleGroup: "Biceps" },
-    { name: "EZ Bar Curl", muscleGroup: "Biceps" },
-    { name: "Dumbbell Curl", muscleGroup: "Biceps" },
-    { name: "Alternating Dumbbell Curl", muscleGroup: "Biceps" },
-    { name: "Incline Dumbbell Curl", muscleGroup: "Biceps" },
-    { name: "Hammer Curl", muscleGroup: "Biceps" },
-    { name: "Cross-Body Hammer Curl", muscleGroup: "Biceps" },
-    { name: "Preacher Curl", muscleGroup: "Biceps" },
-    { name: "Machine Preacher Curl", muscleGroup: "Biceps" },
-    { name: "Cable Curl", muscleGroup: "Biceps" },
-    { name: "Cable Bicep Curl", muscleGroup: "Biceps" },
-    { name: "Concentration Curl", muscleGroup: "Biceps" },
-    { name: "Spider Curl", muscleGroup: "Biceps" },
-    { name: "Bayesian Curl", muscleGroup: "Biceps" },
-    { name: "21s", muscleGroup: "Biceps" },
-    { name: "Zottman Curl", muscleGroup: "Biceps" },
+    // ─── BICEPS (canonical catalog) ──────────────────────────────────────────
+    ...bicepsDictionaryEntries(),
 
     // ─── TRICEPS ────────────────────────────────────────────────────────────
     { name: "Tricep Pushdown", muscleGroup: "Triceps" },
