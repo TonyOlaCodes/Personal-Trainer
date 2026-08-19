@@ -54,16 +54,7 @@ const CHEST_CATALOG = [
         aliases: ["Decline Bench Press", "Decline BB Bench Press"],
         instructions: "Secure your legs on a decline bench and press from lower chest.",
     },
-    {
-        name: "Close Grip Barbell Bench Press",
-        muscleGroup: "Chest",
-        equipment: "Barbell",
-        movementType: "Press",
-        primaryMuscles: ["chest", "triceps"],
-        secondaryMuscles: ["shoulders"],
-        aliases: ["Close Grip Bench Press", "Close-Grip Bench Press", "Close-Grip Barbell Bench Press"],
-        instructions: "Use a narrower grip than a standard bench press; keep elbows closer to the torso.",
-    },
+    // Close Grip Barbell Bench Press lives in the Triceps catalog.
     {
         name: "Wide Grip Barbell Bench Press",
         muscleGroup: "Chest",
@@ -104,16 +95,7 @@ const CHEST_CATALOG = [
         aliases: [],
         instructions: "Bench press with feet elevated or legs straight to remove leg drive.",
     },
-    {
-        name: "Barbell Floor Press",
-        muscleGroup: "Chest",
-        equipment: "Barbell",
-        movementType: "Press",
-        primaryMuscles: ["chest"],
-        secondaryMuscles: ["triceps", "shoulders"],
-        aliases: ["Floor Press", "BB Floor Press"],
-        instructions: "Press from the floor; upper arms rest on the ground at the bottom.",
-    },
+    // Floor Press (barbell) lives in the Triceps catalog.
     {
         name: "Guillotine Press",
         muscleGroup: "Chest",
@@ -270,15 +252,7 @@ const CHEST_CATALOG = [
         secondaryMuscles: ["shoulders", "triceps"],
         aliases: ["Smith Machine Decline Press"],
     },
-    {
-        name: "Smith Machine Close Grip Bench Press",
-        muscleGroup: "Chest",
-        equipment: "Smith Machine",
-        movementType: "Press",
-        primaryMuscles: ["chest", "triceps"],
-        secondaryMuscles: ["shoulders"],
-        aliases: ["Smith Close Grip Bench Press"],
-    },
+    // Close Grip Smith pressing lives in the Triceps catalog.
 
     // ── Machines ─────────────────────────────────────────────────────────────
     {
@@ -804,8 +778,7 @@ const CHEST_KEY_ALIASES = {
     "paused bench press": "paused barbell bench press",
     "pause bench press": "paused barbell bench press",
     "spoto bench press": "spoto press",
-    "floor press": "barbell floor press",
-    "bb floor press": "barbell floor press",
+    // Barbell floor press lives in Triceps catalog (identity: floor press)
     "guillotine bench press": "guillotine press",
     "neck press": "guillotine press",
 
@@ -843,7 +816,7 @@ const CHEST_KEY_ALIASES = {
     "smith machine incline press": "smith machine incline bench press",
     "smith incline bench press": "smith machine incline bench press",
     "smith machine decline press": "smith machine decline bench press",
-    "smith close grip bench press": "smith machine close grip bench press",
+    "smith close grip bench press": "close grip smith machine bench press",
 
     // Machines
     "chest press machine": "machine chest press",

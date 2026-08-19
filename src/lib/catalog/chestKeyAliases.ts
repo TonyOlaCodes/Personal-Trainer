@@ -16,8 +16,7 @@ export const CHEST_KEY_ALIASES: Record<string, string> = {
     "paused bench press": "paused barbell bench press",
     "pause bench press": "paused barbell bench press",
     "spoto bench press": "spoto press",
-    "floor press": "barbell floor press",
-    "bb floor press": "barbell floor press",
+    // Barbell floor press lives in Triceps catalog (identity: floor press)
     "guillotine bench press": "guillotine press",
     "neck press": "guillotine press",
     "db bench press": "dumbbell bench press",
@@ -51,7 +50,7 @@ export const CHEST_KEY_ALIASES: Record<string, string> = {
     "smith machine incline press": "smith machine incline bench press",
     "smith incline bench press": "smith machine incline bench press",
     "smith machine decline press": "smith machine decline bench press",
-    "smith close grip bench press": "smith machine close grip bench press",
+    "smith close grip bench press": "close grip smith machine bench press",
     "chest press machine": "machine chest press",
     "seated chest press": "machine chest press",
     "incline machine press": "incline machine chest press",

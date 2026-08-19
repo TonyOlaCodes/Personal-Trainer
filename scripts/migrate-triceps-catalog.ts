@@ -1,12 +1,12 @@
 /**
- * Seed missing Chest canonical exercises, then merge historical duplicates onto them.
+ * Seed missing Triceps canonical exercises, then merge historical duplicates onto them.
  *
  * Preserves plan exercises, log sets, PR snapshots and analytics by remapping names
  * through `mergeExercisesIntoTarget` — never hard-deletes workout logs.
  *
  * Run:
- *   npx tsx scripts/migrate-chest-catalog.ts --dry-run
- *   npx tsx scripts/migrate-chest-catalog.ts
+ *   npx tsx scripts/migrate-triceps-catalog.ts --dry-run
+ *   npx tsx scripts/migrate-triceps-catalog.ts
  */
 
 import { PrismaClient } from "@prisma/client";
@@ -14,16 +14,16 @@ import { mergeExercisesIntoTarget } from "../src/lib/mergeExercises";
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const {
-    CHEST_CATALOG,
-    chestMergeTargets,
-} = require("./catalog/chest.js") as {
-    CHEST_CATALOG: Array<{
+    TRICEPS_CATALOG,
+    tricepsMergeTargets,
+} = require("./catalog/triceps.js") as {
+    TRICEPS_CATALOG: Array<{
         name: string;
         muscleGroup: string;
         instructions?: string;
         aliases?: string[];
     }>;
-    chestMergeTargets: () => Array<{
+    tricepsMergeTargets: () => Array<{
         targetName: string;
         targetMuscleGroup: string;
         sourceNames: string[];
@@ -37,7 +37,7 @@ async function seedCanonical() {
     let created = 0;
     let updated = 0;
 
-    for (const entry of CHEST_CATALOG) {
+    for (const entry of TRICEPS_CATALOG) {
         const existing = await prisma.globalExercise.findFirst({
             where: { name: { equals: entry.name, mode: "insensitive" } },
         });
@@ -69,12 +69,23 @@ async function seedCanonical() {
                     data: {
                         name: entry.name,
                         muscleGroup: entry.muscleGroup,
-                        ...(entry.instructions ? { instructions: entry.instructions } : {}),
+                        ...(entry.instructions
+                            ? {
+                                instructions: entry.instructions,
+                                ...(existing.instructions
+                                    && /dip station|cable stack|rope to a cable|lie flat on a bench and set your hands/i.test(
+                                        existing.instructions
+                                    )
+                                    && !/dip|pushdown|skull|overhead|kickback|press/i.test(entry.name)
+                                    ? { videoUrl: null, thumbnailUrl: null }
+                                    : {}),
+                            }
+                            : {}),
                     },
                 });
             }
             updated += 1;
-            console.log(`[seed] update ${existing.name} → ${entry.name}`);
+            console.log(`[seed] update ${existing.name} → ${entry.name} (${existing.muscleGroup} → ${entry.muscleGroup})`);
         }
     }
 
@@ -83,34 +94,68 @@ async function seedCanonical() {
 
 async function mergeAliases() {
     let merges = 0;
-    const targets = chestMergeTargets();
+    const targets = tricepsMergeTargets();
 
-    // Extra historical duplicates that may exist in DB / plans but aren't listed as aliases.
     const extra: Array<{ targetName: string; sourceNames: string[]; targetMuscleGroup: string }> = [
         {
             targetName: "Close Grip Barbell Bench Press",
-            targetMuscleGroup: "Chest",
-            sourceNames: ["Close Grip Bench Press", "Close-Grip Bench Press"],
+            targetMuscleGroup: "Triceps",
+            sourceNames: ["Close Grip Bench Press", "Close-Grip Bench Press", "Close-Grip Barbell Bench Press"],
+        },
+        {
+            targetName: "Close Grip Smith Machine Bench Press",
+            targetMuscleGroup: "Triceps",
+            sourceNames: ["Smith Machine Close Grip Bench Press", "Smith Close Grip Bench Press"],
         },
         {
             targetName: "Floor Press",
             targetMuscleGroup: "Triceps",
-            sourceNames: ["Floor Press", "Barbell Floor Press"],
+            sourceNames: ["Barbell Floor Press", "BB Floor Press"],
         },
         {
-            targetName: "Landmine Chest Press",
-            targetMuscleGroup: "Chest",
-            sourceNames: ["Landmine Press"],
+            targetName: "Straight Bar Tricep Pushdown",
+            targetMuscleGroup: "Triceps",
+            sourceNames: ["Tricep Pushdown", "Triceps Pushdown", "Tricep Pressdown"],
         },
         {
-            targetName: "Weighted Chest Dip",
-            targetMuscleGroup: "Chest",
-            sourceNames: ["Weighted Dip"],
+            targetName: "Rope Tricep Pushdown",
+            targetMuscleGroup: "Triceps",
+            sourceNames: ["Tricep Rope Pushdown", "Rope Pushdown"],
         },
         {
-            targetName: "Wide Grip Push-Up",
-            targetMuscleGroup: "Chest",
-            sourceNames: ["Wide Push-Up", "Wide Pushup"],
+            targetName: "Reverse Grip Tricep Pushdown",
+            targetMuscleGroup: "Triceps",
+            sourceNames: ["Reverse-Grip Tricep Pushdown"],
+        },
+        {
+            targetName: "Cable Overhead Tricep Extension",
+            targetMuscleGroup: "Triceps",
+            sourceNames: ["Overhead Tricep Extension"],
+        },
+        {
+            targetName: "Single Arm Cable Overhead Tricep Extension",
+            targetMuscleGroup: "Triceps",
+            sourceNames: ["Single-Arm Cable Extension", "Single Arm Cable Extension"],
+        },
+        {
+            targetName: "EZ Bar Skull Crusher",
+            targetMuscleGroup: "Triceps",
+            sourceNames: ["Skull Crusher", "Skull Crushers"],
+        },
+        {
+            targetName: "Dumbbell Tricep Kickback",
+            targetMuscleGroup: "Triceps",
+            sourceNames: ["Tricep Kickback", "Dumbbell Kickback"],
+        },
+        {
+            targetName: "Cable Tricep Kickback",
+            targetMuscleGroup: "Triceps",
+            sourceNames: ["Cable Kickback"],
+        },
+        {
+            targetName: "Tate Press",
+            targetMuscleGroup: "Triceps",
+            sourceNames: ["Dumbbell Tate Press"],
         },
     ];
 
@@ -119,13 +164,13 @@ async function mergeAliases() {
         const existing = allTargets.find((t) => t.targetName === row.targetName);
         if (existing) {
             existing.sourceNames = [...new Set([...existing.sourceNames, ...row.sourceNames])];
+            existing.targetMuscleGroup = row.targetMuscleGroup;
         } else {
             allTargets.push(row);
         }
     }
 
     for (const target of allTargets) {
-        // Only merge sources that actually exist as globals or plan/log names.
         const presentSources: string[] = [];
         for (const source of target.sourceNames) {
             if (source.toLowerCase() === target.targetName.toLowerCase()) continue;
@@ -170,42 +215,28 @@ async function mergeAliases() {
     return merges;
 }
 
-async function deactivateOrphanChestAliases() {
-    /**
-     * After merges, leftover GlobalExercise rows whose names are only aliases
-     * (and no longer referenced) can be deleted safely. Plan/log remaps already ran.
-     */
+async function deactivateOrphanTricepsAliases() {
     const aliasNames = new Set<string>();
-    for (const entry of CHEST_CATALOG) {
+    for (const entry of TRICEPS_CATALOG) {
         for (const alias of entry.aliases ?? []) {
             if (alias.toLowerCase() !== entry.name.toLowerCase()) {
                 aliasNames.add(alias);
             }
         }
     }
-    // Common historical spellings
     for (const extra of [
-        "Bench Press",
-        "Incline Bench Press",
-        "Decline Bench Press",
+        "Tricep Pushdown",
+        "Tricep Rope Pushdown",
+        "Reverse-Grip Tricep Pushdown",
+        "Skull Crusher",
+        "Overhead Tricep Extension",
+        "Single-Arm Cable Extension",
+        "Tricep Kickback",
+        "Cable Kickback",
         "Close Grip Bench Press",
         "Close-Grip Bench Press",
-        "Floor Press",
-        "Landmine Press",
-        "Weighted Dip",
-        "Wide Push-Up",
-        "Pushup",
-        "Wall Pushup",
-        "Pec Deck",
-        "Cable Fly",
-        "Low Cable Fly",
-        "High Cable Fly",
-        "Incline Dumbbell Press",
-        "Incline Dumbbell Fly",
-        "Flat Dumbbell Fly",
-        "Chest Fly",
-        "Incline Machine Press",
-        "Smith Machine Incline Press",
+        "Barbell Floor Press",
+        "Smith Machine Close Grip Bench Press",
     ]) {
         aliasNames.add(extra);
     }
@@ -217,8 +248,7 @@ async function deactivateOrphanChestAliases() {
         });
         if (!row) continue;
 
-        // Never delete a row that is itself a canonical catalog name.
-        if (CHEST_CATALOG.some((c) => c.name.toLowerCase() === row.name.toLowerCase())) {
+        if (TRICEPS_CATALOG.some((c) => c.name.toLowerCase() === row.name.toLowerCase())) {
             continue;
         }
 
@@ -243,10 +273,10 @@ async function deactivateOrphanChestAliases() {
 }
 
 async function main() {
-    console.log(DRY_RUN ? "Chest catalog migration (DRY RUN)" : "Chest catalog migration");
+    console.log(DRY_RUN ? "Triceps catalog migration (DRY RUN)" : "Triceps catalog migration");
     const seeded = await seedCanonical();
     const merges = await mergeAliases();
-    const removed = await deactivateOrphanChestAliases();
+    const removed = await deactivateOrphanTricepsAliases();
     console.log(
         `\nDone. seeded+updated=${seeded.created + seeded.updated} (created ${seeded.created}, updated ${seeded.updated}), merge groups=${merges}, orphans removed=${removed}`
     );

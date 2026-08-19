@@ -15,6 +15,7 @@ import { BACK_KEY_ALIASES } from "@/lib/catalog/backKeyAliases";
 import { BICEPS_KEY_ALIASES } from "@/lib/catalog/bicepsKeyAliases";
 import { CHEST_KEY_ALIASES } from "@/lib/catalog/chestKeyAliases";
 import { SHOULDERS_KEY_ALIASES } from "@/lib/catalog/shouldersKeyAliases";
+import { TRICEPS_KEY_ALIASES } from "@/lib/catalog/tricepsKeyAliases";
 
 /** Tokens written as one word in some places and two in others. */
 const COMPOUND_TOKEN_SPLITS: Record<string, string> = {
@@ -84,6 +85,7 @@ const KEY_ALIASES: Record<string, string> = {
     ...BACK_KEY_ALIASES,
     ...SHOULDERS_KEY_ALIASES,
     ...BICEPS_KEY_ALIASES,
+    ...TRICEPS_KEY_ALIASES,
 };
 
 /** Ambiguous plurals where dropping the trailing "s" would change the movement. */

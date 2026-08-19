@@ -14,6 +14,8 @@ const { backDictionaryEntries } = require("./catalog/back");
 const { shouldersDictionaryEntries } = require("./catalog/shoulders");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { bicepsDictionaryEntries } = require("./catalog/biceps");
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { tricepsDictionaryEntries } = require("./catalog/triceps");
 
 const EXERCISE_DICTIONARY = [
     // ─── CHEST (canonical catalog) ───────────────────────────────────────────
@@ -28,24 +30,8 @@ const EXERCISE_DICTIONARY = [
     // ─── BICEPS (canonical catalog) ──────────────────────────────────────────
     ...bicepsDictionaryEntries(),
 
-    // ─── TRICEPS ────────────────────────────────────────────────────────────
-    { name: "Tricep Pushdown", muscleGroup: "Triceps" },
-    { name: "Tricep Rope Pushdown", muscleGroup: "Triceps" },
-    { name: "V-Bar Tricep Pushdown", muscleGroup: "Triceps" },
-    { name: "Reverse-Grip Tricep Pushdown", muscleGroup: "Triceps" },
-    { name: "Skull Crusher", muscleGroup: "Triceps" },
-    { name: "EZ Bar Skull Crusher", muscleGroup: "Triceps" },
-    { name: "Overhead Tricep Extension", muscleGroup: "Triceps" },
-    { name: "Dumbbell Overhead Tricep Extension", muscleGroup: "Triceps" },
-    { name: "Cable Overhead Tricep Extension", muscleGroup: "Triceps" },
-    { name: "Single-Arm Cable Extension", muscleGroup: "Triceps" },
-    // Close Grip Barbell Bench Press is in the Chest catalog (canonical for this movement).
-    { name: "Tricep Dip", muscleGroup: "Triceps" },
-    { name: "Bench Dip", muscleGroup: "Triceps" },
-    { name: "Tricep Kickback", muscleGroup: "Triceps" },
-    { name: "Cable Kickback", muscleGroup: "Triceps" },
-    { name: "JM Press", muscleGroup: "Triceps" },
-    { name: "Tate Press", muscleGroup: "Triceps" },
+    // ─── TRICEPS (canonical catalog) ─────────────────────────────────────────
+    ...tricepsDictionaryEntries(),
 
     // ─── FOREARMS / TRAPS ───────────────────────────────────────────────────
     { name: "Wrist Curl", muscleGroup: "Forearms" },

@@ -155,23 +155,11 @@ module.exports = {
         "sourceUrl": "https://www.muscleandstrength.com/exercises/cable-front-raise.html",
         "instructions": "Assume a shoulder width stance with the cable running between your legs and grasp the handle with both hands using a pronated grip. Inhale, brace your abs, and raise the arms vertically while keeping the elbows slightly bent. Once the arms are parallel with the floor, slowly lower the handle back to the starting position. Repeat for the desired number of repetitions."
     },
-    "Cable Kickback": {
-        "videoUrl": "https://www.youtube.com/watch?v=NRENeEgaIgA",
-        "thumbnailUrl": "https://img.youtube.com/vi/NRENeEgaIgA/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/overhead-tricep-extension.html",
-        "instructions": "Attach a rope to a cable stack as high as possible and assume a standing position. Utilize a split stance, grasp the rope overhead with a neutral grip (palms facing), and lean forward by hinging at the hips. Initiate the movement by extending the elbows and flexing the triceps. Pull the rope downward until the elbows are almost locked out and then slowly lower under control back to the starting position. Repeat for the desired number of repetitions."
-    },
     "Cable Lateral Raise": {
         "videoUrl": "https://www.youtube.com/watch?v=CsnKFGAx0Zc",
         "thumbnailUrl": "https://img.youtube.com/vi/CsnKFGAx0Zc/hqdefault.jpg",
         "sourceUrl": "https://www.muscleandstrength.com/exercises/cable-front-raise.html",
         "instructions": "Assume a shoulder width stance with the cable running between your legs and grasp the handle with both hands using a pronated grip. Inhale, brace your abs, and raise the arms vertically while keeping the elbows slightly bent. Once the arms are parallel with the floor, slowly lower the handle back to the starting position. Repeat for the desired number of repetitions."
-    },
-    "Cable Overhead Tricep Extension": {
-        "videoUrl": "https://www.youtube.com/watch?v=NRENeEgaIgA",
-        "thumbnailUrl": "https://img.youtube.com/vi/NRENeEgaIgA/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/overhead-tricep-extension.html",
-        "instructions": "Attach a rope to a cable stack as high as possible and assume a standing position. Utilize a split stance, grasp the rope overhead with a neutral grip (palms facing), and lean forward by hinging at the hips. Initiate the movement by extending the elbows and flexing the triceps. Pull the rope downward until the elbows are almost locked out and then slowly lower under control back to the starting position. Repeat for the desired number of repetitions."
     },
     "Cable Upright Row": {
         "videoUrl": "https://www.youtube.com/watch?v=kZpdmn_djFI",
@@ -208,18 +196,6 @@ module.exports = {
         "thumbnailUrl": "https://img.youtube.com/vi/1EJ3A3rEtlo/hqdefault.jpg",
         "sourceUrl": "https://www.muscleandstrength.com/exercises/chin-up.html",
         "instructions": "Using a supinated grip, grasp the bar with a shoulder width grip. Take a deep breath, squeeze your glutes and brace your abs. Depress the shoulder blades and then drive the elbows straight down to the floor while activating the lats. Pull your chin towards the bar until the lats are fully contracted, then slowly lower yourself back to the start position and repeat for the assigned number of repetitions."
-    },
-    "Close Grip Bench Press": {
-        "videoUrl": "https://www.youtube.com/watch?v=j-NhORwJDb4",
-        "thumbnailUrl": "https://img.youtube.com/vi/j-NhORwJDb4/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/close-grip-bench-press.html",
-        "instructions": "Lie flat on a bench and set your hands at shoulder width. Set your shoulder blades by pinching them together and driving them into the bench. Take a deep breath and allow your spotter to help you with the lift off in order to maintain tightness through your upper back. Let the weight settle and ensure your upper back remains tight after lift off. Inhale and allow the bar to descend slowly by unlocking the elbows. Lower the bar in a straight line to the base of the sternum (breastbone) and touch the chest. Push the bar back up in a straight line by pressing yourself into the bench, driving your"
-    },
-    "Close-Grip Bench Press": {
-        "videoUrl": "https://www.youtube.com/watch?v=j-NhORwJDb4",
-        "thumbnailUrl": "https://img.youtube.com/vi/j-NhORwJDb4/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/close-grip-bench-press.html",
-        "instructions": "Lie flat on a bench and set your hands at shoulder width. Set your shoulder blades by pinching them together and driving them into the bench. Take a deep breath and allow your spotter to help you with the lift off in order to maintain tightness through your upper back. Let the weight settle and ensure your upper back remains tight after lift off. Inhale and allow the bar to descend slowly by unlocking the elbows. Lower the bar in a straight line to the base of the sternum (breastbone) and touch the chest. Push the bar back up in a straight line by pressing yourself into the bench, driving your"
     },
     "Close-Grip Lat Pulldown": {
         "videoUrl": "https://www.youtube.com/watch?v=5oxviYmdHCY",
@@ -353,12 +329,6 @@ module.exports = {
         "sourceUrl": "https://www.muscleandstrength.com/exercises/dumbbell-flys.html",
         "instructions": "Pick up the dumbbells off the floor using a neutral grip (palms facing in). Position the ends of the dumbbells in your hip crease, and sit down on the bench. To get into position, lay back and keep the weights close to your chest. Once you are in position, take a deep breath, then press the dumbbells to lockout at the top. Slightly retract your shoulder blades, unlock your elbows, and slowly lower the dumbbells laterally while maintaining the angle at your elbow. Once the dumbbells reach chest level, reverse the movement by squeezing your pecs together and bringing the dumbbells back to their "
     },
-    "Dumbbell Overhead Tricep Extension": {
-        "videoUrl": "https://www.youtube.com/watch?v=NRENeEgaIgA",
-        "thumbnailUrl": "https://img.youtube.com/vi/NRENeEgaIgA/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/overhead-tricep-extension.html",
-        "instructions": "Attach a rope to a cable stack as high as possible and assume a standing position. Utilize a split stance, grasp the rope overhead with a neutral grip (palms facing), and lean forward by hinging at the hips. Initiate the movement by extending the elbows and flexing the triceps. Pull the rope downward until the elbows are almost locked out and then slowly lower under control back to the starting position. Repeat for the desired number of repetitions."
-    },
     "Dumbbell Romanian Deadlift": {
         "videoUrl": "https://www.youtube.com/watch?v=CkrqLaDGvOA",
         "thumbnailUrl": "https://img.youtube.com/vi/CkrqLaDGvOA/hqdefault.jpg",
@@ -388,12 +358,6 @@ module.exports = {
         "thumbnailUrl": "https://img.youtube.com/vi/kHW23afzaUs/hqdefault.jpg",
         "sourceUrl": "https://www.muscleandstrength.com/exercises/machine-t-bar-row.html",
         "instructions": "Lie prone on the pad of a T-Bar machine and grasp the handle with a neutral or pronated grip depending upon preference or programming. Begin the movement by driving the elbows behind the body while retracting the shoulder blades. Pull the weight towards your body until the elbows are at (or just past) the midline and then slowly lower the weight back to the starting position under control. Repeat for the desired number of repetitions."
-    },
-    "EZ Bar Skull Crusher": {
-        "videoUrl": "https://www.youtube.com/watch?v=K6MSN4hCDM4",
-        "thumbnailUrl": "https://img.youtube.com/vi/K6MSN4hCDM4/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/ez-bar-skullcrusher.html",
-        "instructions": "Select your desired weight and sit on the edge of a flat bench. To get into position, lay back and keep the bar close to your chest. Once you are supine, press the weight to lockout. Lower the weights towards your head by unlocking the elbows and allowing the ez bar to drop toward your forehead or just above. Once your forearms reach parallel or just below, reverse the movement by extending the elbows while flexing the triceps to lockout the weight. Repeat for the desired number of repetitions."
     },
     "Flat Dumbbell Fly": {
         "videoUrl": "https://www.youtube.com/watch?v=-lcbvOddoi8",
@@ -556,12 +520,6 @@ module.exports = {
         "thumbnailUrl": "https://img.youtube.com/vi/kHW23afzaUs/hqdefault.jpg",
         "sourceUrl": "https://www.muscleandstrength.com/exercises/machine-t-bar-row.html",
         "instructions": "Lie prone on the pad of a T-Bar machine and grasp the handle with a neutral or pronated grip depending upon preference or programming. Begin the movement by driving the elbows behind the body while retracting the shoulder blades. Pull the weight towards your body until the elbows are at (or just past) the midline and then slowly lower the weight back to the starting position under control. Repeat for the desired number of repetitions."
-    },
-    "JM Press": {
-        "videoUrl": "https://www.youtube.com/watch?v=j-NhORwJDb4",
-        "thumbnailUrl": "https://img.youtube.com/vi/j-NhORwJDb4/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/close-grip-bench-press.html",
-        "instructions": "Lie flat on a bench and set your hands at shoulder width. Set your shoulder blades by pinching them together and driving them into the bench. Take a deep breath and allow your spotter to help you with the lift off in order to maintain tightness through your upper back. Let the weight settle and ensure your upper back remains tight after lift off. Inhale and allow the bar to descend slowly by unlocking the elbows. Lower the bar in a straight line to the base of the sternum (breastbone) and touch the chest. Push the bar back up in a straight line by pressing yourself into the bench, driving your"
     },
     "Jumping Pull-Up": {
         "videoUrl": "https://www.youtube.com/watch?v=1EJ3A3rEtlo",
@@ -767,12 +725,6 @@ module.exports = {
         "sourceUrl": "https://www.muscleandstrength.com/exercises/overhead-squat.html",
         "instructions": "Unrack the bar on your back with a snatch grip and push press it overhead to get into position. Once the bar is in position overhead, take a deep breath and sit straight down by simultaneously pushing the hips back and bending the knees. Once your thighs reach parallel with the floor, begin to reverse the movement. Keep your abs braced and drive your feet through the floor. Finish the lift by exhaling as you fully extend the hips and knees."
     },
-    "Overhead Tricep Extension": {
-        "videoUrl": "https://www.youtube.com/watch?v=NRENeEgaIgA",
-        "thumbnailUrl": "https://img.youtube.com/vi/NRENeEgaIgA/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/overhead-tricep-extension.html",
-        "instructions": "Attach a rope to a cable stack as high as possible and assume a standing position. Utilize a split stance, grasp the rope overhead with a neutral grip (palms facing), and lean forward by hinging at the hips. Initiate the movement by extending the elbows and flexing the triceps. Pull the rope downward until the elbows are almost locked out and then slowly lower under control back to the starting position. Repeat for the desired number of repetitions."
-    },
     "Pause Squat": {
         "videoUrl": "https://www.youtube.com/watch?v=R2dMsNhN3DE",
         "thumbnailUrl": "https://img.youtube.com/vi/R2dMsNhN3DE/hqdefault.jpg",
@@ -869,12 +821,6 @@ module.exports = {
         "sourceUrl": "https://www.muscleandstrength.com/exercises/reverse-grip-lat-pull-down.html",
         "instructions": "Attach a wide grip handle to the lat pulldown machine and assume a seated position. Grasp the handle with a supinated grip (double underhand) just inside of shoulder width. Initiate the movement by depressing the shoulder blades and then flexing the elbow while extending the shoulder. Pull the handle towards your body until the elbows are in line with your torso and then slowly lower the handle back to the starting position under control. Repeat for the desired number of repetitions."
     },
-    "Reverse-Grip Tricep Pushdown": {
-        "videoUrl": "https://www.youtube.com/watch?v=LzwgB15UdO8",
-        "thumbnailUrl": "https://img.youtube.com/vi/LzwgB15UdO8/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/rope-tricep-extension.html",
-        "instructions": "Attach a rope to a cable stack as high as possible and assume a standing position. Grasp the rope with a neutral grip (palms facing in) and lean forward slightly by hinging at the hips. Initiate the movement by extending the elbows and flexing the triceps. Pull the rope downward until the elbows are almost locked out and then slowly lower under control back to the starting position. Repeat for the desired number of repetitions."
-    },
     "Ring Dip": {
         "videoUrl": "https://www.youtube.com/watch?v=FG1ENBFsdHU",
         "thumbnailUrl": "https://img.youtube.com/vi/FG1ENBFsdHU/hqdefault.jpg",
@@ -953,12 +899,6 @@ module.exports = {
         "sourceUrl": "https://www.muscleandstrength.com/exercises/one-arm-dumbbell-row.html",
         "instructions": "Assume a standing position while holding a dumbbell in one hand with a neutral grip. Hinge forward until your torso is roughly parallel with the floor (or slightly above) and then begin the movement by driving the elbow behind the body while retracting the shoulder blade. Pull the dumbbell towards your body until the elbow is at (or just past) the midline and then slowly lower the dumbbell back to the starting position under control. Repeat for the desired number of repetitions on both sides."
     },
-    "Single-Arm Cable Extension": {
-        "videoUrl": "https://www.youtube.com/watch?v=NRENeEgaIgA",
-        "thumbnailUrl": "https://img.youtube.com/vi/NRENeEgaIgA/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/overhead-tricep-extension.html",
-        "instructions": "Attach a rope to a cable stack as high as possible and assume a standing position. Utilize a split stance, grasp the rope overhead with a neutral grip (palms facing), and lean forward by hinging at the hips. Initiate the movement by extending the elbows and flexing the triceps. Pull the rope downward until the elbows are almost locked out and then slowly lower under control back to the starting position. Repeat for the desired number of repetitions."
-    },
     "Single-Arm Dumbbell Row": {
         "videoUrl": "https://www.youtube.com/watch?v=YZgVEy6cmaY",
         "thumbnailUrl": "https://img.youtube.com/vi/YZgVEy6cmaY/hqdefault.jpg",
@@ -1006,12 +946,6 @@ module.exports = {
         "thumbnailUrl": "https://img.youtube.com/vi/MQDopvLZOS8/hqdefault.jpg",
         "sourceUrl": "https://www.muscleandstrength.com/exercises/sit-up.html",
         "instructions": "Lay supine in a relaxed position with your knees up and hands across your chest. Exhale and squeeze your abs as you curl your upper body off the floor. Once your torso is perpendicular to the floor, slowly lower yourself back to the starting position. Complete for the assigned number of repetitions."
-    },
-    "Skull Crusher": {
-        "videoUrl": "https://www.youtube.com/watch?v=K6MSN4hCDM4",
-        "thumbnailUrl": "https://img.youtube.com/vi/K6MSN4hCDM4/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/ez-bar-skullcrusher.html",
-        "instructions": "Select your desired weight and sit on the edge of a flat bench. To get into position, lay back and keep the bar close to your chest. Once you are supine, press the weight to lockout. Lower the weights towards your head by unlocking the elbows and allowing the ez bar to drop toward your forehead or just above. Once your forearms reach parallel or just below, reverse the movement by extending the elbows while flexing the triceps to lockout the weight. Repeat for the desired number of repetitions."
     },
     "Smith Machine Bench Press": {
         "videoUrl": "https://www.youtube.com/watch?v=tuwHzzPdaGc",
@@ -1127,12 +1061,6 @@ module.exports = {
         "sourceUrl": "https://www.muscleandstrength.com/exercises/machine-t-bar-row.html",
         "instructions": "Lie prone on the pad of a T-Bar machine and grasp the handle with a neutral or pronated grip depending upon preference or programming. Begin the movement by driving the elbows behind the body while retracting the shoulder blades. Pull the weight towards your body until the elbows are at (or just past) the midline and then slowly lower the weight back to the starting position under control. Repeat for the desired number of repetitions."
     },
-    "Tate Press": {
-        "videoUrl": "https://www.youtube.com/watch?v=j-NhORwJDb4",
-        "thumbnailUrl": "https://img.youtube.com/vi/j-NhORwJDb4/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/close-grip-bench-press.html",
-        "instructions": "Lie flat on a bench and set your hands at shoulder width. Set your shoulder blades by pinching them together and driving them into the bench. Take a deep breath and allow your spotter to help you with the lift off in order to maintain tightness through your upper back. Let the weight settle and ensure your upper back remains tight after lift off. Inhale and allow the bar to descend slowly by unlocking the elbows. Lower the bar in a straight line to the base of the sternum (breastbone) and touch the chest. Push the bar back up in a straight line by pressing yourself into the bench, driving your"
-    },
     "Thruster": {
         "videoUrl": "https://www.youtube.com/watch?v=kHW23afzaUs",
         "thumbnailUrl": "https://img.youtube.com/vi/kHW23afzaUs/hqdefault.jpg",
@@ -1180,30 +1108,6 @@ module.exports = {
         "thumbnailUrl": "https://img.youtube.com/vi/ZQnPQG5d67E/hqdefault.jpg",
         "sourceUrl": "https://www.muscleandstrength.com/exercises/weighted-tricep-dips.html",
         "instructions": "Step up onto the dip station (if possible) and position your hands with a neutral grip. Initiate the dip by unlocking the elbows and slowly lowering the body until the forearms are almost parallel with the floor. Control the descent to parallel and then drive back to the starting position by pushing through the palms. Repeat for the desired number of repetitions."
-    },
-    "Tricep Kickback": {
-        "videoUrl": "https://www.youtube.com/watch?v=ZQnPQG5d67E",
-        "thumbnailUrl": "https://img.youtube.com/vi/ZQnPQG5d67E/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/weighted-tricep-dips.html",
-        "instructions": "Step up onto the dip station (if possible) and position your hands with a neutral grip. Initiate the dip by unlocking the elbows and slowly lowering the body until the forearms are almost parallel with the floor. Control the descent to parallel and then drive back to the starting position by pushing through the palms. Repeat for the desired number of repetitions."
-    },
-    "Tricep Pushdown": {
-        "videoUrl": "https://www.youtube.com/watch?v=KYGarkmUqvk",
-        "thumbnailUrl": "https://img.youtube.com/vi/KYGarkmUqvk/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/cable-tricep-extension-with-v-bar.html",
-        "instructions": "Attach a v-bar to a cable stack as high as possible and assume a standing position. Grasp the v-bar with a semi pronated grip (palms slightly facing) and lean forward slightly by hinging at the hips. Initiate the movement by extending the elbows and flexing the triceps. Pull the handle downward until the elbows are almost locked out and then slowly lower under control back to the starting position. Repeat for the desired number of repetitions."
-    },
-    "Tricep Rope Pushdown": {
-        "videoUrl": "https://www.youtube.com/watch?v=LzwgB15UdO8",
-        "thumbnailUrl": "https://img.youtube.com/vi/LzwgB15UdO8/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/rope-tricep-extension.html",
-        "instructions": "Attach a rope to a cable stack as high as possible and assume a standing position. Grasp the rope with a neutral grip (palms facing in) and lean forward slightly by hinging at the hips. Initiate the movement by extending the elbows and flexing the triceps. Pull the rope downward until the elbows are almost locked out and then slowly lower under control back to the starting position. Repeat for the desired number of repetitions."
-    },
-    "V-Bar Tricep Pushdown": {
-        "videoUrl": "https://www.youtube.com/watch?v=KYGarkmUqvk",
-        "thumbnailUrl": "https://img.youtube.com/vi/KYGarkmUqvk/hqdefault.jpg",
-        "sourceUrl": "https://www.muscleandstrength.com/exercises/cable-tricep-extension-with-v-bar.html",
-        "instructions": "Attach a v-bar to a cable stack as high as possible and assume a standing position. Grasp the v-bar with a semi pronated grip (palms slightly facing) and lean forward slightly by hinging at the hips. Initiate the movement by extending the elbows and flexing the triceps. Pull the handle downward until the elbows are almost locked out and then slowly lower under control back to the starting position. Repeat for the desired number of repetitions."
     },
     "V-Up": {
         "videoUrl": "https://www.youtube.com/watch?v=MQDopvLZOS8",

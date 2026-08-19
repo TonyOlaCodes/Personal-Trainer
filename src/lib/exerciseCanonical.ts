@@ -37,10 +37,11 @@ const CANONICAL_NAME_OVERRIDES: Record<string, string> = {
     "smith machine incline bench press": "Smith Machine Incline Bench Press",
     "incline machine chest press": "Incline Machine Chest Press",
     "landmine chest press": "Landmine Chest Press",
-    "barbell floor press": "Barbell Floor Press",
     "weighted chest dip": "Weighted Chest Dip",
     "wide grip push up": "Wide Grip Push-Up",
     "push up": "Push-Up",
+    "floor press": "Floor Press",
+    "close grip smith machine bench press": "Close Grip Smith Machine Bench Press",
     // Back catalog preferred spellings
     "conventional deadlift": "Conventional Deadlift",
     "barbell row": "Barbell Row",
@@ -92,6 +93,17 @@ const CANONICAL_NAME_OVERRIDES: Record<string, string> = {
     "machine bicep curl": "Machine Bicep Curl",
     "bayesian curl": "Bayesian Curl",
     "21": "21s",
+    // Triceps catalog preferred spellings
+    "straight bar tricep pushdown": "Straight Bar Tricep Pushdown",
+    "rope tricep pushdown": "Rope Tricep Pushdown",
+    "ez bar skull crusher": "EZ Bar Skull Crusher",
+    "cable overhead tricep extension": "Cable Overhead Tricep Extension",
+    "dumbbell overhead tricep extension": "Dumbbell Overhead Tricep Extension",
+    "dumbbell tricep kickback": "Dumbbell Tricep Kickback",
+    "cable tricep kickback": "Cable Tricep Kickback",
+    "jm press": "JM Press",
+    "tate press": "Tate Press",
+    "tricep dip": "Tricep Dip",
 };
 
 /**
