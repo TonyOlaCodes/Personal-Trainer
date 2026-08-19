@@ -17,10 +17,11 @@ import { useVisualViewport } from "@/hooks/useVisualViewportHeight";
 import { exerciseIdentityKey } from "@/lib/exerciseIdentity";
 import {
     EMPTY_EXERCISE_RECORDS,
-    evaluateSetPr,
+    evaluateLiveExercisePrs,
     formatPreviousSetLine,
     type ExerciseRecords,
     type PreviousSessionPerformance,
+    type SetPrResult,
 } from "@/lib/exercisePrs";
 import { EXERCISE_NOTE_MAX_LENGTH } from "@/lib/logExerciseNotesShared";
 import { buildWorkoutMuscleBreakdown } from "@/lib/exerciseMuscles";
@@ -890,6 +891,31 @@ export function WorkoutLogClient({
         () => buildWorkoutMuscleBreakdown(activeExercises),
         [activeExercises]
     );
+
+    /**
+     * Live PRs: each completed set is judged against history + earlier completed sets
+     * in this session. Recomputed on every logs/records change so edits/deletes recalc.
+     */
+    const livePrByExerciseId = useMemo(() => {
+        const result: Record<string, SetPrResult[]> = {};
+        if (!sessionActive) return result;
+
+        for (const ex of activeExercises) {
+            if (isCardio(ex.name, ex.muscleGroup)) continue;
+            const sets = logs[ex.id] ?? [];
+            result[ex.id] = evaluateLiveExercisePrs(
+                sets.map((set) => ({
+                    weightKg: parseFloat(String(set.weightKg)) || 0,
+                    reps: set.reps,
+                    isWarmup: set.isWarmup,
+                    isCompleted: set.isCompleted,
+                })),
+                recordsFor(ex.name)
+            );
+        }
+        return result;
+    }, [sessionActive, activeExercises, logs, exerciseRecords]);
+
     const viewport = useVisualViewport();
 
     const closeExercisePicker = () => {
@@ -1495,17 +1521,7 @@ export function WorkoutLogClient({
                                     const weightNum = parseFloat(String(displayWeight)) || 0;
                                     const repsNum = typeof displayReps === "number" ? displayReps : parseInt(String(displayReps), 10) || 0;
                                     const est1RM = !cardio && !set.isWarmup && weightNum > 0 && repsNum > 0 ? calculateOneRM(weightNum, repsNum) : null;
-                                    const pr = sessionActive && !cardio
-                                        ? evaluateSetPr(
-                                            {
-                                                weightKg: weightNum,
-                                                reps: repsNum,
-                                                isWarmup: set.isWarmup,
-                                                isCompleted: set.isCompleted || hasPerformedSetData(set, cardio),
-                                            },
-                                            recordsFor(ex.name)
-                                        )
-                                        : null;
+                                    const pr = livePrByExerciseId[ex.id]?.[sIdx] ?? null;
 
                                     const setActions = sessionActive ? (
                                         <div className="flex items-center justify-end gap-1 shrink-0">

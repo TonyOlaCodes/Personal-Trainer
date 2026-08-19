@@ -1,9 +1,36 @@
 /**
  * Shared personal-record and previous-session logic.
  *
- * One implementation feeds the live workout screen, the save endpoint, the session
- * review pages and the coach progression views, so a "New Best" badge shown while
- * training is the same judgement that gets persisted on the set.
+ * ============================================================================
+ * PR DEFINITIONS (source of truth — use these everywhere)
+ * ============================================================================
+ *
+ * Weight PR
+ *   Heaviest weight ever successfully completed for that exercise, regardless of
+ *   reps. A later lighter set is never a Weight PR, even with more reps.
+ *   Matching the current heaviest weight is NOT a Weight PR.
+ *
+ * Rep PR
+ *   Highest reps ever completed at that exact weight. Tracked per weight key.
+ *   History at 100kg must not affect the 110kg rep record.
+ *   A brand-new weight with no prior history at that weight is NOT a Rep PR
+ *   (avoids noisy first-time badges). Prefer showing Weight PR / New Best instead.
+ *   Matching the current best reps at that weight is NOT a Rep PR.
+ *
+ * New Best
+ *   Highest estimated 1RM (Brzycki/Epley via calculateOneRM) for the exercise.
+ *   Not every Weight/Rep PR is a New Best — only when estimated 1RM strictly
+ *   exceeds the previous best. Matching the existing best 1RM is NOT a New Best.
+ *
+ * Display priority when one set qualifies for multiple (UI shows one badge):
+ *   1. New Best  2. Weight PR  3. Rep PR
+ * Underlying `kinds` still lists every achievement for persistence/analytics.
+ *
+ * Live / session rules
+ *   Compare each set against (1) historical records and (2) earlier completed
+ *   working sets in the same session. Advance working records after each
+ *   completed set so a later equal/worse set cannot re-badge the same PR.
+ *   Warm-ups and incomplete sets never count. Strictly exceed — never equal.
  *
  * Isomorphic: no Prisma, no server-only imports.
  */
@@ -51,7 +78,7 @@ export interface ExerciseRecords {
     bestWeightKg: number | null;
     /** Reps achieved at `bestWeightKg`. */
     bestWeightReps: number | null;
-    /** Highest reps ever recorded at each weight. */
+    /** Highest reps ever recorded at each exact weight (`weightKey` → reps). */
     bestRepsByWeight: Record<string, number>;
     /** Best estimated one-rep max. */
     bestOneRm: number | null;
@@ -69,10 +96,66 @@ export function weightKey(weightKg: number): string {
     return String(Math.round(weightKg * 100) / 100);
 }
 
-function isWorkingSet(set: HistoricalSetInput): boolean {
+export function isWorkingSet(set: {
+    weightKg?: number | null;
+    reps?: number | null;
+    isWarmup?: boolean | null;
+    isCompleted?: boolean | null;
+}): boolean {
     if (set.isWarmup) return false;
     if (set.isCompleted === false) return false;
+    // Incomplete (undefined/null completed) still counts when caller already filtered
+    // to completed sets; treat explicit false as exclude, otherwise require positive data.
+    if (set.isCompleted !== true && set.isCompleted !== undefined && set.isCompleted !== null) {
+        return false;
+    }
     return (set.weightKg ?? 0) > 0 && (set.reps ?? 0) > 0;
+}
+
+/** Strict completed working set — used for live PR advancement. */
+export function isCompletedWorkingSet(set: {
+    weightKg?: number | null;
+    reps?: number | null;
+    isWarmup?: boolean | null;
+    isCompleted?: boolean | null;
+}): boolean {
+    if (set.isWarmup) return false;
+    if (set.isCompleted !== true) return false;
+    return (set.weightKg ?? 0) > 0 && (set.reps ?? 0) > 0;
+}
+
+export function cloneExerciseRecords(records: ExerciseRecords): ExerciseRecords {
+    return {
+        bestWeightKg: records.bestWeightKg,
+        bestWeightReps: records.bestWeightReps,
+        bestRepsByWeight: { ...records.bestRepsByWeight },
+        bestOneRm: records.bestOneRm,
+    };
+}
+
+/** Fold one completed working set into the running record board. */
+export function applySetToRecords(
+    records: ExerciseRecords,
+    set: { weightKg?: number | null; reps?: number | null }
+): void {
+    const weight = set.weightKg ?? 0;
+    const reps = set.reps ?? 0;
+    if (weight <= 0 || reps <= 0) return;
+
+    if (records.bestWeightKg === null || weight > records.bestWeightKg) {
+        records.bestWeightKg = weight;
+        records.bestWeightReps = reps;
+    } else if (weight === records.bestWeightKg && reps > (records.bestWeightReps ?? 0)) {
+        records.bestWeightReps = reps;
+    }
+
+    const wKey = weightKey(weight);
+    if (reps > (records.bestRepsByWeight[wKey] ?? 0)) {
+        records.bestRepsByWeight[wKey] = reps;
+    }
+
+    const oneRm = calculateOneRM(weight, reps);
+    if (oneRm > (records.bestOneRm ?? 0)) records.bestOneRm = oneRm;
 }
 
 /**
@@ -145,24 +228,7 @@ export function buildExerciseRecords(
         for (const set of session.sets) {
             if (exerciseIdentityKey(set.exerciseName) !== key) continue;
             if (!isWorkingSet(set)) continue;
-
-            const weight = set.weightKg as number;
-            const reps = set.reps as number;
-
-            if (records.bestWeightKg === null || weight > records.bestWeightKg) {
-                records.bestWeightKg = weight;
-                records.bestWeightReps = reps;
-            } else if (weight === records.bestWeightKg && reps > (records.bestWeightReps ?? 0)) {
-                records.bestWeightReps = reps;
-            }
-
-            const wKey = weightKey(weight);
-            if (reps > (records.bestRepsByWeight[wKey] ?? 0)) {
-                records.bestRepsByWeight[wKey] = reps;
-            }
-
-            const oneRm = calculateOneRM(weight, reps);
-            if (oneRm > (records.bestOneRm ?? 0)) records.bestOneRm = oneRm;
+            applySetToRecords(records, set);
         }
     }
 
@@ -193,68 +259,92 @@ export type PrKind = "weight" | "reps" | "oneRm";
 
 export interface SetPrResult {
     isPr: boolean;
-    /** Strongest achievement for this set — one badge only, never a stack. */
+    /** Highest-priority badge to show (New Best > Weight PR > Rep PR). */
     kind: PrKind | null;
     label: string | null;
+    /** Every PR kind this set earned (for persistence / analytics). */
+    kinds: PrKind[];
 }
 
-const NO_PR: SetPrResult = { isPr: false, kind: null, label: null };
+const NO_PR: SetPrResult = { isPr: false, kind: null, label: null, kinds: [] };
+
+const PR_LABELS: Record<PrKind, string> = {
+    oneRm: "🔥 New Best",
+    weight: "🔥 Weight PR",
+    reps: "💪 Rep PR",
+};
+
+/** UI shows one badge; this order is the display priority. */
+const DISPLAY_PRIORITY: PrKind[] = ["oneRm", "weight", "reps"];
+
+function pickDisplayKind(kinds: PrKind[]): PrKind | null {
+    for (const kind of DISPLAY_PRIORITY) {
+        if (kinds.includes(kind)) return kind;
+    }
+    return null;
+}
 
 /**
- * Judges one performed set against all-time records.
+ * Judges one performed set against a record board.
  *
- * Rules (deliberate):
- * - Weight PR  — heavier than your heaviest completed working set ever
- * - Rep PR     — more reps than you've ever done *at that same weight*
- *               (a lighter weight you've never lifted before is not a PR)
- * - Est. 1RM   — only when neither of the above applied
- *
- * `records` must exclude the session being judged, otherwise a set would compare
- * against itself and the badge would flicker off as soon as it is saved.
+ * `records` must already exclude later sets in the same session (and the session
+ * being saved when judging on complete) — otherwise a set competes with itself.
  */
 export function evaluateSetPr(
-    set: { weightKg?: number | null; reps?: number | null; isWarmup?: boolean | null; isCompleted?: boolean | null },
+    set: {
+        weightKg?: number | null;
+        reps?: number | null;
+        isWarmup?: boolean | null;
+        isCompleted?: boolean | null;
+    },
     records: ExerciseRecords | undefined
 ): SetPrResult {
     if (!records) return NO_PR;
     if (set.isWarmup) return NO_PR;
+    // Live workout: only completed sets earn badges. Save path marks completed sets true.
     if (set.isCompleted === false) return NO_PR;
 
     const weight = set.weightKg ?? 0;
     const reps = set.reps ?? 0;
     if (weight <= 0 || reps <= 0) return NO_PR;
 
-    // First ever working set for this movement.
-    if (records.bestWeightKg === null) {
-        return { isPr: true, kind: "weight", label: "🔥 New Best" };
+    const kinds: PrKind[] = [];
+
+    // Weight PR — strictly heavier than heaviest completed working weight ever.
+    if (records.bestWeightKg === null || weight > records.bestWeightKg) {
+        kinds.push("weight");
     }
 
-    // Heavier than you've ever loaded — e.g. 105×5 after a best of 100×5.
-    if (weight > records.bestWeightKg) {
-        return { isPr: true, kind: "weight", label: "🔥 Weight PR" };
-    }
-
-    // Rep PR only at a weight you've already completed before. Doing 90×5 when your
-    // best is 100×5 must stay quiet — a brand-new lighter weight is not a record.
+    // Rep PR — strictly more reps at this exact weight, only if that weight was
+    // established before (first-time weight is not a Rep PR).
     const wKey = weightKey(weight);
     const priorBestAtWeight = records.bestRepsByWeight[wKey];
     if (priorBestAtWeight != null && reps > priorBestAtWeight) {
-        return { isPr: true, kind: "reps", label: "💪 Rep PR" };
+        kinds.push("reps");
     }
 
+    // New Best — strictly higher estimated 1RM than the previous best.
     const oneRm = calculateOneRM(weight, reps);
-    if (records.bestOneRm !== null && oneRm > records.bestOneRm) {
-        return { isPr: true, kind: "oneRm", label: "🔥 Est. 1RM PR" };
+    if (records.bestOneRm === null || oneRm > records.bestOneRm) {
+        kinds.push("oneRm");
     }
 
-    return NO_PR;
+    if (kinds.length === 0) return NO_PR;
+
+    const kind = pickDisplayKind(kinds);
+    return {
+        isPr: true,
+        kind,
+        label: kind ? PR_LABELS[kind] : null,
+        kinds,
+    };
 }
 
 /**
- * Flags PRs across a whole session.
+ * Flags PRs across a whole session in order.
  *
- * Records advance set by set so two identical sets in one session cannot both claim
- * the same record — the first earns it, the second does not.
+ * Records advance after each completed working set so two identical PRs in one
+ * session cannot both claim the badge — the first earns it, the second does not.
  */
 export function evaluateSessionPrs<
     T extends {
@@ -270,44 +360,58 @@ export function evaluateSessionPrs<
 ): Array<{ set: T; pr: SetPrResult }> {
     const working: Record<string, ExerciseRecords> = {};
     for (const [key, records] of Object.entries(recordsByExercise)) {
-        working[key] = {
-            bestWeightKg: records.bestWeightKg,
-            bestWeightReps: records.bestWeightReps,
-            bestRepsByWeight: { ...records.bestRepsByWeight },
-            bestOneRm: records.bestOneRm,
-        };
+        working[key] = cloneExerciseRecords(records);
     }
 
     return sets.map((set) => {
         const key = exerciseIdentityKey(set.exerciseName);
         if (!key) return { set, pr: NO_PR };
 
-        const records = working[key] ?? {
-            bestWeightKg: null,
-            bestWeightReps: null,
-            bestRepsByWeight: {},
-            bestOneRm: null,
-        };
+        const records = working[key] ?? cloneExerciseRecords(EMPTY_EXERCISE_RECORDS);
         working[key] = records;
 
         const pr = evaluateSetPr(set, records);
 
-        const weight = set.weightKg ?? 0;
-        const reps = set.reps ?? 0;
-        if (!set.isWarmup && set.isCompleted !== false && weight > 0 && reps > 0) {
-            if (records.bestWeightKg === null || weight > records.bestWeightKg) {
-                records.bestWeightKg = weight;
-                records.bestWeightReps = reps;
-            } else if (weight === records.bestWeightKg && reps > (records.bestWeightReps ?? 0)) {
-                records.bestWeightReps = reps;
-            }
-            const wKey = weightKey(weight);
-            if (reps > (records.bestRepsByWeight[wKey] ?? 0)) records.bestRepsByWeight[wKey] = reps;
-            const oneRm = calculateOneRM(weight, reps);
-            if (oneRm > (records.bestOneRm ?? 0)) records.bestOneRm = oneRm;
+        // Advance the board for the next set. Save payloads mark completed sets true;
+        // never let warm-ups or empty sets move the records.
+        if (!set.isWarmup && set.isCompleted !== false) {
+            const weight = set.weightKg ?? 0;
+            const reps = set.reps ?? 0;
+            if (weight > 0 && reps > 0) applySetToRecords(records, set);
         }
 
         return { set, pr };
+    });
+}
+
+/**
+ * Live workout helper: evaluate every set of one exercise against history +
+ * earlier completed sets in this session. Re-run after edits/deletes.
+ *
+ * Only `isCompleted === true` sets earn badges and advance the board.
+ */
+export function evaluateLiveExercisePrs<
+    T extends {
+        weightKg?: number | null;
+        reps?: number | null;
+        isWarmup?: boolean | null;
+        isCompleted?: boolean | null;
+    },
+>(sets: T[], baselineRecords: ExerciseRecords | undefined): SetPrResult[] {
+    const records = cloneExerciseRecords(baselineRecords ?? EMPTY_EXERCISE_RECORDS);
+
+    return sets.map((set) => {
+        const normalized = {
+            weightKg: set.weightKg,
+            reps: set.reps,
+            isWarmup: set.isWarmup,
+            isCompleted: set.isCompleted === true,
+        };
+        const pr = evaluateSetPr(normalized, records);
+        if (isCompletedWorkingSet(normalized)) {
+            applySetToRecords(records, normalized);
+        }
+        return pr;
     });
 }
 
