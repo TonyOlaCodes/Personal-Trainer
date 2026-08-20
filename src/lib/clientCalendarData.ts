@@ -12,6 +12,10 @@ import { resolveLogSetExerciseName } from "@/lib/logSetExerciseName";
 import { logSetDisplayOrderBy } from "@/lib/logSetGrouping";
 import { serializePlanWeeksForSchedule, resolveScheduleWeeksForDate } from "@/lib/planScheduleHistory";
 import { resolveOrderFromScheduleWorkout } from "@/lib/logSetExerciseOrder";
+import {
+    listSessionOverridesForUser,
+    sessionOverrideMapKey,
+} from "@/lib/workoutSessionOverrides";
 
 export interface ClientCalendarPayload {
     activePlan: {
@@ -56,6 +60,21 @@ export interface ClientCalendarPayload {
     excusedMissedWorkoutKeys: string[];
     /** Missed sessions frozen before plan edits so past calendar cells stay accurate */
     historicalMissedSessions: HistoricalMissedSession[];
+    /** One-off coach session overrides keyed by `${dateKey}:${workoutId}` */
+    sessionOverrides: Record<
+        string,
+        {
+            workoutName: string | null;
+            exercises: Array<{
+                id: string;
+                name: string;
+                sets: number;
+                reps: string;
+                order: number;
+                weightTargetKg: number | null;
+            }>;
+        }
+    >;
 }
 
 export async function loadClientCalendarData(userId: string): Promise<ClientCalendarPayload> {
@@ -92,7 +111,7 @@ export async function loadClientCalendarData(userId: string): Promise<ClientCale
                 workout: { select: { name: true, id: true } },
                 sets: {
                     include: {
-                        exercise: { select: { name: true, order: true, muscleGroup: true } },
+                        exercise: { select: { name: true, order: true, muscleGroup: true, isCustom: true } },
                     },
                     orderBy: logSetDisplayOrderBy,
                 },
@@ -108,15 +127,33 @@ export async function loadClientCalendarData(userId: string): Promise<ClientCale
     ]);
 
     const activePlan = userPlan?.plan ?? null;
-    const [scheduleRevisions, clientActions, historicalMissedSessions] = await Promise.all([
-        activePlan ? loadPlanScheduleRevisions(activePlan.id) : Promise.resolve([]),
-        getClientAttentionActions(userId),
-        loadHistoricalMissedSessions(
-            userId,
-            activePlan ? { planId: activePlan.id } : undefined
-        ),
-    ]);
+    const [scheduleRevisions, clientActions, historicalMissedSessions, sessionOverrideRows] =
+        await Promise.all([
+            activePlan ? loadPlanScheduleRevisions(activePlan.id) : Promise.resolve([]),
+            getClientAttentionActions(userId),
+            loadHistoricalMissedSessions(
+                userId,
+                activePlan ? { planId: activePlan.id } : undefined
+            ),
+            listSessionOverridesForUser(userId),
+        ]);
     const excusedMissedWorkoutKeys = [...getExcusedMissedWorkoutKeys(clientActions)];
+    const sessionOverrides = Object.fromEntries(
+        sessionOverrideRows.map((row) => [
+            sessionOverrideMapKey(row.dateKey, row.baseWorkoutId),
+            {
+                workoutName: row.workoutName,
+                exercises: row.exercises.map((ex, index) => ({
+                    id: ex.id,
+                    name: ex.name,
+                    sets: ex.sets,
+                    reps: ex.reps,
+                    order: ex.order ?? index,
+                    weightTargetKg: ex.weightTargetKg ?? null,
+                })),
+            },
+        ])
+    );
 
     const serializedWeeks = activePlan
         ? serializePlanWeeksForSchedule(
@@ -176,7 +213,13 @@ export async function loadClientCalendarData(userId: string): Promise<ClientCale
             );
             const scheduleWorkout = scheduleWeeks
                 .flatMap((week) => week.workouts)
-                .find((workout) => workout.id === l.workoutId) ?? null;
+                .find((workout) => workout.id === l.workoutId);
+            const scheduleWorkoutSnapshot = scheduleWorkout
+                ? {
+                      ...scheduleWorkout,
+                      dayOfWeek: scheduleWorkout.dayOfWeek ?? null,
+                  }
+                : null;
 
             const orderByExerciseId = new Map<string, number>();
             let appearanceIndex = 0;
@@ -193,7 +236,7 @@ export async function loadClientCalendarData(userId: string): Promise<ClientCale
                     : resolveOrderFromScheduleWorkout(
                         set.exerciseId,
                         resolveLogSetExerciseName(set),
-                        scheduleWorkout,
+                        scheduleWorkoutSnapshot as Parameters<typeof resolveOrderFromScheduleWorkout>[2],
                         appearanceIndex
                     );
                 orderByExerciseId.set(set.exerciseId, order);
@@ -226,5 +269,6 @@ export async function loadClientCalendarData(userId: string): Promise<ClientCale
         scheduleRevisions,
         excusedMissedWorkoutKeys,
         historicalMissedSessions,
+        sessionOverrides,
     };
 }

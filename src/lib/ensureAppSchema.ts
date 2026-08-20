@@ -4,6 +4,7 @@ import { ensureCheckInScheduleColumns } from "@/lib/checkInSchedule";
 import { ensureDailyMetricsTable, ensureDailyMetricTargetColumns } from "@/lib/dailyMetrics";
 import { ensureUserAccountStatusColumns } from "@/lib/userDeactivation";
 import { ensureCoachClientPauseColumns } from "@/lib/coachClientPause";
+import { ensureWorkoutSessionOverridesTable } from "@/lib/workoutSessionOverrides";
 import { ensureExerciseDictionary } from "@/lib/exerciseDictionary";
 import { ensureUnitSystemColumn } from "@/lib/units";
 import { ensureNotificationPreferenceColumns, ensureNotificationsTable, ensurePendingCoachNotificationsTable } from "@/lib/notifications";
@@ -39,6 +40,7 @@ export async function ensureAppSchema() {
             ensureDbSchema(),
             ensureUserAccountStatusColumns(),
             ensureCoachClientPauseColumns(),
+            ensureWorkoutSessionOverridesTable(),
             ensureCheckInScheduleColumns(),
             ensureDailyMetricTargetColumns(),
             ensureDailyMetricsTable(),

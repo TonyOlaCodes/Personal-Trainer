@@ -90,6 +90,14 @@ interface Props {
     scheduleRevisions?: PlanScheduleRevisionRecord[];
     excusedMissedWorkoutKeys?: string[];
     historicalMissedSessions?: Array<{ dateKey: string; workoutId: string; workoutName: string }>;
+    /** One-off session overrides keyed by `${dateKey}:${workoutId}` */
+    sessionOverrides?: Record<
+        string,
+        {
+            workoutName: string | null;
+            exercises: PlanExercise[];
+        }
+    >;
     coachView?: {
         clientId: string;
         clientName: string;
@@ -145,6 +153,7 @@ export function CalendarClient({
     scheduleRevisions = [],
     excusedMissedWorkoutKeys = [],
     historicalMissedSessions = [],
+    sessionOverrides = {},
     coachView,
     view: controlledView,
     onViewChange,
@@ -352,12 +361,24 @@ export function CalendarClient({
             dateKey: key,
         });
         if (resolved) {
+            const override = sessionOverrides[`${key}:${resolved.id}`];
             return {
                 id: resolved.id,
-                name: resolved.name,
+                name: override?.workoutName?.trim() || resolved.name,
                 dayNumber: resolved.dayNumber,
                 dayOfWeek: resolved.dayOfWeek,
-                exercises: sortPlannedExercises(resolved.exercises),
+                exercises: sortPlannedExercises(
+                    override?.exercises?.length
+                        ? override.exercises.map((ex, index) => ({
+                            id: ex.id,
+                            name: ex.name,
+                            sets: ex.sets,
+                            reps: ex.reps,
+                            order: ex.order ?? index,
+                            weightTargetKg: ex.weightTargetKg ?? null,
+                        }))
+                        : resolved.exercises
+                ),
             };
         }
 
@@ -366,7 +387,7 @@ export function CalendarClient({
         }
 
         return workoutFromLog() ?? workoutFromHistorical();
-    }, [serializedPlanWeeks, scheduleRevisions, planStartedAt, todayDate, historicalMissedByDate, logMap, planWeekCount]);
+    }, [serializedPlanWeeks, scheduleRevisions, planStartedAt, todayDate, historicalMissedByDate, logMap, planWeekCount, sessionOverrides, todayKey]);
 
     /* ─── Calendar Generation ─── */
     const firstDay = new Date(view.year, view.month, 1);
@@ -407,6 +428,18 @@ export function CalendarClient({
     }, [inProgressByDate, selectedDateKey, selectedPlanned]);
     const workoutLogHref = selectedPlanned
         ? `/plans/log/${selectedPlanned.id}?date=${selectedDateKey}${coachView ? `&clientId=${coachView.clientId}` : ""}`
+        : "";
+    const coachReviewHref = selectedPlanned && coachView
+        ? `/plans/log/${selectedPlanned.id}?date=${selectedDateKey}&clientId=${coachView.clientId}&mode=review`
+        : "";
+    const coachLiveHref = selectedPlanned && coachView
+        ? `/plans/log/${selectedPlanned.id}?date=${selectedDateKey}&clientId=${coachView.clientId}&mode=live`
+        : "";
+    const coachEditSessionHref = selectedPlanned && coachView
+        ? `/coach/calendar/session?clientId=${encodeURIComponent(coachView.clientId)}&date=${encodeURIComponent(selectedDateKey)}&workoutId=${encodeURIComponent(selectedPlanned.id)}`
+        : "";
+    const coachEditPlanHref = planId && coachView
+        ? `/plans/create?id=${planId}&clientId=${coachView.clientId}`
         : "";
     const selectedIsExcused = Boolean(
         selectedPlanned
@@ -453,6 +486,11 @@ export function CalendarClient({
     ]);
 
     const selectedStatusStyle = STATUS_CONFIG[selectedStatus];
+    const coachCanEditSession =
+        Boolean(coachEditSessionHref) &&
+        selectedStatus !== "in-progress" &&
+        selectedStatus !== "excused" &&
+        !resumeSession;
 
     const updateWorkoutStatus = useCallback(async (status: "excused" | "missed") => {
         if (!coachView || !selectedPlanned || statusUpdating) return;
@@ -884,26 +922,34 @@ export function CalendarClient({
 
                                 {isCoachView && coachView ? (
                                     <div className="space-y-2">
-                                        <ReturnLink
-                                            href={workoutLogHref}
-                                            className={cn(
-                                                "w-full h-12 text-xs font-black uppercase tracking-[0.15em] group hover:scale-[1.02] transition-all flex items-center justify-center",
-                                                resumeSession || selectedStatus === "in-progress"
-                                                    ? "btn-primary shadow-glow-success bg-success border-success hover:bg-success-600"
-                                                    : "btn-primary shadow-glow-brand"
-                                            )}
-                                        >
-                                            {resumeSession || selectedStatus === "in-progress" ? (
+                                        {resumeSession || selectedStatus === "in-progress" ? (
+                                            <ReturnLink
+                                                href={coachLiveHref || workoutLogHref}
+                                                className="btn-primary w-full h-12 text-xs font-black uppercase tracking-[0.15em] shadow-glow-success bg-success border-success hover:bg-success-600 group hover:scale-[1.02] transition-all flex items-center justify-center"
+                                            >
                                                 <Flame className="w-4 h-4 mr-2 animate-pulse group-hover:scale-110 transition-transform" />
-                                            ) : (
-                                                <PlayCircle className="w-4 h-4 mr-2 group-hover:rotate-12 transition-transform" />
-                                            )}
-                                            {resumeSession || selectedStatus === "in-progress"
-                                                ? "Continue Workout"
-                                                : selectedDateKey < todayKey
-                                                    ? "Log Workout"
-                                                    : "Start Workout"}
-                                        </ReturnLink>
+                                                View Live Workout
+                                            </ReturnLink>
+                                        ) : (
+                                            <ReturnLink
+                                                href={coachReviewHref || workoutLogHref}
+                                                className="btn-primary w-full h-12 text-xs font-black uppercase tracking-[0.15em] shadow-glow-brand group hover:scale-[1.02] transition-all flex items-center justify-center"
+                                            >
+                                                <History className="w-4 h-4 mr-2" />
+                                                Review Workout
+                                            </ReturnLink>
+                                        )}
+
+                                        {coachCanEditSession && (
+                                            <Link
+                                                href={coachEditSessionHref}
+                                                className="btn-secondary w-full h-12 text-xs font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2"
+                                            >
+                                                <PencilLine className="w-4 h-4" />
+                                                Edit Session
+                                            </Link>
+                                        )}
+
                                         <Link
                                             href={`/coach/client/${coachView.clientId}`}
                                             className="btn-secondary w-full h-12 text-xs font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2"
@@ -911,13 +957,13 @@ export function CalendarClient({
                                             <User className="w-4 h-4" />
                                             View Client
                                         </Link>
-                                        {planId && (
+
+                                        {coachEditPlanHref && (
                                             <Link
-                                                href={`/plans/create?id=${planId}&clientId=${coachView.clientId}`}
-                                                className="btn-secondary w-full h-12 text-xs font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2"
+                                                href={coachEditPlanHref}
+                                                className="btn-ghost w-full h-11 text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 text-fg-muted"
                                             >
-                                                <PencilLine className="w-4 h-4" />
-                                                {selectedDateKey >= todayKey ? "Edit Workout" : "Edit Plan"}
+                                                Edit Plan
                                             </Link>
                                         )}
                                     </div>

@@ -139,6 +139,7 @@ export function CoachCalendarClient({ clients, selectedClientId, selectedClientN
                     scheduleRevisions={calendar.scheduleRevisions}
                     excusedMissedWorkoutKeys={calendar.excusedMissedWorkoutKeys}
                     historicalMissedSessions={calendar.historicalMissedSessions}
+                    sessionOverrides={calendar.sessionOverrides}
                     view={calendarView}
                     onViewChange={setCalendarView}
                     initialSelectedDateKey={initialDateKey ?? undefined}

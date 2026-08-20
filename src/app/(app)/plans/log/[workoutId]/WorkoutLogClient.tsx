@@ -352,6 +352,8 @@ export function WorkoutLogClient({
     const localStorageKey = `workout_start_time_${workout.id}_${targetDateStr}${clientId ? `_${clientId}` : ""}`;
     const logSubjectFields = clientId ? { clientId } : {};
     const isCoachForClient = Boolean(clientId);
+    /** Coaches observing from calendar must not start/finish; Correct Log uses mode=edit. */
+    const coachObserver = isCoachForClient && searchParams.get("mode") !== "edit";
 
     const [previousSessions, setPreviousSessions] = useState(initialPreviousSessions);
     const [exerciseRecords, setExerciseRecords] = useState(initialExerciseRecords);
@@ -1203,7 +1205,7 @@ export function WorkoutLogClient({
     };
 
     const handleDiscard = async () => {
-        if (isCoachForClient && sessionActive) {
+        if (coachObserver && sessionActive) {
             handleExitSession();
             return;
         }
@@ -1254,17 +1256,17 @@ export function WorkoutLogClient({
                     disabled={isDiscarding}
                     className={cn(
                         "btn-icon",
-                        sessionActive && !isCoachForClient
+                        sessionActive && !coachObserver
                             ? "text-danger/60 hover:text-danger hover:bg-danger/10"
                             : "text-fg-muted hover:text-fg hover:bg-surface-muted"
                     )}
                     title={
                         sessionActive
-                            ? (isCoachForClient ? "Exit" : "Discard Workout")
+                            ? (coachObserver ? "Exit" : "Discard Workout")
                             : "Back"
                     }
                 >
-                    {sessionActive && !isCoachForClient ? <Trash2 className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
+                    {sessionActive && !coachObserver ? <Trash2 className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
                 </button>
                 <div className="text-center">
                     <h2 className="text-sm font-bold text-fg truncate max-w-[180px]">{workout.name}</h2>
@@ -1275,32 +1277,31 @@ export function WorkoutLogClient({
                         </div>
                     ) : (
                         <p className="text-[10px] text-fg-subtle font-semibold uppercase tracking-widest">
-                            {isCheckingSession ? "Loading..." : "Ready to start"}
+                            {isCheckingSession
+                                ? "Loading..."
+                                : coachObserver
+                                  ? "Coach review"
+                                  : "Ready to start"}
                         </p>
                     )}
                 </div>
                 {sessionActive ? (
-                    isCoachForClient ? (
-                        <div className="flex items-center gap-2">
-                            <button
-                                onClick={handleExitSession}
-                                className="btn-secondary btn-sm px-3"
-                            >
-                                Exit
-                            </button>
-                            <button
-                                onClick={handleInitiateFinish}
-                                disabled={saving}
-                                className="btn-primary btn-sm px-3 shadow-glow-brand"
-                            >
-                                {saving ? "Saving..." : "Finish"}
-                            </button>
-                        </div>
+                    coachObserver ? (
+                        <button
+                            onClick={handleExitSession}
+                            className="btn-secondary btn-sm px-3"
+                        >
+                            Exit
+                        </button>
                     ) : (
                         <button onClick={handleInitiateFinish} disabled={saving} className="btn-primary btn-sm px-4 shadow-glow-brand">
                             Finish
                         </button>
                     )
+                ) : coachObserver ? (
+                    <span className="text-[10px] font-black uppercase tracking-wider text-brand-400 px-2">
+                        Review
+                    </span>
                 ) : (
                     <button
                         onClick={handleStartWorkout}
@@ -1324,8 +1325,10 @@ export function WorkoutLogClient({
                 <div className="max-w-3xl mx-auto space-y-6">
                     {clientName && (
                         <div className="card p-3 border-brand-500/30 bg-brand-950/20 text-center">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">Logging for client</p>
-                            <p className="text-sm font-bold text-fg mt-0.5">{clientName}</p>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">
+                                {sessionActive ? "Live client session" : "Reviewing client session"}
+                            </p>
+                            <p className="text-sm font-bold text-fg">{clientName}</p>
                         </div>
                     )}
 
@@ -1339,9 +1342,13 @@ export function WorkoutLogClient({
                     {!sessionActive && (
                         <div className="card p-4 border-brand-500/20 bg-brand-950/10 space-y-3">
                             <div>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">Workout preview</p>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">
+                                    {coachObserver ? "Session preview" : "Workout preview"}
+                                </p>
                                 <p className="text-sm text-fg-muted mt-1">
-                                    Review sets below, then start when you&apos;re ready.
+                                    {coachObserver
+                                        ? "Planned work for this date. Use Edit Session on the calendar to change programming for this day only."
+                                        : "Review sets below, then start when you're ready."}
                                 </p>
                             </div>
                             <MuscleMap breakdown={muscleBreakdown} />
@@ -1523,7 +1530,7 @@ export function WorkoutLogClient({
                                     const est1RM = !cardio && !set.isWarmup && weightNum > 0 && repsNum > 0 ? calculateOneRM(weightNum, repsNum) : null;
                                     const pr = livePrByExerciseId[ex.id]?.[sIdx] ?? null;
 
-                                    const setActions = sessionActive ? (
+                                    const setActions = sessionActive && !coachObserver ? (
                                         <div className="flex items-center justify-end gap-1 shrink-0">
                                             <button
                                                 onClick={() => updateSet(ex.id, sIdx, { isCompleted: !set.isCompleted })}
@@ -1584,7 +1591,7 @@ export function WorkoutLogClient({
                                                 <input
                                                     type="number"
                                                     readOnly={!sessionActive}
-                                                    disabled={!sessionActive}
+                                                    disabled={!sessionActive || coachObserver}
                                                     {...{ [WORKOUT_SET_INPUT_ATTR]: "" }}
                                                     className={cn(
                                                         "input-sm w-full bg-surface-elevated border-none text-center text-sm font-semibold rounded-lg h-10",
@@ -1605,7 +1612,7 @@ export function WorkoutLogClient({
                                             <input
                                                 type="number"
                                                 readOnly={!sessionActive}
-                                                disabled={!sessionActive}
+                                                disabled={!sessionActive || coachObserver}
                                                 {...{ [WORKOUT_SET_INPUT_ATTR]: "" }}
                                                 className={cn(
                                                     "input-sm w-full bg-surface-elevated border-none text-center text-sm font-semibold rounded-lg h-10 px-0",
@@ -1621,7 +1628,7 @@ export function WorkoutLogClient({
                                             <input
                                                 type="number"
                                                 readOnly={!sessionActive}
-                                                disabled={!sessionActive}
+                                                disabled={!sessionActive || coachObserver}
                                                 {...{ [WORKOUT_SET_INPUT_ATTR]: "" }}
                                                 className={cn(
                                                     "input-sm w-full bg-surface-elevated border-none text-center text-sm font-semibold rounded-lg h-10 px-0",
@@ -1683,7 +1690,7 @@ export function WorkoutLogClient({
                                 )})}
                                         </div>
 
-                                        {sessionActive && (
+                                        {sessionActive && !coachObserver && (
                                 <button
                                     onClick={() => addSet(ex.id)}
                                     className="w-full flex items-center justify-center gap-2 py-2.5 bg-surface-muted/50 border border-dashed border-surface-border rounded-xl text-xs font-semibold text-fg-muted hover:text-brand-400 hover:border-brand-600 transition-all"
@@ -1695,7 +1702,7 @@ export function WorkoutLogClient({
                         </div>
                     )})}
 
-                    {!sessionActive ? null : (
+                    {!sessionActive ? null : coachObserver ? null : (
                     <>
                     <button
                         onClick={() => setIsAddingExercise(true)}
@@ -1889,7 +1896,7 @@ export function WorkoutLogClient({
                 </div>
             )}
 
-            {!sessionActive && (
+            {!sessionActive && !coachObserver && (
             <div className="hidden md:block fixed bottom-0 left-0 right-0 z-40 p-4 pt-3 border-t border-surface-border bg-surface glass md:left-[var(--sidebar-width)] pb-[max(1rem,env(safe-area-inset-bottom))]">
                 <button
                     onClick={handleStartWorkout}

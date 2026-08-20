@@ -31,13 +31,12 @@ export function SessionActions({ logId, workoutId, loggedAt, clientId }: Props) 
                 body: JSON.stringify({ status: "IN_PROGRESS" }),
             });
             if (res.ok) {
-                const dateQuery = loggedAt
-                    ? `?date=${encodeURIComponent(toDateKey(parseLogDate(loggedAt)))}`
-                    : "";
-                const clientQuery = clientId
-                    ? `${dateQuery ? "&" : "?"}clientId=${encodeURIComponent(clientId)}`
-                    : "";
-                router.push(appendReturnTo(`/plans/log/${workoutId}${dateQuery}${clientQuery}`, returnTo));
+                const params = new URLSearchParams();
+                if (loggedAt) params.set("date", toDateKey(parseLogDate(loggedAt)));
+                if (clientId) params.set("clientId", clientId);
+                params.set("mode", "edit");
+                const query = params.toString();
+                router.push(appendReturnTo(`/plans/log/${workoutId}${query ? `?${query}` : ""}`, returnTo));
                 router.refresh();
             } else {
                 alert("Failed to reopen session. Try again.");
@@ -97,7 +96,7 @@ export function SessionActions({ logId, workoutId, loggedAt, clientId }: Props) 
                 )} />
                 <Edit3 className={cn("w-4 h-4 relative z-10 transition-transform duration-500 group-hover:rotate-12", editing && "animate-spin")} />
                 <span className="relative z-10 font-black uppercase tracking-widest text-[10px]">
-                    {editing ? "Reopening..." : "Edit Session"}
+                    {editing ? "Reopening..." : "Correct Log"}
                 </span>
             </button>
         </div>

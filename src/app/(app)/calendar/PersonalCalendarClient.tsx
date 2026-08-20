@@ -46,6 +46,7 @@ export function PersonalCalendarClient({ calendar, coachId }: Props) {
                 scheduleRevisions={calendar.scheduleRevisions}
                 excusedMissedWorkoutKeys={calendar.excusedMissedWorkoutKeys}
                 historicalMissedSessions={calendar.historicalMissedSessions}
+                sessionOverrides={calendar.sessionOverrides}
                 coachId={coachId}
                 view={calendarView}
                 onViewChange={setCalendarView}

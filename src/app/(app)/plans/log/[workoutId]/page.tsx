@@ -21,6 +21,10 @@ import {
 import { exerciseIdentityKey } from "@/lib/exerciseIdentity";
 import { canonicalExerciseName } from "@/lib/exerciseCanonical";
 import { getLogExerciseNotes } from "@/lib/logExerciseNotes";
+import {
+    applySessionOverrideToPlanned,
+    getSessionOverride,
+} from "@/lib/workoutSessionOverrides";
 
 export const metadata = { title: "Logging session" };
 const NEW_ACCOUNT_WORKOUT_HINT_DAYS = 30;
@@ -95,6 +99,24 @@ export default async function WorkoutLogPage({
     if (!workout) notFound();
 
     const dateKey = date ? toDateKey(parseLogDate(date)) : toDateKey(new Date());
+    const sessionOverride = await getSessionOverride(subjectUserId, dateKey, workout.id);
+    const plannedForSession = applySessionOverrideToPlanned(
+        {
+            id: workout.id,
+            name: workout.name,
+            dayNumber: workout.dayNumber,
+            dayOfWeek: (workout as { dayOfWeek?: number | null }).dayOfWeek ?? null,
+            exercises: workout.exercises.map((ex) => ({
+                id: ex.id,
+                name: ex.name,
+                sets: ex.sets,
+                reps: ex.reps,
+                order: ex.order,
+                weightTargetKg: ex.weightTargetKg ?? null,
+            })),
+        },
+        sessionOverride
+    );
     const { start: dayStart, end: dayEnd } = getLocalDayBounds(parseLogDate(dateKey));
 
     const activeLog = await prisma.workoutLog.findFirst({
@@ -119,7 +141,7 @@ export default async function WorkoutLogPage({
     const history = await loadWorkoutHistorySessions(subjectUserId, { excludeLogId: activeLog?.id });
 
     const historyExerciseNames = [
-        ...workout.exercises.map((exercise) => exercise.name),
+        ...plannedForSession.exercises.map((exercise) => exercise.name),
         ...(activeLog?.sets ?? []).map((set) => resolveLogSetExerciseName(set)),
     ];
 
@@ -138,7 +160,9 @@ export default async function WorkoutLogPage({
 
     const initialExerciseNotes = activeLog ? await getLogExerciseNotes(activeLog.id) : {};
 
-    const mediaByName = await getExerciseMediaByNames(workout.exercises.map((exercise) => exercise.name));
+    const mediaByName = await getExerciseMediaByNames(
+        plannedForSession.exercises.map((exercise) => exercise.name)
+    );
     const exerciseMedia = Object.fromEntries(mediaByName.entries());
 
     const initialActiveLog = activeLog
@@ -166,18 +190,29 @@ export default async function WorkoutLogPage({
             <Suspense fallback={<div className="min-h-screen bg-surface" />}>
                 <WorkoutLogClient
                 workout={{
-                    id: workout.id,
-                    name: workout.name,
-                    exercises: workout.exercises.map((ex) => ({
-                        id: ex.id,
-                        name: canonicalExerciseName(ex.name) || ex.name,
-                        sets: ex.sets,
-                        reps: ex.reps,
-                        weightTargetKg: ex.weightTargetKg,
-                        notes: ex.notes,
-                        order: ex.order,
-                        muscleGroup: ex.muscleGroup,
-                    })),
+                    id: plannedForSession.id,
+                    name: plannedForSession.name,
+                    exercises: plannedForSession.exercises.map((ex, index) => {
+                        const base = workout.exercises.find((row) => row.id === ex.id);
+                        const resolvedId = base
+                            ? ex.id
+                            : ex.id.startsWith("new-") || ex.id.includes(":sub")
+                              ? ex.id
+                              : `new-${ex.id}`;
+                        return {
+                            id: resolvedId,
+                            name: canonicalExerciseName(ex.name) || ex.name,
+                            sets: ex.sets,
+                            reps: ex.reps,
+                            weightTargetKg: ex.weightTargetKg,
+                            notes:
+                                sessionOverride?.exercises.find((row) => row.id === ex.id)?.notes ??
+                                base?.notes ??
+                                null,
+                            order: ex.order ?? index,
+                            muscleGroup: base?.muscleGroup ?? null,
+                        };
+                    }),
                 }}
                 exerciseMedia={exerciseMedia}
                 logDate={date}
