@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import {
     Trophy, MessageSquare, Loader2, Lock, Dumbbell, ChevronRight,
     Calendar, Activity, ExternalLink, Instagram,
@@ -150,7 +150,6 @@ function formatSocialHref(key: keyof SocialLinks, value: string): string {
 }
 
 export function PublicProfileClient({ userId }: Props) {
-    const router = useRouter();
     const searchParams = useSearchParams();
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
