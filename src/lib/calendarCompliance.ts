@@ -1,6 +1,7 @@
 import { APP_TIMEZONE } from "@/lib/appTimezone";
 import { getPlannedWorkoutForDate, type ActiveUserPlanLike, isDateBeforePlanStart } from "@/lib/planSchedule";
 import { getLocalTimeParts } from "@/lib/coachNotificationSchedule";
+import { isRestPlanWorkout } from "@/lib/planTrainingTarget";
 import { parseLogDate, toDateKey } from "@/lib/utils";
 
 export interface CalendarComplianceInput {
@@ -21,7 +22,10 @@ export interface CalendarComplianceResult {
 }
 
 export interface CalendarComplianceOptions {
-    /** Coach view: exclude today from % until the client logs today's planned session. */
+    /**
+     * @deprecated No longer used — coach and client calendars share the same rules.
+     * Kept optional so existing call sites compile until cleaned up.
+     */
     excludeTodayUntilLogged?: boolean;
     /** When range extends past today, pass the real "today" for schedule + today rules. Defaults to range end. */
     referenceToday?: Date;
@@ -118,13 +122,20 @@ export function computeComplianceForMonth(
     const rangeOptions: CalendarComplianceOptions = {
         ...options,
         referenceToday: reference,
-        excludeTodayUntilLogged: isCurrentMonth ? options?.excludeTodayUntilLogged : false,
     };
 
     return computeWorkoutCompliance(input, monthStart, rangeEnd, rangeOptions);
 }
 
-/** Planned workouts due in range; completed = logged that day. */
+/**
+ * Planned training sessions due in range.
+ * - Completed logs count as completed
+ * - Missed past sessions count against %
+ * - Excused sessions are excluded (do not help or hurt %)
+ * - Rest / empty days are skipped
+ * - Future sessions beyond rangeEnd are not counted
+ * - In-progress (not completed) does not count as completed
+ */
 export function computeWorkoutCompliance(
     input: CalendarComplianceInput,
     rangeStart: Date,
@@ -146,7 +157,6 @@ export function computeWorkoutCompliance(
     const startKey = toDateKey(rangeStart);
     const endKey = toDateKey(rangeEnd);
     const todayKey = toDateKey(referenceToday);
-    const excludeTodayUntilLogged = options?.excludeTodayUntilLogged ?? false;
 
     let completed = 0;
     let due = 0;
@@ -156,17 +166,19 @@ export function computeWorkoutCompliance(
 
         const day = parseLogDate(dateKey);
         const planned = getPlannedWorkoutForDate(activeUserPlan, day, { today: referenceToday });
-        if (!planned) continue;
+        if (!planned || isRestPlanWorkout(planned)) continue;
 
         const slotKey = `${dateKey}:${planned.id}`;
         const isLogged = loggedWorkoutSet.has(slotKey) || loggedSet.has(dateKey);
         const isExcused = !isLogged && excusedSet.has(slotKey);
-        if (excludeTodayUntilLogged && dateKey === todayKey && !isLogged && !isExcused) {
+        // Excused sessions do not enter the completion ratio at all.
+        if (isExcused) {
+            countedSlots.add(slotKey);
             continue;
         }
 
         due++;
-        if (isLogged || isExcused) {
+        if (isLogged) {
             completed++;
         }
         countedSlots.add(slotKey);
@@ -180,13 +192,14 @@ export function computeWorkoutCompliance(
 
         const isLogged = loggedWorkoutSet.has(slotKey);
         const isExcused = excusedSet.has(slotKey);
-        if (excludeTodayUntilLogged && session.dateKey === todayKey && !isLogged && !isExcused) {
+        if (isExcused) {
+            countedSlots.add(slotKey);
             continue;
         }
 
         due++;
         countedSlots.add(slotKey);
-        if (isLogged || isExcused) {
+        if (isLogged) {
             completed++;
         }
     }
@@ -210,7 +223,7 @@ export function computeWorkoutCompliance(
     return { completed, due, percent };
 }
 
-/** True when today has a planned workout that is not logged yet (coach % waits until done or next day). */
+/** True when today has a planned workout that is not logged yet. */
 export function hasPendingTodayWorkout(input: CalendarComplianceInput, today: Date): boolean {
     const activeUserPlan = toActiveUserPlan(input);
     if (!activeUserPlan) return false;
@@ -218,7 +231,8 @@ export function hasPendingTodayWorkout(input: CalendarComplianceInput, today: Da
     const todayKey = toDateKey(today);
     if (input.loggedDates.some((l) => l.date === todayKey)) return false;
 
-    return Boolean(getPlannedWorkoutForDate(activeUserPlan, parseLogDate(todayKey), { today }));
+    const planned = getPlannedWorkoutForDate(activeUserPlan, parseLogDate(todayKey), { today });
+    return Boolean(planned && !isRestPlanWorkout(planned));
 }
 
 export function computeWeeklyCompliance(
@@ -243,9 +257,10 @@ export function computeMonthlyCompliance(
     });
 }
 
+/** Colour bands for monthly calendar completion %. */
 export function complianceTone(percent: number | null): "success" | "warning" | "danger" | "muted" {
     if (percent === null) return "muted";
-    if (percent >= 100) return "success";
-    if (percent >= 75) return "warning";
+    if (percent >= 80) return "success";
+    if (percent >= 50) return "warning";
     return "danger";
 }

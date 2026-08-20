@@ -619,7 +619,6 @@ export function CalendarClient({
                     complianceInput={complianceInput}
                     calendarView={view}
                     now={now}
-                    excludeTodayUntilLogged={isCoachView}
                 />
 
                 <div className="card overflow-hidden shadow-glow-sm border-brand-500/10">
@@ -722,10 +721,6 @@ export function CalendarClient({
                                                     {dayLogs && dayLogs.length > 1 ? ` +${dayLogs.length - 1}` : ""}
                                                 </span>
                                             </div>
-                                        ) : isAfterPlan ? null : status === "rest" ? (
-                                            <span className="text-[7px] sm:text-[8px] font-black uppercase tracking-widest text-fg-subtle/50">
-                                                Rest
-                                            </span>
                                         ) : null}
                                     </div>
 
@@ -1064,7 +1059,7 @@ export function CalendarClient({
 
                 {/* Legend */}
                 <div className="card p-4 flex flex-wrap gap-x-4 gap-y-2 justify-center bg-surface-muted/20 border-surface-border/40">
-                    {(["completed", "today", "upcoming", "in-progress", "missed", "excused", "rest"] as DayWorkoutStatus[]).map((status) => (
+                    {(["completed", "in-progress", "missed", "excused"] as DayWorkoutStatus[]).map((status) => (
                         <div key={status} className="flex items-center gap-1.5">
                             <div className={cn("w-1.5 h-1.5 rounded-full", STATUS_CONFIG[status].dot.split(" ")[0])} />
                             <span className="text-[8px] font-black uppercase tracking-tighter text-fg-subtle">
