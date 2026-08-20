@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getUserPinnedExercises } from "@/lib/pinnedExercises";
 import {
     ensureProfileExtendedColumns,
+    getUserProfilePrivacy,
     getUserSocialLinks,
     hasSocialLinks,
     type SocialLinks,
@@ -11,9 +12,12 @@ import { getPresenceIndicator } from "@/lib/userPresence";
 import { withResolvedAvatar } from "@/lib/uploadUrls";
 import { getAchievementSummary, type AchievementDisplayItem } from "@/lib/achievements";
 import { getWorkoutStreak } from "@/lib/workoutAdherenceStreak";
-import { resolveLogSetExerciseName } from "@/lib/logSetExerciseName";
 import { isInactiveAccount } from "@/lib/userDeactivation";
 import { getNickname, loadNicknameMap, pickDisplayName } from "@/lib/userNicknames";
+import { loadWorkoutHistorySessions } from "@/lib/workoutHistory";
+import { buildExerciseRecords } from "@/lib/exercisePrs";
+import { canonicalExerciseName } from "@/lib/exerciseCanonical";
+import { exerciseIdentityKey } from "@/lib/exerciseIdentity";
 
 export { getWorkoutStreak };
 
@@ -166,6 +170,9 @@ export interface PublicProfilePersonalRecord {
     weightKg: number;
     reps: number;
     loggedAt: string;
+    /** Session where this best weight was logged, when known. */
+    workoutLogId?: string | null;
+    isPr: boolean;
 }
 
 export interface PublicProfileActivityItem {
@@ -173,6 +180,8 @@ export interface PublicProfileActivityItem {
     workoutLogId: string;
     workoutName: string;
     loggedAt: string;
+    exerciseCount: number;
+    setCount: number;
 }
 
 export interface PublicProfileCoach {
@@ -223,6 +232,8 @@ export interface BuiltPublicProfile {
     bio: string | null;
     streak: number | null;
     totalWorkouts: number | null;
+    /** Completed sets marked as PRs — same source as achievements. */
+    totalPrs: number | null;
     onlineStatus: { level: string; label: string } | null;
     mutualCoach: PublicProfileCoach | null;
     coachedBy: PublicProfileCoachedBy | null;
@@ -230,6 +241,8 @@ export interface BuiltPublicProfile {
     achievementSummary: PublicAchievementSummary;
     plans: PublicProfilePlan[];
     activityFeed: PublicProfileActivityItem[];
+    /** Total completed workouts available for activity (may exceed feed length). */
+    activityTotal: number;
     socialLinks: SocialLinks | null;
     coachClients: PublicProfileCoachClient[];
 }
@@ -251,61 +264,97 @@ export function formatPublicUsername(name: string, userId: string, customUsernam
     return `athlete${userId.slice(-6).toLowerCase()}`;
 }
 
-const PUBLIC_ACTIVITY_LIMIT = 3;
+const PUBLIC_ACTIVITY_LIMIT = 10;
 
-async function buildPublicActivityFeed(userId: string): Promise<PublicProfileActivityItem[]> {
-    const logs = await prisma.workoutLog.findMany({
-        where: { userId, status: "COMPLETED" },
-        include: { workout: { select: { name: true } } },
-        orderBy: { loggedAt: "desc" },
-        take: PUBLIC_ACTIVITY_LIMIT,
+async function buildPublicActivityFeed(userId: string): Promise<{
+    items: PublicProfileActivityItem[];
+    total: number;
+}> {
+    const [logs, total] = await Promise.all([
+        prisma.workoutLog.findMany({
+            where: { userId, status: "COMPLETED" },
+            include: {
+                workout: { select: { name: true } },
+                sets: {
+                    where: { isWarmup: false },
+                    select: { exerciseId: true, isCompleted: true },
+                },
+            },
+            orderBy: { loggedAt: "desc" },
+            take: PUBLIC_ACTIVITY_LIMIT,
+        }),
+        prisma.workoutLog.count({ where: { userId, status: "COMPLETED" } }),
+    ]);
+
+    const items = logs.map((log) => {
+        const exerciseIds = new Set(log.sets.map((set) => set.exerciseId));
+        const setCount = log.sets.filter((set) => set.isCompleted).length || log.sets.length;
+        return {
+            id: log.id,
+            workoutLogId: log.id,
+            workoutName: log.workout?.name?.trim() || "Workout",
+            loggedAt: log.loggedAt.toISOString(),
+            exerciseCount: exerciseIds.size,
+            setCount,
+        };
     });
 
-    return logs.map((log) => ({
-        id: log.id,
-        workoutLogId: log.id,
-        workoutName: log.workout?.name?.trim() || "Workout",
-        loggedAt: log.loggedAt.toISOString(),
-    }));
+    return { items, total };
 }
 
-async function getPersonalRecordsForProfile(userId: string, pinned: string[]): Promise<PublicProfilePersonalRecord[]> {
+async function getPersonalRecordsForProfile(
+    userId: string,
+    pinned: string[]
+): Promise<PublicProfilePersonalRecord[]> {
     if (pinned.length === 0) return [];
 
-    const sets = await prisma.logSet.findMany({
-        where: {
-            isWarmup: false,
-            weightKg: { gt: 0 },
-            workoutLog: { userId, status: "COMPLETED" },
-        },
-        include: {
-            exercise: { select: { name: true } },
-            workoutLog: { select: { loggedAt: true } },
-        },
-        orderBy: [{ weightKg: "desc" }, { workoutLog: { loggedAt: "desc" } }],
-    });
-
-    const bestByExercise = new Map<string, (typeof sets)[number]>();
-    for (const set of sets) {
-        const name = resolveLogSetExerciseName(set);
-        if (!name || name === "Unknown") continue;
-        const key = name.toLowerCase();
-        if (!bestByExercise.has(key)) bestByExercise.set(key, set);
-    }
-
+    const history = await loadWorkoutHistorySessions(userId);
     const records: PublicProfilePersonalRecord[] = [];
+
     for (const pin of pinned) {
-        const set = bestByExercise.get(pin.toLowerCase());
-        if (!set || set.weightKg == null) continue;
+        const displayName = canonicalExerciseName(pin) || pin.trim();
+        const key = exerciseIdentityKey(displayName);
+        if (!key) continue;
+
+        const exRecords = buildExerciseRecords(history, displayName);
+        if (exRecords.bestWeightKg == null || exRecords.bestWeightKg <= 0) continue;
+
+        let workoutLogId: string | null = null;
+        let loggedAt = new Date(0).toISOString();
+        const targetWeight = exRecords.bestWeightKg;
+        const targetReps = exRecords.bestWeightReps ?? 0;
+
+        for (const session of history) {
+            for (const set of session.sets) {
+                if (exerciseIdentityKey(set.exerciseName) !== key) continue;
+                if (set.isWarmup || !set.isCompleted) continue;
+                if (set.weightKg == null) continue;
+                if (Math.abs(set.weightKg - targetWeight) > 0.001) continue;
+                if (targetReps > 0 && (set.reps ?? 0) !== targetReps) continue;
+                workoutLogId = session.logId;
+                loggedAt = session.loggedAt;
+                break;
+            }
+            if (workoutLogId) break;
+        }
+
         records.push({
-            exerciseName: resolveLogSetExerciseName(set),
-            weightKg: Math.round(set.weightKg * 100) / 100,
-            reps: set.reps ?? 0,
-            loggedAt: set.workoutLog.loggedAt.toISOString(),
+            exerciseName: displayName,
+            weightKg: Math.round(targetWeight * 100) / 100,
+            reps: targetReps,
+            loggedAt,
+            workoutLogId,
+            isPr: true,
         });
     }
 
     return records;
+}
+
+async function countPersonalRecordSets(userId: string): Promise<number> {
+    return prisma.logSet.count({
+        where: { isPR: true, workoutLog: { userId, status: "COMPLETED" } },
+    });
 }
 
 async function getCoachedBy(
@@ -459,6 +508,7 @@ export async function buildPublicProfileData(
             bio: null,
             streak: null,
             totalWorkouts: null,
+            totalPrs: null,
             onlineStatus: presence
                 ? { level: presence.level, label: presence.label }
                 : null,
@@ -472,6 +522,7 @@ export async function buildPublicProfileData(
             },
             plans: [],
             activityFeed: [],
+            activityTotal: 0,
             socialLinks: null,
             coachClients: [],
         };
@@ -479,6 +530,7 @@ export async function buildPublicProfileData(
 
     let streak: number | null = null;
     let totalWorkouts: number | null = null;
+    let totalPrs: number | null = null;
     let achievementSummary: PublicAchievementSummary = {
         totalUnlocked: 0,
         totalAchievements: 0,
@@ -487,31 +539,42 @@ export async function buildPublicProfileData(
     let personalRecords: PublicProfilePersonalRecord[] = [];
     let plans: PublicProfilePlan[] = [];
     let activityFeed: PublicProfileActivityItem[] = [];
+    let activityTotal = 0;
     let mutualCoach: PublicProfileCoach | null = null;
     let coachClients: PublicProfileCoachClient[] = [];
+    let bio: string | null = target.bio?.trim() ? target.bio.trim() : null;
+    let onlineStatus = presence
+        ? { level: presence.level, label: presence.label }
+        : null;
+    let resolvedSocialLinks = hasSocialLinks(socialLinks) ? socialLinks : null;
 
     const [
         streakValue,
         total,
+        prTotal,
         achievementSummaryValue,
         personalRecordsValue,
         rawPlans,
-        activityFeedValue,
+        activityFeedResult,
         mutualCoachValue,
         coachClientsValue,
+        privacy,
     ] = await Promise.all([
         getWorkoutStreak(targetUserId),
         prisma.workoutLog.count({ where: { userId: targetUserId, status: "COMPLETED" } }),
+        countPersonalRecordSets(targetUserId),
         getAchievementSummary(targetUserId),
         getPersonalRecordsForProfile(targetUserId, pinned),
         getPublicPlansForUser(targetUserId),
         buildPublicActivityFeed(targetUserId),
         getMutualCoach(viewerId, target.coachId),
         isCoachProfile ? getPublicCoachClients(targetUserId, viewerId) : Promise.resolve([]),
+        getUserProfilePrivacy(targetUserId),
     ]);
 
     streak = streakValue;
     totalWorkouts = total;
+    totalPrs = prTotal;
     achievementSummary = {
         totalUnlocked: achievementSummaryValue.totalUnlocked,
         totalAchievements: achievementSummaryValue.totalAchievements,
@@ -527,9 +590,35 @@ export async function buildPublicProfileData(
         createdAt: plan.createdAt.toISOString(),
         creatorName: plan.originalCreator?.name ?? plan.creator?.name ?? "Unknown",
     }));
-    activityFeed = activityFeedValue;
+    activityFeed = activityFeedResult.items;
+    activityTotal = activityFeedResult.total;
     mutualCoach = mutualCoachValue;
     coachClients = coachClientsValue;
+
+    const isOwner = viewerId === targetUserId;
+    if (!isOwner) {
+        if (!privacy.bio) bio = null;
+        if (!privacy.workoutStats) {
+            streak = null;
+            totalWorkouts = null;
+            totalPrs = null;
+        }
+        if (!privacy.prs) personalRecords = [];
+        if (!privacy.activityFeed) {
+            activityFeed = [];
+            activityTotal = 0;
+        }
+        if (!privacy.achievements) {
+            achievementSummary = {
+                totalUnlocked: 0,
+                totalAchievements: 0,
+                preview: [],
+            };
+        }
+        if (!privacy.publicPlans) plans = [];
+        if (!privacy.onlineStatus) onlineStatus = null;
+        if (!privacy.socialLinks) resolvedSocialLinks = null;
+    }
 
     return {
         ...base,
@@ -539,19 +628,19 @@ export async function buildPublicProfileData(
         goal: target.goal ?? null,
         trainingLocation: target.trainingLocation ?? null,
         trainingDaysPerWeek: target.trainingDaysPerWeek ?? null,
-        bio: target.bio?.trim() ? target.bio.trim() : null,
+        bio,
         streak,
         totalWorkouts,
-        onlineStatus: presence
-            ? { level: presence.level, label: presence.label }
-            : null,
+        totalPrs,
+        onlineStatus,
         mutualCoach,
         coachedBy,
         personalRecords,
         achievementSummary,
         plans,
         activityFeed,
-        socialLinks: hasSocialLinks(socialLinks) ? socialLinks : null,
+        activityTotal,
+        socialLinks: resolvedSocialLinks,
         coachClients,
     };
 }

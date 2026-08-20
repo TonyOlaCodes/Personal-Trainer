@@ -6,12 +6,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
     Trophy, MessageSquare, Loader2, Lock, Dumbbell, ChevronRight,
     Calendar, Activity, ExternalLink, Instagram,
-    Youtube, Users,
+    Youtube, Users, Flame, Pencil,
 } from "lucide-react";
 import { cn, getInitials, roleLabels, getRoleNameClass, formatDate } from "@/lib/utils";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { getPublicProfileHref } from "@/lib/profileNavigation";
-import { StreakBadge } from "@/components/shared/StreakBadge";
 import { AchievementsList } from "@/components/shared/AchievementsPanel";
 import { AchievementsModal } from "@/components/shared/AchievementsModal";
 import type { AchievementDisplayItem } from "@/lib/achievements";
@@ -38,6 +37,8 @@ interface PublicProfilePersonalRecord {
     weightKg: number;
     reps: number;
     loggedAt: string;
+    workoutLogId?: string | null;
+    isPr?: boolean;
 }
 
 interface PublicProfileActivityItem {
@@ -45,6 +46,8 @@ interface PublicProfileActivityItem {
     workoutLogId: string;
     workoutName: string;
     loggedAt: string;
+    exerciseCount?: number;
+    setCount?: number;
 }
 
 interface PublicProfileCoach {
@@ -84,6 +87,7 @@ interface ProfilePayload {
     trainingDaysPerWeek: number | null;
     streak: number | null;
     totalWorkouts: number | null;
+    totalPrs?: number | null;
     onlineStatus: { level: string; label: string } | null;
     mutualCoach: PublicProfileCoach | null;
     coachedBy: PublicProfileCoachedBy | null;
@@ -91,6 +95,7 @@ interface ProfilePayload {
     achievementSummary: PublicAchievementSummary;
     plans: PublicPlan[];
     activityFeed: PublicProfileActivityItem[];
+    activityTotal?: number;
     socialLinks: SocialLinks | null;
     coachClients: PublicProfileCoachClient[];
 }
@@ -157,6 +162,8 @@ export function PublicProfileClient({ userId }: Props) {
     const [nicknameDraft, setNicknameDraft] = useState("");
     const [nicknameSaving, setNicknameSaving] = useState(false);
     const [nicknameMessage, setNicknameMessage] = useState<string | null>(null);
+    const [editingNickname, setEditingNickname] = useState(false);
+    const [showAllActivity, setShowAllActivity] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -248,7 +255,8 @@ export function PublicProfileClient({ userId }: Props) {
                 ? { ...current, nickname: data.nickname ?? null }
                 : current);
             setNicknameDraft(data.nickname ?? "");
-            setNicknameMessage("Saved — only you see this nickname.");
+            setNicknameMessage(null);
+            setEditingNickname(false);
         } catch {
             setNicknameMessage("Connection error");
         } finally {
@@ -290,10 +298,57 @@ export function PublicProfileClient({ userId }: Props) {
 
     const isLimited = viewer.isLimitedView;
     const isCoachProfile = profile.role === "COACH" || profile.role === "SUPER_ADMIN";
-    const showWorkoutStats =
-        !isLimited &&
-        ((profile.streak != null && profile.streak > 0) ||
-            (profile.totalWorkouts != null && profile.totalWorkouts > 0));
+    const totalPrs = profile.totalPrs ?? null;
+    const activityTotal = profile.activityTotal ?? profile.activityFeed.length;
+    const visibleActivity = showAllActivity
+        ? profile.activityFeed
+        : profile.activityFeed.slice(0, 3);
+
+    const trainingStatItems: Array<{
+        key: string;
+        value: string;
+        label: string;
+        icon: React.ComponentType<{ className?: string }>;
+        accent: string;
+    }> = [];
+    if (!isLimited) {
+        if (profile.streak != null && profile.streak > 0) {
+            trainingStatItems.push({
+                key: "streak",
+                value: String(profile.streak),
+                label: "Current Streak",
+                icon: Flame,
+                accent: "text-warning",
+            });
+        }
+        if (profile.totalWorkouts != null && profile.totalWorkouts > 0) {
+            trainingStatItems.push({
+                key: "workouts",
+                value: String(profile.totalWorkouts),
+                label: "Workouts Completed",
+                icon: Dumbbell,
+                accent: "text-brand-400",
+            });
+        }
+        if (totalPrs != null && totalPrs > 0) {
+            trainingStatItems.push({
+                key: "prs",
+                value: String(totalPrs),
+                label: "Personal Records",
+                icon: Trophy,
+                accent: "text-brand-300",
+            });
+        }
+        if (profile.trainingDaysPerWeek != null && profile.trainingDaysPerWeek > 0) {
+            trainingStatItems.push({
+                key: "freq",
+                value: `${profile.trainingDaysPerWeek}×`,
+                label: "Training Frequency",
+                icon: Calendar,
+                accent: "text-success",
+            });
+        }
+    }
 
     const socialEntries = profile.socialLinks
         ? (Object.entries(profile.socialLinks) as Array<[keyof SocialLinks, string]>)
@@ -384,36 +439,98 @@ export function PublicProfileClient({ userId }: Props) {
                         </div>
 
                         <div className="flex-1 min-w-0 text-center sm:text-left space-y-1.5 pb-0.5">
-                            <h1 className={cn("text-2xl sm:text-3xl font-black tracking-tight leading-tight", getRoleNameClass(profile.role))}>
-                                {profile.name}
-                            </h1>
+                            <div className="flex items-center justify-center sm:justify-start gap-2">
+                                <h1 className={cn("text-2xl sm:text-3xl font-black tracking-tight leading-tight", getRoleNameClass(profile.role))}>
+                                    {profile.name}
+                                </h1>
+                                {!viewer.isSelf && viewer.canSetNickname && !editingNickname && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setNicknameDraft(viewer.nickname ?? "");
+                                            setEditingNickname(true);
+                                            setNicknameMessage(null);
+                                        }}
+                                        className="p-1.5 rounded-lg text-fg-subtle hover:text-brand-400 hover:bg-brand-500/10 transition-colors"
+                                        title="Set private nickname"
+                                        aria-label="Set private nickname"
+                                    >
+                                        <Pencil className="w-3.5 h-3.5" />
+                                    </button>
+                                )}
+                            </div>
                             <p className="text-sm font-bold text-fg-subtle">@{profile.username}</p>
-                            {!viewer.isSelf && viewer.nickname && (
-                                <p className="text-xs text-fg-muted">
-                                    Their name: {profile.chosenName}
-                                </p>
+                            {!viewer.isSelf && viewer.canSetNickname && editingNickname && (
+                                <div className="flex flex-col sm:flex-row gap-2 max-w-md mx-auto sm:mx-0 pt-1">
+                                    <input
+                                        type="text"
+                                        value={nicknameDraft}
+                                        onChange={(e) => setNicknameDraft(e.target.value)}
+                                        placeholder={profile.chosenName}
+                                        maxLength={40}
+                                        className="input flex-1 h-9 text-sm"
+                                        autoFocus
+                                    />
+                                    <div className="flex gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => void saveNickname()}
+                                            disabled={nicknameSaving}
+                                            className="btn-primary h-9 px-3 text-[10px] font-black uppercase tracking-widest disabled:opacity-60"
+                                        >
+                                            {nicknameSaving ? "…" : "Save"}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setEditingNickname(false);
+                                                setNicknameDraft(viewer.nickname ?? "");
+                                                setNicknameMessage(null);
+                                            }}
+                                            className="btn-secondary h-9 px-3 text-[10px] font-black uppercase tracking-widest"
+                                        >
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                            {nicknameMessage && (
+                                <p className="text-xs font-bold text-danger">{nicknameMessage}</p>
                             )}
                             {!isLimited && (
                                 <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">
                                     {roleLabels[profile.role] ?? profile.role}
                                 </p>
                             )}
+                            {!isLimited && profile.coachedBy && (
+                                <Link
+                                    href={getPublicProfileHref(profile.coachedBy.id)}
+                                    className="inline-flex items-center gap-2 mt-1 mx-auto sm:mx-0 px-2.5 py-1.5 rounded-xl bg-surface-muted/50 border border-surface-border hover:border-brand-500/30 transition-colors"
+                                >
+                                    <div className="w-6 h-6 rounded-lg bg-gradient-brand flex items-center justify-center text-[9px] font-black text-white overflow-hidden shrink-0">
+                                        {profile.coachedBy.avatarUrl ? (
+                                            <img
+                                                src={resolveUploadUrl(profile.coachedBy.avatarUrl)}
+                                                alt=""
+                                                className="w-full h-full object-cover"
+                                            />
+                                        ) : (
+                                            getInitials(profile.coachedBy.name)
+                                        )}
+                                    </div>
+                                    <span className="text-[11px] text-fg-muted">
+                                        Coached by{" "}
+                                        <span className="font-bold text-fg">{profile.coachedBy.name}</span>
+                                    </span>
+                                </Link>
+                            )}
                             {!isLimited && (
-                                profile.coachedBy ||
                                 profile.goal ||
                                 profile.experienceLevel ||
                                 profile.trainingLocation ||
                                 profile.trainingDaysPerWeek
                             ) && (
                                 <div className="flex flex-wrap gap-2 mt-2 justify-center sm:justify-start">
-                                    {profile.coachedBy && (
-                                        <Link
-                                            href={getPublicProfileHref(profile.coachedBy.id)}
-                                            className="badge text-[9px] bg-surface-muted text-fg-muted border border-surface-border hover:border-brand-500/30 transition-colors"
-                                        >
-                                            Coach: {profile.coachedBy.name}
-                                        </Link>
-                                    )}
                                     {profile.goal && (
                                         <span className="badge text-[9px] bg-brand-500/10 text-brand-400 border border-brand-500/20">
                                             {profile.goal.replace(/_/g, " ")}
@@ -499,123 +616,117 @@ export function PublicProfileClient({ userId }: Props) {
                         </p>
                     )}
 
-                    {!viewer.isSelf && viewer.canSetNickname && (
-                        <div className="mt-5 p-4 rounded-2xl border border-surface-border bg-surface-muted/30 space-y-3">
-                            <div>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">
-                                    Private nickname
-                                </p>
-                                <p className="text-xs text-fg-muted mt-1">
-                                    Only you see this. Leave blank to use their chosen name ({profile.chosenName}).
-                                </p>
-                            </div>
-                            <div className="flex flex-col sm:flex-row gap-2">
-                                <input
-                                    type="text"
-                                    value={nicknameDraft}
-                                    onChange={(e) => setNicknameDraft(e.target.value)}
-                                    placeholder={profile.chosenName}
-                                    maxLength={40}
-                                    className="input flex-1 h-10 text-sm"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => void saveNickname()}
-                                    disabled={nicknameSaving}
-                                    className="btn-primary h-10 px-4 text-xs font-black uppercase tracking-widest shrink-0 disabled:opacity-60"
-                                >
-                                    {nicknameSaving ? "Saving…" : "Save nickname"}
-                                </button>
-                            </div>
-                            {nicknameMessage && (
-                                <p className="text-xs font-bold text-fg-muted">{nicknameMessage}</p>
-                            )}
-                        </div>
-                    )}
-
-                    {!isLimited && profile.personalRecords.length > 0 && (
-                        <div className="mt-5 space-y-2">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle text-center sm:text-left">
-                                Favourite lifts
-                            </p>
-                            <div className="flex flex-col gap-2">
-                                {profile.personalRecords.map((pr) => (
-                                    <div
-                                        key={`${pr.exerciseName}-${pr.loggedAt}`}
-                                        className="flex items-center justify-between gap-3 p-3 rounded-xl bg-surface-muted/40 border border-surface-border"
-                                    >
-                                        <p className="text-sm font-black text-fg truncate">{pr.exerciseName}</p>
-                                        <p className="text-sm font-black text-brand-300 shrink-0 tabular-nums">
-                                            {pr.weightKg} kg
-                                        </p>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
                 </div>
             </div>
 
-            {!isLimited && isCoachProfile && (
-                <SectionCard title="Clients" icon={Users}>
-                    {profile.coachClients.length === 0 ? (
-                        <p className="text-sm text-fg-muted">No clients yet.</p>
-                    ) : (
-                        <ul className="divide-y divide-surface-border">
-                            {profile.coachClients.map((client) => (
-                                <li key={client.id}>
-                                    <Link
-                                        href={getPublicProfileHref(client.id)}
-                                        className="flex items-center gap-3 py-3 first:pt-0 last:pb-0 hover:opacity-80 transition-opacity"
-                                    >
-                                        <div className="w-10 h-10 rounded-xl bg-gradient-brand flex items-center justify-center text-xs font-black text-white overflow-hidden shrink-0">
-                                            {client.avatarUrl ? (
-                                                <img
-                                                    src={resolveUploadUrl(client.avatarUrl)}
-                                                    alt={client.name}
-                                                    className="w-full h-full object-cover"
-                                                />
-                                            ) : (
-                                                getInitials(client.name)
-                                            )}
-                                        </div>
-                                        <p className="flex-1 min-w-0 text-sm font-black text-fg truncate">{client.name}</p>
-                                        <ChevronRight className="w-4 h-4 text-fg-subtle shrink-0" />
-                                    </Link>
-                                </li>
-                            ))}
-                        </ul>
+            {!isLimited && trainingStatItems.length > 0 && (
+                <SectionCard title="Training Stats" icon={Activity}>
+                    <div className="grid grid-cols-2 gap-3">
+                        {trainingStatItems.map((stat) => {
+                            const Icon = stat.icon;
+                            return (
+                                <div
+                                    key={stat.key}
+                                    className="rounded-2xl border border-surface-border bg-surface-muted/25 p-3.5 space-y-1.5"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <Icon className={cn("w-4 h-4 shrink-0", stat.accent)} />
+                                        <p className={cn("text-2xl font-black tabular-nums leading-none", stat.accent)}>
+                                            {stat.value}
+                                        </p>
+                                    </div>
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-fg-subtle">
+                                        {stat.label}
+                                    </p>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </SectionCard>
+            )}
+
+            {!isLimited && profile.personalRecords.length > 0 && (
+                <SectionCard title="Favourite Lifts" icon={Dumbbell}>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        {profile.personalRecords.map((pr) => {
+                            const content = (
+                                <>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-sm font-black text-fg truncate">{pr.exerciseName}</p>
+                                        <p className="text-xs font-semibold text-fg-muted mt-0.5 tabular-nums">
+                                            {pr.weightKg} kg
+                                            {pr.reps > 0 ? ` × ${pr.reps}` : ""}
+                                        </p>
+                                    </div>
+                                    {pr.isPr !== false && (
+                                        <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-warning bg-warning/10 border border-warning/25 px-2 py-1 rounded-lg">
+                                            PR
+                                        </span>
+                                    )}
+                                </>
+                            );
+                            const className =
+                                "flex items-center gap-3 p-3.5 rounded-2xl bg-surface-muted/30 border border-surface-border hover:border-brand-500/30 transition-colors";
+                            return pr.workoutLogId ? (
+                                <Link
+                                    key={`${pr.exerciseName}-${pr.loggedAt}`}
+                                    href={`/plans/log/view/${pr.workoutLogId}`}
+                                    className={className}
+                                >
+                                    {content}
+                                </Link>
+                            ) : (
+                                <div key={`${pr.exerciseName}-${pr.loggedAt}`} className={className}>
+                                    {content}
+                                </div>
+                            );
+                        })}
+                    </div>
+                    {viewer.isSelf && (
+                        <Link
+                            href="/progress"
+                            className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-brand-400 hover:text-brand-300 pt-1"
+                        >
+                            Manage on Progress
+                            <ChevronRight className="w-3.5 h-3.5" />
+                        </Link>
                     )}
                 </SectionCard>
             )}
 
-            {!isLimited && showWorkoutStats && (
-                <div className="flex flex-wrap gap-3">
-                    {profile.streak != null && profile.streak > 0 && (
-                        <div className="card p-4 flex items-center gap-3 flex-1 min-w-[140px]">
-                            <StreakBadge streak={profile.streak} size="md" />
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-fg-subtle">Plan streak</p>
-                        </div>
-                    )}
-                    {profile.totalWorkouts != null && profile.totalWorkouts > 0 && (
-                        <div className="card p-4 flex items-center gap-3 flex-1 min-w-[140px]">
-                            <div className="w-10 h-10 rounded-xl bg-brand-400/10 flex items-center justify-center shrink-0">
-                                <Dumbbell className="w-5 h-5 text-brand-400" />
-                            </div>
-                            <div>
-                                <p className="text-xl font-black text-fg leading-none tabular-nums">{profile.totalWorkouts}</p>
-                                <p className="text-[10px] font-bold uppercase tracking-widest text-fg-subtle mt-1">Workouts completed</p>
-                            </div>
-                        </div>
-                    )}
-                </div>
+            {!isLimited && isCoachProfile && profile.coachClients.length > 0 && (
+                <SectionCard title="Clients" icon={Users}>
+                    <ul className="divide-y divide-surface-border">
+                        {profile.coachClients.map((client) => (
+                            <li key={client.id}>
+                                <Link
+                                    href={getPublicProfileHref(client.id)}
+                                    className="flex items-center gap-3 py-3 first:pt-0 last:pb-0 hover:opacity-80 transition-opacity"
+                                >
+                                    <div className="w-10 h-10 rounded-xl bg-gradient-brand flex items-center justify-center text-xs font-black text-white overflow-hidden shrink-0">
+                                        {client.avatarUrl ? (
+                                            <img
+                                                src={resolveUploadUrl(client.avatarUrl)}
+                                                alt={client.name}
+                                                className="w-full h-full object-cover"
+                                            />
+                                        ) : (
+                                            getInitials(client.name)
+                                        )}
+                                    </div>
+                                    <p className="flex-1 min-w-0 text-sm font-black text-fg truncate">{client.name}</p>
+                                    <ChevronRight className="w-4 h-4 text-fg-subtle shrink-0" />
+                                </Link>
+                            </li>
+                        ))}
+                    </ul>
+                </SectionCard>
             )}
 
             {!isLimited && profile.activityFeed.length > 0 && (
-                <SectionCard title="Recent activity" icon={Activity}>
+                <SectionCard title="Recent Activity" icon={Activity}>
                     <ul className="divide-y divide-surface-border">
-                        {profile.activityFeed.map((item) => (
+                        {visibleActivity.map((item) => (
                             <li key={item.id}>
                                 <Link
                                     href={`/plans/log/view/${item.workoutLogId}`}
@@ -626,50 +737,67 @@ export function PublicProfileClient({ userId }: Props) {
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <p className="text-sm font-medium text-fg truncate">{item.workoutName}</p>
-                                        <p className="text-[10px] font-bold text-fg-subtle mt-0.5">{formatDate(item.loggedAt)}</p>
+                                        <p className="text-[10px] font-bold text-fg-subtle mt-0.5">
+                                            {formatDate(item.loggedAt)}
+                                            {(item.exerciseCount != null && item.exerciseCount > 0) ||
+                                            (item.setCount != null && item.setCount > 0) ? (
+                                                <>
+                                                    {" · "}
+                                                    {item.exerciseCount != null && item.exerciseCount > 0
+                                                        ? `${item.exerciseCount} exercise${item.exerciseCount === 1 ? "" : "s"}`
+                                                        : null}
+                                                    {item.exerciseCount != null &&
+                                                    item.exerciseCount > 0 &&
+                                                    item.setCount != null &&
+                                                    item.setCount > 0
+                                                        ? " · "
+                                                        : null}
+                                                    {item.setCount != null && item.setCount > 0
+                                                        ? `${item.setCount} set${item.setCount === 1 ? "" : "s"}`
+                                                        : null}
+                                                </>
+                                            ) : null}
+                                        </p>
                                     </div>
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-success shrink-0">
+                                        Done
+                                    </span>
                                     <ChevronRight className="w-4 h-4 text-fg-subtle shrink-0" />
                                 </Link>
                             </li>
                         ))}
                     </ul>
+                    {activityTotal > 3 && (
+                        <button
+                            type="button"
+                            onClick={() => setShowAllActivity((open) => !open)}
+                            className="w-full text-center text-[10px] font-black uppercase tracking-widest text-brand-400 hover:text-brand-300 pt-1"
+                        >
+                            {showAllActivity ? "Show less" : "View all activity"}
+                        </button>
+                    )}
                 </SectionCard>
             )}
 
-            {!isLimited && profile.achievementSummary.totalAchievements > 0 && (
+            {!isLimited && profile.achievementSummary.totalUnlocked > 0 && (
                 <SectionCard title="Achievements" icon={Trophy}>
                     <div className="flex items-center justify-between gap-3 mb-3">
                         <p className="text-sm font-black text-fg tabular-nums">
-                            {profile.achievementSummary.totalUnlocked} / {profile.achievementSummary.totalAchievements} Achievements
+                            {profile.achievementSummary.totalUnlocked} / {profile.achievementSummary.totalAchievements}
                         </p>
                         <button
                             type="button"
                             onClick={() => void openAchievements()}
                             className="text-[10px] font-black uppercase tracking-widest text-brand-400 hover:text-brand-300 transition-colors"
                         >
-                            View all
-                        </button>
-                    </div>
-                    <div className="space-y-3">
-                        {profile.achievementSummary.preview.length > 0 ? (
-                            <AchievementsList
-                                achievements={profile.achievementSummary.preview}
-                                layout="grid"
-                            />
-                        ) : (
-                            <p className="text-xs text-fg-muted text-center py-2">
-                                No achievements unlocked yet.
-                            </p>
-                        )}
-                    </div>
-                    {profile.achievementSummary.totalUnlocked > profile.achievementSummary.preview.length && (
-                        <button
-                            type="button"
-                            onClick={() => void openAchievements()}
-                            className="btn-secondary w-full h-10 mt-3 text-xs font-bold"
-                        >
                             View all achievements
                         </button>
+                    </div>
+                    {profile.achievementSummary.preview.length > 0 && (
+                        <AchievementsList
+                            achievements={profile.achievementSummary.preview.slice(0, 3)}
+                            layout="grid"
+                        />
                     )}
                 </SectionCard>
             )}
