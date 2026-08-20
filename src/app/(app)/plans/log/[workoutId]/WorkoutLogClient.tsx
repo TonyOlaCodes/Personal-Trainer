@@ -1438,7 +1438,8 @@ export function WorkoutLogClient({
                         const cardio = isCardio(ex.name, ex.muscleGroup);
                         const targetSummary = getExerciseTargetSummary(ex, cardio);
                         const previous = previousSessionFor(ex.name);
-                        const noteOpen = openNoteExerciseId === ex.id || Boolean(exerciseNotes[ex.id]?.trim());
+                        const hasNote = Boolean(exerciseNotes[ex.id]?.trim());
+                        const noteOpen = openNoteExerciseId === ex.id;
                         const noteText = exerciseNotes[ex.id] ?? "";
 
                         return (
@@ -1496,7 +1497,7 @@ export function WorkoutLogClient({
                                     </div>
                                 )}
 
-                                {sessionActive && (
+                                {sessionActive && !coachObserver && (
                                     <div className="flex items-center gap-2 pt-1">
                                         <button
                                             type="button"
@@ -1507,39 +1508,12 @@ export function WorkoutLogClient({
                                         </button>
                                         <button
                                             type="button"
-                                            onClick={() =>
-                                                setOpenNoteExerciseId((id) => (id === ex.id ? null : ex.id))
-                                            }
-                                            aria-label={noteText.trim() ? "Edit exercise note" : "Add exercise note"}
-                                            title={noteText.trim() ? "Edit note" : "Add note"}
-                                            className={cn(
-                                                "w-8 h-8 rounded-md transition-all flex items-center justify-center",
-                                                noteText.trim()
-                                                    ? "text-brand-400 bg-brand-400/10"
-                                                    : "text-fg-subtle hover:text-fg-muted bg-surface-muted/40 hover:bg-surface-muted/70"
-                                            )}
-                                        >
-                                            <NotebookPen className="w-3.5 h-3.5" />
-                                        </button>
-                                        <button
-                                            type="button"
                                             onClick={() => removeExercise(ex.id)}
                                             className="text-[10px] font-black uppercase text-danger/40 hover:text-danger bg-danger/5 hover:bg-danger/10 px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5"
                                         >
                                             <Trash2 className="w-3 h-3" /> Delete
                                         </button>
                                     </div>
-                                )}
-
-                                {sessionActive && noteOpen && (
-                                    <textarea
-                                        value={noteText}
-                                        onChange={(e) => updateExerciseNote(ex.id, e.target.value)}
-                                        rows={2}
-                                        maxLength={EXERCISE_NOTE_MAX_LENGTH}
-                                        placeholder="Technique, machine setting, pain, cue for next time…"
-                                        className="w-full resize-none rounded-lg border border-surface-border/70 bg-surface-elevated/80 px-2.5 py-2 text-xs text-fg placeholder:text-fg-subtle focus:outline-none focus:ring-1 focus:ring-brand-500"
-                                    />
                                 )}
                             </div>
 
@@ -1765,6 +1739,60 @@ export function WorkoutLogClient({
                                     <Plus className="w-3.5 h-3.5" />
                                     Add Set
                                 </button>
+                            )}
+
+                            {sessionActive && !coachObserver && (
+                                <div className="pt-1 space-y-2">
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            setOpenNoteExerciseId((id) => (id === ex.id ? null : ex.id))
+                                        }
+                                        aria-expanded={noteOpen}
+                                        aria-label={hasNote ? "View or edit exercise note" : "Add exercise note"}
+                                        className={cn(
+                                            "w-full min-h-11 px-3 rounded-xl border text-left transition-all flex items-center gap-2.5 active:scale-[0.99]",
+                                            hasNote
+                                                ? "border-brand-500/25 bg-brand-500/[0.06] text-brand-300"
+                                                : "border-surface-border/70 bg-surface-muted/25 text-fg-muted hover:border-surface-border hover:bg-surface-muted/40 hover:text-fg"
+                                        )}
+                                    >
+                                        <span
+                                            className={cn(
+                                                "relative flex items-center justify-center w-7 h-7 rounded-lg shrink-0",
+                                                hasNote ? "bg-brand-500/15 text-brand-400" : "bg-surface-muted/60 text-fg-subtle"
+                                            )}
+                                        >
+                                            <NotebookPen className="w-3.5 h-3.5" />
+                                            {hasNote && (
+                                                <span
+                                                    className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-brand-400"
+                                                    aria-hidden
+                                                />
+                                            )}
+                                        </span>
+                                        <span className="text-xs font-semibold tracking-tight">
+                                            {hasNote ? "View/Edit note" : "Add note"}
+                                        </span>
+                                        {hasNote && !noteOpen && (
+                                            <span className="ml-auto text-[10px] font-medium text-brand-400/70 truncate max-w-[45%]">
+                                                {noteText.trim()}
+                                            </span>
+                                        )}
+                                    </button>
+
+                                    {noteOpen && (
+                                        <textarea
+                                            value={noteText}
+                                            onChange={(e) => updateExerciseNote(ex.id, e.target.value)}
+                                            rows={2}
+                                            maxLength={EXERCISE_NOTE_MAX_LENGTH}
+                                            autoFocus
+                                            placeholder="Technique, machine setting, pain, cue for next time…"
+                                            className="w-full resize-none rounded-xl border border-brand-500/20 bg-surface-elevated/80 px-3 py-2.5 text-sm text-fg placeholder:text-fg-subtle focus:outline-none focus:ring-1 focus:ring-brand-500"
+                                        />
+                                    )}
+                                </div>
                             )}
                         </div>
                     )})}
