@@ -429,6 +429,12 @@ export function CalendarClient({
     const workoutLogHref = selectedPlanned
         ? `/plans/log/${selectedPlanned.id}?date=${selectedDateKey}${coachView ? `&clientId=${coachView.clientId}` : ""}`
         : "";
+    const workoutPreviewHref = selectedPlanned && !coachView
+        ? `/plans/log/${selectedPlanned.id}?date=${encodeURIComponent(selectedDateKey)}&mode=preview`
+        : "";
+    const workoutStartHref = selectedPlanned && !coachView
+        ? `/plans/log/${selectedPlanned.id}?date=${encodeURIComponent(selectedDateKey)}&autostart=1`
+        : "";
     const coachReviewHref = selectedPlanned && coachView
         ? `/plans/log/${selectedPlanned.id}?date=${selectedDateKey}&clientId=${coachView.clientId}&mode=review`
         : "";
@@ -968,21 +974,28 @@ export function CalendarClient({
                                         className="btn-primary w-full h-12 text-xs font-black uppercase tracking-[0.15em] shadow-glow-success bg-success border-success hover:bg-success-600 group hover:scale-[1.02] transition-all flex items-center justify-center"
                                     >
                                         <Flame className="w-4 h-4 mr-2 animate-pulse group-hover:scale-110 transition-transform" />
-                                        Continue Workout
+                                        Resume Workout
                                     </ReturnLink>
                                 ) : selectedStatus === "missed" ? (
                                     <div className="space-y-2">
                                         <ReturnLink
-                                            href={workoutLogHref}
+                                            href={workoutPreviewHref || workoutLogHref}
                                             className="btn-secondary w-full h-12 text-xs font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2"
                                         >
                                             <History className="w-4 h-4" />
                                             View Workout
                                         </ReturnLink>
+                                        <ReturnLink
+                                            href={workoutStartHref || workoutLogHref}
+                                            className="btn-primary w-full h-12 text-xs font-black uppercase tracking-[0.15em] shadow-glow-brand group hover:scale-[1.02] transition-all flex items-center justify-center"
+                                        >
+                                            <PlayCircle className="w-4 h-4 mr-2 group-hover:rotate-12 transition-transform" />
+                                            Start Workout
+                                        </ReturnLink>
                                         {coachId && (
                                             <Link
                                                 href={`/chat?with=${coachId}`}
-                                                className="btn-primary w-full h-12 text-xs font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2 shadow-glow-brand"
+                                                className="btn-secondary w-full h-12 text-xs font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2"
                                             >
                                                 <MessageSquare className="w-4 h-4" />
                                                 Message Coach
@@ -991,7 +1004,7 @@ export function CalendarClient({
                                     </div>
                                 ) : selectedStatus === "excused" ? (
                                     <ReturnLink
-                                        href={workoutLogHref}
+                                        href={workoutPreviewHref || workoutLogHref}
                                         className="btn-secondary w-full h-12 text-xs font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2"
                                     >
                                         <History className="w-4 h-4" />
@@ -1000,14 +1013,14 @@ export function CalendarClient({
                                 ) : (
                                     <div className="space-y-2">
                                         <ReturnLink
-                                            href={workoutLogHref}
+                                            href={workoutPreviewHref || workoutLogHref}
                                             className="btn-secondary w-full h-12 text-xs font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2"
                                         >
                                             <History className="w-4 h-4" />
                                             View Workout
                                         </ReturnLink>
                                         <ReturnLink
-                                            href={workoutLogHref}
+                                            href={workoutStartHref || workoutLogHref}
                                             className="btn-primary w-full h-12 text-xs font-black uppercase tracking-[0.15em] shadow-glow-brand group hover:scale-[1.02] transition-all flex items-center justify-center"
                                         >
                                             <PlayCircle className="w-4 h-4 mr-2 group-hover:rotate-12 transition-transform" />

@@ -384,13 +384,13 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
     const planPreviewHref = useMemo(() => {
         if (todayWorkout) {
             return appendReturnTo(
-                `/plans/log/${todayWorkout.id}?date=${encodeURIComponent(todayDate)}`,
+                `/plans/log/${todayWorkout.id}?date=${encodeURIComponent(todayDate)}&mode=preview`,
                 currentPath
             );
         }
         if (nextTrainingDay) {
             return appendReturnTo(
-                `/plans/log/${nextTrainingDay.id}?date=${encodeURIComponent(nextTrainingDay.date)}`,
+                `/plans/log/${nextTrainingDay.id}?date=${encodeURIComponent(nextTrainingDay.date)}&mode=preview`,
                 currentPath
             );
         }
@@ -478,6 +478,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
 
             setStartConflict(null);
             setPendingStartToday(false);
+            notifyWorkoutStatsChanged();
             goToWorkoutLog(todayWorkout.id, todayDate);
             router.refresh();
             return true;
@@ -860,7 +861,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                         <h3 className="heading-3">Today&apos;s Workout</h3>
                         {(nextTrainingDay && (!todayWorkout || todayCompleted)) && (
                             <ReturnLink
-                                href={`/plans/log/${nextTrainingDay.id}?date=${encodeURIComponent(nextTrainingDay.date)}`}
+                                href={`/plans/log/${nextTrainingDay.id}?date=${encodeURIComponent(nextTrainingDay.date)}&mode=preview`}
                                 className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-brand-300 hover:text-brand-200 transition-colors"
                             >
                                 Next training day — preview {nextTrainingDay.name} ({nextTrainingDay.dayLabel} {formatDate(nextTrainingDay.date, { day: "numeric", month: "long" })})

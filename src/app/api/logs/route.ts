@@ -386,6 +386,43 @@ export async function POST(req: Request) {
     }
 
     if (existingInProgress) {
+        // Idempotent Start Workout: resume the existing session instead of wiping sets
+        // when the client posts an empty placeholder payload again.
+        const hasMeaningfulSets = setsWithRealIds.some(
+            (s) =>
+                Boolean(s.isCompleted) ||
+                (typeof s.reps === "number" && s.reps > 0) ||
+                (typeof s.weightKg === "number" && s.weightKg > 0) ||
+                (typeof s.rpe === "number" && s.rpe > 0) ||
+                Boolean(s.videoUrl)
+        );
+        if (status === "IN_PROGRESS" && !hasMeaningfulSets) {
+            const existing = await prisma.workoutLog.findUnique({
+                where: { id: existingInProgress.id },
+                include: {
+                    sets: {
+                        include: {
+                            exercise: {
+                                select: {
+                                    id: true,
+                                    name: true,
+                                    sets: true,
+                                    reps: true,
+                                    weightTargetKg: true,
+                                    notes: true,
+                                    order: true,
+                                    muscleGroup: true,
+                                },
+                            },
+                        },
+                        orderBy: logSetDisplayOrderBy,
+                    },
+                    workout: { select: { name: true } },
+                },
+            });
+            return NextResponse.json(existing ?? existingInProgress, { status: 200 });
+        }
+
         await prisma.logSet.deleteMany({ where: { workoutLogId: existingInProgress.id } });
         const workoutLog = await prisma.workoutLog.update({
             where: { id: existingInProgress.id },

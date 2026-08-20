@@ -104,7 +104,7 @@ export default async function ProgressPage() {
                 today,
             });
             if (todayWorkout) {
-                todayWorkoutHref = `/plans/log/${todayWorkout.id}?date=${encodeURIComponent(todayDate)}`;
+                todayWorkoutHref = `/plans/log/${todayWorkout.id}?date=${encodeURIComponent(todayDate)}&autostart=1`;
             }
         }
 

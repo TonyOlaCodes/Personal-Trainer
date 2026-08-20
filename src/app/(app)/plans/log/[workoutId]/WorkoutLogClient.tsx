@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import {
     Timer, Flame, Check, HelpCircle,
     Trash2, Plus, InfoIcon, Award, Play, Zap, X, ChevronLeft, NotebookPen
@@ -346,6 +346,7 @@ export function WorkoutLogClient({
     showWorkoutInputHint = false,
 }: Props) {
     const router = useRouter();
+    const pathname = usePathname();
     const searchParams = useSearchParams();
     const returnTo = getReturnToFromSearchParams(searchParams);
     const targetDateStr = logDate ? toDateKey(parseLogDate(logDate)) : toDateKey(new Date());
@@ -354,7 +355,11 @@ export function WorkoutLogClient({
     const isCoachForClient = Boolean(clientId);
     /** Coaches observing from calendar must not start/finish; Correct Log uses mode=edit. */
     const coachObserver = isCoachForClient && searchParams.get("mode") !== "edit";
-
+    const isPreviewMode = searchParams.get("mode") === "preview";
+    const shouldAutostart =
+        !coachObserver &&
+        (searchParams.get("autostart") === "1" || searchParams.get("mode") === "start");
+    const autostartAttemptedRef = useRef(false);
     const [previousSessions, setPreviousSessions] = useState(initialPreviousSessions);
     const [exerciseRecords, setExerciseRecords] = useState(initialExerciseRecords);
     const [mediaByName, setMediaByName] = useState(initialExerciseMedia);
@@ -769,11 +774,30 @@ export function WorkoutLogClient({
             }
 
             const saved = await createRes.json();
-            if (saved.id) setActiveLogId(saved.id);
+            if (saved.id) {
+                const hasLoggedWork = Array.isArray(saved.sets) && saved.sets.some(
+                    (s: { reps?: number | null; weightKg?: number | null; rpe?: number | null; isCompleted?: boolean | null }) =>
+                        Boolean(s.isCompleted) ||
+                        (typeof s.reps === "number" && s.reps > 0) ||
+                        (typeof s.weightKg === "number" && s.weightKg > 0) ||
+                        (typeof s.rpe === "number" && s.rpe > 0)
+                );
+                if (hasLoggedWork) {
+                    const restored = restoreSessionState(saved, workout.exercises, localStorageKey);
+                    setActiveLogId(restored.activeLogId);
+                    setActiveExercises(restored.exercises);
+                    setLogs(restored.logs);
+                    setStartTime(restored.startTime);
+                } else {
+                    setActiveLogId(saved.id);
+                }
+            }
             if (saved.updatedAt) {
                 lastRemoteUpdatedAtRef.current = remoteUpdatedAtMs(saved.updatedAt);
             }
             setConflictSession(null);
+            notifyWorkoutStatsChanged();
+            router.refresh();
             return true;
         } catch (e) {
             console.error("Failed to start workout session:", e);
@@ -783,6 +807,43 @@ export function WorkoutLogClient({
             setIsStarting(false);
         }
     };
+
+    const clearAutostartParams = () => {
+        const params = new URLSearchParams(searchParams.toString());
+        let changed = false;
+        if (params.has("autostart")) {
+            params.delete("autostart");
+            changed = true;
+        }
+        if (params.get("mode") === "start") {
+            params.delete("mode");
+            changed = true;
+        }
+        if (!changed) return;
+        const qs = params.toString();
+        router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
+    };
+
+    // Start Workout deep-links: create/resume the session instead of leaving the user on a preview.
+    useEffect(() => {
+        if (!shouldAutostart) return;
+        if (isCheckingSession) return;
+
+        if (activeLogId) {
+            clearAutostartParams();
+            return;
+        }
+
+        if (autostartAttemptedRef.current || isStarting) return;
+        autostartAttemptedRef.current = true;
+
+        void (async () => {
+            await startWorkoutSession(false);
+            clearAutostartParams();
+        })();
+        // Intentionally omit startWorkoutSession — guarded by autostartAttemptedRef.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [shouldAutostart, isCheckingSession, activeLogId, isStarting]);
 
     const handleStartWorkout = async () => {
         await startWorkoutSession(false);
@@ -1279,9 +1340,13 @@ export function WorkoutLogClient({
                         <p className="text-[10px] text-fg-subtle font-semibold uppercase tracking-widest">
                             {isCheckingSession
                                 ? "Loading..."
-                                : coachObserver
-                                  ? "Coach review"
-                                  : "Ready to start"}
+                                : isStarting && shouldAutostart
+                                  ? "Starting..."
+                                  : coachObserver
+                                    ? "Coach review"
+                                    : isPreviewMode
+                                      ? "Workout preview"
+                                      : "Ready to start"}
                         </p>
                     )}
                 </div>
@@ -1343,12 +1408,14 @@ export function WorkoutLogClient({
                         <div className="card p-4 border-brand-500/20 bg-brand-950/10 space-y-3">
                             <div>
                                 <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">
-                                    {coachObserver ? "Session preview" : "Workout preview"}
+                                    Workout preview
                                 </p>
                                 <p className="text-sm text-fg-muted mt-1">
                                     {coachObserver
                                         ? "Planned work for this date. Use Edit Session on the calendar to change programming for this day only."
-                                        : "Review sets below, then start when you're ready."}
+                                        : isPreviewMode
+                                          ? "Preview only — press Start Workout when you are ready to begin logging."
+                                          : "Review sets below, then start when you're ready."}
                                 </p>
                             </div>
                             <MuscleMap breakdown={muscleBreakdown} />
