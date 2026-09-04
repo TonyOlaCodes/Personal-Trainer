@@ -767,6 +767,12 @@ export async function getProgressiveDisplay(
                       bestStreakDays: stats.bestStreakDays,
                   }
                 : {}),
+            ...(def.key === "checkin-consistency"
+                ? {
+                      currentStreakDays: stats.checkInCurrentStreak,
+                      bestStreakDays: stats.checkInBestStreak,
+                  }
+                : {}),
         });
     }
 
@@ -903,13 +909,5 @@ export function pickAutoFeatured(
         .slice(0, limit);
 }
 
-export type StreakDisplay =
-    | { mode: "single"; days: number }
-    | { mode: "dual"; current: number; best: number };
-
-export function formatStreakDisplay(current: number, best: number): StreakDisplay {
-    if (current === best) {
-        return { mode: "single", days: current };
-    }
-    return { mode: "dual", current, best };
-}
+export type { StreakDisplay } from "./rarity";
+export { formatStreakDisplay } from "./rarity";

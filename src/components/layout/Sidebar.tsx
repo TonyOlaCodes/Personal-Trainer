@@ -17,6 +17,7 @@ import {
     ChevronLeft,
     ChevronRight,
     UserPlus,
+    Trophy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getActiveNavHref } from "@/lib/navActive";
@@ -45,6 +46,7 @@ const navItems: NavItem[] = [
     { href: "/plans", label: "Plans", icon: Dumbbell },
     { href: "/calendar", label: "Calendar", icon: Calendar, hideRoles: ["COACH", "SUPER_ADMIN"] },
     { href: "/progress", label: "Progress", icon: BarChart3, hideRoles: ["COACH", "SUPER_ADMIN"] },
+    { href: "/achievements", label: "Achievements", icon: Trophy, hideRoles: ["COACH", "SUPER_ADMIN"] },
     { href: "/checkins", label: "Check-ins", icon: ClipboardList, requiresCheckIns: true },
     { href: "/chat", label: "Chat", icon: MessageSquare },
 ];

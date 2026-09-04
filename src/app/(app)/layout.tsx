@@ -17,6 +17,7 @@ import { ChatUnreadProvider } from "@/components/chat/ChatUnreadProvider";
 import { AppUserProvider } from "@/lib/AppUserContext";
 import { getMaintenanceStatus } from "@/lib/maintenanceMode";
 import { MaintenanceBanner, MAINTENANCE_BANNER_HEIGHT } from "@/components/layout/MaintenanceBanner";
+import { AchievementUnlockHost } from "@/components/shared/AchievementUnlockHost";
 
 export default async function AppLayout({
     children,
@@ -113,6 +114,7 @@ export default async function AppLayout({
                     )}
                     <AppMobileFrame userRole={userRole}>
                         {children}
+                        <AchievementUnlockHost />
                     </AppMobileFrame>
                 </div>
             </div>

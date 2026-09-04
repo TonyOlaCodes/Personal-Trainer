@@ -67,8 +67,8 @@ export const SPECIAL_ACHIEVEMENTS: SpecialDefinition[] = [
     },
     {
         key: "shared-plan",
-        name: "Shared Plan",
-        description: "Make a workout plan public on your profile.",
+        name: "Shared",
+        description: "Share your first workout plan.",
         icon: "share",
         category: "plans",
         rarity: "uncommon",
