@@ -3,7 +3,9 @@ import { addDaysToDateStr, ensureBodyweightTable, getBodyweightAverageInRange } 
 import { ensureDailyMetricsTable, getDailyMetricTargets } from "@/lib/dailyMetrics";
 import { getUserCheckInSchedule, type CheckInSchedule } from "@/lib/checkInSchedule";
 import { getWorkoutsTargetFromUserPlan } from "@/lib/planTrainingTarget";
-import { startOfWeek, endOfWeek } from "date-fns";
+import { APP_TIMEZONE, mondayOfDateKey, shiftAppDateKey } from "@/lib/appTimezone";
+import { localDayBoundsUtc } from "@/lib/coachNotificationSchedule";
+import { toDateKey } from "@/lib/utils";
 
 export type CheckInPeriodSummary = {
     periodDays: number;
@@ -101,7 +103,7 @@ function getCheckInBodyweightWindow(
     accountCreatedAt: Date
 ): { startDateStr: string; endDateStr: string } {
     const endDateStr = periodEndDate;
-    const accountStart = accountCreatedAt.toISOString().slice(0, 10);
+    const accountStart = toDateKey(accountCreatedAt);
     const startDateStr = priorCheckInDate ? addDaysToDateStr(priorCheckInDate, 1) : accountStart;
 
     return {
@@ -114,7 +116,7 @@ async function findPreviousCheckIn(userId: string, referenceDate: string) {
     return prisma.checkIn.findFirst({
         where: {
             userId,
-            createdAt: { lt: new Date(`${referenceDate}T00:00:00.000`) },
+            createdAt: { lt: localDayBoundsUtc(referenceDate, APP_TIMEZONE).start },
         },
         orderBy: { createdAt: "desc" },
         select: { createdAt: true, bodyweightKg: true },
@@ -137,7 +139,7 @@ export async function getBodyweightAverageSinceLastCheckIn(
     await ensureBodyweightTable();
 
     const previousCheckIn = await findPreviousCheckIn(userId, referenceDate);
-    const priorCheckInDate = previousCheckIn?.createdAt.toISOString().slice(0, 10) ?? null;
+    const priorCheckInDate = previousCheckIn ? toDateKey(previousCheckIn.createdAt) : null;
     const window = getCheckInBodyweightWindow(referenceDate, priorCheckInDate, accountCreatedAt);
     const { averageWeightKg, entries } = await getBodyweightAverageInRange(
         userId,
@@ -418,29 +420,17 @@ function getCheckInPeriodBounds(
     accountCreatedAt: Date
 ): { startDateStr: string; endDateStr: string; effectiveStart: Date; end: Date } {
     const periodDays = getCheckInPeriodDays({ frequencyWeeks });
-    const end = new Date(`${referenceDate}T23:59:59.999`);
-    const referenceMidday = new Date(`${referenceDate}T12:00:00`);
-
-    let periodStart: Date;
     const endDateStr = referenceDate;
+    let startDateStr = frequencyWeeks <= 1
+        ? mondayOfDateKey(referenceDate)
+        : shiftAppDateKey(referenceDate, -periodDays);
 
-    if (frequencyWeeks <= 1) {
-        periodStart = startOfWeek(referenceMidday, { weekStartsOn: 1 });
-        const weekEnd = endOfWeek(referenceMidday, { weekStartsOn: 1 });
-        if (weekEnd.getTime() < end.getTime()) {
-            end.setTime(weekEnd.getTime());
-            end.setHours(23, 59, 59, 999);
-        }
-    } else {
-        periodStart = new Date(referenceMidday);
-        periodStart.setDate(periodStart.getDate() - periodDays);
-        periodStart.setHours(0, 0, 0, 0);
-    }
+    const accountStart = toDateKey(accountCreatedAt);
+    if (accountStart > startDateStr) startDateStr = accountStart;
+    if (startDateStr > endDateStr) startDateStr = endDateStr;
 
-    const accountStart = new Date(accountCreatedAt);
-    accountStart.setHours(0, 0, 0, 0);
-    const effectiveStart = accountStart > periodStart ? accountStart : periodStart;
-    const startDateStr = effectiveStart.toISOString().slice(0, 10);
+    const { start: effectiveStart } = localDayBoundsUtc(startDateStr, APP_TIMEZONE);
+    const { end } = localDayBoundsUtc(endDateStr, APP_TIMEZONE);
 
     return { startDateStr, endDateStr, effectiveStart, end };
 }
@@ -522,7 +512,7 @@ export async function getCheckInPeriodSummary(
 
     const previousCheckIn = await findPreviousCheckIn(userId, referenceDate);
     const hasPreviousCheckIn = previousCheckIn != null;
-    const priorCheckInDate = previousCheckIn?.createdAt.toISOString().slice(0, 10) ?? null;
+    const priorCheckInDate = previousCheckIn ? toDateKey(previousCheckIn.createdAt) : null;
 
     let weightSummary: CheckInPeriodSummary["weight"] = null;
     if (!isWeightHidden) {
@@ -545,9 +535,9 @@ export async function getCheckInPeriodSummary(
                 orderBy: { createdAt: "desc" },
                 select: { createdAt: true },
             });
-            const priorPriorDate = priorPriorCheckIn?.createdAt.toISOString().slice(0, 10) ?? null;
+            const priorPriorDate = priorPriorCheckIn ? toDateKey(priorPriorCheckIn.createdAt) : null;
             const prevWindow = getCheckInBodyweightWindow(
-                previousCheckIn.createdAt.toISOString().slice(0, 10),
+                toDateKey(previousCheckIn.createdAt),
                 priorPriorDate,
                 user.createdAt
             );

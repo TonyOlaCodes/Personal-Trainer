@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/prisma";
-import { APP_TIMEZONE } from "@/lib/appTimezone";
 import {
     getCheckInDueState,
     getUserCheckInSchedule,
@@ -14,7 +13,8 @@ import {
 } from "@/lib/coachAttentionActions";
 import { getLocalTimeParts } from "@/lib/coachNotificationSchedule";
 import { formatCheckInDueDate, formatCheckInWeekLabel, getIsoWeekYear } from "@/lib/checkInLabels";
-import { getWeekNumber, parseLogDate, toDateKey } from "@/lib/utils";
+import { APP_TIMEZONE, dateKeyToUtcNoon, shiftAppDateKey } from "@/lib/appTimezone";
+import { getWeekNumber, toDateKey } from "@/lib/utils";
 import { isInactiveAccount } from "@/lib/userDeactivation";
 import {
     getCoachPauseStatusMap,
@@ -40,7 +40,7 @@ export interface OverdueCheckInClient {
 /** App-timezone "today" for coach check-in overdue / attention logic. */
 export function getCoachAppToday(referenceDate = new Date()) {
     const todayKey = getLocalTimeParts(referenceDate, APP_TIMEZONE).dateKey;
-    const today = parseLogDate(todayKey);
+    const today = dateKeyToUtcNoon(todayKey);
     const weekNumber = getWeekNumber(today);
     return { today, todayKey, weekNumber };
 }
@@ -82,9 +82,8 @@ export function isCoachClientCheckInAttentionNeeded(
 
 /** Clients assigned to this coach who owe a check-in (due today or overdue) without a submission. */
 export async function getOverdueCheckInClientsForCoach(coachId: string): Promise<OverdueCheckInClient[]> {
-    const { today } = getCoachAppToday();
-    const lookback = new Date(today);
-    lookback.setDate(lookback.getDate() - 90);
+    const { today, todayKey } = getCoachAppToday();
+    const lookback = dateKeyToUtcNoon(shiftAppDateKey(todayKey, -90));
 
     const clients = await prisma.user.findMany({
         where: {

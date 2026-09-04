@@ -299,7 +299,7 @@ export function SettingsClient({ user }: Props) {
         if (target === "avatar") {
             setUploading(true);
             try {
-                const url = await uploadMediaFile(file);
+                const url = await uploadMediaFile(file, "avatar");
                 setAvatarUrl(url);
                 closeCropModal();
             } catch (error) {
@@ -312,7 +312,7 @@ export function SettingsClient({ user }: Props) {
 
         setBannerUploading(true);
         try {
-            const url = await uploadMediaFile(file);
+            const url = await uploadMediaFile(file, "banner");
             setBannerUrl(url);
             closeCropModal();
         } catch (error) {

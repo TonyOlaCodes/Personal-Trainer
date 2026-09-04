@@ -88,7 +88,11 @@ async function storeLocally(buffer: Buffer, filename: string, contentType: strin
     return { url: `/uploads/${filename}`, type: contentType };
 }
 
-export async function storeUploadedFile(file: File): Promise<{ url: string; type: string }> {
+export async function storeUploadedFile(file: File): Promise<{
+    url: string;
+    type: string;
+    filename: string;
+}> {
     if (!isAllowedUpload(file)) {
         throw new Error("Only image and video uploads are supported.");
     }
@@ -103,8 +107,10 @@ export async function storeUploadedFile(file: File): Promise<{ url: string; type
     const contentType = file.type || "application/octet-stream";
 
     if (blobToken() || isVercelRuntime()) {
-        return storeInBlob(buffer, filename, contentType);
+        const stored = await storeInBlob(buffer, filename, contentType);
+        return { ...stored, filename };
     }
 
-    return storeLocally(buffer, filename, contentType);
+    const stored = await storeLocally(buffer, filename, contentType);
+    return { ...stored, filename };
 }

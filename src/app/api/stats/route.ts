@@ -16,6 +16,7 @@ import { calculateOneRM, isBetterSet } from "@/lib/oneRepMax";
 import { ensureBodyweightTable } from "@/lib/bodyweight";
 import { getUserPinnedExercises } from "@/lib/pinnedExercises";
 import { ensureLogSetExerciseNamesReady, resolveLogSetExerciseName } from "@/lib/logSetExerciseName";
+import { toDateKey } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -258,7 +259,7 @@ export async function GET() {
     (user.checkIns ?? []).forEach((c: any) => {
         if (c.bodyweightKg) {
             const cDate = c.createdAt ?? new Date();
-            const dateKey = cDate.toISOString().slice(0, 10);
+            const dateKey = toDateKey(cDate);
             const dateStr = format(cDate, "MMM dd");
             combinedWeightMap.set(dateKey, { date: dateStr, dateKey, weight: c.bodyweightKg });
         }
@@ -281,7 +282,7 @@ export async function GET() {
     // 3. Fallback: If no history exists at all, use user.weightKg at user.createdAt (so there's at least one data point)
     if (combinedWeightMap.size === 0 && user.weightKg) {
         const uDate = user.createdAt ?? new Date();
-        const dateKey = uDate.toISOString().slice(0, 10);
+        const dateKey = toDateKey(uDate);
         const dateStr = format(uDate, "MMM dd");
         combinedWeightMap.set(dateKey, { date: dateStr, dateKey, weight: user.weightKg });
     }

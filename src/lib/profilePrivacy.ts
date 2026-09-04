@@ -106,6 +106,22 @@ export function hasSocialLinks(links: SocialLinks): boolean {
     return Boolean(links.instagram || links.tiktok || links.youtube || links.website);
 }
 
+/**
+ * Check-in / progress photos stay between the athlete, their assigned coach,
+ * and SUPER_ADMIN — even when the athlete's public `progressPhotos` setting is on.
+ * That setting only means "do not leak these on public profile APIs"; public
+ * profiles never include check-in media.
+ */
+export async function canViewProgressPhotos(
+    viewer: { id: string; role: string },
+    subject: { id: string; coachId: string | null }
+): Promise<boolean> {
+    if (viewer.id === subject.id) return true;
+    if (viewer.role === "SUPER_ADMIN") return true;
+    if (viewer.role === "COACH" && subject.coachId === viewer.id) return true;
+    return false;
+}
+
 export async function getUserProfilePrivacy(userId: string): Promise<ProfilePrivacy> {
     await ensureProfileExtendedColumns();
     const rows = await prisma.$queryRaw<Array<{ profilePrivacy: unknown }>>`

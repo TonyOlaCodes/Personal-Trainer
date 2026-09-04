@@ -14,6 +14,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ReturnLink } from "@/components/shared/ReturnLink";
 import { cn, toDateKey, parseLogDate, formatDate } from "@/lib/utils";
+import { shiftAppDateKey, weekdayFromDateKey } from "@/lib/appTimezone";
 import { useCurrentDate } from "@/hooks/useCurrentDate";
 import {
     getPlanDayOffset,
@@ -418,23 +419,25 @@ export function CalendarClient({
         return workoutFromLog() ?? workoutFromHistorical();
     }, [serializedPlanWeeks, scheduleRevisions, planStartedAt, todayDate, historicalMissedByDate, logMap, planWeekCount, sessionOverrides, todayKey]);
 
-    /* ─── Calendar Generation ─── */
-    const firstDay = new Date(view.year, view.month, 1);
-    const startDow = (firstDay.getDay() + 6) % 7; 
-    const gridStart = new Date(view.year, view.month, 1 - startDow);
-    const gridEnd = new Date(view.year, view.month + 1, 0);
-    const endDow = (gridEnd.getDay() + 6) % 7;
-    gridEnd.setDate(gridEnd.getDate() + (6 - endDow));
+    /* ─── Calendar Generation (Europe/Dublin date keys) ─── */
+    const monthPrefix = `${view.year}-${String(view.month + 1).padStart(2, "0")}`;
+    const monthStartKey = `${monthPrefix}-01`;
+    const startDow = (weekdayFromDateKey(monthStartKey) + 6) % 7;
+    const gridStartKey = shiftAppDateKey(monthStartKey, -startDow);
+    const nextMonthKey = view.month === 11
+        ? `${view.year + 1}-01-01`
+        : `${view.year}-${String(view.month + 2).padStart(2, "0")}-01`;
+    const monthEndKey = shiftAppDateKey(nextMonthKey, -1);
+    const endDow = (weekdayFromDateKey(monthEndKey) + 6) % 7;
+    const gridEndKey = shiftAppDateKey(monthEndKey, 6 - endDow);
 
     const cells: CalendarCell[] = [];
-    const cursor = new Date(gridStart);
-    while (cursor <= gridEnd) {
+    for (let key = gridStartKey; key <= gridEndKey; key = shiftAppDateKey(key, 1)) {
         cells.push({
-            dateKey: toDateKey(cursor),
-            day: cursor.getDate(),
-            inCurrentMonth: cursor.getMonth() === view.month,
+            dateKey: key,
+            day: Number(key.slice(8, 10)),
+            inCurrentMonth: key.startsWith(monthPrefix),
         });
-        cursor.setDate(cursor.getDate() + 1);
     }
 
     /* ─── Selected Day Helpers ─── */

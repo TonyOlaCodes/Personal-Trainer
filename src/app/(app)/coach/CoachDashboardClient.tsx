@@ -96,10 +96,7 @@ function computeSevenDayWeightChange(history: { date: string; weightKg: number }
 } | null {
     if (history.length === 0) return null;
 
-    const today = new Date();
-    const cutoff = new Date(today);
-    cutoff.setDate(cutoff.getDate() - 7);
-    const cutoffKey = cutoff.toISOString().slice(0, 10);
+    const cutoffKey = shiftDateKey(toDateKey(new Date()), -7);
 
     const sorted = [...history].sort((a, b) => a.date.localeCompare(b.date));
     const latest = sorted[sorted.length - 1];

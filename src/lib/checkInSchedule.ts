@@ -1,5 +1,11 @@
 import { prisma } from "@/lib/prisma";
-import { getWeekNumber, parseLogDate, toDateKey } from "@/lib/utils";
+import {
+    dateKeyToUtcNoon,
+    daysBetweenDateKeys,
+    mondayOfDateKey,
+    shiftAppDateKey,
+} from "@/lib/appTimezone";
+import { getWeekNumber, toDateKey } from "@/lib/utils";
 
 export interface CheckInSchedule {
     day: number | null;
@@ -97,35 +103,38 @@ export async function updateUserCheckInSchedule(userId: string, day: number, fre
     });
 }
 
-/** Normalize any Date/ISO to a stable noon Date for the app calendar day. */
+function dateKeyFromInput(input: Date | string): string {
+    if (typeof input === "string") {
+        const dateOnly = input.match(/^(\d{4}-\d{2}-\d{2})/);
+        if (dateOnly && !input.includes("T")) {
+            return dateOnly[1];
+        }
+        return toDateKey(new Date(input));
+    }
+    return toDateKey(input);
+}
+
+/** Normalize any Date/ISO to UTC noon of the app (Europe/Dublin) calendar day. */
 export function toCheckInCalendarDate(input: Date | string = new Date()): Date {
-    return parseLogDate(toDateKey(typeof input === "string" ? new Date(input) : input));
+    return dateKeyToUtcNoon(dateKeyFromInput(input));
 }
 
 function startOfIsoWeek(date: Date) {
-    const d = toCheckInCalendarDate(date);
-    const day = d.getDay();
-    const diff = day === 0 ? -6 : 1 - day;
-    d.setDate(d.getDate() + diff);
-    return d;
+    return dateKeyToUtcNoon(mondayOfDateKey(toDateKey(date)));
 }
 
 function dateForWeekdayInIsoWeek(date: Date, day: number) {
-    const monday = startOfIsoWeek(date);
+    const mondayKey = mondayOfDateKey(toDateKey(date));
     const offset = day === 0 ? 6 : day - 1;
-    const due = new Date(monday);
-    due.setDate(monday.getDate() + offset);
-    return toCheckInCalendarDate(due);
+    return dateKeyToUtcNoon(shiftAppDateKey(mondayKey, offset));
 }
 
 function addDays(date: Date, days: number) {
-    const next = new Date(date);
-    next.setDate(next.getDate() + days);
-    return toCheckInCalendarDate(next);
+    return dateKeyToUtcNoon(shiftAppDateKey(toDateKey(date), days));
 }
 
 function daysBetween(a: Date, b: Date) {
-    return Math.round((b.getTime() - a.getTime()) / 86400000);
+    return daysBetweenDateKeys(toDateKey(a), toDateKey(b));
 }
 
 export function getFirstEligibleDueDate(startDate: Date, day: number) {
@@ -281,4 +290,122 @@ export function hasCheckInForOutstandingPeriod(
         if (n === week) return true;
     }
     return false;
+}
+
+type DuplicateCheckInRow = {
+    id: string;
+    status: string;
+    coachResponse: string | null;
+    coachVideoUrl: string | null;
+    frontImageUrl: string | null;
+    sideImageUrl: string | null;
+    videoUrl: string | null;
+    feedback: string | null;
+    notes: string | null;
+    bodyweightKg: number | null;
+    createdAt: Date;
+    lastUpdatedByClientAt: Date | null;
+    respondedAt: Date | null;
+};
+
+function checkInMergeScore(row: DuplicateCheckInRow): number {
+    let score = 0;
+    if (row.status === "REVIEWED") score += 1000;
+    if (row.coachResponse) score += 200;
+    if (row.coachVideoUrl) score += 100;
+    if (row.frontImageUrl) score += 40;
+    if (row.sideImageUrl) score += 40;
+    if (row.videoUrl) score += 40;
+    if (row.feedback) score += 20;
+    if (row.notes) score += 10;
+    if (row.bodyweightKg != null) score += 10;
+    return score;
+}
+
+/**
+ * Merge historical duplicate (userId, weekNumber) rows, then add a unique index.
+ * Keeps the richest reviewed/submitted row and copies missing coach/client fields
+ * from extras. Does not delete unique period history.
+ */
+export async function ensureCheckInUserWeekUnique() {
+    const groups = await prisma.$queryRaw<Array<{ userId: string; weekNumber: number; n: number }>>`
+        SELECT "userId", "weekNumber", COUNT(*)::int AS n
+        FROM "check_ins"
+        GROUP BY "userId", "weekNumber"
+        HAVING COUNT(*) > 1
+    `;
+
+    for (const group of groups) {
+        const rows = await prisma.checkIn.findMany({
+            where: { userId: group.userId, weekNumber: group.weekNumber },
+            orderBy: [{ createdAt: "desc" }],
+        });
+        if (rows.length < 2) continue;
+
+        const ranked = [...rows].sort((a, b) => {
+            const scoreDiff = checkInMergeScore(b) - checkInMergeScore(a);
+            if (scoreDiff !== 0) return scoreDiff;
+            const aUpdated = a.lastUpdatedByClientAt?.getTime() ?? a.createdAt.getTime();
+            const bUpdated = b.lastUpdatedByClientAt?.getTime() ?? b.createdAt.getTime();
+            return bUpdated - aUpdated;
+        });
+        const keeper = ranked[0];
+        const extras = ranked.slice(1);
+
+        const merged = {
+            coachResponse: keeper.coachResponse,
+            coachVideoUrl: keeper.coachVideoUrl,
+            frontImageUrl: keeper.frontImageUrl,
+            sideImageUrl: keeper.sideImageUrl,
+            videoUrl: keeper.videoUrl,
+            feedback: keeper.feedback,
+            notes: keeper.notes,
+            bodyweightKg: keeper.bodyweightKg,
+            status: keeper.status,
+            respondedAt: keeper.respondedAt,
+            lastUpdatedByClientAt: keeper.lastUpdatedByClientAt,
+            coachLastSeenAt: keeper.coachLastSeenAt,
+        };
+
+        for (const extra of extras) {
+            if (!merged.coachResponse && extra.coachResponse) merged.coachResponse = extra.coachResponse;
+            if (!merged.coachVideoUrl && extra.coachVideoUrl) merged.coachVideoUrl = extra.coachVideoUrl;
+            if (!merged.frontImageUrl && extra.frontImageUrl) merged.frontImageUrl = extra.frontImageUrl;
+            if (!merged.sideImageUrl && extra.sideImageUrl) merged.sideImageUrl = extra.sideImageUrl;
+            if (!merged.videoUrl && extra.videoUrl) merged.videoUrl = extra.videoUrl;
+            if (!merged.feedback && extra.feedback) merged.feedback = extra.feedback;
+            if (!merged.notes && extra.notes) merged.notes = extra.notes;
+            if (merged.bodyweightKg == null && extra.bodyweightKg != null) merged.bodyweightKg = extra.bodyweightKg;
+            if (merged.status !== "REVIEWED" && extra.status === "REVIEWED") merged.status = extra.status;
+            if (!merged.respondedAt && extra.respondedAt) merged.respondedAt = extra.respondedAt;
+            if (
+                extra.lastUpdatedByClientAt
+                && (!merged.lastUpdatedByClientAt || extra.lastUpdatedByClientAt > merged.lastUpdatedByClientAt)
+            ) {
+                merged.lastUpdatedByClientAt = extra.lastUpdatedByClientAt;
+            }
+            if (
+                extra.coachLastSeenAt
+                && (!merged.coachLastSeenAt || extra.coachLastSeenAt > merged.coachLastSeenAt)
+            ) {
+                merged.coachLastSeenAt = extra.coachLastSeenAt;
+            }
+        }
+
+        await prisma.checkIn.update({
+            where: { id: keeper.id },
+            data: merged,
+        });
+        await prisma.checkIn.deleteMany({
+            where: { id: { in: extras.map((row) => row.id) } },
+        });
+        console.warn(
+            `[CheckInUniqueness] Merged ${extras.length} duplicate check-in(s) into ${keeper.id} for user ${group.userId} week ${group.weekNumber}`
+        );
+    }
+
+    await prisma.$executeRaw`
+        CREATE UNIQUE INDEX IF NOT EXISTS "check_ins_userId_weekNumber_key"
+        ON "check_ins"("userId", "weekNumber")
+    `;
 }

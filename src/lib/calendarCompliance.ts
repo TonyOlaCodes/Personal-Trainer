@@ -2,6 +2,7 @@ import { APP_TIMEZONE } from "@/lib/appTimezone";
 import { getPlannedWorkoutForDate, type ActiveUserPlanLike, isDateBeforePlanStart } from "@/lib/planSchedule";
 import { getLocalTimeParts } from "@/lib/coachNotificationSchedule";
 import { isScheduledTrainingWorkout } from "@/lib/planTrainingTarget";
+import { dateKeyToUtcNoon } from "@/lib/appTimezone";
 import { parseLogDate, toDateKey } from "@/lib/utils";
 
 export interface CalendarComplianceInput {
@@ -72,17 +73,17 @@ export function getMondayStart(date: Date): Date {
     const diff = dow === 0 ? -6 : 1 - dow;
     dt.setUTCDate(dt.getUTCDate() + diff);
     const mondayKey = `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
-    return parseLogDate(mondayKey);
+    return dateKeyToUtcNoon(mondayKey);
 }
 
 export function getWeekEnd(date: Date): Date {
     const mondayKey = toDateKey(getMondayStart(date));
-    return parseLogDate(addDaysToDateKey(mondayKey, 6));
+    return dateKeyToUtcNoon(addDaysToDateKey(mondayKey, 6));
 }
 
 export function getMonthStart(date: Date): Date {
     const { year, month } = getLocalTimeParts(date, APP_TIMEZONE);
-    return parseLogDate(`${year}-${String(month).padStart(2, "0")}-01`);
+    return dateKeyToUtcNoon(`${year}-${String(month).padStart(2, "0")}-01`);
 }
 
 export function getMonthEnd(date: Date): Date {
@@ -93,7 +94,7 @@ export function getMonthEnd(date: Date): Date {
         `${nextMonthYear}-${String(nextMonth).padStart(2, "0")}-01`,
         -1
     );
-    return parseLogDate(lastDayKey);
+    return dateKeyToUtcNoon(lastDayKey);
 }
 
 export function isSameCalendarMonth(a: Date, year: number, monthIndex: number): boolean {
@@ -116,7 +117,7 @@ export function computeComplianceForMonth(
     reference: Date,
     options?: CalendarComplianceOptions
 ): CalendarComplianceResult {
-    const monthStart = parseLogDate(`${year}-${String(monthIndex + 1).padStart(2, "0")}-01`);
+    const monthStart = dateKeyToUtcNoon(`${year}-${String(monthIndex + 1).padStart(2, "0")}-01`);
     const isCurrentMonth = isSameCalendarMonth(reference, year, monthIndex);
     const rangeEnd = isCurrentMonth ? reference : getMonthEnd(monthStart);
     const rangeOptions: CalendarComplianceOptions = {

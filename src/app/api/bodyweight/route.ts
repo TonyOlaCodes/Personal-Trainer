@@ -11,6 +11,7 @@ import {
 } from "@/lib/bodyweight";
 import { notifyCoachOfClientBodyweight } from "@/lib/notifications";
 import { triggerAchievementSync } from "@/lib/achievements";
+import { toDateKey } from "@/lib/utils";
 
 const saveSchema = z.object({
     date: z.string(),
@@ -32,7 +33,7 @@ export async function GET(req: Request) {
         if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
         const url = new URL(req.url);
-        const date = normalizeBodyweightDate(url.searchParams.get("date") ?? new Date().toISOString().slice(0, 10));
+        const date = normalizeBodyweightDate(url.searchParams.get("date") ?? toDateKey(new Date()));
         const [summary, weeklyAverage] = await Promise.all([
             getBodyweightSummary(user.id, date),
             getBodyweightWeeklyAverage(user.id, date),

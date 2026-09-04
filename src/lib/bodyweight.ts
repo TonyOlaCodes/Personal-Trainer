@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
+import { mondayOfDateKey, shiftAppDateKey, sundayOfDateKey } from "@/lib/appTimezone";
 
 export interface BodyweightEntry {
     date: string;
@@ -107,9 +108,7 @@ export async function getBodyweightHistory(userId: string, limit = 14): Promise<
 }
 
 export function addDaysToDateStr(dateStr: string, days: number): string {
-    const d = new Date(`${dateStr}T12:00:00`);
-    d.setDate(d.getDate() + days);
-    return d.toISOString().slice(0, 10);
+    return shiftAppDateKey(dateStr, days);
 }
 
 /** Average bodyweight between two dates (inclusive). */
@@ -144,20 +143,25 @@ export async function getBodyweightWeeklyAverage(userId: string, date: string) {
     return runWithRetry(async () => {
         await ensureBodyweightTable();
 
+        const weekStart = mondayOfDateKey(date);
+        const weekEnd = sundayOfDateKey(date);
+        const prevWeekStart = shiftAppDateKey(weekStart, -7);
+        const prevWeekEnd = shiftAppDateKey(weekEnd, -7);
+
         const rows = await prisma.$queryRaw<Array<{ averageWeightKg: number | null; entries: bigint }>>`
             SELECT AVG("weightKg")::float AS "averageWeightKg", COUNT(*)::bigint AS "entries"
             FROM "bodyweight_logs"
             WHERE "userId" = ${userId}
-                AND "loggedDate" >= date_trunc('week', ${date}::date)::date
-                AND "loggedDate" < (date_trunc('week', ${date}::date)::date + INTERVAL '7 days')
+                AND "loggedDate" >= ${weekStart}::date
+                AND "loggedDate" <= ${weekEnd}::date
         `;
 
         const previousRows = await prisma.$queryRaw<Array<{ averageWeightKg: number | null; entries: bigint }>>`
             SELECT AVG("weightKg")::float AS "averageWeightKg", COUNT(*)::bigint AS "entries"
             FROM "bodyweight_logs"
             WHERE "userId" = ${userId}
-                AND "loggedDate" >= (date_trunc('week', ${date}::date)::date - INTERVAL '7 days')
-                AND "loggedDate" < date_trunc('week', ${date}::date)::date
+                AND "loggedDate" >= ${prevWeekStart}::date
+                AND "loggedDate" <= ${prevWeekEnd}::date
         `;
 
         const current = rows[0];

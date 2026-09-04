@@ -18,6 +18,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
 import { isScheduledTrainingWorkout } from "@/lib/planTrainingTarget";
+import { dateKeyToUtcNoon } from "@/lib/appTimezone";
 import { parseLogDate, toDateKey } from "@/lib/utils";
 
 export interface CompletedWorkoutLog {
@@ -330,14 +331,15 @@ function computePerfectWeeks(
     excusedKeys?: Set<string>
 ): number {
     const startedAt = parseLogDate(getPlanStartDateKey(activeUserPlan.startedAt));
-    let weekStart = getMondayStart(startedAt);
+    let weekStartKey = toDateKey(getMondayStart(startedAt));
     const todayKey = toDateKey(today);
     let perfectWeeks = 0;
 
-    while (toDateKey(weekStart) <= todayKey) {
-        const weekEnd = new Date(weekStart);
-        weekEnd.setDate(weekEnd.getDate() + 6);
-        const effectiveEnd = weekEnd.getTime() > today.getTime() ? today : weekEnd;
+    while (weekStartKey <= todayKey) {
+        const weekStart = getMondayStart(dateKeyToUtcNoon(weekStartKey));
+        const weekEndKey = addDaysToDateKey(weekStartKey, 6);
+        const weekEnd = dateKeyToUtcNoon(weekEndKey);
+        const effectiveEnd = weekEndKey > todayKey ? today : weekEnd;
 
         const weekSlots = buildScheduledSlots(activeUserPlan, weekStart, effectiveEnd);
         if (weekSlots.length > 0) {
@@ -359,8 +361,7 @@ function computePerfectWeeks(
             }
         }
 
-        weekStart = new Date(weekStart);
-        weekStart.setDate(weekStart.getDate() + 7);
+        weekStartKey = addDaysToDateKey(weekStartKey, 7);
     }
 
     return perfectWeeks;

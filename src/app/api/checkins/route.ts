@@ -13,6 +13,7 @@ import { triggerAchievementSync } from "@/lib/achievements";
 import { withResolvedCheckInMedia, normalizeStoredUploadUrl } from "@/lib/uploadUrls";
 import { isInactiveAccount } from "@/lib/userDeactivation";
 import { canAccessCheckIns } from "@/lib/roles";
+import { canViewProgressPhotos } from "@/lib/profilePrivacy";
 
 const checkInSchema = z.object({
     bodyweightKg: z.number().optional(),
@@ -55,18 +56,42 @@ export async function POST(req: Request) {
         const { maybeAutoResumeCoachPausedClient } = await import("@/lib/coachClientPause");
         await maybeAutoResumeCoachPausedClient(user.id);
 
-        const checkIn = await prisma.checkIn.create({
-            data: {
-                userId: user.id,
-                ...parsed.data,
-                bodyweightKg: parsed.data.bodyweightKg ? Math.round(parsed.data.bodyweightKg * 100) / 100 : undefined,
-                feedback: parsed.data.feedback?.trim() || null,
-                frontImageUrl: normalizeStoredUploadUrl(parsed.data.frontImageUrl) ?? undefined,
-                sideImageUrl: normalizeStoredUploadUrl(parsed.data.sideImageUrl) ?? undefined,
-                videoUrl: normalizeStoredUploadUrl(parsed.data.videoUrl) ?? undefined,
-                status: "PENDING",
-            },
+        const existing = await prisma.checkIn.findFirst({
+            where: { userId: user.id, weekNumber: parsed.data.weekNumber },
         });
+        if (existing) {
+            const { clearCheckInRequest } = await import("@/lib/checkInRequests");
+            await clearCheckInRequest(user.id, parsed.data.weekNumber);
+            return NextResponse.json(withResolvedCheckInMedia(existing));
+        }
+
+        let checkIn;
+        try {
+            checkIn = await prisma.checkIn.create({
+                data: {
+                    userId: user.id,
+                    ...parsed.data,
+                    bodyweightKg: parsed.data.bodyweightKg ? Math.round(parsed.data.bodyweightKg * 100) / 100 : undefined,
+                    feedback: parsed.data.feedback?.trim() || null,
+                    frontImageUrl: normalizeStoredUploadUrl(parsed.data.frontImageUrl) ?? undefined,
+                    sideImageUrl: normalizeStoredUploadUrl(parsed.data.sideImageUrl) ?? undefined,
+                    videoUrl: normalizeStoredUploadUrl(parsed.data.videoUrl) ?? undefined,
+                    status: "PENDING",
+                },
+            });
+        } catch (error) {
+            if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+                const raced = await prisma.checkIn.findFirst({
+                    where: { userId: user.id, weekNumber: parsed.data.weekNumber },
+                });
+                if (raced) {
+                    const { clearCheckInRequest } = await import("@/lib/checkInRequests");
+                    await clearCheckInRequest(user.id, parsed.data.weekNumber);
+                    return NextResponse.json(withResolvedCheckInMedia(raced));
+                }
+            }
+            throw error;
+        }
 
         const { clearCheckInRequest } = await import("@/lib/checkInRequests");
         await clearCheckInRequest(user.id, parsed.data.weekNumber);
@@ -123,6 +148,7 @@ export async function GET(req: Request) {
                     select: {
                         name: true,
                         email: true,
+                        coachId: true,
                         workoutLogs: {
                             take: 15,
                             orderBy: { loggedAt: "desc" },
@@ -140,7 +166,23 @@ export async function GET(req: Request) {
             orderBy: { weekNumber: "desc" },
         });
 
-        return NextResponse.json(checkIns.map(withResolvedCheckInMedia));
+        const visible = await Promise.all(checkIns.map(async (checkIn) => {
+            const allowed = await canViewProgressPhotos(user, {
+                id: checkIn.userId,
+                coachId: checkIn.user?.coachId ?? null,
+            });
+            const resolved = withResolvedCheckInMedia(checkIn);
+            if (allowed) return resolved;
+            return {
+                ...resolved,
+                frontImageUrl: null,
+                sideImageUrl: null,
+                videoUrl: null,
+                coachVideoUrl: null,
+            };
+        }));
+
+        return NextResponse.json(visible);
     } catch (error) {
         console.error("Error in GET /api/checkins:", error);
         return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });

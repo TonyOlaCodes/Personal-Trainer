@@ -4,8 +4,10 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { CheckInsClient } from "./CheckInsClient";
-import { startOfWeek, endOfWeek } from "date-fns";
 import { getBodyweightAverageSinceLastCheckIn } from "@/lib/checkInPeriodSummary";
+import { APP_TIMEZONE, mondayOfDateKey, sundayOfDateKey } from "@/lib/appTimezone";
+import { localDayBoundsUtc } from "@/lib/coachNotificationSchedule";
+import { toDateKey } from "@/lib/utils";
 import { getWorkoutsTargetFromUserPlan } from "@/lib/planTrainingTarget";
 import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
 import { getEffectiveCheckInDueStateForUser } from "@/lib/coachAttentionActions";
@@ -48,8 +50,8 @@ export default async function CheckInsPage() {
                     where: {
                         status: "COMPLETED",
                         loggedAt: {
-                            gte: startOfWeek(new Date(), { weekStartsOn: 1 }),
-                            lte: endOfWeek(new Date(), { weekStartsOn: 1 }),
+                            gte: localDayBoundsUtc(mondayOfDateKey(toDateKey(new Date())), APP_TIMEZONE).start,
+                            lte: localDayBoundsUtc(sundayOfDateKey(toDateKey(new Date())), APP_TIMEZONE).end,
                         }
                     },
                     select: { id: true }
@@ -89,8 +91,7 @@ export default async function CheckInsPage() {
         }
 
         const workoutsThisWeek = user.workoutLogs?.length ?? 0;
-        const now = new Date();
-        const todayDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+        const todayDate = toDateKey(new Date());
         const bodyweightSinceLastCheckIn = isCoach
             ? { averageWeightKg: null, entries: 0, windowLabel: "since last check-in" as const }
             : await getBodyweightAverageSinceLastCheckIn(user.id, todayDate, user.createdAt);

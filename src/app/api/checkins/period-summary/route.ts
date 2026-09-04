@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCheckInPeriodSummary } from "@/lib/checkInPeriodSummary";
 import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
+import { toDateKey } from "@/lib/utils";
 
 export async function GET(req: Request) {
     try {
@@ -13,7 +14,7 @@ export async function GET(req: Request) {
         if (!actor) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
         const url = new URL(req.url);
-        const date = url.searchParams.get("date") ?? new Date().toISOString().slice(0, 10);
+        const date = url.searchParams.get("date") ?? toDateKey(new Date());
         const clientId = url.searchParams.get("clientId");
 
         let targetUserId = actor.id;

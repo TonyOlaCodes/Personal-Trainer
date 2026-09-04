@@ -1,6 +1,8 @@
 import { ensureDbSchema, prisma } from "@/lib/prisma";
 import { ensureBodyweightTable } from "@/lib/bodyweight";
-import { ensureCheckInScheduleColumns } from "@/lib/checkInSchedule";
+import { ensureCheckInScheduleColumns, ensureCheckInUserWeekUnique } from "@/lib/checkInSchedule";
+import { revokeBlockedAccessCodes } from "@/lib/accessCodes";
+import { ensureMediaAssetsTable } from "@/lib/mediaAccess";
 import { ensureDailyMetricsTable, ensureDailyMetricTargetColumns } from "@/lib/dailyMetrics";
 import { ensureUserAccountStatusColumns } from "@/lib/userDeactivation";
 import { ensureCoachClientPauseColumns } from "@/lib/coachClientPause";
@@ -74,6 +76,9 @@ export async function ensureAppSchema() {
             ensureAppSettingsTable(),
             ensureExerciseTrackingSchema(),
         ]);
+        await ensureCheckInUserWeekUnique();
+        await ensureMediaAssetsTable();
+        await revokeBlockedAccessCodes(prisma);
         appSchemaReady = true;
     })();
 

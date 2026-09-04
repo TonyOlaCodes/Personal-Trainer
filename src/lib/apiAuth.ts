@@ -7,6 +7,7 @@ import { getUserDeactivationStatusByClerkId, isInactiveAccount } from "@/lib/use
 import { isClientRole, isCoachRole, parseTeamCoachId } from "@/lib/roles";
 import { canViewFullProfile, canViewUserProfile } from "@/lib/userProfile";
 import { ensureAccessRequestColumns } from "@/lib/accessRequest";
+import { getUserProfilePrivacy } from "@/lib/profilePrivacy";
 
 export { defaultHomeForRole, isCoachRole, isClientRole, parseTeamCoachId } from "@/lib/roles";
 
@@ -217,11 +218,35 @@ export async function canDirectMessage(
         return true;
     }
 
+    // Social DMs honour the recipient's allowMessages setting.
+    const recipientPrivacy = await getUserProfilePrivacy(otherUserId);
+    if (!recipientPrivacy.allowMessages) return false;
+
     // Social messaging from public profiles (free and other client roles)
     if (!isClientRole(actor.role) || !isClientRole(other.role)) return false;
     if (!(await canViewUserProfile({ id: actor.id, role: actor.role }, otherUserId))) return false;
 
     return canViewFullProfile({ id: actor.id, role: actor.role }, otherUserId);
+}
+
+/** Read an existing 1:1 thread even when the peer has since disabled new messages. */
+export async function canReadDirectThread(
+    actor: Pick<User, "id" | "role" | "coachId">,
+    otherUserId: string
+): Promise<boolean> {
+    if (await canDirectMessage(actor, otherUserId)) return true;
+
+    const existing = await prisma.message.findFirst({
+        where: {
+            isGeneral: false,
+            OR: [
+                { senderId: actor.id, receiverId: otherUserId },
+                { senderId: otherUserId, receiverId: actor.id },
+            ],
+        },
+        select: { id: true },
+    });
+    return !!existing;
 }
 
 export async function canAccessTeamChat(

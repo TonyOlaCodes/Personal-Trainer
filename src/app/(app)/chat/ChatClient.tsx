@@ -1114,7 +1114,7 @@ export function ChatClient({
         if (!file || uploading) return;
         setUploading(true);
         try {
-            const url = await uploadMediaFile(file);
+            const url = await uploadMediaFile(file, tab === "general" ? "chat-general" : "chat-dm");
             const isVideo = file.type.startsWith("video/");
             setStagedMedia({ url, type: isVideo ? "VIDEO" : "IMAGE" });
         } catch (error) {

@@ -1,7 +1,19 @@
 import type { Prisma, PrismaClient, Role } from "@prisma/client";
 import { assignCoachPlanToClient } from "@/lib/coachPlanAssignment";
 
-const INSTANT_GENERAL_ACCESS_CODE = "PHOENIX";
+/** Permanently reserved — never redeemable, even if a leftover DB row exists. */
+const BLOCKED_ACCESS_CODES = new Set(["PHOENIX"]);
+
+function isBlockedAccessCode(code: string): boolean {
+    return BLOCKED_ACCESS_CODES.has(code.trim().toUpperCase());
+}
+
+export async function revokeBlockedAccessCodes(prisma: PrismaClient) {
+    await prisma.accessCode.updateMany({
+        where: { code: { in: [...BLOCKED_ACCESS_CODES] } },
+        data: { isActive: false, status: "expired" },
+    });
+}
 
 export async function generateCoachAccessCode(
     prisma: PrismaClient,
@@ -82,35 +94,8 @@ export async function redeemAccessCodeForUser(
 ) {
     const code = rawCode.trim().toUpperCase();
 
-    if (code === INSTANT_GENERAL_ACCESS_CODE) {
-        const existingUser = await prisma.user.findUnique({
-            where: { id: user.id },
-            select: { role: true, coachId: true },
-        });
-
-        if (existingUser?.role === "GENERAL_PREMIUM") {
-            return { error: "You already have Premium access", status: 400 } as const;
-        }
-
-        if (existingUser?.role === "PREMIUM" && existingUser.coachId) {
-            return { error: "You already have Coached Premium access", status: 400 } as const;
-        }
-
-        await prisma.user.update({
-            where: { id: user.id },
-            data: {
-                role: "GENERAL_PREMIUM",
-                coachId: null,
-            },
-        });
-
-        return {
-            success: true,
-            upgradedTo: "GENERAL_PREMIUM",
-            planAssigned: false,
-            isGeneralPremium: true,
-            generatedBy: INSTANT_GENERAL_ACCESS_CODE,
-        } as const;
+    if (isBlockedAccessCode(code)) {
+        return { error: "Invalid code", status: 404 } as const;
     }
 
     const validation = await validateAccessCode(prisma, code);
@@ -199,24 +184,8 @@ export async function releasePremiumAccessCodesForUser(
 export async function validateAccessCode(prisma: PrismaClient, rawCode: string) {
     const code = rawCode.trim().toUpperCase();
 
-    if (code === INSTANT_GENERAL_ACCESS_CODE) {
-        return {
-            success: true,
-            accessCode: {
-                id: INSTANT_GENERAL_ACCESS_CODE,
-                code: INSTANT_GENERAL_ACCESS_CODE,
-                planId: null,
-                generatedBy: INSTANT_GENERAL_ACCESS_CODE,
-                usedById: null,
-                usedAt: null,
-                expiresAt: null,
-                upgradesTo: "GENERAL_PREMIUM" as Role,
-                isActive: true,
-                status: "active",
-                createdAt: new Date(0),
-                generator: { name: "PHOENIX", email: null },
-            },
-        } as const;
+    if (isBlockedAccessCode(code)) {
+        return { error: "Invalid code", status: 404 } as const;
     }
 
     const accessCode = await prisma.accessCode.findUnique({

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { readFile } from "fs/promises";
 import path from "path";
 import fs from "fs";
+import { requireAuthUser } from "@/lib/apiAuth";
+import { lookupStoredMediaUrl, resolveMediaForViewer } from "@/lib/mediaAccess";
 
 export const runtime = "nodejs";
 
@@ -12,42 +14,68 @@ function safeFilename(filename: string): string | null {
     return base;
 }
 
-/** Legacy fallback for old `/api/uploads/...` URLs — serves files from public/uploads without auth. */
+function mimeForName(safeName: string, fallback?: string | null): string {
+    if (fallback) return fallback;
+    const lower = safeName.toLowerCase();
+    if (lower.endsWith(".png")) return "image/png";
+    if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+    if (lower.endsWith(".gif")) return "image/gif";
+    if (lower.endsWith(".webp")) return "image/webp";
+    if (lower.endsWith(".heic")) return "image/heic";
+    if (lower.endsWith(".heif")) return "image/heif";
+    if (lower.endsWith(".mp4")) return "video/mp4";
+    if (lower.endsWith(".webm")) return "video/webm";
+    if (lower.endsWith(".mov") || lower.endsWith(".qt")) return "video/quicktime";
+    return "application/octet-stream";
+}
+
+function fileResponse(buffer: Buffer, safeName: string, contentType?: string | null) {
+    return new NextResponse(new Uint8Array(buffer), {
+        headers: {
+            "Content-Type": mimeForName(safeName, contentType),
+            "Cache-Control": "private, max-age=3600",
+            "X-Content-Type-Options": "nosniff",
+        },
+    });
+}
+
 export async function GET(_req: Request, context: { params: Promise<{ filename: string }> }) {
     try {
+        const authResult = await requireAuthUser(_req);
+        if (authResult.error) return authResult.error;
+
         const { filename } = await context.params;
         const safeName = safeFilename(filename);
-
         if (!safeName) {
             return new NextResponse("Not Found", { status: 404 });
         }
 
-        const filePath = path.join(process.cwd(), "public", "uploads", safeName);
+        const asset = await resolveMediaForViewer(safeName, authResult.user);
+        if (!asset) {
+            return new NextResponse("Not Found", { status: 404 });
+        }
 
+        const storedUrl = asset.blobUrl ?? await lookupStoredMediaUrl(safeName);
+        if (storedUrl && (storedUrl.startsWith("http://") || storedUrl.startsWith("https://"))) {
+            const remote = await fetch(storedUrl);
+            if (!remote.ok) {
+                return new NextResponse("Not Found", { status: 404 });
+            }
+            const buffer = Buffer.from(await remote.arrayBuffer());
+            return fileResponse(
+                buffer,
+                safeName,
+                remote.headers.get("content-type") ?? asset.contentType
+            );
+        }
+
+        const filePath = path.join(process.cwd(), "public", "uploads", safeName);
         if (!fs.existsSync(filePath)) {
             return new NextResponse("File Not Found", { status: 404 });
         }
 
         const buffer = await readFile(filePath);
-
-        let mime = "application/octet-stream";
-        const lower = safeName.toLowerCase();
-        if (lower.endsWith(".png")) mime = "image/png";
-        else if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) mime = "image/jpeg";
-        else if (lower.endsWith(".gif")) mime = "image/gif";
-        else if (lower.endsWith(".webp")) mime = "image/webp";
-        else if (lower.endsWith(".heic")) mime = "image/heic";
-        else if (lower.endsWith(".heif")) mime = "image/heif";
-        else if (lower.endsWith(".mp4")) mime = "video/mp4";
-        else if (lower.endsWith(".webm")) mime = "video/webm";
-        else if (lower.endsWith(".mov") || lower.endsWith(".qt")) mime = "video/quicktime";
-
-        return new NextResponse(buffer, {
-            headers: {
-                "Content-Type": mime,
-                "Cache-Control": "public, max-age=86400, immutable",
-            },
-        });
+        return fileResponse(buffer, safeName, asset.contentType);
     } catch (e) {
         console.error("Error serving uploaded file:", e);
         return new NextResponse("Internal Server Error", { status: 500 });

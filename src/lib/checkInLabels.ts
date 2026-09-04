@@ -1,7 +1,7 @@
-import { APP_TIMEZONE } from "@/lib/appTimezone";
+import { APP_TIMEZONE, dateKeyToUtcNoon, isoWeekYearFromDateKey, shiftAppDateKey } from "@/lib/appTimezone";
 import { getLocalTimeParts } from "@/lib/coachNotificationSchedule";
 import type { CheckInDueState } from "@/lib/checkInSchedule";
-import { getWeekNumber, parseLogDate } from "@/lib/utils";
+import { getWeekNumber, parseLogDate, toDateKey } from "@/lib/utils";
 
 function ordinalSuffix(day: number): string {
     if (day >= 11 && day <= 13) return "th";
@@ -25,21 +25,16 @@ export function formatDayMonthLabel(input: Date | string): string {
 }
 
 export function getIsoWeekYear(date = new Date()): number {
-    const d = new Date(date);
-    d.setHours(12, 0, 0, 0);
-    const day = d.getDay() || 7;
-    d.setDate(d.getDate() + 4 - day);
-    return d.getFullYear();
+    return isoWeekYearFromDateKey(toDateKey(date instanceof Date ? date : new Date(date)));
 }
 
 /** Monday at the start of an ISO week. */
 export function getIsoWeekStartDate(weekNumber: number, isoWeekYear: number): Date {
-    const jan4 = new Date(isoWeekYear, 0, 4, 12, 0, 0, 0);
-    const day = jan4.getDay() || 7;
-    const monday = new Date(jan4);
-    monday.setDate(jan4.getDate() - (day - 1));
-    monday.setDate(monday.getDate() + (weekNumber - 1) * 7);
-    return monday;
+    const jan4Key = `${isoWeekYear}-01-04`;
+    const jan4 = dateKeyToUtcNoon(jan4Key);
+    const day = jan4.getUTCDay() || 7;
+    const mondayKey = shiftAppDateKey(jan4Key, -(day - 1) + (weekNumber - 1) * 7);
+    return dateKeyToUtcNoon(mondayKey);
 }
 
 export function formatCheckInWeekLabel(weekNumber: number, isoWeekYear?: number): string {

@@ -6,6 +6,7 @@ import { notifyClientOfCoachMessage } from "@/lib/notifications";
 import {
     canAccessTeamChat,
     canDirectMessage,
+    canReadDirectThread,
     isMessageParticipant,
     parseTeamCoachId,
     requireAuthUser,
@@ -112,7 +113,7 @@ export async function GET(req: Request) {
             }
             where = { isGeneral: false, receiverId: withUserId };
         } else {
-            if (!(await canDirectMessage(user, withUserId))) {
+            if (!(await canReadDirectThread(user, withUserId))) {
                 return NextResponse.json({ error: "Forbidden" }, { status: 403 });
             }
             where = {

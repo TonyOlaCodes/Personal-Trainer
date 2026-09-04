@@ -38,10 +38,14 @@ export async function compressImageForUpload(file: File, maxWidth = 1600): Promi
     }
 }
 
-export async function uploadMediaFile(file: File): Promise<string> {
+export async function uploadMediaFile(
+    file: File,
+    purpose: "checkin" | "chat-dm" | "chat-general" | "avatar" | "banner" | "workout" | "other" = "other"
+): Promise<string> {
     const payload = file.type.startsWith("image/") ? await compressImageForUpload(file) : file;
     const formData = new FormData();
     formData.append("file", payload);
+    formData.append("purpose", purpose);
 
     const res = await fetch("/api/upload", { method: "POST", body: formData });
     const data = await res.json().catch(() => ({}));

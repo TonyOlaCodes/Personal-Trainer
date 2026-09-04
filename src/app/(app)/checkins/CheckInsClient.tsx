@@ -534,7 +534,7 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highl
                                 if (!file) return;
                                 setUploadingCoachV(true);
                                 try {
-                                    const url = await uploadMediaFile(file);
+                                    const url = await uploadMediaFile(file, "checkin");
                                     setCoachVideo(url);
                                 } catch (error) {
                                     console.error("Coach video upload failed:", error);
@@ -947,7 +947,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
     const uploadPhoto = async (file: File, setUrl: (u: string) => void, setLoading: (v: boolean) => void) => {
         setLoading(true);
         try {
-            const url = await uploadMediaFile(file);
+            const url = await uploadMediaFile(file, "checkin");
             setUrl(url);
         } catch (error) {
             console.error("Progress photo upload failed:", error);

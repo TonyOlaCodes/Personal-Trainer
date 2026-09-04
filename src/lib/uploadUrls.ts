@@ -1,15 +1,26 @@
 /** Extract a safe uploads filename from any stored upload path, or null. */
-function extractUploadFilename(url: string): string | null {
+export function extractUploadFilename(url: string): string | null {
     let candidate = url.trim();
     if (!candidate) return null;
 
-    if (candidate.startsWith("/api/uploads/")) {
+    if (candidate.startsWith("http://") || candidate.startsWith("https://")) {
+        try {
+            const parsed = new URL(candidate);
+            const last = parsed.pathname.split("/").filter(Boolean).pop() ?? "";
+            candidate = last;
+        } catch {
+            return null;
+        }
+    } else if (candidate.startsWith("/api/uploads/")) {
         candidate = candidate.slice("/api/uploads/".length);
     } else if (candidate.startsWith("/uploads/")) {
         candidate = candidate.slice("/uploads/".length);
     } else if (candidate.startsWith("uploads/")) {
         candidate = candidate.slice("uploads/".length);
     }
+
+    const qIndex = candidate.indexOf("?");
+    if (qIndex >= 0) candidate = candidate.slice(0, qIndex);
 
     if (/^[a-zA-Z0-9._-]+$/.test(candidate)) {
         return candidate;
@@ -26,10 +37,6 @@ export function resolveUploadUrl(url: string | null | undefined): string {
     if (!url) return "";
     const trimmed = url.trim();
     if (!trimmed) return "";
-
-    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-        return trimmed;
-    }
 
     const filename = extractUploadFilename(trimmed);
     if (filename) {

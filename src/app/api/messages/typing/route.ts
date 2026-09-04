@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { canDirectMessage, requireAuthUser } from "@/lib/apiAuth";
+import { canReadDirectThread, requireAuthUser } from "@/lib/apiAuth";
 import { isPeerTyping, setChatTyping } from "@/lib/chatTyping";
 
 const typingSchema = z.object({
@@ -19,7 +19,7 @@ export async function GET(req: Request) {
         return NextResponse.json({ error: "with is required" }, { status: 400 });
     }
 
-    if (!(await canDirectMessage(user, withUserId))) {
+    if (!(await canReadDirectThread(user, withUserId))) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
@@ -40,7 +40,7 @@ export async function POST(req: Request) {
 
     const { withUserId, typing } = parsed.data;
 
-    if (!(await canDirectMessage(user, withUserId))) {
+    if (!(await canReadDirectThread(user, withUserId))) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
