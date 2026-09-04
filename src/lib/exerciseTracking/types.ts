@@ -33,6 +33,21 @@ export const TRACKING_PRESETS = [
 
 export type TrackingPreset = (typeof TRACKING_PRESETS)[number];
 
+/** Presets the Exercise Dictionary assigns. Type alone decides the fields. */
+export const DICTIONARY_TRACKING_PRESETS = [
+    "strength",
+    "timed",
+    "distance_time",
+    "weight_distance",
+    "height_reps",
+] as const;
+
+export type DictionaryTrackingPreset = (typeof DICTIONARY_TRACKING_PRESETS)[number];
+
+export function isDictionaryTrackingPreset(value: string): value is DictionaryTrackingPreset {
+    return (DICTIONARY_TRACKING_PRESETS as readonly string[]).includes(value);
+}
+
 export interface TrackingFieldConfig {
     key: TrackingFieldKey;
     enabled: boolean;
@@ -85,10 +100,10 @@ export const PRESET_LABELS: Record<TrackingPreset, string> = {
     reps_only: "Reps Only",
     timed: "Timed",
     distance: "Distance",
-    distance_time: "Distance + Time",
-    weight_distance: "Weight + Distance",
+    distance_time: "Distance",
+    weight_distance: "Load + Distance",
     weight_time: "Weight + Time",
-    height_reps: "Height + Reps",
+    height_reps: "Height",
     cardio: "Cardio",
     custom: "Custom",
 };

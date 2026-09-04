@@ -4,7 +4,7 @@ import type {
     TrackingFieldKey,
     TrackingPreset,
 } from "./types";
-import { TRACKING_FIELDS, TRACKING_PRESETS } from "./types";
+import { isDictionaryTrackingPreset, TRACKING_FIELDS, TRACKING_PRESETS } from "./types";
 import { DEFAULT_STRENGTH_SCHEMA, PRESET_DEFAULTS, schemaFromPreset } from "./presets";
 
 function isPreset(value: unknown): value is TrackingPreset {
@@ -20,6 +20,9 @@ export function normalizeTrackingSchema(
     input: Partial<ExerciseTrackingSchema> | null | undefined
 ): ExerciseTrackingSchema {
     const preset = isPreset(input?.preset) ? input!.preset : "strength";
+    if (isDictionaryTrackingPreset(preset)) {
+        return schemaFromPreset(preset);
+    }
     const defaults = PRESET_DEFAULTS[preset];
     const byKey = new Map<TrackingFieldKey, TrackingFieldConfig>();
 

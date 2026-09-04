@@ -210,7 +210,8 @@ export function evaluateMetricAwarePr(
 
     if (prEnabled(schema, "duration") && (set.durationSec ?? 0) > 0) {
         const d = set.durationSec!;
-        if (!prEnabled(schema, "distance")) {
+        const hasDistanceValue = prEnabled(schema, "distance") && (set.distanceMeters ?? 0) > 0;
+        if (!hasDistanceValue) {
             if (records.bestDurationSec != null && d > records.bestDurationSec) {
                 kinds.push("duration");
             }
@@ -219,7 +220,7 @@ export function evaluateMetricAwarePr(
 
     if (prEnabled(schema, "distance") && (set.distanceMeters ?? 0) > 0) {
         const dist = set.distanceMeters!;
-        if (!prEnabled(schema, "duration")) {
+        if (!prEnabled(schema, "duration") || !(set.durationSec ?? 0)) {
             if (records.bestDistanceMeters != null && dist > records.bestDistanceMeters) {
                 kinds.push("distance");
             }

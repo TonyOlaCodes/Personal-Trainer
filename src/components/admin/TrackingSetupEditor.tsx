@@ -2,18 +2,22 @@
 
 import { cn } from "@/lib/utils";
 import {
+    DICTIONARY_TRACKING_PRESETS,
+    FIELD_LABELS,
     PRESET_LABELS,
+    isDictionaryTrackingPreset,
+    type DictionaryTrackingPreset,
     type ExerciseTrackingSchema,
     type TrackingPreset,
 } from "@/lib/exerciseTracking/types";
-import { schemaFromPreset, normalizeTrackingSchema } from "@/lib/exerciseTracking/schema";
+import { schemaFromPreset, normalizeTrackingSchema, enabledInputFields } from "@/lib/exerciseTracking/schema";
 
-/** Admin-facing presets — keep the internal schema flexible for future types. */
-const SIMPLE_PRESETS: TrackingPreset[] = ["strength", "timed"];
-
-const PRESET_HINTS: Record<"strength" | "timed", string> = {
-    strength: "Sets, Weight, Reps, and RPE — used for PRs and progression automatically.",
+const PRESET_HINTS: Record<DictionaryTrackingPreset, string> = {
+    strength: "Sets, optional Weight, Reps, and RPE. Bodyweight work can omit load.",
     timed: "Sets, Duration, and RPE — for holds and timed efforts.",
+    distance_time: "Sets, Distance, Duration, and RPE. Either metric can be logged on its own.",
+    weight_distance: "Sets, Weight, Distance, Duration, and RPE. Load, distance, and time are optional.",
+    height_reps: "Sets, Height, Reps, and RPE — for jumps and similar efforts.",
 };
 
 interface Props {
@@ -22,37 +26,27 @@ interface Props {
     className?: string;
 }
 
-function toSimplePreset(preset: TrackingPreset): "strength" | "timed" {
-    if (preset === "timed") return "timed";
-    // Legacy cardio / distance / holds that were duration-led → Timed when admin re-saves.
-    if (
-        preset === "distance"
-        || preset === "distance_time"
-        || preset === "cardio"
-    ) {
-        return "timed";
-    }
+function toDictionaryPreset(preset: TrackingPreset): DictionaryTrackingPreset {
+    if (isDictionaryTrackingPreset(preset)) return preset;
+    if (preset === "distance" || preset === "cardio") return "distance_time";
+    if (preset === "weight_time") return "timed";
     return "strength";
 }
 
 export function TrackingSetupEditor({ value, onChange, className }: Props) {
     const schema = normalizeTrackingSchema(value);
-    const selected = toSimplePreset(schema.preset);
-    const fieldsSummary =
-        selected === "strength"
-            ? ["Sets", "Weight", "Reps", "RPE"]
-            : ["Sets", "Duration", "RPE"];
-
-    const setPreset = (preset: "strength" | "timed") => {
-        onChange(schemaFromPreset(preset));
-    };
+    const selected = toDictionaryPreset(schema.preset);
+    const display = schemaFromPreset(selected);
+    const fieldsSummary = enabledInputFields(display)
+        .filter((key) => key !== "pace")
+        .map((key) => FIELD_LABELS[key]);
 
     return (
         <div className={cn("rounded-xl border border-surface-border bg-surface-muted/20 p-4 space-y-4", className)}>
             <div>
                 <h4 className="text-sm font-black text-fg tracking-wide">Tracking</h4>
                 <p className="text-xs text-fg-muted mt-0.5">
-                    Choose how this exercise is logged. Plan targets, workouts, history, and PRs follow automatically.
+                    Choose how this exercise is logged. Fields, plan targets, history, and PRs follow this type.
                 </p>
             </div>
 
@@ -63,11 +57,11 @@ export function TrackingSetupEditor({ value, onChange, className }: Props) {
                 <select
                     className="input w-full"
                     value={selected}
-                    onChange={(e) => setPreset(e.target.value as "strength" | "timed")}
+                    onChange={(e) => onChange(schemaFromPreset(e.target.value as DictionaryTrackingPreset))}
                 >
-                    {SIMPLE_PRESETS.map((p) => (
-                        <option key={p} value={p}>
-                            {PRESET_LABELS[p]}
+                    {DICTIONARY_TRACKING_PRESETS.map((preset) => (
+                        <option key={preset} value={preset}>
+                            {PRESET_LABELS[preset]}
                         </option>
                     ))}
                 </select>
@@ -78,7 +72,7 @@ export function TrackingSetupEditor({ value, onChange, className }: Props) {
                     Includes
                 </p>
                 <div className="flex flex-wrap gap-1.5">
-                    {fieldsSummary.map((label) => (
+                    {["Sets", ...fieldsSummary].map((label) => (
                         <span
                             key={label}
                             className="text-[11px] font-bold px-2 py-1 rounded-lg bg-surface-muted border border-surface-border text-fg"
@@ -88,23 +82,16 @@ export function TrackingSetupEditor({ value, onChange, className }: Props) {
                     ))}
                 </div>
                 <p className="text-xs text-fg-muted leading-relaxed">{PRESET_HINTS[selected]}</p>
-                {schema.preset !== selected && (
-                    <p className="text-[11px] text-warning">
-                        Previously stored as {PRESET_LABELS[schema.preset] ?? schema.preset}. Saving a type
-                        above will switch to the simplified setup (historical logs stay intact).
-                    </p>
-                )}
             </div>
         </div>
     );
 }
 
 export function TrackingPresetBadge({ preset }: { preset: TrackingPreset | null | undefined }) {
-    const simple = preset ? toSimplePreset(preset) : "strength";
-    const label = PRESET_LABELS[simple];
+    const simple = preset ? toDictionaryPreset(preset) : "strength";
     return (
         <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border border-surface-border bg-surface-muted/40 text-fg-subtle">
-            {label}
+            {PRESET_LABELS[simple]}
         </span>
     );
 }

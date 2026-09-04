@@ -74,16 +74,16 @@ check("guess Dead Hang → timed", () => {
     assert.equal(guessTrackingPreset("Dead Hang"), "timed");
 });
 
-check("guess Sprint → timed", () => {
-    assert.equal(guessTrackingPreset("Sprint"), "timed");
+check("guess Sprint → distance", () => {
+    assert.equal(guessTrackingPreset("Sprint"), "distance_time");
 });
 
-check("guess Farmer's Carry → strength", () => {
-    assert.equal(guessTrackingPreset("Farmer's Carry"), "strength");
+check("guess Farmer's Carry → load + distance", () => {
+    assert.equal(guessTrackingPreset("Farmer's Carry"), "weight_distance");
 });
 
-check("guess Box Jump → strength", () => {
-    assert.equal(guessTrackingPreset("Box Jump"), "strength");
+check("guess Box Jump → height", () => {
+    assert.equal(guessTrackingPreset("Box Jump"), "height_reps");
 });
 
 check("guess Push-Up → strength", () => {
@@ -98,8 +98,45 @@ check("guess Plank → timed", () => {
     assert.equal(guessTrackingPreset("Plank"), "timed");
 });
 
-check("guess Treadmill → timed", () => {
-    assert.equal(guessTrackingPreset("Treadmill Run"), "timed");
+check("guess Treadmill → distance", () => {
+    assert.equal(guessTrackingPreset("Treadmill Run"), "distance_time");
+});
+
+check("guess Burpee stays strength", () => {
+    assert.equal(guessTrackingPreset("Burpee", "Cardio"), "strength");
+});
+
+check("guess Battle Ropes → timed", () => {
+    assert.equal(guessTrackingPreset("Battle Ropes"), "timed");
+});
+
+check("guess Rope Climb → distance", () => {
+    assert.equal(guessTrackingPreset("Rope Climb"), "distance_time");
+});
+
+check("guess isometric Hold → timed", () => {
+    assert.equal(guessTrackingPreset("Single-Leg Wall Sit Hold"), "timed");
+});
+
+check("guess Superman stays strength; Superman Holds is timed", () => {
+    assert.equal(guessTrackingPreset("Superman"), "strength");
+    assert.equal(guessTrackingPreset("Superman Holds"), "timed");
+});
+
+check("guess Towel Dead Hang → timed", () => {
+    assert.equal(guessTrackingPreset("Towel Dead Hang"), "timed");
+});
+
+check("strength weight is optional", () => {
+    const schema = schemaFromPreset("strength");
+    assert.equal(schema.fields.find((f) => f.key === "weight")?.required, undefined);
+    assert.equal(
+        isSchemaWorkingSet(
+            { ...coerceSetMetrics({ reps: 12 }), isWarmup: false },
+            schema
+        ),
+        true
+    );
 });
 
 check("hasPerformedMetrics strength with weight+reps", () => {

@@ -24,6 +24,7 @@
     "migrate:biceps": "npx tsx scripts/migrate-biceps-catalog.ts",
     "migrate:triceps": "npx tsx scripts/migrate-triceps-catalog.ts",
     "migrate:forearms": "npx tsx scripts/migrate-forearms-catalog.ts",
+    "migrate:tracking": "npx tsx scripts/migrate-exercise-tracking.ts",
     "test:tracking": "npx tsx scripts/test-exercise-tracking.ts",
     "test:muscles": "npx tsx scripts/test-muscle-contribution.ts",
     "test:achievements": "npx tsx scripts/test-achievements-progressive.ts",

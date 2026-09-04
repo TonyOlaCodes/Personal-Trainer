@@ -4,6 +4,7 @@ export * from "./schema";
 export * from "./format";
 export * from "./validation";
 export * from "./ensure";
+export * from "./classify";
 export * from "./guess";
 export * from "./resolve";
 export * from "./prs";

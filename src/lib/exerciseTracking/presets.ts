@@ -24,11 +24,11 @@ function disabled(key: TrackingFieldKey): TrackingFieldConfig {
     return { key, enabled: false };
 }
 
-/** Defaults for each preset — admin can toggle fields after selecting. */
+/** Defaults for each preset. Dictionary types decide fields — no per-exercise checkboxes. */
 export const PRESET_DEFAULTS: Record<TrackingPreset, TrackingFieldConfig[]> = {
     strength: [
         field("sets", { required: true, planTarget: true }),
-        field("weight", { required: true, planTarget: true, usedForPr: true, usedForProgress: true }),
+        field("weight", { planTarget: true, usedForPr: true, usedForProgress: true }),
         field("reps", { required: true, planTarget: true, usedForPr: true, usedForProgress: true }),
         field("rpe", { planTarget: true }),
         disabled("duration"),
@@ -92,8 +92,8 @@ export const PRESET_DEFAULTS: Record<TrackingPreset, TrackingFieldConfig[]> = {
     ],
     distance_time: [
         field("sets", { required: true, planTarget: true }),
-        field("distance", { required: true, planTarget: true, usedForPr: true, usedForProgress: true }),
-        field("duration", { required: true, planTarget: true, usedForPr: true, usedForProgress: true }),
+        field("distance", { planTarget: true, usedForPr: true, usedForProgress: true }),
+        field("duration", { planTarget: true, usedForPr: true, usedForProgress: true }),
         field("pace", { usedForPr: true, usedForProgress: true }),
         field("rpe", { planTarget: true }),
         disabled("weight"),
@@ -108,13 +108,13 @@ export const PRESET_DEFAULTS: Record<TrackingPreset, TrackingFieldConfig[]> = {
     ],
     weight_distance: [
         field("sets", { required: true, planTarget: true }),
-        field("weight", { required: true, planTarget: true, usedForPr: true, usedForProgress: true }),
-        field("distance", { required: true, planTarget: true, usedForPr: true, usedForProgress: true }),
-        field("duration", { planTarget: true, usedForProgress: true }),
+        field("weight", { planTarget: true, usedForProgress: true }),
+        field("distance", { planTarget: true, usedForPr: true, usedForProgress: true }),
+        field("duration", { planTarget: true, usedForPr: true, usedForProgress: true }),
+        field("pace", { usedForPr: true, usedForProgress: true }),
         field("rpe", { planTarget: true }),
         disabled("reps"),
         disabled("rir"),
-        disabled("pace"),
         disabled("speed"),
         disabled("height"),
         disabled("resistance"),
