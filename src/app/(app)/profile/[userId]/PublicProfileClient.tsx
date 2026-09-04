@@ -659,7 +659,7 @@ export function PublicProfileClient({ userId }: Props) {
                                     </div>
                                     {pr.isPr !== false && (
                                         <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-warning bg-warning/10 border border-warning/25 px-2 py-1 rounded-lg">
-                                            PR
+                                            WEIGHT PR
                                         </span>
                                     )}
                                 </>

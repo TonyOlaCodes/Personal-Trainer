@@ -23,6 +23,9 @@ import {
     usesStrengthOneRm,
     type ExerciseTrackingSchema,
 } from "@/lib/exerciseTracking";
+import { loadWorkoutHistorySessions } from "@/lib/workoutHistory";
+import { annotateMetricSessionPrs } from "@/lib/annotateSessionPrs";
+import { formatAlsoStrengthPrLabels, type PrKind } from "@/lib/exercisePrs";
 
 export default async function LogViewPage({ params }: { params: Promise<{ logId: string }> }) {
     const { logId } = await params;
@@ -74,6 +77,39 @@ export default async function LogViewPage({ params }: { params: Promise<{ logId:
     }
 
     const exerciseNotes = await getLogExerciseNotes(log.id);
+
+    const history = await loadWorkoutHistorySessions(log.userId, { excludeLogId: log.id });
+    const flatSets = log.sets.map((set) => ({
+        id: set.id,
+        exerciseName: canonicalExerciseName(resolveLogSetExerciseName(set)) || resolveLogSetExerciseName(set),
+        weightKg: set.weightKg,
+        reps: set.reps,
+        durationSec: set.durationSec,
+        distanceMeters: set.distanceMeters,
+        heightCm: set.heightCm,
+        resistance: set.resistance,
+        inclinePct: set.inclinePct,
+        calories: set.calories,
+        heartRate: set.heartRate,
+        speedKph: set.speedKph,
+        rpe: set.rpe,
+        rir: set.rir,
+        isWarmup: set.isWarmup,
+        isCompleted: set.isCompleted,
+    }));
+    const prBySetId = annotateMetricSessionPrs(
+        flatSets,
+        history,
+        (name) => {
+            const match = groupedExercises.find(
+                (g) => g.name.toLowerCase() === name.toLowerCase()
+            );
+            if (match) return schemaByExerciseId[match.exerciseId];
+            // Fallback: first schema (should rarely happen)
+            return Object.values(schemaByExerciseId)[0];
+        },
+        log.id
+    );
 
     return (
         <div className="bg-surface min-h-screen pb-20">
@@ -202,14 +238,34 @@ export default async function LogViewPage({ params }: { params: Promise<{ logId:
                                     const est1RM = show1rm && !set.isWarmup && set.weightKg && set.reps
                                         ? calculateOneRM(set.weightKg, set.reps)
                                         : null;
+                                    const pr = prBySetId.get(set.id);
+                                    const isPr = pr?.isPr ?? set.isPR;
+                                    const alsoLabels = formatAlsoStrengthPrLabels(
+                                        (pr?.alsoKinds ?? []).filter((k): k is PrKind =>
+                                            k === "oneRm" || k === "weight" || k === "reps"
+                                        ),
+                                        set.reps
+                                    );
                                     return (
                                     <div key={set.id} className="space-y-3">
                                         <div className={cn(
                                             "grid grid-cols-12 px-3 py-3 text-sm items-center rounded-2xl group transition-all",
-                                            set.isPR ? "bg-brand-500/5 border border-brand-500/20 shadow-glow-brand-sm" : "bg-surface-muted border border-transparent hover:border-surface-border"
+                                            isPr ? "bg-brand-500/5 border border-brand-500/20 shadow-glow-brand-sm" : "bg-surface-muted border border-transparent hover:border-surface-border"
                                         )}>
                                             <span className="col-span-2 font-black text-fg-subtle tracking-tighter">#{set.setNumber}{set.isWarmup ? " W" : ""}</span>
-                                            <span className="col-span-6 font-semibold text-fg leading-snug">{summary}</span>
+                                            <span className="col-span-6 font-semibold text-fg leading-snug">
+                                                {summary}
+                                                {pr?.isPr && pr.label && (
+                                                    <span className="ml-2 text-[10px] font-black uppercase tracking-wider text-warning whitespace-nowrap">
+                                                        {pr.label}
+                                                    </span>
+                                                )}
+                                                {alsoLabels.length > 0 && (
+                                                    <span className="ml-1.5 text-[9px] font-bold uppercase tracking-wide text-fg-subtle">
+                                                        + {alsoLabels.join(" · ")}
+                                                    </span>
+                                                )}
+                                            </span>
                                             {show1rm && (
                                                 <span className={cn("col-span-2 font-black text-center", est1RM ? "text-warning-400" : "text-fg-subtle")}>
                                                     {est1RM ? `${est1RM}kg` : "—"}

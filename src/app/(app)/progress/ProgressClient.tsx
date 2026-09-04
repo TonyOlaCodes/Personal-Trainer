@@ -961,6 +961,50 @@ export function ProgressClient({ userRole, hiddenGoals, todayWorkoutHref = null,
                         </div>
 
                         <div className="p-6 space-y-6">
+                            {(() => {
+                                const rec = (data as any)?.exerciseRecords?.[selectedExercise];
+                                if (!rec || (!rec.bestOneRm && !rec.bestWeightKg)) return null;
+                                return (
+                                    <div className="rounded-2xl border border-surface-border bg-surface-muted/40 p-4 space-y-3">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Records</p>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            {rec.bestOneRm != null && (
+                                                <div>
+                                                    <p className="text-[9px] font-black uppercase tracking-widest text-warning/80">Overall Best</p>
+                                                    <p className="text-sm font-black text-fg tabular-nums">
+                                                        Est. 1RM {Math.round(rec.bestOneRm)}kg
+                                                    </p>
+                                                </div>
+                                            )}
+                                            {rec.bestWeightKg != null && (
+                                                <div>
+                                                    <p className="text-[9px] font-black uppercase tracking-widest text-brand-400/80">Weight PR</p>
+                                                    <p className="text-sm font-black text-fg tabular-nums">
+                                                        {rec.bestWeightKg}kg
+                                                        {rec.bestWeightReps > 0 ? ` × ${rec.bestWeightReps}` : ""}
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
+                                        {Array.isArray(rec.repRecords) && rec.repRecords.length > 0 && (
+                                            <div>
+                                                <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle mb-1.5">Rep Records</p>
+                                                <ul className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                                                    {rec.repRecords.map((r: { reps: number; weightKg: number }) => (
+                                                        <li
+                                                            key={r.reps}
+                                                            className="text-[11px] font-semibold text-fg-muted tabular-nums"
+                                                        >
+                                                            {r.reps} rep{r.reps === 1 ? "" : "s"}: {r.weightKg}kg
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })()}
+
                             {/* Graph */}
                             <div className="h-[240px] w-full">
                                 <ResponsiveContainer width="100%" height="100%">

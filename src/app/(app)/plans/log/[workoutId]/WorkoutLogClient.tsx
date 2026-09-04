@@ -24,6 +24,7 @@ import { exerciseIdentityKey } from "@/lib/exerciseIdentity";
 import {
     EMPTY_EXERCISE_RECORDS,
     evaluateLiveExercisePrs,
+    formatAlsoStrengthPrLabels,
     type ExerciseRecords,
     type PreviousSessionPerformance,
     type PreviousSet,
@@ -38,6 +39,14 @@ import {
     type ExerciseTrackingSchema,
     type TrackingFieldKey,
 } from "@/lib/exerciseTracking";
+import {
+    cloneMetricRecords,
+    EMPTY_METRIC_RECORDS,
+    evaluateMetricAwarePr,
+    applySetToMetricRecords,
+    type MetricExerciseRecords,
+    type MetricPrResult,
+} from "@/lib/exerciseTracking/prs";
 import { EXERCISE_NOTE_MAX_LENGTH } from "@/lib/logExerciseNotesShared";
 import { buildWorkoutMuscleBreakdown } from "@/lib/exerciseMuscles";
 import { MuscleMap, MuscleChips } from "@/components/shared/MuscleMap";
@@ -1177,27 +1186,83 @@ export function WorkoutLogClient({
     /**
      * Live PRs: each completed set is judged against history + earlier completed sets
      * in this session. Recomputed on every logs/records change so edits/deletes recalc.
+     * Strength uses the canonical engine; other tracking schemas use metric-aware PRs.
      */
     const livePrByExerciseId = useMemo(() => {
-        const result: Record<string, SetPrResult[]> = {};
+        const result: Record<string, Array<SetPrResult | MetricPrResult>> = {};
         if (!sessionActive) return result;
 
         for (const ex of activeExercises) {
             const schema = schemaFor(ex);
-            if (!usesStrengthOneRm(schema)) continue;
             const sets = logs[ex.id] ?? [];
-            result[ex.id] = evaluateLiveExercisePrs(
-                sets.map((set) => ({
-                    weightKg: parseFloat(String(set.weightKg)) || 0,
+            if (usesStrengthOneRm(schema)) {
+                result[ex.id] = evaluateLiveExercisePrs(
+                    sets.map((set) => ({
+                        weightKg: parseFloat(String(set.weightKg)) || 0,
+                        reps: set.reps,
+                        isWarmup: set.isWarmup,
+                        isCompleted: set.isCompleted,
+                    })),
+                    recordsFor(ex.name)
+                );
+                continue;
+            }
+
+            // Non-strength: replay metric board from baseline strength records when present,
+            // otherwise empty metric board (history for duration/distance arrives via records
+            // only for strength today — duration PRs still work once prior sets exist in-session).
+            const board: MetricExerciseRecords = cloneMetricRecords({
+                ...EMPTY_METRIC_RECORDS,
+                strength: recordsFor(ex.name),
+            });
+            result[ex.id] = sets.map((set) => {
+                const metrics = {
+                    weightKg: parseFloat(String(set.weightKg)) || null,
                     reps: set.reps,
+                    durationSec: set.durationSec != null ? parseFloat(String(set.durationSec)) : null,
+                    distanceMeters: set.distanceMeters != null ? parseFloat(String(set.distanceMeters)) : null,
+                    heightCm: set.heightCm != null ? parseFloat(String(set.heightCm)) : null,
                     isWarmup: set.isWarmup,
-                    isCompleted: set.isCompleted,
-                })),
-                recordsFor(ex.name)
-            );
+                    isCompleted: set.isCompleted === true,
+                };
+                const pr = evaluateMetricAwarePr(metrics, board, schema);
+                if (set.isCompleted === true && !set.isWarmup) {
+                    applySetToMetricRecords(board, metrics, schema);
+                }
+                return pr;
+            });
         }
         return result;
     }, [sessionActive, activeExercises, logs, exerciseRecords, trackingSchemas]);
+
+    const sessionPrSummary = useMemo(() => {
+        const rows: Array<{ exerciseName: string; label: string; summary: string }> = [];
+        for (const ex of activeExercises) {
+            const prs = livePrByExerciseId[ex.id] ?? [];
+            const sets = logs[ex.id] ?? [];
+            prs.forEach((pr, idx) => {
+                if (!pr.isPr || !pr.label) return;
+                const set = sets[idx];
+                if (!set) return;
+                const schema = schemaFor(ex);
+                rows.push({
+                    exerciseName: ex.name,
+                    label: pr.label,
+                    summary: formatSetSummary(
+                        {
+                            weightKg: parseFloat(String(set.weightKg)) || null,
+                            reps: set.reps,
+                            durationSec: set.durationSec != null ? parseFloat(String(set.durationSec)) : null,
+                            distanceMeters: set.distanceMeters != null ? parseFloat(String(set.distanceMeters)) : null,
+                            heightCm: set.heightCm != null ? parseFloat(String(set.heightCm)) : null,
+                        },
+                        schema
+                    ),
+                });
+            });
+        }
+        return rows;
+    }, [activeExercises, livePrByExerciseId, logs, trackingSchemas]);
 
     const viewport = useVisualViewport();
 
@@ -1846,9 +1911,42 @@ export function WorkoutLogClient({
                                         )}
                                     </div>
                                     {pr?.isPr && pr.label && (
-                                        <p className="px-1 text-[10px] font-black uppercase tracking-wider text-warning">
-                                            {pr.label}
-                                        </p>
+                                        <div className="px-1 space-y-0.5">
+                                            <p className="text-[10px] font-black uppercase tracking-wider text-warning">
+                                                {pr.label}
+                                            </p>
+                                            {"alsoKinds" in pr && pr.alsoKinds && pr.alsoKinds.length > 0 && (() => {
+                                                const strengthKinds = pr.alsoKinds.filter(
+                                                    (k) => k === "oneRm" || k === "weight" || k === "reps"
+                                                ) as Array<"oneRm" | "weight" | "reps">;
+                                                const strengthAlso = formatAlsoStrengthPrLabels(
+                                                    strengthKinds,
+                                                    set.reps
+                                                );
+                                                const metricAlso = pr.alsoKinds
+                                                    .filter((k) => !["oneRm", "weight", "reps"].includes(k))
+                                                    .map((k) =>
+                                                        k === "duration"
+                                                            ? "DURATION PR"
+                                                            : k === "distance"
+                                                              ? "DISTANCE PR"
+                                                              : k === "pace"
+                                                                ? "TIME PR"
+                                                                : k === "height"
+                                                                  ? "HEIGHT PR"
+                                                                  : k === "heightReps"
+                                                                    ? "REP PR"
+                                                                    : String(k).toUpperCase()
+                                                    );
+                                                const labels = [...strengthAlso, ...metricAlso];
+                                                if (labels.length === 0) return null;
+                                                return (
+                                                    <p className="text-[9px] font-bold uppercase tracking-wide text-fg-subtle">
+                                                        Also: {labels.join(" · ")}
+                                                    </p>
+                                                );
+                                            })()}
+                                        </div>
                                     )}
                                     </div>
                                 )})}
@@ -2161,6 +2259,28 @@ export function WorkoutLogClient({
                                 <h3 className="text-xl sm:text-2xl font-black text-fg tracking-tighter uppercase">Workout Complete!</h3>
                                 <p className="text-xs text-fg-subtle font-medium">Review your session details below.</p>
                             </div>
+
+                            {sessionPrSummary.length > 0 && (
+                                <div className="rounded-2xl border border-warning/25 bg-warning/5 p-3.5 space-y-2.5">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-warning">
+                                        {sessionPrSummary.length}{" "}
+                                        {sessionPrSummary.length === 1 ? "Record" : "Records"}
+                                    </p>
+                                    <ul className="space-y-2">
+                                        {sessionPrSummary.map((row, i) => (
+                                            <li key={`${row.exerciseName}-${i}`} className="flex items-start justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <p className="text-xs font-black text-fg truncate">{row.exerciseName}</p>
+                                                    <p className="text-[10px] font-semibold text-fg-muted tabular-nums">{row.summary}</p>
+                                                </div>
+                                                <span className="shrink-0 text-[9px] font-black uppercase tracking-wider text-warning">
+                                                    {row.label}
+                                                </span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
 
                             {!isCoachForClient && (
                                 <WorkoutFeelingPicker

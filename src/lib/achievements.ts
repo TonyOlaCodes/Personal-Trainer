@@ -6,9 +6,6 @@ import { createNotification, ensureNotificationsTable } from "@/lib/notification
 import { NOTIFICATION_TYPES } from "@/lib/notificationTypes";
 import {
     ACHIEVEMENT_DEFINITIONS,
-    TOTAL_CLIENT_ACHIEVEMENTS,
-    evaluateAchievement,
-    getAchievementProgress,
     type AchievementDefinition,
     type AchievementStats,
 } from "@/lib/achievementDefinitions";
@@ -25,22 +22,37 @@ import { ensureMessageActionColumns } from "@/lib/coachChat";
 import { ensureWorkoutNotesTable } from "@/lib/workoutNotes";
 import { isCoachRole } from "@/lib/roles";
 import { getWorkoutAdherenceForUser } from "@/lib/workoutAdherenceStreak";
+import {
+    ensureProgressiveAchievementTables,
+    getFeaturedAchievementKeys,
+    getProgressiveDisplay,
+    pickAutoFeatured,
+    syncProgressiveAchievements,
+    type ProgressiveDisplayItem,
+} from "@/lib/achievements/engine";
+import { PROGRESSIVE_ACHIEVEMENTS } from "@/lib/achievements/progressiveCatalog";
+import { SPECIAL_ACHIEVEMENTS } from "@/lib/achievements/specialCatalog";
+
+export type { ProgressiveDisplayItem };
+export type AchievementDisplayItem = ProgressiveDisplayItem | CoachAchievementDisplayItem;
 
 export interface UserAchievementRow {
     achievementId: string;
     unlockedAt: Date;
 }
 
-export interface AchievementDisplayItem {
+/** Coach (and legacy flat) display shape — progressive items add more fields. */
+export interface CoachAchievementDisplayItem {
     id: string;
     title: string;
     description: string;
     unlockHint: string;
-    rarity: AchievementDefinition["rarity"];
-    icon: AchievementDefinition["icon"];
+    rarity: AchievementDefinition["rarity"] | CoachAchievementDefinition["rarity"];
+    icon: AchievementDefinition["icon"] | CoachAchievementDefinition["icon"];
     unlocked: boolean;
     unlockedAt: string | null;
     progress: { current: number; target: number } | null;
+    kind?: "coach";
 }
 
 export interface AchievementSummary {
@@ -54,14 +66,16 @@ export function isCoachAchievementId(id: string): boolean {
     return id.startsWith("coach-");
 }
 
-export function getAchievementCatalogForRole(role: string): Array<AchievementDefinition | CoachAchievementDefinition> {
+export function getAchievementCatalogForRole(
+    role: string
+): Array<AchievementDefinition | CoachAchievementDefinition> {
     if (isCoachRole(role)) return COACH_ACHIEVEMENT_DEFINITIONS;
     return ACHIEVEMENT_DEFINITIONS;
 }
 
 export function getTotalAchievementsForRole(role: string): number {
     if (isCoachRole(role)) return TOTAL_COACH_ACHIEVEMENTS;
-    return TOTAL_CLIENT_ACHIEVEMENTS;
+    return PROGRESSIVE_ACHIEVEMENTS.length + SPECIAL_ACHIEVEMENTS.length;
 }
 
 function getUnlockHint(def: AchievementDefinition | CoachAchievementDefinition): string {
@@ -80,7 +94,10 @@ let achievementsReady = false;
 const syncInFlight = new Map<string, Promise<string[]>>();
 
 export async function ensureAchievementsTables() {
-    if (achievementsReady) return;
+    if (achievementsReady) {
+        await ensureProgressiveAchievementTables();
+        return;
+    }
 
     await prisma.$executeRaw`
         CREATE TABLE IF NOT EXISTS "user_achievements" (
@@ -104,6 +121,7 @@ export async function ensureAchievementsTables() {
         )
     `;
 
+    await ensureProgressiveAchievementTables();
     achievementsReady = true;
 }
 
@@ -144,6 +162,7 @@ export async function recordProfileView(viewerId: string, profileUserId: string)
     triggerAchievementSync(viewerId);
 }
 
+/** Legacy flat stats — retained for coach tooling / audits; client sync uses progressiveStats. */
 export async function getAchievementStats(userId: string): Promise<AchievementStats> {
     await ensureAchievementsTables();
     await ensureBodyweightTable();
@@ -304,20 +323,22 @@ export async function getCoachAchievementStats(coachId: string): Promise<CoachAc
                 usedById: { not: null },
             },
         }),
-        prisma.user.findMany({
-            where: clientWhere,
-            select: { id: true },
-        }).then((clients) =>
-            clients.length === 0
-                ? 0
-                : prisma.message.count({
-                    where: {
-                        senderId: coachId,
-                        isGeneral: false,
-                        receiverId: { in: clients.map((client) => client.id) },
-                    },
-                })
-        ),
+        prisma.user
+            .findMany({
+                where: clientWhere,
+                select: { id: true },
+            })
+            .then((clients) =>
+                clients.length === 0
+                    ? 0
+                    : prisma.message.count({
+                          where: {
+                              senderId: coachId,
+                              isGeneral: false,
+                              receiverId: { in: clients.map((client) => client.id) },
+                          },
+                      })
+            ),
         prisma.checkIn.count({
             where: {
                 user: { coachId },
@@ -356,31 +377,10 @@ async function getUnlockedMap(userId: string): Promise<Map<string, Date>> {
     return new Map(rows.map((r) => [r.achievementId, r.unlockedAt]));
 }
 
-function buildClientDisplayList(
-    stats: AchievementStats,
-    unlocked: Map<string, Date>
-): AchievementDisplayItem[] {
-    return ACHIEVEMENT_DEFINITIONS.map((def) => {
-        const unlockedAt = unlocked.get(def.id);
-        const isUnlocked = Boolean(unlockedAt) || evaluateAchievement(def, stats);
-        return {
-            id: def.id,
-            title: def.title,
-            description: def.description,
-            unlockHint: getUnlockHint(def),
-            rarity: def.rarity,
-            icon: def.icon,
-            unlocked: isUnlocked,
-            unlockedAt: unlockedAt?.toISOString() ?? null,
-            progress: getAchievementProgress(def, stats),
-        };
-    });
-}
-
 function buildCoachDisplayList(
     stats: CoachAchievementStats,
     unlocked: Map<string, Date>
-): AchievementDisplayItem[] {
+): CoachAchievementDisplayItem[] {
     return COACH_ACHIEVEMENT_DEFINITIONS.map((def) => {
         const unlockedAt = unlocked.get(def.id);
         const isUnlocked = Boolean(unlockedAt) || evaluateCoachAchievement(def, stats);
@@ -394,15 +394,32 @@ function buildCoachDisplayList(
             unlocked: isUnlocked,
             unlockedAt: unlockedAt?.toISOString() ?? null,
             progress: getCoachAchievementProgress(def, stats),
+            kind: "coach",
         };
     });
 }
 
-/** Most recently unlocked achievements for profile preview. */
+/** Most recently unlocked / featured achievements for profile preview. */
 export function getRecentAchievementPreview(
     achievements: AchievementDisplayItem[],
-    limit = 3
+    limit = 3,
+    featuredKeys?: string[]
 ): AchievementDisplayItem[] {
+    if (featuredKeys && featuredKeys.length > 0) {
+        const byId = new Map(achievements.map((a) => [a.id, a]));
+        const featured = featuredKeys
+            .map((key) => byId.get(key))
+            .filter((item): item is AchievementDisplayItem => Boolean(item?.unlocked));
+        if (featured.length > 0) return featured.slice(0, limit);
+    }
+
+    const progressive = achievements.filter(
+        (a): a is ProgressiveDisplayItem => "kind" in a && (a.kind === "progressive" || a.kind === "special")
+    );
+    if (progressive.length > 0) {
+        return pickAutoFeatured(progressive, limit);
+    }
+
     return achievements
         .filter((item) => item.unlocked)
         .sort((a, b) => {
@@ -428,10 +445,10 @@ async function doSyncUserAchievements(userId: string): Promise<string[]> {
     await ensureAchievementsTables();
 
     const role = await getUserRole(userId);
-    const unlocked = await getUnlockedMap(userId);
-    const newlyUnlocked: string[] = [];
 
     if (isCoachRole(role)) {
+        const unlocked = await getUnlockedMap(userId);
+        const newlyUnlocked: string[] = [];
         const stats = await getCoachAchievementStats(userId);
 
         for (const def of COACH_ACHIEVEMENT_DEFINITIONS) {
@@ -448,20 +465,8 @@ async function doSyncUserAchievements(userId: string): Promise<string[]> {
         return newlyUnlocked;
     }
 
-    const stats = await getAchievementStats(userId);
-
-    for (const def of ACHIEVEMENT_DEFINITIONS) {
-        if (unlocked.has(def.id)) continue;
-        if (!evaluateAchievement(def, stats)) continue;
-
-        const inserted = await insertAchievementUnlock(userId, def.id, unlocked);
-        if (!inserted) continue;
-
-        newlyUnlocked.push(def.id);
-        await notifyAchievementUnlock(userId, def.id, def.title);
-    }
-
-    return newlyUnlocked;
+    const { newlyUnlockedKeys } = await syncProgressiveAchievements(userId);
+    return newlyUnlockedKeys;
 }
 
 async function insertAchievementUnlock(
@@ -501,7 +506,7 @@ async function notifyAchievementUnlock(userId: string, achievementId: string, ti
     await createNotification({
         userId,
         type: NOTIFICATION_TYPES.ACHIEVEMENT_UNLOCKED,
-        message: `🏆 Achievement Unlocked — ${title}`,
+        message: `Achievement Unlocked — ${title}`,
         entityType: "ACHIEVEMENT",
         entityId: achievementId,
         route: `/profile/${userId}?achievements=1`,
@@ -511,15 +516,14 @@ async function notifyAchievementUnlock(userId: string, achievementId: string, ti
 export async function getUserAchievementsDisplay(userId: string): Promise<AchievementDisplayItem[]> {
     await syncUserAchievements(userId);
     const role = await getUserRole(userId);
-    const unlocked = await getUnlockedMap(userId);
 
     if (isCoachRole(role)) {
+        const unlocked = await getUnlockedMap(userId);
         const stats = await getCoachAchievementStats(userId);
         return buildCoachDisplayList(stats, unlocked);
     }
 
-    const stats = await getAchievementStats(userId);
-    return buildClientDisplayList(stats, unlocked);
+    return getProgressiveDisplay(userId);
 }
 
 export async function getAchievementSummary(userId: string): Promise<AchievementSummary> {
@@ -527,10 +531,15 @@ export async function getAchievementSummary(userId: string): Promise<Achievement
     const achievements = await getUserAchievementsDisplay(userId);
     const totalUnlocked = achievements.filter((a) => a.unlocked).length;
 
+    let featuredKeys: string[] | undefined;
+    if (!isCoachRole(role)) {
+        featuredKeys = await getFeaturedAchievementKeys(userId);
+    }
+
     return {
         totalUnlocked,
         totalAchievements: getTotalAchievementsForRole(role),
-        preview: getRecentAchievementPreview(achievements, 3),
+        preview: getRecentAchievementPreview(achievements, 3, featuredKeys),
         achievements,
     };
 }

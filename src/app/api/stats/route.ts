@@ -4,6 +4,14 @@ import { prisma } from "@/lib/prisma";
 import { format, startOfWeek, endOfWeek, subWeeks, isWithinInterval, startOfMonth, startOfYear, addDays, endOfDay } from "date-fns";
 import { ensureDailyMetricsTable, getDailyMetricTargets } from "@/lib/dailyMetrics";
 import { createExerciseSessionEntry, mergeSetIntoExerciseSession, normalizeExerciseHistory } from "@/lib/exerciseHistory";
+import {
+    applySetToRecords,
+    cloneExerciseRecords,
+    EMPTY_EXERCISE_RECORDS,
+    meaningfulRepRecords,
+    type ExerciseRecords,
+} from "@/lib/exercisePrs";
+import { canonicalExerciseName } from "@/lib/exerciseCanonical";
 import { calculateOneRM, isBetterSet } from "@/lib/oneRepMax";
 import { ensureBodyweightTable } from "@/lib/bodyweight";
 import { getUserPinnedExercises } from "@/lib/pinnedExercises";
@@ -44,6 +52,7 @@ export async function GET() {
 
     // Aggregation containers
     const exerciseHistory: Record<string, any[]> = {};
+    const exerciseRecordsByName: Record<string, ExerciseRecords> = {};
     const muscleVolume: Record<string, number> = {};
     
     // Volume Aggregations
@@ -125,6 +134,17 @@ export async function GET() {
             sessionVolume += sVol;
 
             if (!sessionExercises.includes(exName)) sessionExercises.push(exName);
+
+            if (isWorkingSet && sWeight > 0 && sReps > 0) {
+                const displayName = canonicalExerciseName(exName) || exName;
+                if (!exerciseRecordsByName[displayName]) {
+                    exerciseRecordsByName[displayName] = cloneExerciseRecords(EMPTY_EXERCISE_RECORDS);
+                }
+                applySetToRecords(exerciseRecordsByName[displayName], {
+                    weightKg: sWeight,
+                    reps: sReps,
+                });
+            }
 
             // Volume tracking
             muscleVolume[mg] = (muscleVolume[mg] || 0) + sVol;
@@ -435,6 +455,17 @@ export async function GET() {
             sbdTimeline: sbdTimelineProgressive,
             muscleVolume,
             exerciseHistory: normalizeExerciseHistory(exerciseHistory),
+            exerciseRecords: Object.fromEntries(
+                Object.entries(exerciseRecordsByName).map(([name, rec]) => [
+                    name,
+                    {
+                        bestWeightKg: rec.bestWeightKg,
+                        bestWeightReps: rec.bestWeightReps,
+                        bestOneRm: rec.bestOneRm,
+                        repRecords: meaningfulRepRecords(rec),
+                    },
+                ])
+            ),
             prList,
             topExercises,
             lastWorkout: lastWorkoutSummary,

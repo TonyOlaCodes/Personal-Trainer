@@ -23,6 +23,7 @@ import {
     type MetricExerciseRecords,
 } from "@/lib/exerciseTracking/prs";
 import { calculateOneRM } from "@/lib/oneRepMax";
+import { exerciseIdentityKey } from "@/lib/exerciseIdentity";
 import { z } from "zod";
 
 const optionalNonNeg = z.number().min(0).optional();
@@ -311,60 +312,68 @@ export async function POST(req: Request) {
      * PRs are judged against history that excludes this session, so re-saving or
      * finishing an in-progress log cannot make a set compete with itself and flip its
      * own badge off. Warmups and incomplete sets never earn a record.
+     * Boards are keyed by canonical exercise identity so aliases share history.
      */
     const prBySetIndex = new Map<number, boolean>();
+    const prMetaBySetIndex = new Map<number, { kinds: string[]; label: string | null }>();
     if (status === "COMPLETED") {
         const excludeLogId = existingInProgress?.id ?? existingCompleted?.id;
         const history = await loadWorkoutHistorySessions(subjectUserId, { excludeLogId });
 
         // Build metric-aware records per exercise identity using each exercise's tracking schema.
-        const schemaByName = new Map<string, Awaited<ReturnType<typeof resolveTrackingSchema>>>();
-        const recordsByName = new Map<string, MetricExerciseRecords>();
+        const schemaByKey = new Map<string, Awaited<ReturnType<typeof resolveTrackingSchema>>>();
+        const displayNameByKey = new Map<string, string>();
+        const recordsByKey = new Map<string, MetricExerciseRecords>();
 
-        const ensureSchema = async (name: string) => {
-            if (!schemaByName.has(name)) {
-                schemaByName.set(name, await resolveTrackingSchema(name));
+        const ensureSchema = async (name: string, key: string) => {
+            if (!schemaByKey.has(key)) {
+                schemaByKey.set(key, await resolveTrackingSchema(name));
             }
-            return schemaByName.get(name)!;
+            return schemaByKey.get(key)!;
         };
 
         for (const session of history) {
             for (const set of session.sets) {
+                if (set.isWarmup || !set.isCompleted) continue;
                 const name = set.exerciseName?.trim() || "";
                 if (!name) continue;
-                const schema = await ensureSchema(name);
-                if (!recordsByName.has(name)) {
-                    recordsByName.set(name, cloneMetricRecords(EMPTY_METRIC_RECORDS));
+                const key = exerciseIdentityKey(name);
+                if (!key) continue;
+                displayNameByKey.set(key, name);
+                const schema = await ensureSchema(name, key);
+                if (!recordsByKey.has(key)) {
+                    recordsByKey.set(key, cloneMetricRecords(EMPTY_METRIC_RECORDS));
                 }
                 const metrics = {
                     weightKg: set.weightKg,
                     reps: set.reps,
-                    durationSec: (set as { durationSec?: number | null }).durationSec,
-                    distanceMeters: (set as { distanceMeters?: number | null }).distanceMeters,
-                    heightCm: (set as { heightCm?: number | null }).heightCm,
+                    durationSec: set.durationSec,
+                    distanceMeters: set.distanceMeters,
+                    heightCm: set.heightCm,
                 };
                 const oneRm =
                     (metrics.weightKg ?? 0) > 0 && (metrics.reps ?? 0) > 0
                         ? calculateOneRM(metrics.weightKg!, metrics.reps!)
                         : null;
-                applySetToMetricRecords(recordsByName.get(name)!, metrics, schema, oneRm);
+                applySetToMetricRecords(recordsByKey.get(key)!, metrics, schema, oneRm);
             }
         }
 
         // Evaluate each set in order, advancing records within the session.
         const liveRecords = new Map<string, MetricExerciseRecords>();
-        for (const [name, rec] of recordsByName) {
-            liveRecords.set(name, cloneMetricRecords(rec));
+        for (const [key, rec] of recordsByKey) {
+            liveRecords.set(key, cloneMetricRecords(rec));
         }
 
         for (let index = 0; index < setsWithRealIds.length; index++) {
             const set = setsWithRealIds[index];
             const name = resolvedSetName(set);
-            const schema = await ensureSchema(name);
-            if (!liveRecords.has(name)) {
-                liveRecords.set(name, cloneMetricRecords(EMPTY_METRIC_RECORDS));
+            const key = exerciseIdentityKey(name) || name.toLowerCase();
+            const schema = await ensureSchema(name, key);
+            if (!liveRecords.has(key)) {
+                liveRecords.set(key, cloneMetricRecords(EMPTY_METRIC_RECORDS));
             }
-            const board = liveRecords.get(name)!;
+            const board = liveRecords.get(key)!;
             const metrics = {
                 weightKg: set.weightKg ?? null,
                 reps: set.reps ?? null,
@@ -386,7 +395,13 @@ export async function POST(req: Request) {
                     ? calculateOneRM(metrics.weightKg!, metrics.reps!)
                     : null;
             const pr = evaluateMetricAwarePr(metrics, board, schema, oneRm);
-            if (pr.isPr) prBySetIndex.set(index, true);
+            if (pr.isPr) {
+                prBySetIndex.set(index, true);
+                prMetaBySetIndex.set(index, {
+                    kinds: pr.kinds,
+                    label: pr.label,
+                });
+            }
             applySetToMetricRecords(board, metrics, schema, oneRm);
         }
     }
@@ -411,6 +426,10 @@ export async function POST(req: Request) {
         isWarmup: s.isWarmup,
         isCompleted: s.isCompleted,
         isPR: prBySetIndex.get(index) ?? false,
+        prKinds: prMetaBySetIndex.get(index)?.kinds?.length
+            ? JSON.stringify(prMetaBySetIndex.get(index)!.kinds)
+            : null,
+        prLabel: prMetaBySetIndex.get(index)?.label ?? null,
         videoUrl: s.videoUrl ? normalizeStoredUploadUrl(s.videoUrl) ?? s.videoUrl : undefined,
     }));
 

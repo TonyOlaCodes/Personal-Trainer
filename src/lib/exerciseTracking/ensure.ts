@@ -24,6 +24,8 @@ export async function ensureExerciseTrackingSchema() {
     await addColumn(`ALTER TABLE "log_sets" ADD COLUMN IF NOT EXISTS "heartRate" INTEGER`);
     await addColumn(`ALTER TABLE "log_sets" ADD COLUMN IF NOT EXISTS "speedKph" DOUBLE PRECISION`);
     await addColumn(`ALTER TABLE "log_sets" ADD COLUMN IF NOT EXISTS "rir" DOUBLE PRECISION`);
+    await addColumn(`ALTER TABLE "log_sets" ADD COLUMN IF NOT EXISTS "prKinds" TEXT`);
+    await addColumn(`ALTER TABLE "log_sets" ADD COLUMN IF NOT EXISTS "prLabel" TEXT`);
 
     await addColumn(`ALTER TABLE "exercises" ADD COLUMN IF NOT EXISTS "targetDurationSec" DOUBLE PRECISION`);
     await addColumn(`ALTER TABLE "exercises" ADD COLUMN IF NOT EXISTS "targetDistanceMeters" DOUBLE PRECISION`);

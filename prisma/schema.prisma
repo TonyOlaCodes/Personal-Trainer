@@ -364,6 +364,10 @@ model LogSet {
   isWarmup     Boolean @default(false)
   isCompleted  Boolean @default(true)
   isPR         Boolean @default(false)
+  /// JSON array of PR kinds earned on this set, e.g. ["oneRm","weight","reps"]
+  prKinds      String?
+  /// Primary display label at save time, e.g. "NEW BEST" / "WEIGHT PR" / "8 REP PR"
+  prLabel      String?
   videoUrl     String? // Add video upload per set
 
   workoutLog WorkoutLog @relation(fields: [workoutLogId], references: [id], onDelete: Cascade)
