@@ -13,7 +13,7 @@ const REQUIRED_PATTERNS = [
     { id: "first-completion-anchor", pattern: /findFirstCompletedWorkoutDateKey/ },
     { id: "neutral-pre-start-days", pattern: /status:\s*"neutral"/ },
     { id: "pending-today-excluded", pattern: /streakDaysForEvaluation/ },
-    { id: "excused-keeps-streak", pattern: /excusedKeys\.has\(slotKey\)/ },
+    { id: "excused-keeps-streak", pattern: /excusedKeys\??\.has\(/ },
     { id: "scenario-checks", pattern: /runStreakScenarioChecks/ },
 ];
 

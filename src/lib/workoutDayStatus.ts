@@ -1,14 +1,13 @@
 /**
  * The one definition of a training day's status.
  *
- * Calendar, Dashboard, Plans and the coach views all derive status here so they can
- * never disagree. Precedence is deliberate and load-bearing:
+ * Calendar, Dashboard, Plans, streaks and coach views all derive status here so
+ * they can never disagree. Precedence (load-bearing):
  *
- *   completed > in progress > rest > excused > missed > today > upcoming
+ *   completed > in-progress > excused > missed > today > upcoming > rest
  *
- * In progress outranks everything except a finished log, which is what keeps an
- * active session visible on a scheduled rest day and turns a missed day that the
- * user has started catching up into "In Progress" rather than leaving it red.
+ * Rest is only for days with no required scheduled training. A past scheduled
+ * workout with no completion and no excuse is always Missed — never Rest.
  */
 
 export type WorkoutDayStatus =
@@ -25,10 +24,12 @@ export interface WorkoutDayStatusInput {
     hasCompletedLog: boolean;
     /** An in-progress session is attached to this day. */
     hasActiveSession: boolean;
-    /** A workout is scheduled and it is not a rest slot. */
+    /**
+     * A required training workout was/is scheduled for this day.
+     * Historical missed sessions and named training workouts count even when
+     * exercise lists are empty (reconstructions often omit sets).
+     */
     hasScheduledTraining: boolean;
-    /** The day falls outside the plan's active range. */
-    isOutsidePlanRange?: boolean;
     isPast: boolean;
     isToday: boolean;
     /** A coach has excused the missed session on this day. */
@@ -38,7 +39,10 @@ export interface WorkoutDayStatusInput {
 export function resolveWorkoutDayStatus(input: WorkoutDayStatusInput): WorkoutDayStatus {
     if (input.hasCompletedLog) return "completed";
     if (input.hasActiveSession) return "in-progress";
-    if (!input.hasScheduledTraining || input.isOutsidePlanRange) return "rest";
+
+    // No required training on this day → Rest (never Missed).
+    if (!input.hasScheduledTraining) return "rest";
+
     if (input.isPast && input.isExcused) return "excused";
     if (input.isPast) return "missed";
     if (input.isToday) return "today";

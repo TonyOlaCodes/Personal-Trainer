@@ -16,6 +16,7 @@ import {
     type CoachAttentionCategory,
 } from "@/lib/coachAttentionActions";
 import { getPlannedWorkoutForDate, type ActiveUserPlanLike } from "@/lib/planSchedule";
+import { isScheduledTrainingWorkout } from "@/lib/planTrainingTarget";
 import { loadPlanScheduleRevisionsByPlanIds } from "@/lib/planScheduleHistory";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
 import { isInactiveAccount } from "@/lib/userDeactivation";
@@ -232,7 +233,7 @@ export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAtt
                 if (shouldSuppressCoachMissedAttention(pauseClient, dateKey)) continue;
                 const date = parseLogDate(dateKey);
                 const planned = getPlannedWorkoutForDate(activeUserPlan, date, { today });
-                if (!planned) continue;
+                if (!planned || !isScheduledTrainingWorkout(planned)) continue;
                 if (completedLogKeys.has(`${dateKey}:${planned.id}`)) continue;
 
                 const alertKey = buildMissedWorkoutAlertKey(client.id, dateKey, planned.id);

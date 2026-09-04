@@ -6,7 +6,7 @@ import { getDayName, getWeekNumber, isSameCalendarDay, parseLogDate, toDateKey }
 import { startOfWeek, endOfWeek } from "date-fns";
 import { getBodyweightHistory, getBodyweightSummary } from "@/lib/bodyweight";
 import { getBodyweightAverageSinceLastCheckIn } from "@/lib/checkInPeriodSummary";
-import { getWorkoutsTargetFromUserPlan } from "@/lib/planTrainingTarget";
+import { getWorkoutsTargetFromUserPlan, isScheduledTrainingWorkout } from "@/lib/planTrainingTarget";
 import { getPlannedWorkoutForDate } from "@/lib/planSchedule";
 import { loadPlanScheduleRevisions, serializePlanWeeksForSchedule } from "@/lib/planScheduleHistory";
 import { resolvePlannedWorkoutWithExercisesForDate, sortPlannedExercises } from "@/lib/plannedWorkoutResolve";
@@ -114,7 +114,10 @@ export default async function DashboardPage() {
             ? { startedAt: activeUserPlan.startedAt, plan: { weeks: activePlan.weeks } }
             : null;
 
-        const todayWorkoutPlanned = getPlannedWorkoutForDate(activeUserPlanLike, today, { today });
+        const todayWorkoutPlannedRaw = getPlannedWorkoutForDate(activeUserPlanLike, today, { today });
+        const todayWorkoutPlanned = isScheduledTrainingWorkout(todayWorkoutPlannedRaw)
+            ? todayWorkoutPlannedRaw
+            : null;
 
         const [scheduleRevisions] = await Promise.all([
             activePlan ? loadPlanScheduleRevisions(activePlan.id) : Promise.resolve([]),
@@ -140,7 +143,7 @@ export default async function DashboardPage() {
             )
             : [];
 
-        const todayWorkoutResolved = activeUserPlan && serializedWeeks.length > 0
+        const todayWorkoutResolvedRaw = activeUserPlan && serializedWeeks.length > 0
             ? resolvePlannedWorkoutWithExercisesForDate({
                 startedAt: activeUserPlan.startedAt,
                 weeks: serializedWeeks,
@@ -148,6 +151,9 @@ export default async function DashboardPage() {
                 date: today,
                 today,
             })
+            : null;
+        const todayWorkoutResolved = isScheduledTrainingWorkout(todayWorkoutResolvedRaw)
+            ? todayWorkoutResolvedRaw
             : null;
 
         const todayWorkoutFromPlan = todayWorkoutPlanned && activePlan

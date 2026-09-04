@@ -136,10 +136,7 @@ export async function loadClientCalendarData(userId: string): Promise<ClientCale
         await Promise.all([
             activePlan ? loadPlanScheduleRevisions(activePlan.id) : Promise.resolve([]),
             getClientAttentionActions(userId),
-            loadHistoricalMissedSessions(
-                userId,
-                activePlan ? { planId: activePlan.id } : undefined
-            ),
+            loadHistoricalMissedSessions(userId),
             listSessionOverridesForUser(userId),
         ]);
     const excusedMissedWorkoutKeys = [...getExcusedMissedWorkoutKeys(clientActions)];

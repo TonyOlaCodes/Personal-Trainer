@@ -1,7 +1,7 @@
 import { APP_TIMEZONE } from "@/lib/appTimezone";
 import { getPlannedWorkoutForDate, type ActiveUserPlanLike, isDateBeforePlanStart } from "@/lib/planSchedule";
 import { getLocalTimeParts } from "@/lib/coachNotificationSchedule";
-import { isRestPlanWorkout } from "@/lib/planTrainingTarget";
+import { isScheduledTrainingWorkout } from "@/lib/planTrainingTarget";
 import { parseLogDate, toDateKey } from "@/lib/utils";
 
 export interface CalendarComplianceInput {
@@ -166,7 +166,7 @@ export function computeWorkoutCompliance(
 
         const day = parseLogDate(dateKey);
         const planned = getPlannedWorkoutForDate(activeUserPlan, day, { today: referenceToday });
-        if (!planned || isRestPlanWorkout(planned)) continue;
+        if (!planned || !isScheduledTrainingWorkout(planned)) continue;
 
         const slotKey = `${dateKey}:${planned.id}`;
         const isLogged = loggedWorkoutSet.has(slotKey) || loggedSet.has(dateKey);
@@ -232,7 +232,7 @@ export function hasPendingTodayWorkout(input: CalendarComplianceInput, today: Da
     if (input.loggedDates.some((l) => l.date === todayKey)) return false;
 
     const planned = getPlannedWorkoutForDate(activeUserPlan, parseLogDate(todayKey), { today });
-    return Boolean(planned && !isRestPlanWorkout(planned));
+    return Boolean(planned && isScheduledTrainingWorkout(planned));
 }
 
 export function computeWeeklyCompliance(

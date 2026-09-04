@@ -25,6 +25,7 @@ import {
     isMissedWorkoutExcused,
 } from "@/lib/coachAttentionActions";
 import { getPlannedWorkoutForDate, getPlanStartDateKey, type ActiveUserPlanLike } from "@/lib/planSchedule";
+import { isScheduledTrainingWorkout } from "@/lib/planTrainingTarget";
 import { loadPlanScheduleRevisionsByPlanIds } from "@/lib/planScheduleHistory";
 import { loadHistoricalMissedSessionsByUserIds, filterHistoricalMissedForActivePlan } from "@/lib/planMissedSessionHistory";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
@@ -343,7 +344,8 @@ export async function loadCoachDashboardInsights(input: {
             };
         }
 
-        const plannedToday = getPlannedWorkoutForDate(activeUserPlan, today, { today });
+        const plannedTodayRaw = getPlannedWorkoutForDate(activeUserPlan, today, { today });
+        const plannedToday = isScheduledTrainingWorkout(plannedTodayRaw) ? plannedTodayRaw : null;
         const completedToday = plannedToday
             ? (todayCompletedByUser.get(client.id)?.has(plannedToday.id) ?? false)
             : false;
@@ -510,7 +512,10 @@ export async function loadCoachDashboardInsights(input: {
             const dateKey = shiftDateKey(todayKey, dayOffset);
             const date = parseLogDate(dateKey);
 
-            const plannedWorkout = getPlannedWorkoutForDate(activeUserPlan, date, { today });
+            const plannedWorkoutRaw = getPlannedWorkoutForDate(activeUserPlan, date, { today });
+            const plannedWorkout = isScheduledTrainingWorkout(plannedWorkoutRaw)
+                ? plannedWorkoutRaw
+                : null;
             const completedWorkoutKeys = completedWorkoutDateKeysByUser.get(client.id);
             const isWorkoutCompleted = plannedWorkout
                 ? (completedWorkoutKeys?.has(`${plannedWorkout.id}:${dateKey}`) ?? false)

@@ -31,7 +31,7 @@ import {
     resolvePlannedWorkoutWithExercisesForDate,
     sortPlannedExercises,
 } from "@/lib/plannedWorkoutResolve";
-import { isRestPlanWorkout } from "@/lib/planTrainingTarget";
+import { isScheduledTrainingWorkout } from "@/lib/planTrainingTarget";
 import {
     resolveWorkoutDayStatus,
     WORKOUT_DAY_STATUS_STYLES,
@@ -54,7 +54,15 @@ interface PlanExercise {
         reps?: number | null;
     }>;
 }
-interface PlanWorkout { dayNumber: number; dayOfWeek?: number | null; name: string; id: string; exercises: PlanExercise[]; }
+interface PlanWorkout {
+    dayNumber: number;
+    dayOfWeek?: number | null;
+    name: string;
+    id: string;
+    exercises: PlanExercise[];
+    /** Historical/log reconstructions that omit exercises still count as training. */
+    isScheduledTraining?: boolean;
+}
 interface PlanWeek { weekNumber: number; workouts: PlanWorkout[]; }
 interface ActivePlan { id?: string; name: string; weeks: PlanWeek[]; }
 
@@ -138,15 +146,12 @@ function resolveDayStatus(input: {
     planned: PlanWorkout | null;
     isPast: boolean;
     isTodayDay: boolean;
-    isBeforePlan: boolean;
-    isAfterPlan?: boolean;
     isExcused: boolean;
 }): DayWorkoutStatus {
     return resolveWorkoutDayStatus({
         hasCompletedLog: Boolean(input.log),
         hasActiveSession: Boolean(input.dayInProgress),
-        hasScheduledTraining: Boolean(input.planned) && !isRestPlanWorkout(input.planned!),
-        isOutsidePlanRange: input.isBeforePlan || Boolean(input.isAfterPlan),
+        hasScheduledTraining: isScheduledTrainingWorkout(input.planned),
         isPast: input.isPast,
         isToday: input.isTodayDay,
         isExcused: input.isExcused,
@@ -247,14 +252,15 @@ export function CalendarClient({
     }, [inProgressSessions]);
 
     const historicalMissedByDate = useMemo(() => {
+        // Keep every frozen miss so past scheduled days stay Missed even after
+        // plan edits, switches, or end — never drop them just because the live
+        // plan start moved.
         const map = new Map<string, { workoutId: string; workoutName: string }>();
-        const planStartKey = planStartedAt ? getPlanStartDateKey(planStartedAt) : null;
         for (const session of historicalMissedSessions) {
-            if (planStartKey && session.dateKey < planStartKey) continue;
             map.set(session.dateKey, session);
         }
         return map;
-    }, [historicalMissedSessions, planStartedAt]);
+    }, [historicalMissedSessions]);
 
     const [localExcusedKeys, setLocalExcusedKeys] = useState(excusedMissedWorkoutKeys);
     const [statusUpdating, setStatusUpdating] = useState(false);
@@ -333,6 +339,7 @@ export function CalendarClient({
                 dayNumber: 0,
                 dayOfWeek: null,
                 exercises: [],
+                isScheduledTraining: true,
             };
         };
 
@@ -345,6 +352,7 @@ export function CalendarClient({
                 dayNumber: 0,
                 dayOfWeek: null,
                 exercises: [],
+                isScheduledTraining: true,
             };
         };
 
@@ -483,7 +491,6 @@ export function CalendarClient({
         const primaryLog = selectedLogs[0] ?? null;
         const isPast = selectedDateKey < todayKey;
         const isTodayDay = selectedDateKey === todayKey;
-        const isBeforePlan = Boolean(planStartedAt && isDateBeforePlanStart(planStartedAt, selectedDateKey));
         const isExcused = Boolean(
             selectedPlanned
             && isPast
@@ -496,16 +503,12 @@ export function CalendarClient({
             planned: selectedPlanned,
             isPast,
             isTodayDay,
-            isBeforePlan,
-            isAfterPlan: selectedIsAfterPlan,
             isExcused,
         });
     }, [
-        selectedIsAfterPlan,
         selectedLogs,
         selectedDateKey,
         todayKey,
-        planStartedAt,
         selectedPlanned,
         resumeSession,
         isWorkoutExcused,
@@ -686,8 +689,6 @@ export function CalendarClient({
                                 planned,
                                 isPast,
                                 isTodayDay,
-                                isBeforePlan,
-                                isAfterPlan,
                                 isExcused,
                             });
                             const statusStyle = STATUS_CONFIG[status];
@@ -863,7 +864,7 @@ export function CalendarClient({
                                     );
                                 })}
                             </div>
-                        ) : selectedPlanned && !isRestPlanWorkout(selectedPlanned) ? (
+                        ) : selectedPlanned && isScheduledTrainingWorkout(selectedPlanned) ? (
                             <div className="space-y-5">
                                 <div className={cn("p-4 rounded-2xl border", selectedStatusStyle.panelBg, selectedStatusStyle.panelBorder)}>
                                     <div className="flex items-start justify-between gap-3">

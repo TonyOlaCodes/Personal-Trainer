@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { APP_TIMEZONE } from "@/lib/appTimezone";
 import { getLocalTimeParts, shiftDateKey } from "@/lib/coachNotificationSchedule";
 import { getPlannedWorkoutForDate, activeWorkoutWhere } from "@/lib/planSchedule";
+import { isScheduledTrainingWorkout } from "@/lib/planTrainingTarget";
 import { loadPlanScheduleRevisionsByPlanIds } from "@/lib/planScheduleHistory";
 import { parseLogDate } from "@/lib/utils";
 import { isInactiveAccount } from "@/lib/userDeactivation";
@@ -143,7 +144,7 @@ export async function getMissedWorkoutsYesterdayForCoach(
             yesterdayDate,
             { today }
         );
-        if (!plannedWorkout) continue;
+        if (!plannedWorkout || !isScheduledTrainingWorkout(plannedWorkout)) continue;
 
         const completed = client.workoutLogs.some((log) => {
             if (log.workoutId !== plannedWorkout.id) return false;

@@ -17,7 +17,7 @@ import {
 } from "@/lib/planMissedSessionHistory";
 import { prisma } from "@/lib/prisma";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
-import { isRestPlanWorkout } from "@/lib/planTrainingTarget";
+import { isScheduledTrainingWorkout } from "@/lib/planTrainingTarget";
 import { parseLogDate, toDateKey } from "@/lib/utils";
 
 export interface CompletedWorkoutLog {
@@ -216,7 +216,7 @@ function resolveScheduledTrainingWorkoutId(
     today: Date
 ): string | null {
     const planned = getPlannedWorkoutForDate(activeUserPlan, parseLogDate(dateKey), { today, dateKey });
-    if (!planned || isRestPlanWorkout(planned)) return null;
+    if (!planned || !isScheduledTrainingWorkout(planned)) return null;
     return planned.id;
 }
 
@@ -234,7 +234,7 @@ function buildScheduledSlots(
 
         const day = parseLogDate(dateKey);
         const planned = getPlannedWorkoutForDate(activeUserPlan, day, { today });
-        if (!planned || isRestPlanWorkout(planned)) continue;
+        if (!planned || !isScheduledTrainingWorkout(planned)) continue;
 
         slots.push({
             dateKey,
