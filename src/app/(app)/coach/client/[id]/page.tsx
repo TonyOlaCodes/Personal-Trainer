@@ -36,6 +36,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             where: { id },
             include: {
                 workoutLogs: {
+                    where: { status: "COMPLETED" },
                     include: { workout: { select: { name: true } }, sets: true },
                     orderBy: { loggedAt: "desc" },
                     take: 40,
@@ -314,6 +315,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                         }))}
                         workoutHistory={(target.workoutLogs ?? []).map((l) => ({
                             id: l.id,
+                            workoutId: l.workoutId,
                             workoutName: l.workout.name,
                             date: l.loggedAt ? l.loggedAt.toISOString() : new Date().toISOString(),
                             duration: l.duration || 0,

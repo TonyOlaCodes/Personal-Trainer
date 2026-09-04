@@ -89,6 +89,8 @@ interface ClientWorkoutNote {
 
 interface WorkoutHistoryEntry {
     id: string;
+    /** Template / planned workout id — used to group same session type. */
+    workoutId: string;
     workoutName: string;
     date: string;
     duration: number;
@@ -156,7 +158,18 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
     }, [client, canEdit]);
 
     const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; date: string; weightKg: number } | null>(null);
-    const [hoveredVolPoint, setHoveredVolPoint] = useState<{ id: string; workoutName: string; date: string; formattedDate: string; volume: number; x: number; y: number } | null>(null);
+    const [hoveredVolPoint, setHoveredVolPoint] = useState<{
+        id: string;
+        workoutId: string;
+        workoutName: string;
+        date: string;
+        formattedDate: string;
+        volume: number;
+        x: number;
+        y: number;
+    } | null>(null);
+    /** Filter volume chart to one workout template; null = show all. */
+    const [selectedVolumeWorkoutId, setSelectedVolumeWorkoutId] = useState<string | null>(null);
     const isWeightHidden = client.hiddenGoals?.includes("weight");
     const [activeChartTab, setActiveChartTab] = useState<"weight" | "volume">(isWeightHidden ? "volume" : "weight");
     
@@ -423,36 +436,84 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
     const targetY = client.targetWeightKg ? toY(client.targetWeightKg) : null;
 
     // Sort workout history ascending for chart progression
-    const volumeHistory = [...workoutHistory].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    const volumeValues = volumeHistory.map(h => h.volume);
-    
+    const volumeHistory = useMemo(
+        () => [...workoutHistory].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
+        [workoutHistory]
+    );
+    const volumeValues = volumeHistory.map((h) => h.volume);
+
     const volMin = volumeValues.length > 0 ? Math.max(0, Math.floor(Math.min(...volumeValues) - 200)) : 0;
     const volMax = volumeValues.length > 0 ? Math.ceil(Math.max(...volumeValues) + 200) : 1000;
     const volRange = Math.max(volMax - volMin, 1);
-    
+
     const volChartWidth = 640;
     const volChartHeight = 240;
     const volChartPadding = { top: 20, right: 24, bottom: 34, left: 48 };
     const volPlotWidth = volChartWidth - volChartPadding.left - volChartPadding.right;
     const volPlotHeight = volChartHeight - volChartPadding.top - volChartPadding.bottom;
-    
-    const toVolX = (index: number) => volChartPadding.left + (volumeHistory.length === 1 ? volPlotWidth / 2 : (index / (volumeHistory.length - 1)) * volPlotWidth);
+
+    const toVolX = (index: number) =>
+        volChartPadding.left +
+        (volumeHistory.length === 1 ? volPlotWidth / 2 : (index / (volumeHistory.length - 1)) * volPlotWidth);
     const toVolY = (vol: number) => volChartPadding.top + ((volMax - vol) / volRange) * volPlotHeight;
-    
-    const volChartPoints = volumeHistory.map((row, index) => ({ 
-        ...row, 
-        formattedDate: new Date(row.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-        x: toVolX(index), 
-        y: toVolY(row.volume) 
-    }));
-    
-    const volLinePath = volChartPoints.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(" ");
-    const volAreaPath = volChartPoints.length > 0
-        ? `${volLinePath} L ${volChartPoints[volChartPoints.length - 1].x.toFixed(1)} ${(volChartPadding.top + volPlotHeight).toFixed(1)} L ${volChartPoints[0].x.toFixed(1)} ${(volChartPadding.top + volPlotHeight).toFixed(1)} Z`
-        : "";
+
+    const volChartPoints = useMemo(
+        () =>
+            volumeHistory.map((row, index) => ({
+                ...row,
+                formattedDate: new Date(row.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+                x: toVolX(index),
+                y: toVolY(row.volume),
+            })),
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- x/y depend on volumeHistory length + values
+        [volumeHistory, volMin, volMax, volRange]
+    );
+
+    const selectedVolumePoints = useMemo(() => {
+        if (!selectedVolumeWorkoutId) return [];
+        return volChartPoints.filter((p) => p.workoutId === selectedVolumeWorkoutId);
+    }, [volChartPoints, selectedVolumeWorkoutId]);
+
+    const selectedVolumeName =
+        selectedVolumePoints[0]?.workoutName
+        ?? volumeHistory.find((h) => h.workoutId === selectedVolumeWorkoutId)?.workoutName
+        ?? null;
+
+    const volLinePath = volChartPoints
+        .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`)
+        .join(" ");
+    const volAreaPath =
+        volChartPoints.length > 0
+            ? `${volLinePath} L ${volChartPoints[volChartPoints.length - 1].x.toFixed(1)} ${(volChartPadding.top + volPlotHeight).toFixed(1)} L ${volChartPoints[0].x.toFixed(1)} ${(volChartPadding.top + volPlotHeight).toFixed(1)} Z`
+            : "";
+
+    const selectedVolLinePath = selectedVolumePoints
+        .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`)
+        .join(" ");
+    const selectedVolAreaPath =
+        selectedVolumePoints.length > 0
+            ? `${selectedVolLinePath} L ${selectedVolumePoints[selectedVolumePoints.length - 1].x.toFixed(1)} ${(volChartPadding.top + volPlotHeight).toFixed(1)} L ${selectedVolumePoints[0].x.toFixed(1)} ${(volChartPadding.top + volPlotHeight).toFixed(1)} Z`
+            : "";
+
+    const latestVolumeForDisplay = selectedVolumeWorkoutId
+        ? (selectedVolumePoints[selectedVolumePoints.length - 1]?.volume
+            ?? volumeHistory.filter((h) => h.workoutId === selectedVolumeWorkoutId).at(-1)?.volume
+            ?? null)
+        : volumeHistory.length > 0
+          ? volumeHistory[volumeHistory.length - 1].volume
+          : null;
+
+    useEffect(() => {
+        if (
+            selectedVolumeWorkoutId
+            && !volumeHistory.some((h) => h.workoutId === selectedVolumeWorkoutId)
+        ) {
+            setSelectedVolumeWorkoutId(null);
+        }
+    }, [volumeHistory, selectedVolumeWorkoutId]);
 
     // Average duration math
-    const validDurations = workoutHistory.filter(h => h.duration > 0);
+    const validDurations = workoutHistory.filter((h) => h.duration > 0);
     const totalDuration = validDurations.reduce((sum, h) => sum + h.duration, 0);
     const avgDuration = validDurations.length > 0 ? Math.round(totalDuration / validDurations.length) : 0;
 
@@ -965,15 +1026,38 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                             </div>
                         ) : (
                             <div className="text-right">
-                                <p className="text-xl font-black text-fg leading-none font-mono">
-                                    {volumeHistory.length > 0 ? `${volumeHistory[volumeHistory.length - 1].volume.toLocaleString()}kg` : "--"}
+                                <p className="text-xl font-black text-fg leading-none font-mono transition-all duration-300">
+                                    {latestVolumeForDisplay != null
+                                        ? `${latestVolumeForDisplay.toLocaleString()}kg`
+                                        : "--"}
                                 </p>
                                 <p className="text-[10px] text-fg-subtle font-bold uppercase tracking-widest mt-1">
-                                    Last Workout Volume
+                                    {selectedVolumeName
+                                        ? `Latest ${selectedVolumeName} Volume`
+                                        : "Last Workout Volume"}
                                 </p>
                             </div>
                         )}
                     </div>
+                    {activeChartTab === "volume" && selectedVolumeWorkoutId && selectedVolumeName && (
+                        <div className="flex items-center gap-2 mb-3 -mt-2">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setSelectedVolumeWorkoutId(null);
+                                    setHoveredVolPoint(null);
+                                }}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/15 border border-indigo-500/30 text-[10px] font-black uppercase tracking-widest text-indigo-300 hover:bg-indigo-500/25 transition-colors"
+                                aria-label={`Clear ${selectedVolumeName} filter`}
+                            >
+                                {selectedVolumeName}
+                                <X className="w-3 h-3" />
+                            </button>
+                            <span className="text-[9px] text-fg-subtle font-bold uppercase tracking-widest">
+                                Showing progression · tap chip or point to clear
+                            </span>
+                        </div>
+                    )}
                     {activeChartTab === "weight" ? (
                         filteredBodyweightHistory.length > 0 ? (
                             <div className="h-64 relative">
@@ -1056,10 +1140,14 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                     ) : (
                         volumeHistory.length > 0 ? (
                             <div className="h-64 relative">
-                                <svg viewBox={`0 0 ${volChartWidth} ${volChartHeight}`} className="h-full w-full" role="img" aria-label="Training volume progression chart">
+                                <svg viewBox={`0 0 ${volChartWidth} ${volChartHeight}`} className="h-full w-full touch-manipulation" role="img" aria-label="Training volume progression chart">
                                     <defs>
                                         <linearGradient id="clientVolumeFill" x1="0" x2="0" y1="0" y2="1">
                                             <stop offset="5%" stopColor="#818cf8" stopOpacity="0.35" />
+                                            <stop offset="95%" stopColor="#818cf8" stopOpacity="0" />
+                                        </linearGradient>
+                                        <linearGradient id="clientVolumeFillSelected" x1="0" x2="0" y1="0" y2="1">
+                                            <stop offset="5%" stopColor="#818cf8" stopOpacity="0.4" />
                                             <stop offset="95%" stopColor="#818cf8" stopOpacity="0" />
                                         </linearGradient>
                                     </defs>
@@ -1073,30 +1161,109 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                             </g>
                                         );
                                     })}
-                                    <path d={volAreaPath} fill="url(#clientVolumeFill)" />
-                                    <path d={volLinePath} fill="none" stroke="#818cf8" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
-                                    {volChartPoints.map((point) => (
-                                        <g key={`${point.id}-${point.volume}`}>
-                                            <circle 
-                                                cx={point.x} 
-                                                cy={point.y} 
-                                                r={hoveredVolPoint?.id === point.id ? "6" : "4"} 
-                                                fill={hoveredVolPoint?.id === point.id ? "#818cf8" : "#0f172a"} 
-                                                stroke="#818cf8" 
-                                                strokeWidth="3"
-                                                className="transition-all duration-150"
-                                            />
-                                            <circle
-                                                cx={point.x}
-                                                cy={point.y}
-                                                r="12"
-                                                fill="transparent"
-                                                className="cursor-pointer"
-                                                onMouseEnter={() => setHoveredVolPoint(point)}
-                                                onMouseLeave={() => setHoveredVolPoint(null)}
-                                            />
+
+                                    {/* Full series — faded when a workout type is selected */}
+                                    <g
+                                        style={{
+                                            opacity: selectedVolumeWorkoutId ? 0.22 : 1,
+                                            transition: "opacity 280ms ease",
+                                        }}
+                                        pointerEvents="none"
+                                    >
+                                        <path d={volAreaPath} fill="url(#clientVolumeFill)" />
+                                        <path d={volLinePath} fill="none" stroke="#818cf8" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+                                    </g>
+
+                                    {/* Selected workout-type progression — same x positions, connected */}
+                                    {selectedVolumeWorkoutId && selectedVolumePoints.length > 0 && (
+                                        <g
+                                            style={{
+                                                opacity: 1,
+                                                transition: "opacity 280ms ease",
+                                            }}
+                                            pointerEvents="none"
+                                        >
+                                            {selectedVolumePoints.length > 1 && (
+                                                <>
+                                                    <path d={selectedVolAreaPath} fill="url(#clientVolumeFillSelected)" />
+                                                    <path
+                                                        d={selectedVolLinePath}
+                                                        fill="none"
+                                                        stroke="#a5b4fc"
+                                                        strokeWidth="3.5"
+                                                        strokeLinejoin="round"
+                                                        strokeLinecap="round"
+                                                    />
+                                                </>
+                                            )}
                                         </g>
-                                    ))}
+                                    )}
+
+                                    {volChartPoints.map((point) => {
+                                        const isSelectedType = selectedVolumeWorkoutId === point.workoutId;
+                                        const isFiltered = Boolean(selectedVolumeWorkoutId);
+                                        const isActive = !isFiltered || isSelectedType;
+                                        const isHovered = hoveredVolPoint?.id === point.id;
+                                        return (
+                                            <g
+                                                key={`${point.id}-${point.volume}`}
+                                                style={{
+                                                    opacity: isActive ? 1 : 0.28,
+                                                    transition: "opacity 280ms ease",
+                                                }}
+                                            >
+                                                <circle
+                                                    cx={point.x}
+                                                    cy={point.y}
+                                                    r={isHovered || (isFiltered && isSelectedType) ? 6 : 4}
+                                                    fill={
+                                                        isFiltered && isSelectedType
+                                                            ? "#a5b4fc"
+                                                            : isHovered
+                                                              ? "#818cf8"
+                                                              : isActive
+                                                                ? "#0f172a"
+                                                                : "#1e293b"
+                                                    }
+                                                    stroke={
+                                                        isFiltered && isSelectedType
+                                                            ? "#c7d2fe"
+                                                            : isActive
+                                                              ? "#818cf8"
+                                                              : "#64748b"
+                                                    }
+                                                    strokeWidth={isFiltered && isSelectedType ? 3.5 : 3}
+                                                    className="transition-all duration-280"
+                                                    style={{ transition: "r 200ms ease, fill 200ms ease, stroke 200ms ease" }}
+                                                />
+                                                <circle
+                                                    cx={point.x}
+                                                    cy={point.y}
+                                                    r="16"
+                                                    fill="transparent"
+                                                    className="cursor-pointer"
+                                                    style={{ touchAction: "manipulation" }}
+                                                    onMouseEnter={() => {
+                                                        if (!selectedVolumeWorkoutId || selectedVolumeWorkoutId === point.workoutId) {
+                                                            setHoveredVolPoint(point);
+                                                        }
+                                                    }}
+                                                    onMouseLeave={() => setHoveredVolPoint(null)}
+                                                    onPointerUp={(e) => {
+                                                        // pointerup covers mouse + touch without double-firing
+                                                        if (e.pointerType === "mouse" && e.button !== 0) return;
+                                                        e.stopPropagation();
+                                                        const next =
+                                                            selectedVolumeWorkoutId === point.workoutId
+                                                                ? null
+                                                                : point.workoutId;
+                                                        setSelectedVolumeWorkoutId(next);
+                                                        setHoveredVolPoint(next ? point : null);
+                                                    }}
+                                                />
+                                            </g>
+                                        );
+                                    })}
                                     {volChartPoints[0] && (
                                         <text x={volChartPoints[0].x} y={volChartHeight - 10} textAnchor="middle" fill="#94a3b8" fontSize="11" fontWeight="700">{volChartPoints[0].formattedDate}</text>
                                     )}
@@ -1104,8 +1271,9 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                         <text x={volChartPoints[volChartPoints.length - 1].x} y={volChartHeight - 10} textAnchor="middle" fill="#94a3b8" fontSize="11" fontWeight="700">{volChartPoints[volChartPoints.length - 1].formattedDate}</text>
                                     )}
                                 </svg>
-                                {hoveredVolPoint && (
-                                    <div 
+                                {hoveredVolPoint &&
+                                    (!selectedVolumeWorkoutId || hoveredVolPoint.workoutId === selectedVolumeWorkoutId) && (
+                                    <div
                                         className="absolute z-10 pointer-events-none bg-surface-elevated/95 backdrop-blur-md border border-indigo-500/30 px-3 py-1.5 rounded-xl text-center shadow-glow-brand-sm -translate-x-1/2 -translate-y-full transition-all duration-150 animate-scale-in"
                                         style={{
                                             left: `${(hoveredVolPoint.x / volChartWidth) * 100}%`,
@@ -1122,6 +1290,11 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                             {hoveredVolPoint.volume.toLocaleString()}<span className="text-[9px] text-fg-muted ml-0.5">kg</span>
                                         </p>
                                     </div>
+                                )}
+                                {!selectedVolumeWorkoutId && (
+                                    <p className="text-[9px] text-fg-subtle font-bold uppercase tracking-widest mt-2 text-center">
+                                        Tap a workout point to see volume progression for that session type
+                                    </p>
                                 )}
                             </div>
                         ) : (
