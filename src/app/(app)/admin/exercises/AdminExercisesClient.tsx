@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Check, Search, Loader2, Dumbbell, Pencil, X, Merge, CheckSquare } from "lucide-react";
+import { Plus, Check, Search, Loader2, Dumbbell, Pencil, X, Merge, CheckSquare, Copy } from "lucide-react";
 import { MUSCLE_GROUPS, muscleGroupBadgeClass } from "@/lib/muscleGroups";
 import {
     TrackingPresetBadge,
@@ -79,6 +79,37 @@ function trackingPayload(schema: ExerciseTrackingSchema) {
     };
 }
 
+function groupKey(exercise: GlobalExercise) {
+    return exercise.muscleGroup || "Uncategorized";
+}
+
+/** Dictionary names in the same group-then-name order shown on this screen. */
+function namesInDictionaryOrder(exercises: GlobalExercise[], groupFilter: string): string[] {
+    const source = exercises.filter(
+        (exercise) => groupFilter === "All" || groupKey(exercise) === groupFilter
+    );
+    const groups = new Map<string, GlobalExercise[]>();
+    for (const exercise of source) {
+        const key = groupKey(exercise);
+        const list = groups.get(key) ?? [];
+        list.push(exercise);
+        groups.set(key, list);
+    }
+    const extraKeys = Array.from(groups.keys())
+        .filter((key) => !MUSCLE_GROUPS.includes(key as (typeof MUSCLE_GROUPS)[number]))
+        .sort();
+    const orderedKeys = [
+        ...MUSCLE_GROUPS.filter((group) => groups.has(group)),
+        ...extraKeys,
+    ];
+    return orderedKeys.flatMap((key) =>
+        (groups.get(key) ?? [])
+            .slice()
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map((exercise) => exercise.name)
+    );
+}
+
 export function AdminExercisesClient({ initialExercises }: { initialExercises: GlobalExercise[] }) {
     const [exercises, setExercises] = useState(initialExercises);
     const [search, setSearch] = useState("");
@@ -92,6 +123,7 @@ export function AdminExercisesClient({ initialExercises }: { initialExercises: G
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [mergeTargetName, setMergeTargetName] = useState("");
     const [mergeMuscleGroup, setMergeMuscleGroup] = useState("Uncategorized");
+    const [copied, setCopied] = useState(false);
 
     const dictionaryExercises = useMemo(
         () => exercises.filter((e) => !e.isSuggestion),
@@ -130,6 +162,22 @@ export function AdminExercisesClient({ initialExercises }: { initialExercises: G
     }, [exercises]);
 
     const selectedExercises = dictionaryExercises.filter((e) => selectedIds.includes(e.id));
+    const namesForCopy = useMemo(
+        () => namesInDictionaryOrder(dictionaryExercises, groupFilter),
+        [dictionaryExercises, groupFilter]
+    );
+
+    const copyCategoryNames = async () => {
+        if (namesForCopy.length === 0) return;
+        const text = namesForCopy.map((name, index) => `${index + 1}. ${name}`).join("\n");
+        try {
+            await navigator.clipboard.writeText(text);
+            setCopied(true);
+            window.setTimeout(() => setCopied(false), 2000);
+        } catch {
+            alert("Could not copy exercise names.");
+        }
+    };
 
     const toggleSelected = (id: string) => {
         setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -463,7 +511,7 @@ export function AdminExercisesClient({ initialExercises }: { initialExercises: G
                 />
             </div>
 
-            <div className="flex flex-wrap gap-2 mb-4">
+            <div className="flex flex-wrap items-center gap-2 mb-4">
                 <button
                     type="button"
                     onClick={() => setGroupFilter("All")}
@@ -485,6 +533,20 @@ export function AdminExercisesClient({ initialExercises }: { initialExercises: G
                         </button>
                     );
                 })}
+                <button
+                    type="button"
+                    onClick={() => void copyCategoryNames()}
+                    disabled={namesForCopy.length === 0}
+                    className="px-3 py-1.5 rounded-full text-xs font-bold border bg-surface-muted text-fg-subtle border-surface-border hover:text-fg disabled:opacity-50 inline-flex items-center gap-1.5"
+                    title={
+                        groupFilter === "All"
+                            ? "Copy all exercise names"
+                            : `Copy ${groupFilter} exercise names`
+                    }
+                >
+                    {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    {copied ? "Copied" : "Copy"}
+                </button>
             </div>
 
             <div className="space-y-6">
