@@ -14,6 +14,8 @@ type Props = {
   breakdown: WorkoutMuscleBreakdown;
   className?: string;
   size?: "sm" | "md";
+  /** When false, only the body SVGs render (use with MuscleChips below). */
+  showLegend?: boolean;
 };
 
 /** SVG paths overlaid on the grey silhouette — keyed by MuscleRegion. */
@@ -175,7 +177,7 @@ function HeatChip({
   );
 }
 
-export function MuscleMap({ breakdown, className = "", size = "md" }: Props) {
+export function MuscleMap({ breakdown, className = "", size = "md", showLegend = true }: Props) {
   const dim = size === "sm" ? 88 : 118;
   const heat = breakdown.heat;
 
@@ -220,27 +222,29 @@ export function MuscleMap({ breakdown, className = "", size = "md" }: Props) {
           </svg>
         ))}
       </div>
-      <div className="min-w-0 flex-1 space-y-1.5">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">
-          Muscles worked
-        </p>
-        <div className="flex flex-wrap gap-1">
-          {labels.map(({ region, heat: level }) => (
-            <HeatChip key={region} region={region} heat={level} />
-          ))}
-          {breakdown.activityGroups.map((group) => (
-            <span
-              key={group}
-              className="rounded-full border border-[var(--border)] px-2 py-0.5 text-[10px] font-medium text-[var(--muted)]"
-            >
-              {group}
-            </span>
-          ))}
+      {showLegend && (
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">
+            Muscles worked
+          </p>
+          <div className="flex flex-wrap gap-1">
+            {labels.map(({ region, heat: level }) => (
+              <HeatChip key={region} region={region} heat={level} />
+            ))}
+            {breakdown.activityGroups.map((group) => (
+              <span
+                key={group}
+                className="rounded-full border border-[var(--border)] px-2 py-0.5 text-[10px] font-medium text-[var(--muted)]"
+              >
+                {group}
+              </span>
+            ))}
+          </div>
+          <p className="text-[10px] text-[var(--muted)]">
+            Grey = resting · Pale yellow → dark red = more work
+          </p>
         </div>
-        <p className="text-[10px] text-[var(--muted)]">
-          Grey = resting · Yellow → red = more work
-        </p>
-      </div>
+      )}
     </div>
   );
 }

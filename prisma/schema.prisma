@@ -420,6 +420,8 @@ model GlobalExercise {
   trackingPreset String?
   /// JSON array of TrackingFieldConfig — source of truth for logging UI / PRs / plans
   trackingFields String?
+  /// JSON array of { region, level } muscle contribution targets for visuals
+  muscleTargets String?
   createdAt    DateTime @default(now())
 
   @@map("global_exercises")

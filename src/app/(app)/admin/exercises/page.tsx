@@ -10,6 +10,7 @@ import {
     guessTrackingSchema,
     parseTrackingSchemaFromDb,
 } from "@/lib/exerciseTracking";
+import { ensureMuscleTargetsColumn, parseMuscleTargetsJson } from "@/lib/exerciseMuscleTargets";
 
 export const metadata = { title: "Admin - Exercises" };
 
@@ -21,6 +22,7 @@ export default async function AdminExercisesPage() {
     if (!user || user.role !== "SUPER_ADMIN") redirect("/dashboard");
 
     await ensureExerciseTrackingSchema();
+    await ensureMuscleTargetsColumn();
     // Safe one-shot: persist guessed presets for rows still missing config.
     await backfillMissingTrackingConfigs();
 
@@ -48,6 +50,7 @@ export default async function AdminExercisesPage() {
         thumbnailUrl: string | null;
         trackingPreset: string | null;
         trackingSchema: ReturnType<typeof guessTrackingSchema>;
+        muscleTargets: ReturnType<typeof parseMuscleTargetsJson>;
         isSuggestion: boolean;
     }[] = [];
     const seenNames = new Set();
@@ -65,6 +68,7 @@ export default async function AdminExercisesPage() {
                 thumbnailUrl: null,
                 trackingPreset: trackingSchema.preset,
                 trackingSchema,
+                muscleTargets: [],
                 isSuggestion: true
             });
             seenNames.add(lowerName);
@@ -83,6 +87,9 @@ export default async function AdminExercisesPage() {
                 thumbnailUrl: mediaById.get(exercise.id)?.thumbnailUrl ?? null,
                 trackingPreset: trackingSchema.preset,
                 trackingSchema,
+                muscleTargets: parseMuscleTargetsJson(
+                    (exercise as { muscleTargets?: string | null }).muscleTargets
+                ),
             };
         }),
         ...uniqueFromWorkouts,

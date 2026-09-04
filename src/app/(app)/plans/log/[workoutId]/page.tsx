@@ -30,6 +30,7 @@ import {
     resolveTrackingSchema,
     type ExerciseTrackingSchema,
 } from "@/lib/exerciseTracking";
+import { getDictionaryMuscleTargetsMap } from "@/lib/exerciseMuscleTargets";
 
 export const metadata = { title: "Logging session" };
 const NEW_ACCOUNT_WORKOUT_HINT_DAYS = 30;
@@ -207,6 +208,10 @@ export default async function WorkoutLogPage({
         if (identity) trackingSchemas[identity] = schema;
     }
 
+    const muscleTargetsByKey = await getDictionaryMuscleTargetsMap(
+        workoutExercises.map((ex) => ex.name)
+    );
+
     const initialActiveLog = activeLog
         ? {
               id: activeLog.id,
@@ -252,6 +257,7 @@ export default async function WorkoutLogPage({
                 clientName={clientName}
                 previousSessions={previousSessions}
                 exerciseRecords={exerciseRecords}
+                muscleTargetsByKey={muscleTargetsByKey}
                 initialExerciseNotes={initialExerciseNotes}
                 initialActiveLog={initialActiveLog}
                 showWorkoutInputHint={showWorkoutInputHint}

@@ -41,6 +41,7 @@ import {
 import { EXERCISE_NOTE_MAX_LENGTH } from "@/lib/logExerciseNotesShared";
 import { buildWorkoutMuscleBreakdown } from "@/lib/exerciseMuscles";
 import { MuscleMap, MuscleChips } from "@/components/shared/MuscleMap";
+import type { MuscleTargetEntry } from "@/lib/muscleTargetEntries";
 import {
     ActiveSessionConflictModal,
     parseActiveSessionConflict,
@@ -324,6 +325,8 @@ interface Props {
     previousSessions?: Record<string, PreviousSessionPerformance>;
     /** All-time records per exercise identity, excluding the session being logged. */
     exerciseRecords?: Record<string, ExerciseRecords>;
+    /** Dictionary muscle targets keyed by exercise identity. */
+    muscleTargetsByKey?: Record<string, MuscleTargetEntry[]>;
     /** Saved per-exercise notes for a resumed session, keyed by exercise id. */
     initialExerciseNotes?: Record<string, string>;
     initialActiveLog?: InitialActiveLog | null;
@@ -481,6 +484,7 @@ export function WorkoutLogClient({
     clientName,
     previousSessions: initialPreviousSessions = {},
     exerciseRecords: initialExerciseRecords = {},
+    muscleTargetsByKey: initialMuscleTargetsByKey = {},
     initialExerciseNotes = {},
     initialActiveLog = null,
     showWorkoutInputHint = false,
@@ -504,6 +508,7 @@ export function WorkoutLogClient({
     const [exerciseRecords, setExerciseRecords] = useState(initialExerciseRecords);
     const [mediaByName, setMediaByName] = useState(initialExerciseMedia);
     const [trackingSchemas] = useState(initialTrackingSchemas);
+    const [muscleTargetsByKey, setMuscleTargetsByKey] = useState(initialMuscleTargetsByKey);
 
     const schemaFor = (ex: Pick<Exercise, "id" | "name" | "muscleGroup">) =>
         getSchemaForExercise(ex, trackingSchemas);
@@ -597,6 +602,7 @@ export function WorkoutLogClient({
                 records: exerciseRecords[key] ?? null,
                 media: mediaByName[exerciseName] ?? null,
                 muscleGroup: null as string | null,
+                muscleTargets: muscleTargetsByKey[key] ?? null,
                 fromCache: true,
             };
         }
@@ -628,9 +634,16 @@ export function WorkoutLogClient({
         records?: ExerciseRecords | null;
         media?: ExercisePreviewMedia | null;
         muscleGroup?: string | null;
+        muscleTargets?: MuscleTargetEntry[] | null;
         fromCache?: boolean;
     } | null) => {
-        if (!data?.key || data.fromCache) return;
+        if (!data?.key) return;
+
+        if (data.muscleTargets && data.muscleTargets.length > 0) {
+            setMuscleTargetsByKey((prev) => ({ ...prev, [data.key]: data.muscleTargets! }));
+        }
+
+        if (data.fromCache) return;
 
         if (data.previousSession) {
             setPreviousSessions((prev) => ({ ...prev, [data.key]: data.previousSession! }));
@@ -1146,8 +1159,19 @@ export function WorkoutLogClient({
     };
 
     const muscleBreakdown = useMemo(
-        () => buildWorkoutMuscleBreakdown(activeExercises),
-        [activeExercises]
+        () =>
+            buildWorkoutMuscleBreakdown(
+                activeExercises.map((ex) => ({
+                    name: ex.name,
+                    muscleGroup: ex.muscleGroup,
+                    sets: Math.max(
+                        logs[ex.id]?.filter((s) => !s.isWarmup).length ?? ex.sets ?? 1,
+                        1
+                    ),
+                    muscleTargets: muscleTargetsByKey[exerciseIdentityKey(ex.name)],
+                }))
+            ),
+        [activeExercises, logs, muscleTargetsByKey]
     );
 
     /**
@@ -1609,7 +1633,10 @@ export function WorkoutLogClient({
                     )}
 
                     {sessionActive && (
-                        <MuscleChips breakdown={muscleBreakdown} className="px-1" />
+                        <div className="space-y-2 px-1">
+                            <MuscleMap breakdown={muscleBreakdown} size="sm" showLegend={false} />
+                            <MuscleChips breakdown={muscleBreakdown} />
+                        </div>
                     )}
 
                     {showWorkoutInputHint && sessionActive && (

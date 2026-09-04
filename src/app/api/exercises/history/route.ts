@@ -10,6 +10,10 @@ import {
 } from "@/lib/exercisePrs";
 import { exerciseIdentityKey } from "@/lib/exerciseIdentity";
 import { canonicalExerciseName } from "@/lib/exerciseCanonical";
+import {
+    ensureMuscleTargetsColumn,
+    parseMuscleTargetsJson,
+} from "@/lib/exerciseMuscleTargets";
 
 /**
  * Previous-session sets + all-time records for one exercise name.
@@ -43,21 +47,29 @@ export async function GET(req: Request) {
             records: null,
             media: null,
             muscleGroup: null,
+            muscleTargets: null,
         });
     }
+
+    await ensureMuscleTargetsColumn();
 
     const [history, mediaByName, global] = await Promise.all([
         loadWorkoutHistorySessions(readTarget.targetUserId, { excludeLogId }),
         getExerciseMediaByNames([name]),
-        prisma.globalExercise.findFirst({
-            where: { name: { equals: name, mode: "insensitive" } },
-            select: { muscleGroup: true, name: true },
-        }),
+        prisma.$queryRaw<
+            Array<{ muscleGroup: string | null; name: string; muscleTargets: string | null }>
+        >`
+            SELECT "muscleGroup", "name", "muscleTargets"
+            FROM "global_exercises"
+            WHERE LOWER("name") = LOWER(${name})
+            LIMIT 1
+        `.then((rows) => rows[0] ?? null),
     ]);
 
     const previousSession = findPreviousSessionPerformance(history, name);
     const records = buildExerciseRecords(history, name);
     const media = mediaByName.get(name) ?? mediaByName.get(global?.name ?? "") ?? null;
+    const muscleTargets = parseMuscleTargetsJson(global?.muscleTargets);
 
     return NextResponse.json({
         key,
@@ -72,5 +84,6 @@ export async function GET(req: Request) {
               }
             : null,
         muscleGroup: global?.muscleGroup ?? null,
+        muscleTargets: muscleTargets.length > 0 ? muscleTargets : null,
     });
 }

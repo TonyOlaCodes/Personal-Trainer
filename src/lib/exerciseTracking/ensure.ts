@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { ensureMuscleTargetsColumn } from "@/lib/exerciseMuscleTargets";
 
 let trackingSchemaReady = false;
 
@@ -12,6 +13,7 @@ export async function ensureExerciseTrackingSchema() {
 
     await addColumn(`ALTER TABLE "global_exercises" ADD COLUMN IF NOT EXISTS "trackingPreset" TEXT`);
     await addColumn(`ALTER TABLE "global_exercises" ADD COLUMN IF NOT EXISTS "trackingFields" TEXT`);
+    await ensureMuscleTargetsColumn();
 
     await addColumn(`ALTER TABLE "log_sets" ADD COLUMN IF NOT EXISTS "durationSec" DOUBLE PRECISION`);
     await addColumn(`ALTER TABLE "log_sets" ADD COLUMN IF NOT EXISTS "distanceMeters" DOUBLE PRECISION`);

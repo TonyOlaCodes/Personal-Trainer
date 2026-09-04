@@ -7,6 +7,7 @@ import {
     TrackingPresetBadge,
     TrackingSetupEditor,
 } from "@/components/admin/TrackingSetupEditor";
+import { MuscleTargetsEditor } from "@/components/admin/MuscleTargetsEditor";
 import {
     DEFAULT_STRENGTH_SCHEMA,
     normalizeTrackingSchema,
@@ -14,6 +15,7 @@ import {
     type ExerciseTrackingSchema,
     type TrackingPreset,
 } from "@/lib/exerciseTracking";
+import type { MuscleTargetEntry } from "@/lib/muscleTargetEntries";
 
 interface GlobalExercise {
     id: string;
@@ -24,6 +26,7 @@ interface GlobalExercise {
     muscleGroup: string | null;
     trackingPreset?: TrackingPreset | string | null;
     trackingSchema?: ExerciseTrackingSchema;
+    muscleTargets?: MuscleTargetEntry[];
     isSuggestion?: boolean;
 }
 
@@ -34,6 +37,7 @@ type ExerciseDraft = {
     instructions: string;
     thumbnailUrl: string;
     trackingSchema: ExerciseTrackingSchema;
+    muscleTargets: MuscleTargetEntry[];
 };
 
 function cloneSchema(schema: ExerciseTrackingSchema): ExerciseTrackingSchema {
@@ -50,6 +54,7 @@ const emptyDraft: ExerciseDraft = {
     instructions: "",
     thumbnailUrl: "",
     trackingSchema: cloneSchema(DEFAULT_STRENGTH_SCHEMA),
+    muscleTargets: [],
 };
 
 function draftFromExercise(exercise: GlobalExercise): ExerciseDraft {
@@ -63,6 +68,7 @@ function draftFromExercise(exercise: GlobalExercise): ExerciseDraft {
         instructions: exercise.instructions || "",
         thumbnailUrl: exercise.thumbnailUrl || "",
         trackingSchema,
+        muscleTargets: exercise.muscleTargets ?? [],
     };
 }
 
@@ -149,6 +155,7 @@ export function AdminExercisesClient({ initialExercises }: { initialExercises: G
                     videoUrl: newExercise.videoUrl,
                     instructions: newExercise.instructions,
                     thumbnailUrl: newExercise.thumbnailUrl,
+                    muscleTargets: newExercise.muscleTargets,
                     ...trackingPayload(newExercise.trackingSchema),
                 })
             });
@@ -159,6 +166,7 @@ export function AdminExercisesClient({ initialExercises }: { initialExercises: G
                     ...newExercise,
                     trackingPreset: created.trackingPreset ?? newExercise.trackingSchema.preset,
                     trackingSchema: created.trackingSchema ?? newExercise.trackingSchema,
+                    muscleTargets: created.muscleTargets ?? newExercise.muscleTargets,
                 }, ...exercises].sort((a,b) => a.name.localeCompare(b.name)));
                 setNewExercise({ ...emptyDraft, trackingSchema: cloneSchema(DEFAULT_STRENGTH_SCHEMA) });
                 setIsAdding(false);
@@ -185,6 +193,7 @@ export function AdminExercisesClient({ initialExercises }: { initialExercises: G
                     videoUrl: editingExercise.videoUrl,
                     instructions: editingExercise.instructions,
                     thumbnailUrl: editingExercise.thumbnailUrl,
+                    muscleTargets: editingExercise.muscleTargets,
                     ...trackingPayload(editingExercise.trackingSchema),
                 })
             });
@@ -195,6 +204,7 @@ export function AdminExercisesClient({ initialExercises }: { initialExercises: G
                     ...editingExercise,
                     trackingPreset: updated.trackingPreset ?? editingExercise.trackingSchema.preset,
                     trackingSchema: updated.trackingSchema ?? editingExercise.trackingSchema,
+                    muscleTargets: updated.muscleTargets ?? editingExercise.muscleTargets,
                 } : e).sort((a,b) => a.name.localeCompare(b.name)));
                 setEditingId(null);
             } else {
@@ -538,6 +548,16 @@ export function AdminExercisesClient({ initialExercises }: { initialExercises: G
                                                 onChange={(trackingSchema) =>
                                                     setEditingExercise((prev) => ({ ...prev, trackingSchema }))
                                                 }
+                                            />
+                                        </div>
+                                        <div className="sm:col-span-2">
+                                            <MuscleTargetsEditor
+                                                value={editingExercise.muscleTargets}
+                                                onChange={(muscleTargets) =>
+                                                    setEditingExercise((prev) => ({ ...prev, muscleTargets }))
+                                                }
+                                                exerciseName={editingExercise.name}
+                                                muscleGroup={editingExercise.muscleGroup}
                                             />
                                         </div>
                                     </div>

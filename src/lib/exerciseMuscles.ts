@@ -2,84 +2,83 @@
  * Maps exercises onto anatomy regions for the muscle visual.
  *
  * Resolution order for each exercise:
- * 1. Per-movement overrides (e.g. Bench Press → chest + shoulders + triceps)
- * 2. Name heuristics for common compounds
- * 3. Muscle-group defaults (category secondaries, e.g. Chest → triceps/shoulders assist)
+ * 1. Dictionary muscleTargets (admin-configured) when provided
+ * 2. Per-movement overrides (e.g. Bench Press → chest + shoulders + triceps)
+ * 3. Name heuristics for common compounds
+ * 4. Muscle-group defaults (category secondaries, e.g. Chest → triceps/shoulders assist)
  *
  * Intensity is scored across the workout so lightly worked muscles read yellow and
  * heavily worked ones read red on a grey body.
  */
 
 import { exerciseIdentityKey } from "@/lib/exerciseIdentity";
+import {
+    ALL_MUSCLE_REGIONS,
+    MUSCLE_REGION_LABELS,
+    type MuscleRegion,
+} from "@/lib/muscleRegions";
+import {
+    MUSCLE_CONTRIBUTION_WEIGHTS,
+    heatFromContribution,
+    muscleHeatFill,
+    muscleHeatOpacity,
+    muscleHeatStroke,
+    type MuscleHeatLevel,
+} from "@/lib/muscleContribution";
+import {
+    targetsToHit,
+    type MuscleTargetEntry,
+} from "@/lib/muscleTargetEntries";
 
-export type MuscleRegion =
-    | "chest"
-    | "upperBack"
-    | "lats"
-    | "lowerBack"
-    | "traps"
-    | "shoulders"
-    | "biceps"
-    | "triceps"
-    | "forearms"
-    | "core"
-    | "obliques"
-    | "glutes"
-    | "quads"
-    | "hamstrings"
-    | "calves";
+export type { MuscleRegion, MuscleHeatLevel };
+export { ALL_MUSCLE_REGIONS, MUSCLE_REGION_LABELS };
+export { muscleHeatFill, muscleHeatStroke, muscleHeatOpacity };
 
-export const MUSCLE_REGION_LABELS: Record<MuscleRegion, string> = {
-    chest: "Chest",
-    upperBack: "Upper back",
-    lats: "Lats",
-    lowerBack: "Lower back",
-    traps: "Traps",
-    shoulders: "Shoulders",
-    biceps: "Biceps",
-    triceps: "Triceps",
-    forearms: "Forearms",
-    core: "Core",
-    obliques: "Obliques",
-    glutes: "Glutes",
-    quads: "Quads",
-    hamstrings: "Hamstrings",
-    calves: "Calves",
+export type MuscleHit = {
+    primary: MuscleRegion[];
+    secondary: MuscleRegion[];
+    minor: MuscleRegion[];
 };
 
-export const ALL_MUSCLE_REGIONS = Object.keys(MUSCLE_REGION_LABELS) as MuscleRegion[];
-
-type MuscleHit = { primary: MuscleRegion[]; secondary: MuscleRegion[] };
+/** Loose hit shape used by overrides/heuristics — `minor` defaults in cleanHit. */
+type MuscleHitInput = {
+    primary: MuscleRegion[];
+    secondary: MuscleRegion[];
+    minor?: MuscleRegion[];
+};
 
 /** Category defaults — primary is the named group; secondary is typical assistance. */
 const MUSCLE_GROUP_REGIONS: Record<string, MuscleHit> = {
-    chest: { primary: ["chest"], secondary: ["shoulders", "triceps"] },
-    back: { primary: ["lats", "upperBack"], secondary: ["biceps", "traps", "forearms"] },
-    lats: { primary: ["lats"], secondary: ["biceps", "upperBack"] },
-    shoulders: { primary: ["shoulders"], secondary: ["triceps", "traps"] },
-    biceps: { primary: ["biceps"], secondary: ["forearms"] },
-    triceps: { primary: ["triceps"], secondary: ["shoulders"] },
-    forearms: { primary: ["forearms"], secondary: [] },
-    traps: { primary: ["traps"], secondary: ["shoulders"] },
-    quads: { primary: ["quads"], secondary: ["glutes", "core"] },
-    hamstrings: { primary: ["hamstrings"], secondary: ["glutes", "lowerBack"] },
-    glutes: { primary: ["glutes"], secondary: ["hamstrings", "core"] },
-    calves: { primary: ["calves"], secondary: [] },
-    legs: { primary: ["quads", "hamstrings", "glutes"], secondary: ["calves", "core"] },
-    core: { primary: ["core", "obliques"], secondary: [] },
+    chest: { primary: ["chest"], secondary: ["shoulders", "triceps"], minor: [] },
+    back: { primary: ["lats", "upperBack"], secondary: ["biceps", "traps", "forearms"], minor: [] },
+    lats: { primary: ["lats"], secondary: ["biceps", "upperBack"], minor: [] },
+    shoulders: { primary: ["shoulders"], secondary: ["triceps", "traps"], minor: [] },
+    biceps: { primary: ["biceps"], secondary: ["forearms"], minor: [] },
+    triceps: { primary: ["triceps"], secondary: ["shoulders"], minor: [] },
+    forearms: { primary: ["forearms"], secondary: [], minor: [] },
+    traps: { primary: ["traps"], secondary: ["shoulders"], minor: [] },
+    quads: { primary: ["quads"], secondary: ["glutes", "core"], minor: [] },
+    hamstrings: { primary: ["hamstrings"], secondary: ["glutes", "lowerBack"], minor: [] },
+    glutes: { primary: ["glutes"], secondary: ["hamstrings", "core"], minor: [] },
+    calves: { primary: ["calves"], secondary: [], minor: [] },
+    legs: { primary: ["quads", "hamstrings", "glutes"], secondary: ["calves", "core"], minor: [] },
+    core: { primary: ["core", "obliques"], secondary: [], minor: [] },
     "full body": {
         primary: ["quads", "glutes", "upperBack", "shoulders"],
         secondary: ["core", "hamstrings", "lowerBack", "triceps", "biceps", "forearms", "chest"],
+        minor: [],
     },
     crossfit: {
         primary: ["quads", "glutes", "shoulders", "upperBack"],
         secondary: ["core", "hamstrings", "lowerBack", "triceps", "forearms", "chest"],
+        minor: [],
     },
     calisthenics: {
         primary: ["chest", "lats", "shoulders", "core"],
         secondary: ["triceps", "biceps", "glutes"],
+        minor: [],
     },
-    cardio: { primary: [], secondary: [] },
+    cardio: { primary: [], secondary: [], minor: [] },
 };
 
 /**
@@ -87,12 +86,12 @@ const MUSCLE_GROUP_REGIONS: Record<string, MuscleHit> = {
  * These beat the category defaults so Bench Press lights chest + shoulders + triceps
  * even though its muscleGroup is simply "Chest".
  */
-const EXERCISE_MUSCLE_OVERRIDES: Record<string, MuscleHit> = {
+const EXERCISE_MUSCLE_OVERRIDES: Record<string, MuscleHitInput> = {
     // Chest presses (keys are post-alias identity keys from the Chest catalog)
     "barbell bench press": { primary: ["chest"], secondary: ["shoulders", "triceps"] },
     "incline barbell bench press": { primary: ["chest", "shoulders"], secondary: ["triceps"] },
     "decline barbell bench press": { primary: ["chest"], secondary: ["triceps", "shoulders"] },
-    "close grip barbell bench press": { primary: ["chest", "triceps"], secondary: ["shoulders"] },
+    "close grip barbell bench press": { primary: ["triceps", "chest"], secondary: ["shoulders"] },
     "wide grip barbell bench press": { primary: ["chest"], secondary: ["shoulders", "triceps"] },
     "paused barbell bench press": { primary: ["chest"], secondary: ["shoulders", "triceps"] },
     "spoto press": { primary: ["chest"], secondary: ["shoulders", "triceps"] },
@@ -238,7 +237,6 @@ const EXERCISE_MUSCLE_OVERRIDES: Record<string, MuscleHit> = {
     "zottman curl": { primary: ["biceps", "forearms"], secondary: [] },
     "21": { primary: ["biceps"], secondary: ["forearms"] },
     // Arms — triceps
-    "close grip barbell bench press": { primary: ["triceps", "chest"], secondary: ["shoulders"] },
     "floor press": { primary: ["triceps", "chest"], secondary: ["shoulders"] },
     "jm press": { primary: ["triceps"], secondary: ["chest"] },
     "straight bar tricep pushdown": { primary: ["triceps"], secondary: [] },
@@ -290,7 +288,7 @@ const EXERCISE_MUSCLE_OVERRIDES: Record<string, MuscleHit> = {
 };
 
 /** Keyword heuristics when no exact override exists — checked in order. */
-const NAME_HEURISTICS: Array<{ match: RegExp; hit: MuscleHit }> = [
+const NAME_HEURISTICS: Array<{ match: RegExp; hit: MuscleHitInput }> = [
     { match: /\bbench\b.*\bpress\b|\bpress\b.*\bbench\b/i, hit: { primary: ["chest"], secondary: ["shoulders", "triceps"] } },
     { match: /\bincline\b.*\bpress\b/i, hit: { primary: ["chest", "shoulders"], secondary: ["triceps"] } },
     { match: /\boverhead\b|\bmilitary\b|\bshoulder press\b|\bohp\b/i, hit: { primary: ["shoulders"], secondary: ["triceps", "traps", "core"] } },
@@ -319,17 +317,28 @@ function normalizeGroup(group: string | null | undefined): string | null {
     return trimmed || null;
 }
 
-function cleanHit(hit: MuscleHit): MuscleHit {
+function cleanHit(hit: MuscleHitInput): MuscleHit {
     const primary = [...new Set(hit.primary)];
     const secondary = [...new Set(hit.secondary)].filter((r) => !primary.includes(r));
-    return { primary, secondary };
+    const minor = [...new Set(hit.minor ?? [])].filter(
+        (r) => !primary.includes(r) && !secondary.includes(r)
+    );
+    return { primary, secondary, minor };
 }
 
-/** Regions trained by one exercise, preferring movement-specific data over category alone. */
+/**
+ * Regions trained by one exercise.
+ * Dictionary targets win when non-empty; otherwise overrides → heuristics → group defaults.
+ */
 export function musclesForExercise(
     name: string | null | undefined,
-    muscleGroup?: string | null
+    muscleGroup?: string | null,
+    dictionaryTargets?: MuscleTargetEntry[] | null
 ): MuscleHit {
+    if (dictionaryTargets && dictionaryTargets.length > 0) {
+        return cleanHit(targetsToHit(dictionaryTargets));
+    }
+
     const key = exerciseIdentityKey(name);
     if (key && EXERCISE_MUSCLE_OVERRIDES[key]) {
         return cleanHit(EXERCISE_MUSCLE_OVERRIDES[key]);
@@ -346,10 +355,8 @@ export function musclesForExercise(
         return cleanHit(MUSCLE_GROUP_REGIONS[groupKey]);
     }
 
-    return { primary: [], secondary: [] };
+    return { primary: [], secondary: [], minor: [] };
 }
-
-export type MuscleHeatLevel = "none" | "low" | "medium" | "high";
 
 export interface WorkoutMuscleBreakdown {
     primary: MuscleRegion[];
@@ -373,24 +380,19 @@ const EMPTY_BREAKDOWN: WorkoutMuscleBreakdown = {
     activityGroups: [],
 };
 
-const PRIMARY_WEIGHT = 3;
-const SECONDARY_WEIGHT = 1;
-
-function heatFromScore(score: number, maxScore: number): MuscleHeatLevel {
-    if (score <= 0) return "none";
-    const ratio = maxScore > 0 ? score / maxScore : 0;
-    if (ratio >= 0.67 || score >= PRIMARY_WEIGHT * 2) return "high";
-    if (ratio >= 0.34 || score >= PRIMARY_WEIGHT) return "medium";
-    return "low";
-}
+export type WorkoutMuscleExerciseInput = {
+    name?: string;
+    muscleGroup?: string | null;
+    sets?: number;
+    muscleTargets?: MuscleTargetEntry[];
+};
 
 /**
  * Aggregates a workout into primary/secondary regions plus per-region intensity.
- * Primary hits weight more than secondary so compounds like Bench Press push chest
- * hotter than assisting shoulders/triceps.
+ * Score = contribution weight × sets; heat bands from muscleContribution.
  */
 export function buildWorkoutMuscleBreakdown(
-    exercises: Array<{ name?: string; muscleGroup?: string | null }>
+    exercises: WorkoutMuscleExerciseInput[]
 ): WorkoutMuscleBreakdown {
     if (exercises.length === 0) return EMPTY_BREAKDOWN;
 
@@ -402,10 +404,19 @@ export function buildWorkoutMuscleBreakdown(
     let unknownExerciseCount = 0;
 
     for (const exercise of exercises) {
-        const hit = musclesForExercise(exercise.name, exercise.muscleGroup);
+        const hit = musclesForExercise(
+            exercise.name,
+            exercise.muscleGroup,
+            exercise.muscleTargets
+        );
         const groupKey = normalizeGroup(exercise.muscleGroup);
+        const setMultiplier = Math.max(1, exercise.sets || 1);
 
-        if (hit.primary.length === 0 && hit.secondary.length === 0) {
+        if (
+            hit.primary.length === 0 &&
+            hit.secondary.length === 0 &&
+            hit.minor.length === 0
+        ) {
             if (groupKey === "cardio" && exercise.muscleGroup) {
                 const display = exercise.muscleGroup.trim();
                 if (!activityGroups.includes(display)) activityGroups.push(display);
@@ -421,11 +432,17 @@ export function buildWorkoutMuscleBreakdown(
 
         for (const region of hit.primary) {
             primary.add(region);
-            scores[region] = (scores[region] ?? 0) + PRIMARY_WEIGHT;
+            scores[region] =
+                (scores[region] ?? 0) + MUSCLE_CONTRIBUTION_WEIGHTS.primary * setMultiplier;
         }
         for (const region of hit.secondary) {
             if (!primary.has(region)) secondary.add(region);
-            scores[region] = (scores[region] ?? 0) + SECONDARY_WEIGHT;
+            scores[region] =
+                (scores[region] ?? 0) + MUSCLE_CONTRIBUTION_WEIGHTS.secondary * setMultiplier;
+        }
+        for (const region of hit.minor) {
+            scores[region] =
+                (scores[region] ?? 0) + MUSCLE_CONTRIBUTION_WEIGHTS.minor * setMultiplier;
         }
     }
 
@@ -438,7 +455,7 @@ export function buildWorkoutMuscleBreakdown(
         const score = scores[region] ?? 0;
         if (score <= 0) continue;
         intensity[region] = maxScore > 0 ? score / maxScore : 0;
-        heat[region] = heatFromScore(score, maxScore);
+        heat[region] = heatFromContribution(score, maxScore);
     }
 
     return {
@@ -454,44 +471,4 @@ export function buildWorkoutMuscleBreakdown(
 
 export function hasMuscleData(breakdown: WorkoutMuscleBreakdown): boolean {
     return breakdown.primary.length > 0 || breakdown.secondary.length > 0;
-}
-
-/** Fill colour for a heat band — grey body, yellow → red work. */
-export function muscleHeatFill(level: MuscleHeatLevel | undefined): string {
-    switch (level) {
-        case "high":
-            return "#ef4444";
-        case "medium":
-            return "#f59e0b";
-        case "low":
-            return "#eab308";
-        default:
-            return "#64748b";
-    }
-}
-
-export function muscleHeatStroke(level: MuscleHeatLevel | undefined): string {
-    switch (level) {
-        case "high":
-            return "#fca5a5";
-        case "medium":
-            return "#fcd34d";
-        case "low":
-            return "#fde047";
-        default:
-            return "#475569";
-    }
-}
-
-export function muscleHeatOpacity(level: MuscleHeatLevel | undefined): number {
-    switch (level) {
-        case "high":
-            return 0.92;
-        case "medium":
-            return 0.78;
-        case "low":
-            return 0.65;
-        default:
-            return 0.35;
-    }
 }

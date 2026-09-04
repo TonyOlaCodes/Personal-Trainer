@@ -6,6 +6,7 @@ import { EXERCISE_SEARCH_LIMIT } from "@/lib/exerciseSearch";
 import { ensureExerciseTrackingSchema } from "@/lib/exerciseTracking/ensure";
 import { parseTrackingSchemaFromDb } from "@/lib/exerciseTracking/schema";
 import { guessTrackingSchema } from "@/lib/exerciseTracking/guess";
+import { ensureMuscleTargetsColumn, parseMuscleTargetsJson } from "@/lib/exerciseMuscleTargets";
 
 export async function GET(req: Request) {
     const { userId } = await auth();
@@ -14,6 +15,7 @@ export async function GET(req: Request) {
     try {
         await ensureExerciseDictionary();
         await ensureExerciseTrackingSchema();
+        await ensureMuscleTargetsColumn();
 
         const url = new URL(req.url);
         const q = url.searchParams.get("q")?.trim() ?? "";
@@ -28,9 +30,10 @@ export async function GET(req: Request) {
                 muscleGroup: string | null;
                 trackingPreset: string | null;
                 trackingFields: string | null;
+                muscleTargets: string | null;
             }>
         >`
-            SELECT "name", "muscleGroup", "trackingPreset", "trackingFields"
+            SELECT "name", "muscleGroup", "trackingPreset", "trackingFields", "muscleTargets"
             FROM "global_exercises"
             ORDER BY "name" ASC
         `;
@@ -40,11 +43,13 @@ export async function GET(req: Request) {
                 exercise.trackingPreset || exercise.trackingFields
                     ? parseTrackingSchemaFromDb(exercise)
                     : guessTrackingSchema(exercise.name, exercise.muscleGroup);
+            const muscleTargets = parseMuscleTargetsJson(exercise.muscleTargets);
             return {
                 name: exercise.name,
                 muscleGroup: exercise.muscleGroup,
                 trackingPreset: trackingSchema.preset,
                 trackingSchema,
+                ...(muscleTargets.length > 0 ? { muscleTargets } : {}),
             };
         });
 
