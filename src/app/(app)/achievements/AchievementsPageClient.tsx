@@ -10,7 +10,11 @@ import {
 } from "@/components/shared/AchievementsPanel";
 import { ModalOverlay } from "@/components/shared/ModalOverlay";
 import { cn } from "@/lib/utils";
-import { RARITY_TOKENS, type AchievementRarity } from "@/lib/achievements/rarity";
+import {
+    ACHIEVEMENT_RARITIES,
+    RARITY_TOKENS,
+    type AchievementRarity,
+} from "@/lib/achievements/rarity";
 import type { AchievementCategory } from "@/lib/achievements/types";
 import type { ProgressiveDisplayItem } from "@/lib/achievements";
 
@@ -33,11 +37,7 @@ const CATEGORY_FILTERS: Array<{ id: CategoryFilter; label: string }> = [
 
 const RARITY_FILTERS: Array<{ id: RarityFilter; label: string }> = [
     { id: "all", label: "All rarities" },
-    { id: "common", label: "Common" },
-    { id: "uncommon", label: "Uncommon" },
-    { id: "rare", label: "Rare" },
-    { id: "epic", label: "Epic" },
-    { id: "legendary", label: "Legendary" },
+    ...ACHIEVEMENT_RARITIES.map((id) => ({ id, label: RARITY_TOKENS[id].label })),
 ];
 
 interface Props {
@@ -164,12 +164,14 @@ export function AchievementsPageClient({
                             type="button"
                             onClick={() => setRarity(f.id)}
                             className={cn(
-                                "shrink-0 px-3 py-1.5 rounded-full text-[10px] font-bold border",
+                                "shrink-0 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider border transition-all",
                                 rarity === f.id
                                     ? f.id === "all"
                                         ? "bg-surface-card border-brand-400/40 text-fg"
-                                        : cn(RARITY_TOKENS[f.id].badge, RARITY_TOKENS[f.id].border)
-                                    : "border-surface-border/60 text-fg-subtle"
+                                        : cn(RARITY_TOKENS[f.id].chip, RARITY_TOKENS[f.id].glow)
+                                    : f.id === "all"
+                                      ? "border-surface-border/60 text-fg-subtle"
+                                      : cn("border-surface-border/60", RARITY_TOKENS[f.id].text, "opacity-70")
                             )}
                         >
                             {f.label}

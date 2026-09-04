@@ -1,4 +1,6 @@
-export type AchievementRarity = "common" | "rare" | "epic" | "legendary";
+/** Canonical rarity scale — see `@/lib/achievements/rarity` for styling tokens. */
+export type { AchievementRarity } from "@/lib/achievements/rarity";
+import type { AchievementRarity } from "@/lib/achievements/rarity";
 
 export type AchievementIcon =
     | "dumbbell"
@@ -184,32 +186,3 @@ export function getAchievementProgress(
     return null;
 }
 
-export const RARITY_STYLES: Record<
-    AchievementRarity,
-    { ring: string; icon: string; label: string; badge: string }
-> = {
-    common: {
-        ring: "border-surface-border",
-        icon: "text-fg-muted",
-        label: "text-fg-subtle",
-        badge: "bg-surface-muted text-fg-muted border-surface-border",
-    },
-    rare: {
-        ring: "border-brand-400/40",
-        icon: "text-brand-400",
-        label: "text-brand-400",
-        badge: "bg-brand-400/10 text-brand-300 border-brand-400/25",
-    },
-    epic: {
-        ring: "border-violet-400/40",
-        icon: "text-violet-400",
-        label: "text-violet-400",
-        badge: "bg-violet-400/10 text-violet-300 border-violet-400/25",
-    },
-    legendary: {
-        ring: "border-amber-400/50",
-        icon: "text-amber-400",
-        label: "text-amber-400",
-        badge: "bg-amber-400/10 text-amber-300 border-amber-400/25",
-    },
-};

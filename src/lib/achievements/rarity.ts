@@ -43,78 +43,156 @@ export function highestRarity(list: AchievementRarity[]): AchievementRarity | nu
 }
 
 /**
- * Tailwind-oriented design tokens used everywhere.
+ * Single source of truth for rarity styling across cards, modals, popups,
+ * the profile showcase, notifications and filters.
  *
- * Suggested CSS custom properties for globals.css:
- *   --achievement-common-text / --achievement-common-border / --achievement-common-badge
- *   --achievement-common-glow / --achievement-common-soft-bg / --achievement-common-accent
- *   --achievement-uncommon-text / --achievement-uncommon-border / --achievement-uncommon-badge
- *   --achievement-uncommon-glow / --achievement-uncommon-soft-bg / --achievement-uncommon-accent
- *   --achievement-rare-text / --achievement-rare-border / --achievement-rare-badge
- *   --achievement-rare-glow / --achievement-rare-soft-bg / --achievement-rare-accent
- *   --achievement-epic-text / --achievement-epic-border / --achievement-epic-badge
- *   --achievement-epic-glow / --achievement-epic-soft-bg / --achievement-epic-accent
- *   --achievement-legendary-text / --achievement-legendary-border / --achievement-legendary-badge
- *   --achievement-legendary-glow / --achievement-legendary-soft-bg / --achievement-legendary-accent
+ * Every value is a literal Tailwind class string so the JIT compiler can see
+ * it — never build these class names dynamically at runtime.
+ *
+ * Hierarchy is intentional and increases with rank:
+ * border → icon container → rarity label → background tint → glow → progress bar.
+ * Colours are fixed (not `brand-*`) so rarity reads the same in every theme.
  */
-export const RARITY_TOKENS: Record<
-    AchievementRarity,
-    {
-        label: string;
-        text: string;
-        border: string;
-        badge: string;
-        glow: string;
-        softBg: string;
-        notificationAccent: string;
-    }
-> = {
+export interface RarityStyleTokens {
+    label: string;
+    /** Rarity word and other text accents. */
+    text: string;
+    /** Icon glyph colour. */
+    icon: string;
+    /** Card border — thickness/opacity climbs with rank. */
+    border: string;
+    /** Icon container background + border. */
+    iconWrap: string;
+    /** Soft card background tint (gradient for epic/legendary). */
+    cardBg: string;
+    /** Outer glow for cards and tiles. */
+    glow: string;
+    /** Heavier glow for hero moments (unlock/upgrade popup). */
+    glowStrong: string;
+    /** Progress bar fill for the currently earned rarity. */
+    bar: string;
+    /** Compact pill used by rarity filters and inline badges. */
+    chip: string;
+    /** Left accent border for notification rows. */
+    notificationAccent: string;
+}
+
+export const RARITY_TOKENS: Record<AchievementRarity, RarityStyleTokens> = {
     common: {
         label: "Common",
-        text: "text-fg-muted",
-        border: "border-surface-border",
-        badge: "bg-surface-muted text-fg-muted border-surface-border",
-        glow: "shadow-none",
-        softBg: "bg-surface-muted/40",
-        notificationAccent: "border-l-surface-border",
+        text: "text-slate-200",
+        icon: "text-slate-300",
+        border: "border-slate-400/40",
+        iconWrap: "bg-slate-400/10 border-slate-400/30",
+        cardBg: "bg-slate-400/[0.04]",
+        glow: "shadow-[0_0_14px_-6px_rgba(203,213,225,0.35)]",
+        glowStrong: "shadow-[0_0_30px_-8px_rgba(203,213,225,0.5)]",
+        bar: "bg-slate-300",
+        chip: "bg-slate-400/15 text-slate-200 border-slate-400/40",
+        notificationAccent: "border-l-slate-400",
     },
     uncommon: {
         label: "Uncommon",
-        text: "text-emerald-400",
-        border: "border-emerald-400/40",
-        badge: "bg-emerald-400/10 text-emerald-300 border-emerald-400/25",
-        glow: "shadow-[0_0_10px_rgba(52,211,153,0.1)]",
-        softBg: "bg-emerald-400/10",
+        text: "text-emerald-300",
+        icon: "text-emerald-300",
+        border: "border-emerald-400/60",
+        iconWrap: "bg-emerald-400/15 border-emerald-400/40",
+        cardBg: "bg-emerald-500/[0.07]",
+        glow: "shadow-[0_0_18px_-4px_rgba(52,211,153,0.35)]",
+        glowStrong: "shadow-[0_0_40px_-6px_rgba(52,211,153,0.55)]",
+        bar: "bg-emerald-400",
+        chip: "bg-emerald-400/15 text-emerald-200 border-emerald-400/45",
         notificationAccent: "border-l-emerald-400",
     },
     rare: {
         label: "Rare",
-        text: "text-brand-400",
-        border: "border-brand-400/40",
-        badge: "bg-brand-400/10 text-brand-300 border-brand-400/25",
-        glow: "shadow-[0_0_12px_rgba(56,189,248,0.12)]",
-        softBg: "bg-brand-400/10",
-        notificationAccent: "border-l-brand-400",
+        text: "text-sky-300",
+        icon: "text-sky-300",
+        border: "border-sky-400/65",
+        iconWrap: "bg-sky-400/15 border-sky-400/45",
+        cardBg: "bg-sky-500/[0.09]",
+        glow: "shadow-[0_0_22px_-4px_rgba(56,189,248,0.4)]",
+        glowStrong: "shadow-[0_0_44px_-6px_rgba(56,189,248,0.6)]",
+        bar: "bg-sky-400",
+        chip: "bg-sky-400/15 text-sky-200 border-sky-400/50",
+        notificationAccent: "border-l-sky-400",
     },
     epic: {
         label: "Epic",
-        text: "text-violet-400",
-        border: "border-violet-400/40",
-        badge: "bg-violet-400/10 text-violet-300 border-violet-400/25",
-        glow: "shadow-[0_0_14px_rgba(167,139,250,0.14)]",
-        softBg: "bg-violet-400/10",
+        text: "text-violet-300",
+        icon: "text-violet-300",
+        border: "border-violet-400/70",
+        iconWrap: "bg-violet-400/20 border-violet-400/50",
+        cardBg: "bg-gradient-to-br from-violet-500/15 via-violet-500/[0.06] to-transparent",
+        glow: "shadow-[0_0_26px_-4px_rgba(167,139,250,0.5)]",
+        glowStrong: "shadow-[0_0_50px_-6px_rgba(167,139,250,0.7)]",
+        bar: "bg-violet-400",
+        chip: "bg-violet-400/20 text-violet-200 border-violet-400/55",
         notificationAccent: "border-l-violet-400",
     },
     legendary: {
         label: "Legendary",
-        text: "text-amber-400",
-        border: "border-amber-400/50",
-        badge: "bg-amber-400/10 text-amber-300 border-amber-400/25",
-        glow: "shadow-[0_0_20px_rgba(251,191,36,0.22)]",
-        softBg: "bg-amber-400/12",
+        text: "text-amber-300",
+        icon: "text-amber-200",
+        border: "border-amber-400/80",
+        iconWrap: "bg-amber-400/20 border-amber-300/60",
+        cardBg: "bg-gradient-to-br from-amber-400/18 via-amber-500/[0.08] to-transparent",
+        glow: "shadow-[0_0_30px_-4px_rgba(251,191,36,0.55),inset_0_1px_0_0_rgba(253,230,138,0.25)]",
+        glowStrong: "shadow-[0_0_60px_-8px_rgba(251,191,36,0.75),inset_0_1px_0_0_rgba(253,230,138,0.35)]",
+        bar: "bg-gradient-to-r from-amber-200 to-amber-400",
+        chip: "bg-amber-400/20 text-amber-200 border-amber-300/60",
         notificationAccent: "border-l-amber-400",
     },
 };
+
+/**
+ * Locked achievements sit clearly below Common: dashed border, no glow,
+ * muted icon and text, low-contrast progress.
+ */
+export const LOCKED_TOKENS: RarityStyleTokens = {
+    label: "Locked",
+    text: "text-fg-subtle",
+    icon: "text-fg-subtle",
+    border: "border-dashed border-surface-border/70",
+    iconWrap: "bg-surface-muted/30 border-surface-border/70",
+    cardBg: "bg-surface-muted/[0.06]",
+    glow: "shadow-none",
+    glowStrong: "shadow-none",
+    bar: "bg-fg-subtle/30",
+    chip: "bg-surface-muted/40 text-fg-subtle border-surface-border",
+    notificationAccent: "border-l-surface-border",
+};
+
+/** Extra dimming applied to locked cards on top of {@link LOCKED_TOKENS}. */
+export const LOCKED_CARD_OPACITY = "opacity-60";
+
+/** Legendary-only shimmer (see `.rarity-shimmer` in globals.css). */
+export const LEGENDARY_SHIMMER_CLASS = "rarity-shimmer";
+
+/** Resolve styling for a rarity, falling back to locked styling when unearned. */
+export function getRarityTokens(
+    rarity: AchievementRarity | null | undefined,
+    locked = false
+): RarityStyleTokens {
+    if (locked || !rarity) return LOCKED_TOKENS;
+    return RARITY_TOKENS[rarity] ?? RARITY_TOKENS.common;
+}
+
+/**
+ * Achievement notifications store `familyKey:rarity[:pN]` as the entity id,
+ * so the bell can tint each row without extra columns.
+ */
+export function rarityFromAchievementEntityId(
+    entityId: string | null | undefined
+): AchievementRarity | null {
+    if (!entityId) return null;
+    for (const part of entityId.split(":")) {
+        if ((ACHIEVEMENT_RARITIES as readonly string[]).includes(part)) {
+            return part as AchievementRarity;
+        }
+    }
+    return null;
+}
 
 export type StreakDisplay =
     | { mode: "single"; days: number }

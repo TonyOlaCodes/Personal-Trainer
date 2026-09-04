@@ -7,7 +7,14 @@ import {
     Target, TrendingUp, Trophy, Users, Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { RARITY_TOKENS, formatStreakDisplay, type AchievementRarity } from "@/lib/achievements/rarity";
+import {
+    LEGENDARY_SHIMMER_CLASS,
+    LOCKED_CARD_OPACITY,
+    RARITY_TOKENS,
+    formatStreakDisplay,
+    getRarityTokens,
+    type AchievementRarity,
+} from "@/lib/achievements/rarity";
 import type { AchievementIcon } from "@/lib/achievements/types";
 import type { AchievementDisplayItem, CoachAchievementDisplayItem, ProgressiveDisplayItem } from "@/lib/achievements";
 
@@ -48,8 +55,7 @@ function formatMetric(value: number, unit: string): string {
 }
 
 function rarityLabel(rarity: AchievementRarity | null | undefined, locked: boolean): string {
-    if (locked || !rarity) return "Locked";
-    return RARITY_TOKENS[rarity].label;
+    return getRarityTokens(rarity, locked).label;
 }
 
 export function AchievementTile({
@@ -79,29 +85,36 @@ export function AchievementCard({
 }
 
 function LegacyCoachTile({ achievement }: { achievement: CoachAchievementDisplayItem }) {
-    const styles = RARITY_TOKENS[achievement.rarity as AchievementRarity] ?? RARITY_TOKENS.common;
-    const Icon = ACHIEVEMENT_ICON_MAP[achievement.icon as AchievementIcon] ?? Trophy;
     const locked = !achievement.unlocked;
+    const rarity = achievement.rarity;
+    const styles = getRarityTokens(rarity, locked);
+    const Icon = ACHIEVEMENT_ICON_MAP[achievement.icon as AchievementIcon] ?? Trophy;
+    const isLegendary = !locked && rarity === "legendary";
 
     return (
         <div
             className={cn(
-                "relative flex flex-col items-center text-center gap-2 rounded-2xl border p-3 min-h-[7.5rem]",
+                "relative flex flex-col items-center text-center gap-2 rounded-2xl p-3 min-h-[7.5rem] bg-surface-card",
                 locked
-                    ? "opacity-55 bg-surface-muted/10 border-dashed border-surface-border/80"
-                    : cn("border-2", styles.softBg, styles.border, styles.glow)
+                    ? cn("border", styles.border, LOCKED_CARD_OPACITY)
+                    : cn("border-2", styles.border, styles.glow),
+                isLegendary && LEGENDARY_SHIMMER_CLASS
             )}
         >
+            <div className={cn("absolute inset-0 rounded-2xl pointer-events-none", styles.cardBg)} />
             {!locked && (
-                <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-success/15 border border-success/35 flex items-center justify-center">
+                <span className="absolute top-1.5 right-1.5 z-10 w-4 h-4 rounded-full bg-success/15 border border-success/35 flex items-center justify-center">
                     <Check className="w-2.5 h-2.5 text-success" strokeWidth={3} />
                 </span>
             )}
-            <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center border", locked ? "bg-surface-muted/40" : styles.badge)}>
-                <Icon className={cn("w-5 h-5", locked ? "text-fg-subtle" : styles.text)} />
+            <div className={cn("relative w-10 h-10 rounded-xl flex items-center justify-center border", styles.iconWrap)}>
+                <Icon className={cn("w-5 h-5", styles.icon)} />
             </div>
-            <p className={cn("text-[11px] font-black leading-tight line-clamp-2", locked ? "text-fg-subtle" : "text-fg")}>
+            <p className={cn("relative text-[11px] font-black leading-tight line-clamp-2", locked ? "text-fg-subtle" : "text-fg")}>
                 {achievement.title}
+            </p>
+            <p className={cn("relative text-[9px] font-black uppercase tracking-[0.15em]", styles.text)}>
+                {styles.label}
             </p>
         </div>
     );
@@ -121,7 +134,8 @@ export function ProgressiveAchievementCard({
     const locked = !achievement.unlocked;
     const secretLocked = achievement.secret && locked;
     const rarity = achievement.highestRarity;
-    const tokens = rarity ? RARITY_TOKENS[rarity] : RARITY_TOKENS.common;
+    const tokens = getRarityTokens(rarity, locked);
+    const isLegendary = !locked && rarity === "legendary";
     const Icon = ACHIEVEMENT_ICON_MAP[achievement.icon] ?? Trophy;
     const next = achievement.nextRarity;
     const progress = achievement.progress;
@@ -153,27 +167,28 @@ export function ProgressiveAchievementCard({
             type="button"
             onClick={() => onOpen?.(achievement)}
             className={cn(
-                "relative w-full text-left rounded-2xl border transition-all",
+                "relative w-full text-left rounded-2xl transition-all bg-surface-card",
                 compact ? "p-3" : "p-4",
                 locked
-                    ? "bg-surface-muted/10 border-dashed border-surface-border/80 opacity-70"
-                    : cn("bg-surface-card border-2", tokens.border, tokens.glow),
+                    ? cn("border", tokens.border, LOCKED_CARD_OPACITY)
+                    : cn("border-2", tokens.border, tokens.glow),
                 selected && "ring-2 ring-brand-400/50",
-                rarity === "legendary" && !locked && "animate-[pulse_4s_ease-in-out_infinite]"
+                isLegendary && LEGENDARY_SHIMMER_CLASS
             )}
         >
-            <div className="flex items-start gap-3">
+            <div className={cn("absolute inset-0 rounded-2xl pointer-events-none", tokens.cardBg)} />
+            <div className="relative flex items-start gap-3">
                 <div
                     className={cn(
                         "rounded-xl flex items-center justify-center shrink-0 border",
                         compact ? "w-10 h-10" : "w-12 h-12",
-                        locked ? "bg-surface-muted/40 border-surface-border" : cn(tokens.badge, tokens.border)
+                        tokens.iconWrap
                     )}
                 >
                     {secretLocked ? (
                         <Lock className="w-5 h-5 text-fg-subtle" />
                     ) : (
-                        <Icon className={cn("w-5 h-5", locked ? "text-fg-subtle" : tokens.text)} />
+                        <Icon className={cn("w-5 h-5", tokens.icon)} />
                     )}
                 </div>
 
@@ -188,8 +203,9 @@ export function ProgressiveAchievementCard({
                                 {achievement.title}
                             </p>
                             <p className={cn(
-                                "text-[10px] font-black uppercase tracking-widest mt-0.5",
-                                locked ? "text-fg-subtle" : tokens.text
+                                "font-black uppercase tracking-[0.18em] mt-1",
+                                compact ? "text-[10px]" : "text-[11px]",
+                                tokens.text
                             )}>
                                 {rarityLabel(rarity, locked)}
                             </p>
@@ -217,18 +233,13 @@ export function ProgressiveAchievementCard({
 
                             {progress && (
                                 <div className="space-y-1 pt-0.5">
-                                    <div className="h-1.5 rounded-full bg-surface-muted overflow-hidden">
+                                    <div className={cn(
+                                        "h-1.5 rounded-full overflow-hidden",
+                                        locked ? "bg-surface-muted/60" : "bg-surface-muted"
+                                    )}>
                                         <div
-                                            className={cn(
-                                                "h-full rounded-full transition-all",
-                                                locked ? "bg-fg-subtle/40" : tokens.text.replace("text-", "bg-")
-                                            )}
-                                            style={{
-                                                width: `${progressPct}%`,
-                                                backgroundColor: locked
-                                                    ? undefined
-                                                    : undefined,
-                                            }}
+                                            className={cn("h-full rounded-full transition-all", tokens.bar)}
+                                            style={{ width: `${progressPct}%` }}
                                         />
                                     </div>
                                     <div className="flex justify-between text-[10px] font-bold text-fg-subtle">
@@ -269,26 +280,32 @@ export function AchievementDetailPanel({
     achievement: ProgressiveDisplayItem;
     onClose?: () => void;
 }) {
-    const rarity = achievement.highestRarity;
-    const tokens = rarity ? RARITY_TOKENS[rarity] : RARITY_TOKENS.common;
-    const Icon = ACHIEVEMENT_ICON_MAP[achievement.icon] ?? Trophy;
     const locked = !achievement.unlocked;
+    const rarity = achievement.highestRarity;
+    const tokens = getRarityTokens(rarity, locked);
+    const isLegendary = !locked && rarity === "legendary";
+    const Icon = ACHIEVEMENT_ICON_MAP[achievement.icon] ?? Trophy;
     const secretLocked = achievement.secret && locked;
 
     return (
         <div className="space-y-5">
-            <div className="flex items-start gap-4">
+            <div className={cn(
+                "relative flex items-start gap-4 rounded-2xl p-4",
+                locked ? cn("border", tokens.border) : cn("border-2", tokens.border, tokens.glow),
+                isLegendary && LEGENDARY_SHIMMER_CLASS
+            )}>
+                <div className={cn("absolute inset-0 rounded-2xl pointer-events-none", tokens.cardBg)} />
                 <div className={cn(
-                    "w-14 h-14 rounded-2xl flex items-center justify-center border shrink-0",
-                    locked ? "bg-surface-muted/40 border-surface-border" : cn(tokens.badge, tokens.border, tokens.glow)
+                    "relative w-14 h-14 rounded-2xl flex items-center justify-center border shrink-0",
+                    tokens.iconWrap
                 )}>
                     {secretLocked ? <Lock className="w-7 h-7 text-fg-subtle" /> : (
-                        <Icon className={cn("w-7 h-7", locked ? "text-fg-subtle" : tokens.text)} />
+                        <Icon className={cn("w-7 h-7", tokens.icon)} />
                     )}
                 </div>
-                <div className="min-w-0 flex-1">
+                <div className="relative min-w-0 flex-1">
                     <p className="text-lg font-black text-fg tracking-tight">{achievement.title}</p>
-                    <p className={cn("text-[10px] font-black uppercase tracking-widest mt-1", locked ? "text-fg-subtle" : tokens.text)}>
+                    <p className={cn("text-xs font-black uppercase tracking-[0.2em] mt-1", tokens.text)}>
                         {rarityLabel(rarity, locked)}
                     </p>
                     {!secretLocked && (
@@ -296,7 +313,7 @@ export function AchievementDetailPanel({
                     )}
                 </div>
                 {onClose && (
-                    <button type="button" onClick={onClose} className="btn-ghost text-xs">Close</button>
+                    <button type="button" onClick={onClose} className="relative btn-ghost text-xs">Close</button>
                 )}
             </div>
 
@@ -340,8 +357,8 @@ export function AchievementDetailPanel({
                     <div className="space-y-2">
                         <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Progression</p>
                         {achievement.tierHistory.map((tier) => {
-                            const t = RARITY_TOKENS[tier.rarity];
                             const done = tier.unlocked;
+                            const t = getRarityTokens(tier.rarity, !done);
                             const isCurrentNext =
                                 !done
                                 && achievement.nextRarity === tier.rarity
@@ -351,17 +368,21 @@ export function AchievementDetailPanel({
                                     key={tier.rarity}
                                     className={cn(
                                         "flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5",
-                                        done ? cn(t.softBg, t.border) : "border-surface-border/60 bg-surface-muted/10"
+                                        t.border,
+                                        t.cardBg
                                     )}
                                 >
                                     <div className="flex items-center gap-2 min-w-0">
                                         {done ? (
-                                            <Check className={cn("w-4 h-4", t.text)} />
+                                            <Check className={cn("w-4 h-4", t.icon)} />
                                         ) : (
                                             <Lock className="w-4 h-4 text-fg-subtle" />
                                         )}
-                                        <span className={cn("text-sm font-bold", done ? t.text : "text-fg-subtle")}>
-                                            {t.label}
+                                        <span className={cn(
+                                            "text-sm font-black uppercase tracking-wider",
+                                            done ? t.text : "text-fg-subtle"
+                                        )}>
+                                            {RARITY_TOKENS[tier.rarity].label}
                                         </span>
                                     </div>
                                     <div className="text-right text-xs font-bold tabular-nums text-fg-muted">

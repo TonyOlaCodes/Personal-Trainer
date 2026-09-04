@@ -9,6 +9,7 @@ import { AccountNav } from "@/components/layout/AccountNav";
 import { formatRelative, roleLabels, roleBadgeClass, formatDate, getDayName, cn } from "@/lib/utils";
 import { useCurrentDate } from "@/hooks/useCurrentDate";
 import { getQuickReplyTemplate, supportsQuickReply, NOTIFICATION_TYPES } from "@/lib/notificationTypes";
+import { RARITY_TOKENS, rarityFromAchievementEntityId } from "@/lib/achievements/rarity";
 import { GainAccessModal } from "@/components/shared/GainAccessModal";
 import { ResumeWorkoutBarHost } from "@/components/shared/ResumeWorkoutBarHost";
 
@@ -74,6 +75,35 @@ function AnnouncementNotificationText({ message }: { message: string }) {
             <span className="font-bold text-fg">{match[1]}</span>
             {rest && <span className="text-fg-muted font-medium"> — {rest}</span>}
         </>
+    );
+}
+
+function AchievementNotificationText({
+    message,
+    entityId,
+}: {
+    message: string;
+    entityId?: string | null;
+}) {
+    const rarity = rarityFromAchievementEntityId(entityId);
+    const tokens = rarity ? RARITY_TOKENS[rarity] : null;
+    const [rarityWord, ...rest] = message.split(" ");
+    const showRarityWord = tokens != null && rarityWord.toLowerCase() === rarity;
+
+    return (
+        <span className="inline-flex items-start gap-1.5">
+            <Trophy className={cn("w-3.5 h-3.5 shrink-0 mt-0.5", tokens?.icon ?? "text-amber-400")} />
+            {showRarityWord ? (
+                <span>
+                    <span className={cn("font-black uppercase tracking-wider", tokens.text)}>
+                        {tokens.label}
+                    </span>{" "}
+                    {rest.join(" ")}
+                </span>
+            ) : (
+                <span>{message}</span>
+            )}
+        </span>
     );
 }
 
@@ -337,12 +367,20 @@ export function TopBar({ title, subtitle, showToday = false, streak, hideSearch 
                                         </div>
                                     ) : notifications.map((n) => {
                                         const canQuickReply = isCoach && (n.supportsQuickReply ?? supportsQuickReply(n.type));
+                                        const achievementRarity = n.type === NOTIFICATION_TYPES.ACHIEVEMENT_UNLOCKED
+                                            ? rarityFromAchievementEntityId(n.entityId)
+                                            : null;
                                         return (
                                             <div
                                                 key={n.id}
                                                 className={cn(
                                                     "p-4 border-b border-surface-border relative group",
-                                                    !n.read && "bg-brand-950/10"
+                                                    !n.read && "bg-brand-950/10",
+                                                    achievementRarity && cn(
+                                                        "border-l-4",
+                                                        RARITY_TOKENS[achievementRarity].notificationAccent,
+                                                        RARITY_TOKENS[achievementRarity].cardBg
+                                                    )
                                                 )}
                                             >
                                                 <button
@@ -373,10 +411,10 @@ export function TopBar({ title, subtitle, showToday = false, streak, hideSearch 
                                                             ) : n.type === NOTIFICATION_TYPES.GLOBAL_ANNOUNCEMENT ? (
                                                                 <AnnouncementNotificationText message={n.message} />
                                                             ) : n.type === NOTIFICATION_TYPES.ACHIEVEMENT_UNLOCKED ? (
-                                                                <span className="inline-flex items-start gap-1.5">
-                                                                    <Trophy className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
-                                                                    <span>{n.message}</span>
-                                                                </span>
+                                                                <AchievementNotificationText
+                                                                    message={n.message}
+                                                                    entityId={n.entityId}
+                                                                />
                                                             ) : n.type === NOTIFICATION_TYPES.MISSED_CHECKIN ? (
                                                                 <CheckInRequestedNotificationText message={n.message} />
                                                             ) : (

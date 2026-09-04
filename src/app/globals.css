@@ -176,6 +176,26 @@
   .progress-bar { @apply h-1.5 rounded-full bg-surface-muted overflow-hidden; }
   .progress-fill { @apply h-full rounded-full bg-gradient-to-r from-brand-500 to-indigo-500 transition-all duration-500 ease-out; }
 
+  /* ── Achievement rarity (legendary shimmer) ── */
+  .rarity-shimmer { position: relative; overflow: hidden; }
+  .rarity-shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(
+      105deg,
+      transparent 38%,
+      rgba(253, 230, 138, 0.16) 50%,
+      transparent 62%
+    );
+    transform: translateX(-130%);
+  }
+  .rarity-shimmer:hover::after,
+  .rarity-shimmer-active::after {
+    animation: rarityShimmer 2.6s ease-in-out infinite;
+  }
+
   /* ── Chat bubbles ── */
   .bubble-sent {
     @apply bg-gradient-to-br from-brand-500 to-indigo-500 text-white rounded-2xl rounded-br-sm px-4 py-2.5 max-w-full text-sm;
@@ -212,6 +232,14 @@
 @keyframes shimmer {
   0%   { background-position: -200% 0; }
   100% { background-position:  200% 0; }
+}
+@keyframes rarityShimmer {
+  0%   { transform: translateX(-130%); }
+  100% { transform: translateX(230%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rarity-shimmer:hover::after,
+  .rarity-shimmer-active::after { animation: none; }
 }
 @keyframes pulseBrand {
   0%, 100% { box-shadow: 0 0 15px rgba(99,102,241,0.3); }
