@@ -23,7 +23,7 @@ export type SetMetricStrings = {
 };
 
 const SHORT_LABEL: Partial<Record<TrackingFieldKey, string>> = {
-    weight: "Wt",
+    weight: "Weight",
     reps: "Reps",
     duration: "Time",
     distance: "Dist",

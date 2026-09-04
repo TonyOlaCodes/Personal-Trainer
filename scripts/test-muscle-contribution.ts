@@ -24,16 +24,28 @@ function check(name: string, fn: () => void) {
 
 console.log("\nMuscle contribution tests\n");
 
-check("bench primary chest + secondary tris accumulates", () => {
+check("workout muscle chips ordered by contribution score", () => {
     const breakdown = buildWorkoutMuscleBreakdown([
-        { name: "Barbell Bench Press", muscleGroup: "Chest", sets: 3 },
+        { name: "Barbell Bench Press", muscleGroup: "Chest", sets: 4 },
+        { name: "Incline Dumbbell Bench Press", muscleGroup: "Chest", sets: 3 },
+        { name: "Tricep Pushdown", muscleGroup: "Triceps", sets: 3 },
+        { name: "Dumbbell Lateral Raise", muscleGroup: "Shoulders", sets: 2 },
     ]);
-    assert.ok(breakdown.primary.includes("chest"));
-    assert.ok(breakdown.secondary.includes("triceps") || breakdown.primary.includes("triceps"));
-    assert.ok((breakdown.intensity.chest ?? 0) >= (breakdown.intensity.triceps ?? 0));
-    assert.ok(breakdown.heat.chest);
-    assert.notEqual(breakdown.heat.chest, "none");
+    assert.ok(breakdown.primary.length >= 2);
+    // Hottest primary should be chest from the pressing volume
+    assert.equal(breakdown.primary[0], "chest");
+    const chestScore = breakdown.intensity.chest ?? 0;
+    const trisScore = breakdown.intensity.triceps ?? 0;
+    assert.ok(chestScore >= trisScore);
 });
+
+check("RDL prioritises hamstrings over lower back", () => {
+    const hit = musclesForExercise("Romanian Deadlift", "Hamstrings");
+    assert.deepEqual(hit.primary, ["hamstrings"]);
+    assert.ok(hit.secondary.includes("glutes"));
+    assert.ok(hit.minor.includes("lowerBack"));
+});
+
 
 check("adding leg press increases quads", () => {
     const benchOnly = buildWorkoutMuscleBreakdown([

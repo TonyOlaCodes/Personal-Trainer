@@ -252,22 +252,29 @@ async function computeHasPerfectMonth(userId: string): Promise<boolean> {
 }
 
 /**
- * Replay completed working sets chronologically to detect weight / rep PR kinds.
- * Caps to a reasonable volume for sync; falls back to isPR flags if empty.
+ * Replay completed working sets chronologically.
+ * One set that hits multiple PR kinds counts as a single PR event for PR Hunter.
  */
-function detectPrKinds(
+function detectPrStats(
     sets: Array<{
         exerciseName: string | null;
         weightKg: number | null;
         reps: number | null;
         isWarmup: boolean;
         isCompleted: boolean;
-        isPR: boolean;
         loggedAt: Date;
         setNumber: number;
     }>
-): { hasWeightPr: boolean; hasRepPr: boolean; hasEstimated1RM: boolean } {
+): {
+    prEventCount: number;
+    prVariety: number;
+    hasWeightPr: boolean;
+    hasRepPr: boolean;
+    hasEstimated1RM: boolean;
+} {
     const recordsByKey = new Map<string, ExerciseRecords>();
+    const varietyKeys = new Set<string>();
+    let prEventCount = 0;
     let hasWeightPr = false;
     let hasRepPr = false;
     let hasEstimated1RM = false;
@@ -285,14 +292,46 @@ function detectPrKinds(
         }
 
         const result = evaluateSetPr(set, records);
-        if (result.kinds.includes("weight")) hasWeightPr = true;
-        if (result.kinds.includes("reps")) hasRepPr = true;
-        if (result.kinds.includes("oneRm")) hasEstimated1RM = true;
+        if (result.kinds.length > 0) {
+            prEventCount += 1;
+            varietyKeys.add(key);
+            if (result.kinds.includes("weight")) hasWeightPr = true;
+            if (result.kinds.includes("reps")) hasRepPr = true;
+            if (result.kinds.includes("oneRm")) hasEstimated1RM = true;
+        }
 
         applySetToRecords(records, set);
     }
 
-    return { hasWeightPr, hasRepPr, hasEstimated1RM };
+    return {
+        prEventCount,
+        prVariety: varietyKeys.size,
+        hasWeightPr,
+        hasRepPr,
+        hasEstimated1RM,
+    };
+}
+
+/** Cap per-session minutes so abandoned timers cannot farm Time Under Iron. */
+const MAX_COUNTABLE_SESSION_MINUTES = 180;
+
+async function sumValidTrainingMinutes(userId: string): Promise<number> {
+    const rows = await prisma.$queryRaw<Array<{ minutes: number | null }>>`
+        SELECT
+            COALESCE(
+                SUM(
+                    LEAST(GREATEST(COALESCE("duration", 0), 0), ${MAX_COUNTABLE_SESSION_MINUTES})
+                ),
+                0
+            )::float AS minutes
+        FROM "workout_logs"
+        WHERE "userId" = ${userId}
+          AND "status" = 'COMPLETED'
+          AND "duration" IS NOT NULL
+          AND "duration" > 0
+          AND "duration" <= 1440
+    `;
+    return Number(rows[0]?.minutes ?? 0);
 }
 
 export async function getProgressiveAchievementStats(
@@ -302,7 +341,7 @@ export async function getProgressiveAchievementStats(
 
     const user = await prisma.user.findUnique({
         where: { id: userId },
-        select: { createdAt: true, onboardingDone: true },
+        select: { createdAt: true, onboardingDone: true, role: true },
     });
 
     const accountAgeDays = user
@@ -312,10 +351,9 @@ export async function getProgressiveAchievementStats(
     const [
         workoutsCompleted,
         checkIns,
-        prCount,
         bodyweightDaysRows,
         completedSets,
-        trainingAgg,
+        trainingMinutes,
         dailyTargetDaysRows,
         messagesSent,
         plansCreated,
@@ -330,11 +368,8 @@ export async function getProgressiveAchievementStats(
     ] = await Promise.all([
         prisma.workoutLog.count({ where: { userId, status: "COMPLETED" } }),
         prisma.checkIn.count({ where: { userId } }),
-        prisma.logSet.count({
-            where: { isPR: true, workoutLog: { userId, status: "COMPLETED" } },
-        }),
         prisma.$queryRaw<Array<{ count: bigint }>>`
-            SELECT COUNT(*)::bigint AS count
+            SELECT COUNT(DISTINCT "loggedDate")::bigint AS count
             FROM "bodyweight_logs"
             WHERE "userId" = ${userId}
         `,
@@ -345,12 +380,9 @@ export async function getProgressiveAchievementStats(
                 workoutLog: { userId, status: "COMPLETED" },
             },
         }),
-        prisma.workoutLog.aggregate({
-            where: { userId, status: "COMPLETED", duration: { not: null } },
-            _sum: { duration: true },
-        }),
+        sumValidTrainingMinutes(userId),
         prisma.$queryRaw<Array<{ count: bigint }>>`
-            SELECT COUNT(*)::bigint AS count
+            SELECT COUNT(DISTINCT "loggedDate")::bigint AS count
             FROM "daily_metric_logs"
             WHERE "userId" = ${userId}
         `,
@@ -414,21 +446,17 @@ export async function getProgressiveAchievementStats(
 
     const bodyweightDays = Number(bodyweightDaysRows[0]?.count ?? 0);
     const dailyTargetDays = Number(dailyTargetDaysRows[0]?.count ?? 0);
-    const trainingMinutes = trainingAgg._sum.duration ?? 0;
     const trainingHours = trainingMinutes / 60;
-
     const checkInStreaks = computeCheckInStreaks(checkInRows.map((r) => r.createdAt));
 
     const uniqueExerciseKeys = new Set<string>();
     const loggedEntryKeys = new Set<string>();
-    const prVarietyKeys = new Set<string>();
 
     for (const set of workingSets) {
         const key = exerciseIdentityKey(set.exerciseName);
         if (!key) continue;
         uniqueExerciseKeys.add(key);
         loggedEntryKeys.add(`${set.workoutLogId}:${key}`);
-        if (set.isPR) prVarietyKeys.add(key);
     }
 
     const trainingDayKeys = new Set(
@@ -459,14 +487,13 @@ export async function getProgressiveAchievementStats(
         activeMonthKeys.add(monthKeyFromLoggedDate(row.loggedDate));
     }
 
-    const prKinds = detectPrKinds(
+    const prStats = detectPrStats(
         workingSets.map((s) => ({
             exerciseName: s.exerciseName,
             weightKg: s.weightKg,
             reps: s.reps,
             isWarmup: s.isWarmup,
             isCompleted: s.isCompleted,
-            isPR: s.isPR,
             loggedAt: s.workoutLog.loggedAt,
             setNumber: s.setNumber,
         }))
@@ -484,12 +511,15 @@ export async function getProgressiveAchievementStats(
 
     const bestStreakDays = adherence.maxStreak;
     const activeMonths = activeMonthKeys.size;
+    const role = user?.role ?? "FREE";
+    const canCreatePlans = role === "COACH" || role === "SUPER_ADMIN" || role === "PREMIUM"
+        || role === "GENERAL_PREMIUM" || role === "FREE";
 
     return {
         workoutsCompleted,
         currentStreakDays: adherence.currentStreak,
         bestStreakDays,
-        prCount,
+        prCount: prStats.prEventCount,
         checkIns,
         bodyweightDays,
         trainingHours,
@@ -504,15 +534,15 @@ export async function getProgressiveAchievementStats(
         activeMonths,
         checkInBestStreak: checkInStreaks.best,
         checkInCurrentStreak: checkInStreaks.current,
-        prVariety: prVarietyKeys.size,
+        prVariety: prStats.prVariety,
         trainingDays: trainingDayKeys.size,
         workoutVariety: workoutVarietyKeys.size,
         hasCompletedWorkout: workoutsCompleted > 0,
         hasCheckIn: checkIns > 0,
-        hasPr: prCount > 0,
-        hasWeightPr: prKinds.hasWeightPr,
-        hasRepPr: prKinds.hasRepPr,
-        hasEstimated1RM: prKinds.hasEstimated1RM,
+        hasPr: prStats.prEventCount > 0,
+        hasWeightPr: prStats.hasWeightPr,
+        hasRepPr: prStats.hasRepPr,
+        hasEstimated1RM: prStats.hasEstimated1RM,
         onboardingDone: user?.onboardingDone ?? false,
         hasCreatedPlan: plansCreated > 0,
         hasPublicPlan: publicPlans > 0,
@@ -523,7 +553,7 @@ export async function getProgressiveAchievementStats(
         hasComeback,
         hasVolumeDay,
         hasEarlyBird,
-        canCreatePlans: true,
+        canCreatePlans,
         accountAgeDays,
     };
 }

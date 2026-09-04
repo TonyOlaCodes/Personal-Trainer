@@ -159,7 +159,7 @@ function patchTargetField(
 function fieldLabel(key: TrackingFieldKey): string {
     switch (key) {
         case "weight":
-            return "kg";
+            return "Weight";
         case "reps":
             return "Reps";
         case "duration":
@@ -171,9 +171,9 @@ function fieldLabel(key: TrackingFieldKey): string {
         case "rpe":
             return "RPE";
         case "resistance":
-            return "Res";
+            return "Level";
         case "incline":
-            return "%";
+            return "Incline";
         default:
             return key;
     }

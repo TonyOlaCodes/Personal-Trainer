@@ -34,6 +34,7 @@ import { PROGRESSIVE_ACHIEVEMENTS } from "@/lib/achievements/progressiveCatalog"
 import { SPECIAL_ACHIEVEMENTS } from "@/lib/achievements/specialCatalog";
 
 export type { ProgressiveDisplayItem };
+export { getFeaturedAchievementKeys, pickAutoFeatured };
 export type AchievementDisplayItem = ProgressiveDisplayItem | CoachAchievementDisplayItem;
 
 export interface UserAchievementRow {

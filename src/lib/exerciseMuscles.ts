@@ -161,9 +161,9 @@ const EXERCISE_MUSCLE_OVERRIDES: Record<string, MuscleHitInput> = {
     "dumbbell shrug": { primary: ["traps"], secondary: ["shoulders"] },
 
     // Back
-    "pull up": { primary: ["lats"], secondary: ["upperBack", "biceps", "forearms"] },
-    "chin up": { primary: ["lats", "biceps"], secondary: ["upperBack", "forearms"] },
-    "neutral grip pull up": { primary: ["lats"], secondary: ["upperBack", "biceps"] },
+    "pull up": { primary: ["lats"], secondary: ["biceps", "upperBack"], minor: ["forearms"] },
+    "chin up": { primary: ["lats", "biceps"], secondary: ["upperBack"], minor: ["forearms"] },
+    "neutral grip pull up": { primary: ["lats"], secondary: ["biceps", "upperBack"], minor: ["forearms"] },
     "lat pulldown": { primary: ["lats"], secondary: ["biceps", "upperBack"] },
     "wide grip lat pulldown": { primary: ["lats"], secondary: ["upperBack", "biceps"] },
     "straight arm cable pulldown": { primary: ["lats"], secondary: ["core"] },
@@ -189,16 +189,18 @@ const EXERCISE_MUSCLE_OVERRIDES: Record<string, MuscleHitInput> = {
         secondary: ["lowerBack", "traps", "core"],
     },
     "rack pull": { primary: ["upperBack", "traps", "lowerBack"], secondary: ["glutes", "hamstrings", "forearms"] },
-    "romanian deadlift": { primary: ["hamstrings", "glutes"], secondary: ["lowerBack", "core"] },
+    "romanian deadlift": { primary: ["hamstrings"], secondary: ["glutes"], minor: ["lowerBack", "core"] },
+    "stiff leg deadlift": { primary: ["hamstrings"], secondary: ["glutes"], minor: ["lowerBack"] },
+    "dumbbell romanian deadlift": { primary: ["hamstrings"], secondary: ["glutes"], minor: ["lowerBack"] },
     "sumo deadlift": { primary: ["glutes", "hamstrings", "quads"], secondary: ["lowerBack", "traps", "core"] },
     "back extension": { primary: ["lowerBack"], secondary: ["glutes", "hamstrings"] },
     "good morning": { primary: ["hamstrings", "lowerBack"], secondary: ["glutes"] },
     "reverse hyperextension": { primary: ["glutes", "hamstrings"], secondary: ["lowerBack"] },
 
     // Legs
-    "squat": { primary: ["quads", "glutes"], secondary: ["hamstrings", "core", "lowerBack"] },
-    "barbell squat": { primary: ["quads", "glutes"], secondary: ["hamstrings", "core", "lowerBack"] },
-    "back squat": { primary: ["quads", "glutes"], secondary: ["hamstrings", "core", "lowerBack"] },
+    "squat": { primary: ["quads", "glutes"], secondary: ["core"], minor: ["hamstrings", "lowerBack"] },
+    "barbell squat": { primary: ["quads", "glutes"], secondary: ["core"], minor: ["hamstrings", "lowerBack"] },
+    "back squat": { primary: ["quads", "glutes"], secondary: ["core"], minor: ["hamstrings", "lowerBack"] },
     "front squat": { primary: ["quads", "core"], secondary: ["glutes", "upperBack"] },
     "goblet squat": { primary: ["quads", "glutes"], secondary: ["core"] },
     "leg press": { primary: ["quads", "glutes"], secondary: ["hamstrings"] },
@@ -292,10 +294,11 @@ const NAME_HEURISTICS: Array<{ match: RegExp; hit: MuscleHitInput }> = [
     { match: /\bbench\b.*\bpress\b|\bpress\b.*\bbench\b/i, hit: { primary: ["chest"], secondary: ["shoulders", "triceps"] } },
     { match: /\bincline\b.*\bpress\b/i, hit: { primary: ["chest", "shoulders"], secondary: ["triceps"] } },
     { match: /\boverhead\b|\bmilitary\b|\bshoulder press\b|\bohp\b/i, hit: { primary: ["shoulders"], secondary: ["triceps", "traps", "core"] } },
-    { match: /\bpull[\s-]?up\b|\bchin[\s-]?up\b/i, hit: { primary: ["lats", "upperBack"], secondary: ["biceps", "forearms"] } },
-    { match: /\brow\b/i, hit: { primary: ["lats", "upperBack"], secondary: ["biceps", "forearms"] } },
-    { match: /\bdeadlift\b|\brdl\b/i, hit: { primary: ["hamstrings", "glutes", "lowerBack"], secondary: ["traps", "forearms", "core"] } },
-    { match: /\bsquat\b/i, hit: { primary: ["quads", "glutes"], secondary: ["hamstrings", "core", "lowerBack"] } },
+    { match: /\bromanian\b|\brdl\b|\bstiff[\s-]?leg\b/i, hit: { primary: ["hamstrings"], secondary: ["glutes"], minor: ["lowerBack"] } },
+    { match: /\bdeadlift\b/i, hit: { primary: ["hamstrings", "glutes", "lowerBack"], secondary: ["traps", "forearms", "core"] } },
+    { match: /\bsquat\b/i, hit: { primary: ["quads", "glutes"], secondary: ["core"], minor: ["hamstrings", "lowerBack"] } },
+    { match: /\bpull[\s-]?up\b|\bchin[\s-]?up\b/i, hit: { primary: ["lats"], secondary: ["biceps", "upperBack"], minor: ["forearms"] } },
+    { match: /\brow\b/i, hit: { primary: ["lats", "upperBack"], secondary: ["biceps"], minor: ["forearms"] } },
     { match: /\blunge\b|\bsplit squat\b/i, hit: { primary: ["quads", "glutes"], secondary: ["hamstrings", "core"] } },
     { match: /\bcurl\b/i, hit: { primary: ["biceps"], secondary: ["forearms"] } },
     { match: /\btricep|\bextension\b.*\boverhead\b|\bpushdown\b|\bskull/i, hit: { primary: ["triceps"], secondary: [] } },
@@ -448,6 +451,9 @@ export function buildWorkoutMuscleBreakdown(
 
     for (const region of primary) secondary.delete(region);
 
+    const sortByScoreDesc = (regions: MuscleRegion[]) =>
+        [...regions].sort((a, b) => (scores[b] ?? 0) - (scores[a] ?? 0));
+
     const maxScore = Math.max(0, ...Object.values(scores));
     const intensity: Partial<Record<MuscleRegion, number>> = {};
     const heat: Partial<Record<MuscleRegion, MuscleHeatLevel>> = {};
@@ -459,8 +465,8 @@ export function buildWorkoutMuscleBreakdown(
     }
 
     return {
-        primary: [...primary],
-        secondary: [...secondary],
+        primary: sortByScoreDesc([...primary]),
+        secondary: sortByScoreDesc([...secondary]),
         intensity,
         heat,
         groups,

@@ -2,15 +2,19 @@
 
 import { cn } from "@/lib/utils";
 import {
-    FIELD_LABELS,
     PRESET_LABELS,
-    TRACKING_FIELDS,
-    TRACKING_PRESETS,
     type ExerciseTrackingSchema,
-    type TrackingFieldKey,
     type TrackingPreset,
 } from "@/lib/exerciseTracking/types";
 import { schemaFromPreset, normalizeTrackingSchema } from "@/lib/exerciseTracking/schema";
+
+/** Admin-facing presets — keep the internal schema flexible for future types. */
+const SIMPLE_PRESETS: TrackingPreset[] = ["strength", "timed"];
+
+const PRESET_HINTS: Record<"strength" | "timed", string> = {
+    strength: "Sets, Weight, Reps, and RPE — used for PRs and progression automatically.",
+    timed: "Sets, Duration, and RPE — for holds and timed efforts.",
+};
 
 interface Props {
     value: ExerciseTrackingSchema;
@@ -18,58 +22,50 @@ interface Props {
     className?: string;
 }
 
+function toSimplePreset(preset: TrackingPreset): "strength" | "timed" {
+    if (preset === "timed") return "timed";
+    // Legacy cardio / distance / holds that were duration-led → Timed when admin re-saves.
+    if (
+        preset === "distance"
+        || preset === "distance_time"
+        || preset === "cardio"
+    ) {
+        return "timed";
+    }
+    return "strength";
+}
+
 export function TrackingSetupEditor({ value, onChange, className }: Props) {
     const schema = normalizeTrackingSchema(value);
+    const selected = toSimplePreset(schema.preset);
+    const fieldsSummary =
+        selected === "strength"
+            ? ["Sets", "Weight", "Reps", "RPE"]
+            : ["Sets", "Duration", "RPE"];
 
-    const setPreset = (preset: TrackingPreset) => {
+    const setPreset = (preset: "strength" | "timed") => {
         onChange(schemaFromPreset(preset));
-    };
-
-    const toggleField = (key: TrackingFieldKey, enabled: boolean) => {
-        if (key === "sets") return;
-        const fields = schema.fields.map((f) => {
-            if (f.key !== key) return f;
-            if (!enabled) {
-                return { ...f, enabled: false };
-            }
-            // Turning on: adopt sensible flags from preset defaults / common use
-            return {
-                ...f,
-                enabled: true,
-                planTarget: f.planTarget ?? (key !== "pace" && key !== "heartRate" && key !== "calories"),
-                usedForPr: f.usedForPr ?? ["weight", "reps", "duration", "distance", "height"].includes(key),
-                usedForProgress: f.usedForProgress ?? (key !== "rpe" && key !== "rir" && key !== "heartRate"),
-                required: f.required ?? ["weight", "reps", "duration", "distance", "height"].includes(key),
-            };
-        });
-        onChange(normalizeTrackingSchema({ preset: schema.preset === "custom" ? "custom" : schema.preset, fields }));
-    };
-
-    const patchField = (
-        key: TrackingFieldKey,
-        patch: Partial<{ required: boolean; planTarget: boolean; usedForPr: boolean; usedForProgress: boolean }>
-    ) => {
-        const fields = schema.fields.map((f) => (f.key === key ? { ...f, ...patch } : f));
-        onChange(normalizeTrackingSchema({ preset: schema.preset, fields }));
     };
 
     return (
         <div className={cn("rounded-xl border border-surface-border bg-surface-muted/20 p-4 space-y-4", className)}>
             <div>
-                <h4 className="text-sm font-black text-fg tracking-wide">Tracking Setup</h4>
+                <h4 className="text-sm font-black text-fg tracking-wide">Tracking</h4>
                 <p className="text-xs text-fg-muted mt-0.5">
-                    Controls how this exercise is logged in plans, workouts, history, and PRs.
+                    Choose how this exercise is logged. Plan targets, workouts, history, and PRs follow automatically.
                 </p>
             </div>
 
             <label className="block space-y-1.5">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-fg-subtle">Tracking Preset</span>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-fg-subtle">
+                    Tracking Type
+                </span>
                 <select
                     className="input w-full"
-                    value={schema.preset}
-                    onChange={(e) => setPreset(e.target.value as TrackingPreset)}
+                    value={selected}
+                    onChange={(e) => setPreset(e.target.value as "strength" | "timed")}
                 >
-                    {TRACKING_PRESETS.map((p) => (
+                    {SIMPLE_PRESETS.map((p) => (
                         <option key={p} value={p}>
                             {PRESET_LABELS[p]}
                         </option>
@@ -77,80 +73,35 @@ export function TrackingSetupEditor({ value, onChange, className }: Props) {
                 </select>
             </label>
 
-            <div className="space-y-2">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-fg-subtle">Fields</span>
-                <div className="space-y-2">
-                    {TRACKING_FIELDS.map((key) => {
-                        const f = schema.fields.find((x) => x.key === key)!;
-                        const locked = key === "sets";
-                        return (
-                            <div
-                                key={key}
-                                className={cn(
-                                    "rounded-lg border px-3 py-2",
-                                    f.enabled ? "border-surface-border bg-surface-card" : "border-dashed border-surface-border/60 opacity-70"
-                                )}
-                            >
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        className="rounded border-surface-border"
-                                        checked={f.enabled}
-                                        disabled={locked}
-                                        onChange={(e) => toggleField(key, e.target.checked)}
-                                    />
-                                    <span className="text-sm font-semibold text-fg flex-1">{FIELD_LABELS[key]}</span>
-                                    {key === "pace" && (
-                                        <span className="text-[10px] text-fg-subtle">Calculated</span>
-                                    )}
-                                </label>
-                                {f.enabled && key !== "sets" && key !== "pace" && (
-                                    <div className="mt-2 flex flex-wrap gap-3 pl-6 text-[11px] text-fg-muted">
-                                        <label className="inline-flex items-center gap-1.5">
-                                            <input
-                                                type="checkbox"
-                                                checked={Boolean(f.required)}
-                                                onChange={(e) => patchField(key, { required: e.target.checked })}
-                                            />
-                                            Required
-                                        </label>
-                                        <label className="inline-flex items-center gap-1.5">
-                                            <input
-                                                type="checkbox"
-                                                checked={Boolean(f.planTarget)}
-                                                onChange={(e) => patchField(key, { planTarget: e.target.checked })}
-                                            />
-                                            Plan target
-                                        </label>
-                                        <label className="inline-flex items-center gap-1.5">
-                                            <input
-                                                type="checkbox"
-                                                checked={Boolean(f.usedForPr)}
-                                                onChange={(e) => patchField(key, { usedForPr: e.target.checked })}
-                                            />
-                                            PRs
-                                        </label>
-                                        <label className="inline-flex items-center gap-1.5">
-                                            <input
-                                                type="checkbox"
-                                                checked={Boolean(f.usedForProgress)}
-                                                onChange={(e) => patchField(key, { usedForProgress: e.target.checked })}
-                                            />
-                                            Charts
-                                        </label>
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })}
+            <div className="rounded-lg border border-surface-border bg-surface-card px-3 py-3 space-y-2">
+                <p className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">
+                    Includes
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                    {fieldsSummary.map((label) => (
+                        <span
+                            key={label}
+                            className="text-[11px] font-bold px-2 py-1 rounded-lg bg-surface-muted border border-surface-border text-fg"
+                        >
+                            {label}
+                        </span>
+                    ))}
                 </div>
+                <p className="text-xs text-fg-muted leading-relaxed">{PRESET_HINTS[selected]}</p>
+                {schema.preset !== selected && (
+                    <p className="text-[11px] text-warning">
+                        Previously stored as {PRESET_LABELS[schema.preset] ?? schema.preset}. Saving a type
+                        above will switch to the simplified setup (historical logs stay intact).
+                    </p>
+                )}
             </div>
         </div>
     );
 }
 
 export function TrackingPresetBadge({ preset }: { preset: TrackingPreset | null | undefined }) {
-    const label = preset ? PRESET_LABELS[preset] ?? preset : PRESET_LABELS.strength;
+    const simple = preset ? toSimplePreset(preset) : "strength";
+    const label = PRESET_LABELS[simple];
     return (
         <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border border-surface-border bg-surface-muted/40 text-fg-subtle">
             {label}

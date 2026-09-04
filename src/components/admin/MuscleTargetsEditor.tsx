@@ -1,6 +1,8 @@
 "use client";
 
-import { ALL_MUSCLE_REGIONS, MUSCLE_REGION_LABELS } from "@/lib/muscleRegions";
+import { useMemo, useState } from "react";
+import { Plus, X } from "lucide-react";
+import { ALL_MUSCLE_REGIONS, MUSCLE_REGION_LABELS, type MuscleRegion } from "@/lib/muscleRegions";
 import {
     MUSCLE_CONTRIBUTION_LEVELS,
     MUSCLE_CONTRIBUTION_LABELS,
@@ -14,22 +16,12 @@ import {
 import { musclesForExercise } from "@/lib/exerciseMuscles";
 import { cn } from "@/lib/utils";
 
-type LevelOrOff = MuscleContributionLevel | "off";
-
 interface Props {
     value: MuscleTargetEntry[];
     onChange: (next: MuscleTargetEntry[]) => void;
-    /** Used by "Fill from category" defaults. */
     exerciseName?: string;
     muscleGroup?: string | null;
     className?: string;
-}
-
-function levelForRegion(
-    targets: MuscleTargetEntry[],
-    region: (typeof ALL_MUSCLE_REGIONS)[number]
-): LevelOrOff {
-    return targets.find((t) => t.region === region)?.level ?? "off";
 }
 
 export function MuscleTargetsEditor({
@@ -40,13 +32,32 @@ export function MuscleTargetsEditor({
     className,
 }: Props) {
     const targets = normalizeMuscleTargets(value);
+    const [adding, setAdding] = useState(false);
+    const [draftRegion, setDraftRegion] = useState<MuscleRegion | "">("");
+    const [draftLevel, setDraftLevel] = useState<MuscleContributionLevel>("primary");
 
-    const setRegionLevel = (region: (typeof ALL_MUSCLE_REGIONS)[number], level: LevelOrOff) => {
+    const assignedRegions = useMemo(
+        () => new Set(targets.map((t) => t.region)),
+        [targets]
+    );
+    const availableRegions = ALL_MUSCLE_REGIONS.filter((r) => !assignedRegions.has(r));
+
+    const setRegionLevel = (region: MuscleRegion, level: MuscleContributionLevel) => {
         const next = targets.filter((t) => t.region !== region);
-        if (level !== "off") {
-            next.push({ region, level });
-        }
+        next.push({ region, level });
         onChange(normalizeMuscleTargets(next));
+    };
+
+    const removeRegion = (region: MuscleRegion) => {
+        onChange(normalizeMuscleTargets(targets.filter((t) => t.region !== region)));
+    };
+
+    const addMuscle = () => {
+        if (!draftRegion) return;
+        setRegionLevel(draftRegion, draftLevel);
+        setDraftRegion("");
+        setDraftLevel("secondary");
+        setAdding(false);
     };
 
     const fillFromCategory = () => {
@@ -60,38 +71,105 @@ export function MuscleTargetsEditor({
                 <div>
                     <h4 className="text-sm font-black text-fg tracking-wide">Muscle Targets</h4>
                     <p className="text-xs text-fg-muted mt-0.5">
-                        Controls how this exercise lights up the muscle map (primary / secondary / minor).
+                        Only muscles this exercise meaningfully trains.
                     </p>
                 </div>
                 <button type="button" onClick={fillFromCategory} className="btn-secondary btn-sm shrink-0">
-                    Fill from category
+                    Fill defaults
                 </button>
             </div>
 
-            <div className="grid sm:grid-cols-2 gap-2">
-                {ALL_MUSCLE_REGIONS.map((region) => {
-                    const level = levelForRegion(targets, region);
-                    return (
-                        <label key={region} className="flex items-center justify-between gap-2 rounded-lg border border-surface-border bg-surface-elevated/40 px-3 py-2">
-                            <span className="text-xs font-semibold text-fg truncate">
-                                {MUSCLE_REGION_LABELS[region]}
-                            </span>
-                            <select
-                                className="input input-sm w-[7.5rem] shrink-0"
-                                value={level}
-                                onChange={(e) => setRegionLevel(region, e.target.value as LevelOrOff)}
-                            >
-                                <option value="off">Off</option>
-                                {MUSCLE_CONTRIBUTION_LEVELS.map((l) => (
-                                    <option key={l} value={l}>
-                                        {MUSCLE_CONTRIBUTION_LABELS[l]}
-                                    </option>
-                                ))}
-                            </select>
-                        </label>
-                    );
-                })}
+            <div className="space-y-2">
+                {targets.length === 0 && (
+                    <p className="text-xs text-fg-subtle py-2">
+                        No muscles assigned yet. Add muscles or fill defaults from the exercise category.
+                    </p>
+                )}
+                {targets.map((entry) => (
+                    <div
+                        key={entry.region}
+                        className="flex items-center gap-2 rounded-lg border border-surface-border bg-surface-card px-3 py-2"
+                    >
+                        <span className="text-sm font-semibold text-fg flex-1 min-w-0 truncate">
+                            {MUSCLE_REGION_LABELS[entry.region]}
+                        </span>
+                        <select
+                            className="input input-sm w-[7.5rem] shrink-0"
+                            value={entry.level}
+                            onChange={(e) =>
+                                setRegionLevel(entry.region, e.target.value as MuscleContributionLevel)
+                            }
+                        >
+                            {MUSCLE_CONTRIBUTION_LEVELS.map((l) => (
+                                <option key={l} value={l}>
+                                    {MUSCLE_CONTRIBUTION_LABELS[l]}
+                                </option>
+                            ))}
+                        </select>
+                        <button
+                            type="button"
+                            onClick={() => removeRegion(entry.region)}
+                            className="btn-ghost p-1.5 text-fg-subtle hover:text-danger"
+                            aria-label={`Remove ${MUSCLE_REGION_LABELS[entry.region]}`}
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+                    </div>
+                ))}
             </div>
+
+            {adding ? (
+                <div className="rounded-lg border border-brand-500/30 bg-surface-card p-3 space-y-2">
+                    <div className="grid sm:grid-cols-2 gap-2">
+                        <select
+                            className="input"
+                            value={draftRegion}
+                            onChange={(e) => setDraftRegion(e.target.value as MuscleRegion | "")}
+                        >
+                            <option value="">Select muscle…</option>
+                            {availableRegions.map((r) => (
+                                <option key={r} value={r}>
+                                    {MUSCLE_REGION_LABELS[r]}
+                                </option>
+                            ))}
+                        </select>
+                        <select
+                            className="input"
+                            value={draftLevel}
+                            onChange={(e) => setDraftLevel(e.target.value as MuscleContributionLevel)}
+                        >
+                            {MUSCLE_CONTRIBUTION_LEVELS.map((l) => (
+                                <option key={l} value={l}>
+                                    {MUSCLE_CONTRIBUTION_LABELS[l]}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="flex gap-2 justify-end">
+                        <button type="button" className="btn-ghost text-xs" onClick={() => setAdding(false)}>
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            className="btn-primary text-xs"
+                            disabled={!draftRegion}
+                            onClick={addMuscle}
+                        >
+                            Add
+                        </button>
+                    </div>
+                </div>
+            ) : (
+                <button
+                    type="button"
+                    onClick={() => setAdding(true)}
+                    disabled={availableRegions.length === 0}
+                    className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-400 hover:text-brand-300 disabled:opacity-40"
+                >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add Muscle
+                </button>
+            )}
         </div>
     );
 }

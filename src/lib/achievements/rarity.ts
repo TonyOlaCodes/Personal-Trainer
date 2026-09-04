@@ -115,3 +115,14 @@ export const RARITY_TOKENS: Record<
         notificationAccent: "border-l-amber-400",
     },
 };
+
+export type StreakDisplay =
+    | { mode: "single"; days: number }
+    | { mode: "dual"; current: number; best: number };
+
+export function formatStreakDisplay(current: number, best: number): StreakDisplay {
+    if (current === best) {
+        return { mode: "single", days: current };
+    }
+    return { mode: "dual", current, best };
+}

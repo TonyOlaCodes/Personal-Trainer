@@ -74,24 +74,32 @@ check("guess Dead Hang → timed", () => {
     assert.equal(guessTrackingPreset("Dead Hang"), "timed");
 });
 
-check("guess Sprint → distance_time", () => {
-    assert.equal(guessTrackingPreset("Sprint"), "distance_time");
+check("guess Sprint → timed", () => {
+    assert.equal(guessTrackingPreset("Sprint"), "timed");
 });
 
-check("guess Farmer's Carry → weight_distance", () => {
-    assert.equal(guessTrackingPreset("Farmer's Carry"), "weight_distance");
+check("guess Farmer's Carry → strength", () => {
+    assert.equal(guessTrackingPreset("Farmer's Carry"), "strength");
 });
 
-check("guess Box Jump → height_reps", () => {
-    assert.equal(guessTrackingPreset("Box Jump"), "height_reps");
+check("guess Box Jump → strength", () => {
+    assert.equal(guessTrackingPreset("Box Jump"), "strength");
 });
 
-check("guess Push-Up → reps_only", () => {
-    assert.equal(guessTrackingPreset("Push-Up"), "reps_only");
+check("guess Push-Up → strength", () => {
+    assert.equal(guessTrackingPreset("Push-Up"), "strength");
 });
 
 check("guess Bench Press → strength", () => {
     assert.equal(guessTrackingPreset("Bench Press"), "strength");
+});
+
+check("guess Plank → timed", () => {
+    assert.equal(guessTrackingPreset("Plank"), "timed");
+});
+
+check("guess Treadmill → timed", () => {
+    assert.equal(guessTrackingPreset("Treadmill Run"), "timed");
 });
 
 check("hasPerformedMetrics strength with weight+reps", () => {

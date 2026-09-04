@@ -1288,8 +1288,18 @@ export function PlanCreateClient() {
                                                                                     type="number"
                                                                                     placeholder="0"
                                                                                     className="w-full bg-surface-muted border border-surface-border rounded-xl px-2 py-2 text-[16px] sm:text-sm text-fg text-center"
-                                                                                    value={ex.weightTargetKg || ""}
-                                                                                    onChange={(e) => updateExercise(activeWorkoutIdx, eIdx, { weightTargetKg: parseFloat(e.target.value) || undefined })}
+                                                                                    value={ex.weightTargetKg ?? ""}
+                                                                                    onChange={(e) => {
+                                                                                        const raw = e.target.value;
+                                                                                        if (raw.trim() === "") {
+                                                                                            updateExercise(activeWorkoutIdx, eIdx, { weightTargetKg: undefined });
+                                                                                            return;
+                                                                                        }
+                                                                                        const parsed = parseFloat(raw);
+                                                                                        updateExercise(activeWorkoutIdx, eIdx, {
+                                                                                            weightTargetKg: Number.isFinite(parsed) ? parsed : undefined,
+                                                                                        });
+                                                                                    }}
                                                                                     readOnly={isViewOnly}
                                                                                 />
                                                                             </div>
