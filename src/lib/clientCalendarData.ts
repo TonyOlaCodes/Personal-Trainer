@@ -72,6 +72,11 @@ export interface ClientCalendarPayload {
                 reps: string;
                 order: number;
                 weightTargetKg: number | null;
+                setTargets?: Array<{
+                    setNumber: number;
+                    weightKg?: number | null;
+                    reps?: number | null;
+                }>;
             }>;
         }
     >;
@@ -150,6 +155,7 @@ export async function loadClientCalendarData(userId: string): Promise<ClientCale
                     reps: ex.reps,
                     order: ex.order ?? index,
                     weightTargetKg: ex.weightTargetKg ?? null,
+                    setTargets: ex.setTargets,
                 })),
             },
         ])

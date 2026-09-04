@@ -197,6 +197,7 @@ export default async function WorkoutLogPage({
                 null,
             order: ex.order ?? index,
             muscleGroup: base?.muscleGroup ?? null,
+            setTargets: ex.setTargets,
         };
     });
 

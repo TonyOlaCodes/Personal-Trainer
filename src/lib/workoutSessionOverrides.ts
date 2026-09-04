@@ -3,6 +3,19 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { PlannedWorkoutExercise, ResolvedPlannedWorkout } from "@/lib/plannedWorkoutResolve";
 
+/** Per-set planned targets for a session override (one scheduled day). */
+export type SessionSetTarget = {
+    setNumber: number;
+    weightKg?: number | null;
+    reps?: number | null;
+    durationSec?: number | null;
+    distanceMeters?: number | null;
+    heightCm?: number | null;
+    rpe?: number | null;
+    resistance?: number | null;
+    inclinePct?: number | null;
+};
+
 export type SessionOverrideExercise = {
     id: string;
     name: string;
@@ -11,6 +24,8 @@ export type SessionOverrideExercise = {
     order: number;
     weightTargetKg: number | null;
     notes?: string | null;
+    /** When present, each set can have independent targets. */
+    setTargets?: SessionSetTarget[];
 };
 
 export type WorkoutSessionOverride = {
@@ -52,25 +67,107 @@ export async function ensureWorkoutSessionOverridesTable() {
     tableReady = true;
 }
 
+function optionalFiniteNumber(value: unknown): number | null {
+    if (typeof value !== "number" || !Number.isFinite(value)) return null;
+    return value;
+}
+
+function normalizeSetTargets(
+    raw: unknown,
+    setCount: number,
+    fallback: { reps: string; weightTargetKg: number | null }
+): SessionSetTarget[] {
+    const byNumber = new Map<number, SessionSetTarget>();
+    if (Array.isArray(raw)) {
+        for (const item of raw) {
+            if (!item || typeof item !== "object") continue;
+            const row = item as Partial<SessionSetTarget>;
+            const setNumber = Number(row.setNumber);
+            if (!Number.isFinite(setNumber) || setNumber < 1) continue;
+            byNumber.set(Math.round(setNumber), {
+                setNumber: Math.round(setNumber),
+                weightKg: optionalFiniteNumber(row.weightKg),
+                reps: optionalFiniteNumber(row.reps),
+                durationSec: optionalFiniteNumber(row.durationSec),
+                distanceMeters: optionalFiniteNumber(row.distanceMeters),
+                heightCm: optionalFiniteNumber(row.heightCm),
+                rpe: optionalFiniteNumber(row.rpe),
+                resistance: optionalFiniteNumber(row.resistance),
+                inclinePct: optionalFiniteNumber(row.inclinePct),
+            });
+        }
+    }
+
+    const parsedReps = Number.parseInt(fallback.reps, 10);
+    const defaultReps = Number.isFinite(parsedReps) && parsedReps > 0 ? parsedReps : null;
+
+    const targets: SessionSetTarget[] = [];
+    for (let i = 1; i <= setCount; i += 1) {
+        const existing = byNumber.get(i);
+        if (existing) {
+            targets.push({ ...existing, setNumber: i });
+        } else {
+            targets.push({
+                setNumber: i,
+                weightKg: fallback.weightTargetKg,
+                reps: defaultReps,
+            });
+        }
+    }
+    return targets;
+}
+
+function summarizeFromSetTargets(setTargets: SessionSetTarget[]): {
+    sets: number;
+    reps: string;
+    weightTargetKg: number | null;
+} {
+    const sets = Math.max(1, setTargets.length);
+    const first = setTargets[0];
+    const allSameReps = setTargets.every((t) => t.reps === first?.reps);
+    const allSameWeight = setTargets.every((t) => t.weightKg === first?.weightKg);
+    const reps =
+        allSameReps && first?.reps != null && first.reps > 0
+            ? String(Math.round(first.reps))
+            : setTargets
+                  .map((t) => (t.reps != null && t.reps > 0 ? String(Math.round(t.reps)) : "—"))
+                  .join("/");
+    return {
+        sets,
+        reps: reps || "8-12",
+        weightTargetKg: allSameWeight ? (first?.weightKg ?? null) : (first?.weightKg ?? null),
+    };
+}
+
 function normalizeExercises(raw: unknown): SessionOverrideExercise[] {
     if (!Array.isArray(raw)) return [];
     const normalized: SessionOverrideExercise[] = [];
     for (let index = 0; index < raw.length; index += 1) {
-        const item = raw[index] as Partial<SessionOverrideExercise>;
+        const item = raw[index] as Partial<SessionOverrideExercise> & { setTargets?: unknown };
         const name = typeof item.name === "string" ? item.name.trim() : "";
         if (!name) continue;
-        const sets = Number(item.sets);
+        const setsRaw = Number(item.sets);
+        const setsHint = Number.isFinite(setsRaw) && setsRaw > 0 ? Math.round(setsRaw) : 3;
+        const reps =
+            typeof item.reps === "string" && item.reps.trim() ? item.reps.trim() : "8-12";
+        const weightTargetKg =
+            typeof item.weightTargetKg === "number" && Number.isFinite(item.weightTargetKg)
+                ? item.weightTargetKg
+                : null;
+        const setTargets = normalizeSetTargets(item.setTargets, setsHint, {
+            reps,
+            weightTargetKg,
+        });
+        const summary = summarizeFromSetTargets(setTargets);
         normalized.push({
             id: typeof item.id === "string" && item.id ? item.id : `override-ex-${index}`,
             name,
-            sets: Number.isFinite(sets) && sets > 0 ? Math.round(sets) : 3,
-            reps: typeof item.reps === "string" && item.reps.trim() ? item.reps.trim() : "8-12",
+            sets: summary.sets,
+            reps: summary.reps,
             order: typeof item.order === "number" ? item.order : index,
-            weightTargetKg:
-                typeof item.weightTargetKg === "number" && Number.isFinite(item.weightTargetKg)
-                    ? item.weightTargetKg
-                    : null,
+            weightTargetKg: summary.weightTargetKg,
             notes: typeof item.notes === "string" ? item.notes : null,
+            setTargets,
         });
     }
     return normalized
@@ -227,6 +324,7 @@ export function applySessionOverrideToPlanned(
         reps: ex.reps,
         order: index,
         weightTargetKg: ex.weightTargetKg,
+        setTargets: ex.setTargets,
     }));
     return {
         ...planned,
@@ -237,4 +335,16 @@ export function applySessionOverrideToPlanned(
 
 export function sessionOverrideMapKey(dateKey: string, workoutId: string) {
     return `${dateKey}:${workoutId}`;
+}
+
+/** Build default setTargets from a compact exercise definition. */
+export function buildDefaultSetTargets(input: {
+    sets: number;
+    reps: string;
+    weightTargetKg?: number | null;
+}): SessionSetTarget[] {
+    return normalizeSetTargets(undefined, Math.max(1, input.sets), {
+        reps: input.reps || "8-12",
+        weightTargetKg: input.weightTargetKg ?? null,
+    });
 }

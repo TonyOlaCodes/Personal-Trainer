@@ -18,6 +18,18 @@ export interface PlannedWorkoutExercise {
     reps: string;
     order: number;
     weightTargetKg?: number | null;
+    /** Optional per-set targets from a session override. */
+    setTargets?: Array<{
+        setNumber: number;
+        weightKg?: number | null;
+        reps?: number | null;
+        durationSec?: number | null;
+        distanceMeters?: number | null;
+        heightCm?: number | null;
+        rpe?: number | null;
+        resistance?: number | null;
+        inclinePct?: number | null;
+    }>;
 }
 
 export interface ResolvedPlannedWorkout {

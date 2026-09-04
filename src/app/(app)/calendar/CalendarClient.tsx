@@ -7,7 +7,7 @@ import {
     Layout, History,
     PlayCircle,
     Zap, Hash, Flame,
-    User, PencilLine,
+    PencilLine,
     MessageSquare, ChevronUp,
 } from "lucide-react";
 import Link from "next/link";
@@ -41,7 +41,19 @@ import { CalendarComplianceSummary } from "@/components/calendar/CalendarComplia
 import type { CalendarComplianceInput } from "@/lib/calendarCompliance";
 
 /* ─────────────────────────── Types ─────────────────────────── */
-interface PlanExercise { id: string; name: string; sets: number; reps: string; order?: number; weightTargetKg?: number | null; }
+interface PlanExercise {
+    id: string;
+    name: string;
+    sets: number;
+    reps: string;
+    order?: number;
+    weightTargetKg?: number | null;
+    setTargets?: Array<{
+        setNumber: number;
+        weightKg?: number | null;
+        reps?: number | null;
+    }>;
+}
 interface PlanWorkout { dayNumber: number; dayOfWeek?: number | null; name: string; id: string; exercises: PlanExercise[]; }
 interface PlanWeek { weekNumber: number; workouts: PlanWorkout[]; }
 interface ActivePlan { id?: string; name: string; weeks: PlanWeek[]; }
@@ -368,7 +380,7 @@ export function CalendarClient({
                 dayNumber: resolved.dayNumber,
                 dayOfWeek: resolved.dayOfWeek,
                 exercises: sortPlannedExercises(
-                    override?.exercises?.length
+                    (override?.exercises?.length
                         ? override.exercises.map((ex, index) => ({
                             id: ex.id,
                             name: ex.name,
@@ -376,8 +388,17 @@ export function CalendarClient({
                             reps: ex.reps,
                             order: ex.order ?? index,
                             weightTargetKg: ex.weightTargetKg ?? null,
+                            setTargets: ex.setTargets,
                         }))
-                        : resolved.exercises
+                        : resolved.exercises.map((ex, index) => ({
+                            id: ex.id,
+                            name: ex.name,
+                            sets: ex.sets,
+                            reps: ex.reps,
+                            order: ex.order ?? index,
+                            weightTargetKg: ex.weightTargetKg ?? null,
+                            setTargets: ex.setTargets,
+                        }))) as PlanExercise[]
                 ),
             };
         }
@@ -429,20 +450,19 @@ export function CalendarClient({
     const workoutLogHref = selectedPlanned
         ? `/plans/log/${selectedPlanned.id}?date=${selectedDateKey}${coachView ? `&clientId=${coachView.clientId}` : ""}`
         : "";
-    const workoutPreviewHref = selectedPlanned && !coachView
-        ? `/plans/log/${selectedPlanned.id}?date=${encodeURIComponent(selectedDateKey)}&mode=preview`
+    const workoutPreviewHref = selectedPlanned
+        ? `/plans/log/${selectedPlanned.id}?date=${encodeURIComponent(selectedDateKey)}${coachView ? `&clientId=${coachView.clientId}&mode=review` : "&mode=preview"}`
         : "";
     const workoutStartHref = selectedPlanned && !coachView
         ? `/plans/log/${selectedPlanned.id}?date=${encodeURIComponent(selectedDateKey)}&autostart=1`
         : "";
-    const coachReviewHref = selectedPlanned && coachView
-        ? `/plans/log/${selectedPlanned.id}?date=${selectedDateKey}&clientId=${coachView.clientId}&mode=review`
-        : "";
     const coachLiveHref = selectedPlanned && coachView
         ? `/plans/log/${selectedPlanned.id}?date=${selectedDateKey}&clientId=${coachView.clientId}&mode=live`
         : "";
-    const coachEditSessionHref = selectedPlanned && coachView
-        ? `/coach/calendar/session?clientId=${encodeURIComponent(coachView.clientId)}&date=${encodeURIComponent(selectedDateKey)}&workoutId=${encodeURIComponent(selectedPlanned.id)}`
+    const editSessionHref = selectedPlanned
+        ? coachView
+            ? `/coach/calendar/session?clientId=${encodeURIComponent(coachView.clientId)}&date=${encodeURIComponent(selectedDateKey)}&workoutId=${encodeURIComponent(selectedPlanned.id)}`
+            : `/calendar/session?date=${encodeURIComponent(selectedDateKey)}&workoutId=${encodeURIComponent(selectedPlanned.id)}`
         : "";
     const coachEditPlanHref = planId && coachView
         ? `/plans/create?id=${planId}&clientId=${coachView.clientId}`
@@ -492,9 +512,11 @@ export function CalendarClient({
     ]);
 
     const selectedStatusStyle = STATUS_CONFIG[selectedStatus];
-    const coachCanEditSession =
-        Boolean(coachEditSessionHref) &&
+    /** Edit Session is for scheduled targets only — never for live logs or excused days. */
+    const canEditSession =
+        Boolean(editSessionHref) &&
         selectedStatus !== "in-progress" &&
+        selectedStatus !== "completed" &&
         selectedStatus !== "excused" &&
         !resumeSession;
 
@@ -837,15 +859,6 @@ export function CalendarClient({
                                                 <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                                                 Review Session
                                             </ReturnLink>
-                                            {isCoachView && coachView && (
-                                                <Link
-                                                    href={`/coach/client/${coachView.clientId}`}
-                                                    className="btn-secondary w-full h-11 text-[10px] font-black uppercase tracking-[.2em] flex items-center justify-center gap-2"
-                                                >
-                                                    <User className="w-4 h-4" />
-                                                    View Client
-                                                </Link>
-                                            )}
                                         </div>
                                     );
                                 })}
@@ -875,15 +888,38 @@ export function CalendarClient({
                                         </p>
                                         <div className="space-y-1.5">
                                             {sortPlannedExercises(selectedPlanned.exercises).slice(0, 4).map((ex) => {
+                                                const setTargets = ex.setTargets ?? [];
+                                                const varied =
+                                                    setTargets.length > 1
+                                                    && setTargets.some(
+                                                        (t) =>
+                                                            t.weightKg !== setTargets[0]?.weightKg
+                                                            || t.reps !== setTargets[0]?.reps
+                                                    );
                                                 const targetWeight = formatTargetWeight(ex.weightTargetKg);
+                                                const detail = varied
+                                                    ? setTargets
+                                                          .map((t) => {
+                                                              const w =
+                                                                  t.weightKg != null && t.weightKg > 0
+                                                                      ? `${t.weightKg}`
+                                                                      : "";
+                                                              const r =
+                                                                  t.reps != null && t.reps > 0
+                                                                      ? String(t.reps)
+                                                                      : "—";
+                                                              return w ? `${w}×${r}` : `×${r}`;
+                                                          })
+                                                          .join(" · ")
+                                                    : `${ex.sets}×${ex.reps}${targetWeight ? ` @ ${targetWeight}` : ""}`;
                                                 return (
                                                     <div
                                                         key={ex.id}
-                                                        className="flex items-center justify-between py-2 px-3 bg-surface-muted/10 rounded-xl border border-surface-border/40"
+                                                        className="flex items-center justify-between py-2 px-3 bg-surface-muted/10 rounded-xl border border-surface-border/40 gap-2"
                                                     >
                                                         <span className="text-xs font-bold text-fg truncate">{ex.name}</span>
-                                                        <span className="text-[10px] font-black text-brand-400 shrink-0 ml-2">
-                                                            {ex.sets}×{ex.reps}{targetWeight ? ` @ ${targetWeight}` : ""}
+                                                        <span className="text-[10px] font-black text-brand-400 shrink-0 text-right">
+                                                            {detail}
                                                         </span>
                                                     </div>
                                                 );
@@ -933,31 +969,23 @@ export function CalendarClient({
                                             </ReturnLink>
                                         ) : (
                                             <ReturnLink
-                                                href={coachReviewHref || workoutLogHref}
+                                                href={workoutPreviewHref || workoutLogHref}
                                                 className="btn-primary w-full h-12 text-xs font-black uppercase tracking-[0.15em] shadow-glow-brand group hover:scale-[1.02] transition-all flex items-center justify-center"
                                             >
                                                 <History className="w-4 h-4 mr-2" />
-                                                Review Workout
+                                                View Workout
                                             </ReturnLink>
                                         )}
 
-                                        {coachCanEditSession && (
+                                        {canEditSession && (
                                             <Link
-                                                href={coachEditSessionHref}
+                                                href={editSessionHref}
                                                 className="btn-secondary w-full h-12 text-xs font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2"
                                             >
                                                 <PencilLine className="w-4 h-4" />
                                                 Edit Session
                                             </Link>
                                         )}
-
-                                        <Link
-                                            href={`/coach/client/${coachView.clientId}`}
-                                            className="btn-secondary w-full h-12 text-xs font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2"
-                                        >
-                                            <User className="w-4 h-4" />
-                                            View Client
-                                        </Link>
 
                                         {coachEditPlanHref && (
                                             <Link
@@ -985,6 +1013,15 @@ export function CalendarClient({
                                             <History className="w-4 h-4" />
                                             View Workout
                                         </ReturnLink>
+                                        {canEditSession && (
+                                            <Link
+                                                href={editSessionHref}
+                                                className="btn-secondary w-full h-12 text-xs font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2"
+                                            >
+                                                <PencilLine className="w-4 h-4" />
+                                                Edit Session
+                                            </Link>
+                                        )}
                                         <ReturnLink
                                             href={workoutStartHref || workoutLogHref}
                                             className="btn-primary w-full h-12 text-xs font-black uppercase tracking-[0.15em] shadow-glow-brand group hover:scale-[1.02] transition-all flex items-center justify-center"
@@ -1019,6 +1056,15 @@ export function CalendarClient({
                                             <History className="w-4 h-4" />
                                             View Workout
                                         </ReturnLink>
+                                        {canEditSession && (
+                                            <Link
+                                                href={editSessionHref}
+                                                className="btn-secondary w-full h-12 text-xs font-black uppercase tracking-[0.15em] flex items-center justify-center gap-2"
+                                            >
+                                                <PencilLine className="w-4 h-4" />
+                                                Edit Session
+                                            </Link>
+                                        )}
                                         <ReturnLink
                                             href={workoutStartHref || workoutLogHref}
                                             className="btn-primary w-full h-12 text-xs font-black uppercase tracking-[0.15em] shadow-glow-brand group hover:scale-[1.02] transition-all flex items-center justify-center"

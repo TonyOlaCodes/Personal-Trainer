@@ -68,6 +68,17 @@ interface Exercise {
     notes?: string | null;
     order?: number;
     muscleGroup?: string | null;
+    setTargets?: Array<{
+        setNumber: number;
+        weightKg?: number | null;
+        reps?: number | null;
+        durationSec?: number | null;
+        distanceMeters?: number | null;
+        heightCm?: number | null;
+        rpe?: number | null;
+        resistance?: number | null;
+        inclinePct?: number | null;
+    }>;
 }
 
 interface Workout {
@@ -705,30 +716,50 @@ export function WorkoutLogClient({
         setNumber: number
     ): Partial<Record<TrackingFieldKey, string>> => {
         const lastSet = findLastCompletedSet(ex.name, setNumber);
+        const setTarget = ex.setTargets?.find((t) => t.setNumber === setNumber);
         const ph: Partial<Record<TrackingFieldKey, string>> = {};
-        const weight = getWeightPlaceholder(ex.name, setNumber) || formatTargetWeight(ex.weightTargetKg);
+        const weight =
+            getWeightPlaceholder(ex.name, setNumber)
+            || (setTarget?.weightKg != null && setTarget.weightKg > 0
+                ? String(setTarget.weightKg)
+                : "")
+            || formatTargetWeight(ex.weightTargetKg);
         if (weight) ph.weight = weight;
-        const reps = getRepsPlaceholder(ex.name, setNumber) || ex.reps?.trim() || "";
+        const reps =
+            getRepsPlaceholder(ex.name, setNumber)
+            || (setTarget?.reps != null && setTarget.reps > 0 ? String(setTarget.reps) : "")
+            || ex.reps?.trim()
+            || "";
         if (reps) ph.reps = reps;
-        const rpe = getRpePlaceholder(ex.name, setNumber);
+        const rpe =
+            getRpePlaceholder(ex.name, setNumber)
+            || (setTarget?.rpe != null ? String(setTarget.rpe) : "");
         if (rpe) ph.rpe = rpe;
         if (lastSet?.durationSec != null && lastSet.durationSec > 0) {
             ph.duration = String(lastSet.durationSec);
+        } else if (setTarget?.durationSec != null && setTarget.durationSec > 0) {
+            ph.duration = String(setTarget.durationSec);
         } else if (ex.targetDurationSec != null && ex.targetDurationSec > 0) {
             ph.duration = String(ex.targetDurationSec);
         }
         if (lastSet?.distanceMeters != null && lastSet.distanceMeters > 0) {
             ph.distance = String(lastSet.distanceMeters);
+        } else if (setTarget?.distanceMeters != null && setTarget.distanceMeters > 0) {
+            ph.distance = String(setTarget.distanceMeters);
         } else if (ex.targetDistanceMeters != null && ex.targetDistanceMeters > 0) {
             ph.distance = String(ex.targetDistanceMeters);
         }
         if (lastSet?.heightCm != null && lastSet.heightCm > 0) {
             ph.height = String(lastSet.heightCm);
+        } else if (setTarget?.heightCm != null && setTarget.heightCm > 0) {
+            ph.height = String(setTarget.heightCm);
         } else if (ex.targetHeightCm != null && ex.targetHeightCm > 0) {
             ph.height = String(ex.targetHeightCm);
         }
         if (lastSet?.resistance != null) ph.resistance = String(lastSet.resistance);
+        else if (setTarget?.resistance != null) ph.resistance = String(setTarget.resistance);
         if (lastSet?.inclinePct != null) ph.incline = String(lastSet.inclinePct);
+        else if (setTarget?.inclinePct != null) ph.incline = String(setTarget.inclinePct);
         if (lastSet?.calories != null && lastSet.calories > 0) ph.calories = String(lastSet.calories);
         if (lastSet?.heartRate != null && lastSet.heartRate > 0) ph.heartRate = String(lastSet.heartRate);
         if (lastSet?.speedKph != null && lastSet.speedKph > 0) ph.speed = String(lastSet.speedKph);

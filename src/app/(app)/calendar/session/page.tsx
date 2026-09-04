@@ -2,8 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { redirect, notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
-import { canAccessClient } from "@/lib/apiAuth";
-import { defaultHomeForRole } from "@/lib/roles";
+import { defaultHomeForRole, isCoachRole } from "@/lib/roles";
 import { loadClientCalendarData } from "@/lib/clientCalendarData";
 import { parseLogDate } from "@/lib/utils";
 import { resolvePlannedWorkoutWithExercisesForDate } from "@/lib/plannedWorkoutResolve";
@@ -13,40 +12,29 @@ import {
     getSessionOverride,
 } from "@/lib/workoutSessionOverrides";
 import { SessionEditClient } from "@/components/session/SessionEditClient";
-import { pickDisplayName, getNickname } from "@/lib/userNicknames";
 
 export const metadata = { title: "Edit Session" };
 
-export default async function CoachSessionEditPage({
+export default async function AthleteSessionEditPage({
     searchParams,
 }: {
-    searchParams: Promise<{ clientId?: string; date?: string; workoutId?: string }>;
+    searchParams: Promise<{ date?: string; workoutId?: string }>;
 }) {
     const { userId } = await auth();
     if (!userId) redirect("/sign-in");
 
-    const { clientId, date: dateKey, workoutId } = await searchParams;
-    if (!clientId || !dateKey || !workoutId) {
-        redirect("/coach/calendar");
-    }
+    const { date: dateKey, workoutId } = await searchParams;
+    if (!dateKey || !workoutId) redirect("/calendar");
 
     const actor = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!actor || !["COACH", "SUPER_ADMIN"].includes(actor.role)) {
-        redirect(defaultHomeForRole(actor?.role ?? "FREE"));
-    }
-    if (!(await canAccessClient(actor, clientId))) {
-        redirect("/coach/calendar");
+    if (!actor) redirect("/sign-in");
+    if (isCoachRole(actor.role)) {
+        redirect(defaultHomeForRole(actor.role));
     }
 
-    const client = await prisma.user.findUnique({
-        where: { id: clientId },
-        select: { id: true, name: true, email: true },
-    });
-    if (!client) notFound();
-
-    const calendar = await loadClientCalendarData(clientId);
+    const calendar = await loadClientCalendarData(actor.id);
     if (!calendar.activePlan || !calendar.planStartedAt) {
-        redirect(`/coach/calendar?clientId=${encodeURIComponent(clientId)}&date=${encodeURIComponent(dateKey)}`);
+        redirect(`/calendar?date=${encodeURIComponent(dateKey)}`);
     }
 
     const serializedWeeks = serializePlanWeeksForSchedule(
@@ -77,12 +65,10 @@ export default async function CoachSessionEditPage({
     });
 
     if (!planned || planned.id !== workoutId) {
-        redirect(`/coach/calendar?clientId=${encodeURIComponent(clientId)}&date=${encodeURIComponent(dateKey)}`);
+        redirect(`/calendar?date=${encodeURIComponent(dateKey)}`);
     }
 
-    const override = await getSessionOverride(clientId, dateKey, workoutId);
-    const nickname = await getNickname(actor.id, clientId);
-    const clientName = pickDisplayName(client.name, client.email, nickname, client.name || "Client");
+    const override = await getSessionOverride(actor.id, dateKey, workoutId);
 
     const initialExercises = (override?.exercises ?? planned.exercises).map((ex, index) => {
         const setTargets =
@@ -105,15 +91,13 @@ export default async function CoachSessionEditPage({
         };
     });
 
-    const backHref = `/coach/calendar?clientId=${encodeURIComponent(clientId)}&date=${encodeURIComponent(dateKey)}`;
+    const backHref = `/calendar?date=${encodeURIComponent(dateKey)}`;
 
     return (
         <>
-            <TopBar title="Edit Session" subtitle={`${clientName} · ${dateKey}`} hideSearch />
+            <TopBar title="Edit Session" subtitle={dateKey} hideSearch />
             <div className="p-4 sm:p-6 max-w-2xl mx-auto">
                 <SessionEditClient
-                    clientId={clientId}
-                    clientName={clientName}
                     dateKey={dateKey}
                     baseWorkoutId={workoutId}
                     planId={calendar.activePlan.id}
