@@ -8,6 +8,7 @@ import { isClientRole, isCoachRole, parseTeamCoachId } from "@/lib/roles";
 import { canViewFullProfile, canViewUserProfile } from "@/lib/userProfile";
 import { ensureAccessRequestColumns } from "@/lib/accessRequest";
 import { getUserProfilePrivacy } from "@/lib/profilePrivacy";
+import { resolveActiveUserGate } from "@/lib/apiAuthPolicy";
 
 export { defaultHomeForRole, isCoachRole, isClientRole, parseTeamCoachId } from "@/lib/roles";
 
@@ -50,6 +51,10 @@ export async function requireAuthUser(req?: Request): Promise<
 > {
     const { userId } = await auth();
     if (!userId) {
+        const sessionGate = resolveActiveUserGate({ hasClerkSession: false, user: null });
+        if (!sessionGate.ok) {
+            return { user: null, error: NextResponse.json({ error: sessionGate.error }, { status: sessionGate.status }) };
+        }
         return { user: null, error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
     }
 
@@ -57,15 +62,60 @@ export async function requireAuthUser(req?: Request): Promise<
     if (!user) {
         user = await bootstrapClerkUser(userId);
     }
-    if (!user) {
-        return { user: null, error: NextResponse.json({ error: "User not found" }, { status: 404 }) };
+
+    const userGate = resolveActiveUserGate({
+        hasClerkSession: true,
+        user: user
+            ? {
+                email: user.email,
+                isDeactivated: user.isDeactivated || (await getUserDeactivationStatusByClerkId(userId)),
+                isDeleted: user.isDeleted,
+            }
+            : null,
+    });
+    if (!userGate.ok) {
+        return { user: null, error: NextResponse.json({ error: userGate.error }, { status: userGate.status }) };
     }
 
-    if (await getUserDeactivationStatusByClerkId(userId)) {
-        return { user: null, error: NextResponse.json({ error: "Account deactivated" }, { status: 403 }) };
-    }
+    return { user: user!, error: null };
+}
 
-    return { user, error: null };
+/** Authenticated Clerk session + active TOLG user. Preferred name for new routes. */
+export const requireActiveUser = requireAuthUser;
+
+export async function requireCoachUser(req?: Request): Promise<
+    | { user: User; error: null }
+    | { user: null; error: NextResponse }
+> {
+    const authResult = await requireActiveUser(req);
+    if (authResult.error) return authResult;
+    if (!isCoachRole(authResult.user.role)) {
+        return { user: null, error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
+    }
+    return authResult;
+}
+
+export async function requireSuperAdmin(req?: Request): Promise<
+    | { user: User; error: null }
+    | { user: null; error: NextResponse }
+> {
+    const authResult = await requireActiveUser(req);
+    if (authResult.error) return authResult;
+    if (authResult.user.role !== "SUPER_ADMIN") {
+        return { user: null, error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
+    }
+    return authResult;
+}
+
+/** Vercel cron / system routes. Never use requireActiveUser here. */
+export function authorizeCronRequest(req: Request): boolean {
+    const secret = process.env.CRON_SECRET;
+    if (!secret) return process.env.NODE_ENV !== "production";
+    return req.headers.get("authorization") === `Bearer ${secret}`;
+}
+
+export function cronUnauthorized(): NextResponse {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 }
 
 export function canLogWorkouts(user: User): boolean {

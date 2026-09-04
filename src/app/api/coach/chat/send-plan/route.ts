@@ -1,7 +1,7 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { prisma } from "@/lib/prisma";
+import { requireCoachUser } from "@/lib/apiAuth";
+import { enforceRateLimit } from "@/lib/rateLimit";
 import { sendPlanViaChat } from "@/lib/coachChat";
 import { triggerAchievementSync } from "@/lib/achievements";
 import { withResolvedAvatar, withResolvedUpload } from "@/lib/uploadUrls";
@@ -13,13 +13,11 @@ const schema = z.object({
 });
 
 export async function POST(req: Request) {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const coach = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!coach || !["COACH", "SUPER_ADMIN"].includes(coach.role)) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    const authResult = await requireCoachUser(req);
+    if (authResult.error) return authResult.error;
+    const coach = authResult.user;
+    const limited = await enforceRateLimit(req, "coachNotify", coach.id);
+    if (limited) return limited;
 
     try {
         const parsed = schema.parse(await req.json());

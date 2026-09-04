@@ -22,6 +22,7 @@ import {
     parseActiveSessionConflict,
     type ConflictingActiveSession,
 } from "@/components/shared/ActiveSessionConflictModal";
+import { httpErrorMessage } from "@/lib/httpErrorMessage";
 
 interface Exercise {
     id: string;
@@ -501,7 +502,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ code }),
         });
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         if (res.ok) {
             setCodeStatus("success");
             setCodeMsg("Access Granted!");
@@ -510,7 +511,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
             }, 1000);
         } else {
             setCodeStatus("error");
-            setCodeMsg(data.error ?? "Invalid code");
+            setCodeMsg(httpErrorMessage(res.status, data, "Invalid code"));
         }
     };
 

@@ -1,18 +1,21 @@
 import { NextResponse } from "next/server";
-import { requireAuthUser } from "@/lib/apiAuth";
+import { requireActiveUser } from "@/lib/apiAuth";
+import { enforceRateLimit } from "@/lib/rateLimit";
 import { createCoachCodeRequest, getCoachCodeRequestStatus } from "@/lib/coachCodeRequest";
 
 export async function GET() {
-    const authResult = await requireAuthUser();
+    const authResult = await requireActiveUser();
     if (authResult.error) return authResult.error;
 
     const status = await getCoachCodeRequestStatus(authResult.user.id);
     return NextResponse.json(status);
 }
 
-export async function POST() {
-    const authResult = await requireAuthUser();
+export async function POST(req: Request) {
+    const authResult = await requireActiveUser();
     if (authResult.error) return authResult.error;
+    const limited = await enforceRateLimit(req, "coachCodeRequest", authResult.user.id);
+    if (limited) return limited;
 
     try {
         const result = await createCoachCodeRequest(authResult.user.id);

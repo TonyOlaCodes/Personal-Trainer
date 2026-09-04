@@ -9,8 +9,9 @@ import {
     canReadDirectThread,
     isMessageParticipant,
     parseTeamCoachId,
-    requireAuthUser,
+    requireActiveUser,
 } from "@/lib/apiAuth";
+import { enforceRateLimit } from "@/lib/rateLimit";
 import { isInactiveAccount } from "@/lib/userDeactivation";
 import { getDirectMessageActivity, getDirectMessagePeerIds } from "@/lib/chatActivity";
 import { getUnreadCountsByPeer, getTotalUnreadDirectCount } from "@/lib/chatUnread";
@@ -34,7 +35,7 @@ import { triggerAchievementSync } from "@/lib/achievements";
 
 // GET messages
 export async function GET(req: Request) {
-    const authResult = await requireAuthUser(req);
+    const authResult = await requireActiveUser(req);
     if (authResult.error) return authResult.error;
     const user = authResult.user;
 
@@ -219,9 +220,11 @@ const msgSchema = z.object({
 
 // POST send a message
 export async function POST(req: Request) {
-    const authResult = await requireAuthUser(req);
+    const authResult = await requireActiveUser(req);
     if (authResult.error) return authResult.error;
     const user = authResult.user;
+    const limited = await enforceRateLimit(req, "messageSend", user.id);
+    if (limited) return limited;
 
     await touchUserLastActive(user.id);
 
@@ -333,7 +336,7 @@ export async function POST(req: Request) {
 
 // PATCH edit or update message
 export async function PATCH(req: Request) {
-    const authResult = await requireAuthUser(req);
+    const authResult = await requireActiveUser(req);
     if (authResult.error) return authResult.error;
     const user = authResult.user;
 
@@ -370,6 +373,8 @@ export async function PATCH(req: Request) {
 
     // Add/remove reaction
     if (action === "react" && emoji) {
+        const limited = await enforceRateLimit(req, "messageReact", user.id);
+        if (limited) return limited;
         const existing = await prisma.reaction.findUnique({
             where: { messageId_userId_emoji: { messageId: id, userId: user.id, emoji } }
         });
@@ -410,7 +415,7 @@ export async function PATCH(req: Request) {
 
 // DELETE a message
 export async function DELETE(req: Request) {
-    const authResult = await requireAuthUser(req);
+    const authResult = await requireActiveUser(req);
     if (authResult.error) return authResult.error;
     const user = authResult.user;
 

@@ -1,8 +1,6 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { prisma } from "@/lib/prisma";
-import { requireCoachCanEditClient } from "@/lib/apiAuth";
+import { requireActiveUser, requireCoachCanEditClient } from "@/lib/apiAuth";
 import {
     deleteSessionOverride,
     getSessionOverride,
@@ -66,18 +64,11 @@ async function resolveSubjectUserId(
     return { subjectUserId: clientId };
 }
 
-async function requireActor() {
-    const { userId } = await auth();
-    if (!userId) return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
-    const actor = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!actor) return { error: NextResponse.json({ error: "User not found" }, { status: 404 }) };
-    return { actor };
-}
-
 /** Load one session override for a date/workout. */
 export async function GET(req: Request) {
-    const authResult = await requireActor();
+    const authResult = await requireActiveUser(req);
     if (authResult.error) return authResult.error;
+    const actor = authResult.user;
 
     const url = new URL(req.url);
     const clientId = url.searchParams.get("clientId") ?? undefined;
@@ -87,7 +78,7 @@ export async function GET(req: Request) {
         return NextResponse.json({ error: "dateKey and baseWorkoutId are required" }, { status: 400 });
     }
 
-    const subject = await resolveSubjectUserId(authResult.actor, clientId);
+    const subject = await resolveSubjectUserId(actor, clientId);
     if ("error" in subject) return subject.error;
 
     const override = await getSessionOverride(subject.subjectUserId, dateKey, baseWorkoutId);
@@ -96,8 +87,9 @@ export async function GET(req: Request) {
 
 /** Create/update a one-off session override (does not change the recurring plan or start a workout). */
 export async function POST(req: Request) {
-    const authResult = await requireActor();
+    const authResult = await requireActiveUser(req);
     if (authResult.error) return authResult.error;
+    const actor = authResult.user;
 
     const body = await req.json();
     const parsed = upsertSchema.safeParse(body);
@@ -105,7 +97,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
 
-    const subject = await resolveSubjectUserId(authResult.actor, parsed.data.clientId);
+    const subject = await resolveSubjectUserId(actor, parsed.data.clientId);
     if ("error" in subject) return subject.error;
 
     const override = await upsertSessionOverride({
@@ -114,7 +106,7 @@ export async function POST(req: Request) {
         baseWorkoutId: parsed.data.baseWorkoutId,
         workoutName: parsed.data.workoutName ?? null,
         notes: parsed.data.notes ?? null,
-        createdById: authResult.actor.id,
+        createdById: actor.id,
         exercises: parsed.data.exercises.map((ex, index) => ({
             id: ex.id ?? `ex-${index}`,
             name: ex.name,
@@ -132,8 +124,9 @@ export async function POST(req: Request) {
 
 /** Remove a session override so the date falls back to the recurring plan. */
 export async function DELETE(req: Request) {
-    const authResult = await requireActor();
+    const authResult = await requireActiveUser(req);
     if (authResult.error) return authResult.error;
+    const actor = authResult.user;
 
     const body = await req.json();
     const parsed = deleteSchema.safeParse(body);
@@ -141,7 +134,7 @@ export async function DELETE(req: Request) {
         return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
     }
 
-    const subject = await resolveSubjectUserId(authResult.actor, parsed.data.clientId);
+    const subject = await resolveSubjectUserId(actor, parsed.data.clientId);
     if ("error" in subject) return subject.error;
 
     await deleteSessionOverride(

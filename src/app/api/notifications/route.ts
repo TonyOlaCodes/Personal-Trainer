@@ -1,7 +1,6 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { prisma } from "@/lib/prisma";
+import { requireActiveUser } from "@/lib/apiAuth";
 import { getNotifications, markAllNotificationsRead, markNotificationRead, deleteNotification } from "@/lib/notifications";
 import { getQuickReplyTemplate, supportsQuickReply } from "@/lib/notificationTypes";
 
@@ -26,11 +25,9 @@ const patchSchema = z.object({
 });
 
 export async function GET(req: Request) {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const user = await prisma.user.findUnique({ where: { clerkId: userId }, select: { id: true } });
-    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+    const authResult = await requireActiveUser(req);
+    if (authResult.error) return authResult.error;
+    const user = authResult.user;
 
     const url = new URL(req.url);
     const limit = Number(url.searchParams.get("limit") ?? 20);
@@ -46,11 +43,9 @@ export async function GET(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const user = await prisma.user.findUnique({ where: { clerkId: userId }, select: { id: true } });
-    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+    const authResult = await requireActiveUser(req);
+    if (authResult.error) return authResult.error;
+    const user = authResult.user;
 
     const parsed = patchSchema.safeParse(await req.json());
     if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
@@ -67,11 +62,9 @@ export async function PATCH(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const user = await prisma.user.findUnique({ where: { clerkId: userId }, select: { id: true } });
-    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+    const authResult = await requireActiveUser(req);
+    if (authResult.error) return authResult.error;
+    const user = authResult.user;
 
     const id = new URL(req.url).searchParams.get("id");
     if (!id) return NextResponse.json({ error: "Missing notification id" }, { status: 400 });

@@ -12,6 +12,7 @@ import { PLAN_TEMPLATES } from "@/lib/templates";
 import { isCoachRole } from "@/lib/roles";
 import { DeletePlanConfirmModal } from "@/components/shared/DeletePlanConfirmModal";
 import { ModalOverlay } from "@/components/shared/ModalOverlay";
+import { httpErrorMessage } from "@/lib/httpErrorMessage";
 
 interface Plan {
     id: string;
@@ -249,14 +250,14 @@ export function PlansClient({ plans, userRole, coachClients = [] }: Props) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ code }),
         });
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         if (res.ok) {
             setCodeStatus("success");
             setCodeMsg(`Imported from ${data.author}!`);
             setTimeout(() => window.location.reload(), 2000);
         } else {
             setCodeStatus("error");
-            setCodeMsg(data.error ?? "Invalid code");
+            setCodeMsg(httpErrorMessage(res.status, data, "Invalid code"));
         }
     };
 

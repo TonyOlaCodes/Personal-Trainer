@@ -1,22 +1,15 @@
 import { NextResponse } from "next/server";
+import { authorizeCronRequest, cronUnauthorized } from "@/lib/apiAuth";
 import { processScheduledCoachAlerts } from "@/lib/coachMissedAlerts";
 import { ensureAppSchema } from "@/lib/ensureAppSchema";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-function authorizeCron(req: Request) {
-    const secret = process.env.CRON_SECRET;
-    if (!secret) return process.env.NODE_ENV !== "production";
-
-    const authHeader = req.headers.get("authorization");
-    return authHeader === `Bearer ${secret}`;
-}
-
 /** Cron (08:00, 09:00, 10:00 & 18:00 UTC): flush queued coach alerts; notify missed due items from the previous day. */
 export async function GET(req: Request) {
-    if (!authorizeCron(req)) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!authorizeCronRequest(req)) {
+        return cronUnauthorized();
     }
 
     try {

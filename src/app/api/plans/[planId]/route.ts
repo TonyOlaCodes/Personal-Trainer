@@ -1,6 +1,6 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma, ensureDbSchema } from "@/lib/prisma";
+import { requireActiveUser } from "@/lib/apiAuth";
 import { createNotification, userWantsNotification } from "@/lib/notifications";
 import {
     updatePlanPreservingHistory,
@@ -8,7 +8,6 @@ import {
 } from "@/lib/planUpdate";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
 import { DataSafetyError, deleteDuplicatePlansByName, deletePlanIfNoHistory } from "@/lib/dataSafety";
-import { isInactiveAccount } from "@/lib/userDeactivation";
 import { canCopyUserPlan, canViewUserPlanFromProfile } from "@/lib/userProfile";
 
 interface PlanExercisePayload {
@@ -47,12 +46,11 @@ export async function GET(
     { params }: { params: Promise<{ planId: string }> }
 ) {
     await ensureDbSchema();
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const authResult = await requireActiveUser(req);
+    if (authResult.error) return authResult.error;
+    const user = authResult.user;
 
     const { planId } = await params;
-    const user = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
     const plan = await prisma.plan.findUnique({
         where: { id: planId },
@@ -141,12 +139,11 @@ export async function PATCH(
     req: Request,
     { params }: { params: Promise<{ planId: string }> }
 ) {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const authResult = await requireActiveUser(req);
+    if (authResult.error) return authResult.error;
+    const user = authResult.user;
 
     const { planId } = await params;
-    const user = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
     const body = await req.json() as PlanPatchPayload;
     const { name, description, weeks } = body;
@@ -230,13 +227,11 @@ export async function DELETE(
     req: Request,
     { params }: { params: Promise<{ planId: string }> }
 ) {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const authResult = await requireActiveUser(req);
+    if (authResult.error) return authResult.error;
+    const user = authResult.user;
 
     const { planId } = await params;
-    const user = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
-
     const plan = await prisma.plan.findUnique({ where: { id: planId } });
     if (!plan) return NextResponse.json({ error: "Plan not found" }, { status: 404 });
 

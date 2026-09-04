@@ -1,8 +1,7 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { prisma } from "@/lib/prisma";
-import { requireCoachCanEditClient } from "@/lib/apiAuth";
+import { requireCoachCanEditClient, requireCoachUser } from "@/lib/apiAuth";
+import { enforceRateLimit } from "@/lib/rateLimit";
 import {
     setCoachAttentionAction,
     type CoachAttentionCategory,
@@ -11,14 +10,10 @@ import { loadCoachAttentionInbox } from "@/lib/coachAttentionInbox";
 import { createCoachDirectMessage, sendCheckInRequestViaChat, sendMissedWorkoutNotifyViaChat } from "@/lib/coachChat";
 import { triggerAchievementSync } from "@/lib/achievements";
 
-export async function GET() {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const coach = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!coach || !["COACH", "SUPER_ADMIN"].includes(coach.role)) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+export async function GET(req: Request) {
+    const authResult = await requireCoachUser(req);
+    if (authResult.error) return authResult.error;
+    const coach = authResult.user;
 
     const items = await loadCoachAttentionInbox(coach.id);
     const openCount = items.filter((item) => item.status === "open").length;
@@ -46,16 +41,24 @@ const actionSchema = z.object({
 });
 
 export async function POST(req: Request) {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const coach = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!coach || !["COACH", "SUPER_ADMIN"].includes(coach.role)) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    const authResult = await requireCoachUser(req);
+    if (authResult.error) return authResult.error;
+    const coach = authResult.user;
 
     try {
         const parsed = actionSchema.parse(await req.json());
+        if (parsed.operation === "notify" || parsed.operation === "message") {
+            const limited = await enforceRateLimit(
+                req,
+                parsed.operation === "notify" && (parsed.category === "check_in_overdue" || parsed.category === "check_in_missed")
+                    ? "checkInRequest"
+                    : parsed.operation === "message"
+                        ? "messageSend"
+                        : "coachNotify",
+                coach.id
+            );
+            if (limited) return limited;
+        }
         const authz = await requireCoachCanEditClient(coach, parsed.clientId);
         if (authz.error) return authz.error;
 

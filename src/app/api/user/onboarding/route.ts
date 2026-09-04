@@ -1,10 +1,10 @@
-import { auth, currentUser } from "@clerk/nextjs/server";
+import { currentUser } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireActiveUser } from "@/lib/apiAuth";
 import { redeemAccessCodeForUser } from "@/lib/accessCodes";
 import { anonymizeDeletedUserAccount } from "@/lib/accountDeletion";
 import { updateClientGoalTargets } from "@/lib/clientGoalTargets";
-import { getUserDeactivationStatusByClerkId } from "@/lib/userDeactivation";
 import { defaultHomeForRole } from "@/lib/roles";
 import { triggerAchievementSync } from "@/lib/achievements";
 import { ensureUnitSystemColumn } from "@/lib/units";
@@ -52,9 +52,12 @@ export async function POST(req: Request) {
         await ensureUnitSystemColumn(prisma);
         await ensureOnboardingProfileColumns();
 
-        const { userId } = await auth();
+        const authResult = await requireActiveUser(req);
+        if (authResult.error) return authResult.error;
+        const existingUser = authResult.user;
+        const userId = existingUser.clerkId;
         const user = await currentUser();
-        if (!userId || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
         const body = await req.json();
         const parsed = schema.safeParse(body);
@@ -83,11 +86,6 @@ export async function POST(req: Request) {
         const firstName = d.firstName.trim();
         const lastName = d.lastName?.trim() || null;
         const displayName = buildDisplayName(firstName, lastName) ?? buildDisplayName(clerkFirstName, clerkLastName);
-
-        const existingUser = await prisma.user.findUnique({ where: { clerkId: userId } });
-        if (existingUser && await getUserDeactivationStatusByClerkId(userId)) {
-            return NextResponse.json({ error: "Account deactivated" }, { status: 403 });
-        }
 
         if (normalizedUsername) {
             const available = await isUsernameAvailable(normalizedUsername, existingUser?.id);

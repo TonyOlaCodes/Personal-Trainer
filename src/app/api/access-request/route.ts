@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireAuthUser } from "@/lib/apiAuth";
+import { requireActiveUser } from "@/lib/apiAuth";
+import { enforceRateLimit } from "@/lib/rateLimit";
 import { getAccessRequestStatus, sendAccessRequest } from "@/lib/accessRequest";
 
 const postSchema = z.object({
@@ -8,7 +9,7 @@ const postSchema = z.object({
 });
 
 export async function GET() {
-    const authResult = await requireAuthUser();
+    const authResult = await requireActiveUser();
     if (authResult.error) return authResult.error;
 
     const status = await getAccessRequestStatus(authResult.user.id);
@@ -16,8 +17,10 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-    const authResult = await requireAuthUser();
+    const authResult = await requireActiveUser();
     if (authResult.error) return authResult.error;
+    const limited = await enforceRateLimit(req, "accessRequest", authResult.user.id);
+    if (limited) return limited;
 
     try {
         const parsed = postSchema.parse(await req.json());

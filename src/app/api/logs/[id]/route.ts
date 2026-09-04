@@ -1,6 +1,6 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireActiveUser } from "@/lib/apiAuth";
 import { withResolvedLogSetMedia } from "@/lib/uploadUrls";
 import { resolveLogSetExerciseName } from "@/lib/logSetExerciseName";
 import { logSetDisplayOrderBy } from "@/lib/logSetGrouping";
@@ -15,6 +15,8 @@ import {
 } from "@/lib/activeWorkoutSession";
 import { getLocalDayBounds } from "@/lib/utils";
 import { z } from "zod";
+import { nextWorkoutRevision, shouldEmitCompletionSideEffects } from "@/lib/workoutSavePolicy";
+import { ensureWorkoutLogConcurrencySchema } from "@/lib/workoutLogRevision";
 
 const patchLogSchema = z.object({
     status: z.enum(["IN_PROGRESS", "COMPLETED"]).optional(),
@@ -28,12 +30,11 @@ const patchLogSchema = z.object({
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
-        const { userId } = await auth();
-        if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        const authResult = await requireActiveUser(req);
+        if (authResult.error) return authResult.error;
+        const user = authResult.user;
 
         const { id } = await params;
-        const user = await prisma.user.findUnique({ where: { clerkId: userId } });
-        if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
         const log = await prisma.workoutLog.findUnique({
             where: { id },
@@ -69,6 +70,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
             notes: log.notes,
             feeling: log.feeling,
             status: log.status,
+            revision: log.revision,
             sets: log.sets.map((set) => withResolvedLogSetMedia({
                 id: set.id,
                 exerciseId: set.exerciseId,
@@ -98,13 +100,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    await ensureWorkoutLogConcurrencySchema();
+    const authResult = await requireActiveUser(req);
+    if (authResult.error) return authResult.error;
+    const user = authResult.user;
 
     const { id } = await params;
-    const user = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
-
     const body = await req.json();
     const parsed = patchLogSchema.safeParse(body);
     if (!parsed.success) {
@@ -131,7 +132,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const data: { status?: "IN_PROGRESS" | "COMPLETED"; feeling?: number; duration?: number | null } = {};
+    const data: {
+        status?: "IN_PROGRESS" | "COMPLETED";
+        feeling?: number;
+        duration?: number | null;
+        revision?: number;
+    } = {};
 
     if (parsed.data.status !== undefined) {
         data.status = parsed.data.status;
@@ -181,12 +187,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         }
     }
 
+    if (data.status && data.status !== existing.status) {
+        data.revision = nextWorkoutRevision(existing.revision ?? 0);
+    }
+
     const updated = await prisma.workoutLog.update({
         where: { id },
         data,
     });
 
-    if (data.status === "COMPLETED") {
+    if (shouldEmitCompletionSideEffects(existing.status, data.status ?? existing.status)) {
         triggerAchievementSync(existing.userId);
     }
 
@@ -194,13 +204,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 }
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const authResult = await requireActiveUser(req);
+    if (authResult.error) return authResult.error;
+    const user = authResult.user;
 
     const { id } = await params;
-    const user = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
-
     const existing = await prisma.workoutLog.findUnique({
         where: { id },
         include: {

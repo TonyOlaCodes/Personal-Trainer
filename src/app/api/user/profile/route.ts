@@ -1,6 +1,6 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireActiveUser } from "@/lib/apiAuth";
 import { updateClientGoalTargets } from "@/lib/clientGoalTargets";
 import { ensureNotificationPreferenceColumns, getCoachNotifyOnClientMessage, setCoachNotifyOnClientMessage } from "@/lib/notifications";
 import {
@@ -85,8 +85,9 @@ const profileSchema = z.object({
 
 export async function PATCH(req: Request) {
     try {
-        const { userId } = await auth();
-        if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        const authResult = await requireActiveUser(req);
+        if (authResult.error) return authResult.error;
+        const user = authResult.user;
 
         const body = await req.json();
         const parsed = profileSchema.parse(body);
@@ -112,7 +113,7 @@ export async function PATCH(req: Request) {
         let updated;
         try {
             updated = await prisma.user.update({
-                where: { clerkId: userId },
+                where: { id: user.id },
                 data: {
                     ...(parsed.name !== undefined && { name: parsed.name }),
                     ...(parsed.avatarUrl !== undefined && { avatarUrl: normalizedAvatar }),
@@ -157,7 +158,7 @@ export async function PATCH(req: Request) {
         } catch (dbErr) {
             console.warn("[Profile PATCH] Update failed, retrying without hiddenGoals field:", dbErr);
             updated = await prisma.user.update({
-                where: { clerkId: userId },
+                where: { id: user.id },
                 data: {
                     ...(parsed.name !== undefined && { name: parsed.name }),
                     ...(parsed.avatarUrl !== undefined && { avatarUrl: normalizedAvatar }),

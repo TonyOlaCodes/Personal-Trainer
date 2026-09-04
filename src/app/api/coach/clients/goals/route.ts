@@ -1,9 +1,8 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { updateClientGoalTargets } from "@/lib/clientGoalTargets";
 import { z } from "zod";
-import { requireCoachCanEditClient } from "@/lib/apiAuth";
+import { requireCoachCanEditClient, requireCoachUser } from "@/lib/apiAuth";
 
 const goalsUpdateSchema = z.object({
     clientId: z.string().min(1),
@@ -14,13 +13,9 @@ const goalsUpdateSchema = z.object({
 });
 
 export async function POST(req: Request) {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const coach = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!coach || !["COACH", "SUPER_ADMIN"].includes(coach.role)) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    const authResult = await requireCoachUser(req);
+    if (authResult.error) return authResult.error;
+    const coach = authResult.user;
 
     try {
         const body = await req.json();

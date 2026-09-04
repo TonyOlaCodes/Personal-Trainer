@@ -1,9 +1,8 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { notifyClientOfPlanAssigned } from "@/lib/notifications";
-import { requireCoachCanEditClient } from "@/lib/apiAuth";
+import { requireCoachCanEditClient, requireCoachUser } from "@/lib/apiAuth";
 import { triggerAchievementSync } from "@/lib/achievements";
 import { assignCoachPlanToClient, removeCoachPlanFromClient } from "@/lib/coachPlanAssignment";
 
@@ -13,13 +12,9 @@ const planUpdateSchema = z.object({
 });
 
 export async function POST(req: Request) {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const coach = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!coach || !["COACH", "SUPER_ADMIN"].includes(coach.role)) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    const authResult = await requireCoachUser(req);
+    if (authResult.error) return authResult.error;
+    const coach = authResult.user;
 
     try {
         const { clientId, planId } = planUpdateSchema.parse(await req.json());
@@ -63,13 +58,9 @@ const planRemoveSchema = z.object({
 });
 
 export async function DELETE(req: Request) {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const coach = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!coach || !["COACH", "SUPER_ADMIN"].includes(coach.role)) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    const authResult = await requireCoachUser(req);
+    if (authResult.error) return authResult.error;
+    const coach = authResult.user;
 
     try {
         const { clientId } = planRemoveSchema.parse(await req.json());

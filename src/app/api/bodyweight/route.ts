@@ -1,7 +1,6 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { prisma } from "@/lib/prisma";
+import { requireActiveUser } from "@/lib/apiAuth";
 import {
     getBodyweightSummary,
     getBodyweightWeeklyAverage,
@@ -18,19 +17,11 @@ const saveSchema = z.object({
     weightKg: z.number(),
 });
 
-async function getCurrentUser() {
-    const { userId } = await auth();
-    if (!userId) return null;
-    return prisma.user.findUnique({
-        where: { clerkId: userId },
-        select: { id: true, name: true, email: true, coachId: true },
-    });
-}
-
 export async function GET(req: Request) {
     try {
-        const user = await getCurrentUser();
-        if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        const authResult = await requireActiveUser(req);
+        if (authResult.error) return authResult.error;
+        const user = authResult.user;
 
         const url = new URL(req.url);
         const date = normalizeBodyweightDate(url.searchParams.get("date") ?? toDateKey(new Date()));
@@ -48,8 +39,9 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
     try {
-        const user = await getCurrentUser();
-        if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        const authResult = await requireActiveUser(req);
+        if (authResult.error) return authResult.error;
+        const user = authResult.user;
 
         const parsed = saveSchema.parse(await req.json());
         const date = normalizeBodyweightDate(parsed.date);

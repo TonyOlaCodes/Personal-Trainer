@@ -1,7 +1,6 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { resolveWorkoutLogReadUserId } from "@/lib/apiAuth";
+import { requireActiveUser, resolveWorkoutLogReadUserId } from "@/lib/apiAuth";
 import {
     DEFAULT_EXERCISE_HISTORY_SESSIONS,
     loadExerciseSessionHistoryBatch,
@@ -28,11 +27,9 @@ const MAX_NAMES = 40;
  * every exercise on the day in a single history scan.
  */
 export async function GET(req: Request) {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const actor = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!actor) return NextResponse.json({ error: "User not found" }, { status: 404 });
+    const authResult = await requireActiveUser(req);
+    if (authResult.error) return authResult.error;
+    const actor = authResult.user;
 
     const url = new URL(req.url);
     // Repeated `name` params only — exercise names are free text and may contain commas.

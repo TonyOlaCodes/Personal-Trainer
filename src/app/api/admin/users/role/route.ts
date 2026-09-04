@@ -1,6 +1,6 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireSuperAdmin } from "@/lib/apiAuth";
 import { getUserDeactivationStatusById, setUserDeactivationStatus } from "@/lib/userDeactivation";
 import { releasePremiumAccessCodesForUser } from "@/lib/accessCodes";
 import { z } from "zod";
@@ -12,13 +12,8 @@ const schema = z.object({
 });
 
 export async function PATCH(req: Request) {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const actor = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!actor || actor.role !== "SUPER_ADMIN") {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    const authResult = await requireSuperAdmin(req);
+    if (authResult.error) return authResult.error;
 
     const body = await req.json();
     const parsed = schema.safeParse(body);

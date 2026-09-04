@@ -1,6 +1,7 @@
-import { auth, clerkClient } from "@clerk/nextjs/server";
+import { clerkClient } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireSuperAdmin } from "@/lib/apiAuth";
 import { anonymizeDeletedUserAccount } from "@/lib/accountDeletion";
 import { setUserDeactivationStatus } from "@/lib/userDeactivation";
 import { z } from "zod";
@@ -11,13 +12,9 @@ const schema = z.object({
 });
 
 export async function PATCH(req: Request) {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const actor = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!actor || actor.role !== "SUPER_ADMIN") {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    const authResult = await requireSuperAdmin(req);
+    if (authResult.error) return authResult.error;
+    const actor = authResult.user;
 
     const parsed = schema.safeParse(await req.json());
     if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });

@@ -1,6 +1,6 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma, ensureDbSchema } from "@/lib/prisma";
+import { requireActiveUser } from "@/lib/apiAuth";
 import { z } from "zod";
 import { generateUniquePlanShareCode } from "@/lib/planShareCode";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
@@ -59,13 +59,11 @@ function nextWeekdayDate(targetDow: number): Date {
 }
 
 // GET all plans for the user
-export async function GET() {
+export async function GET(req: Request) {
     await ensureDbSchema();
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const user = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+    const authResult = await requireActiveUser(req);
+    if (authResult.error) return authResult.error;
+    const user = authResult.user;
 
     const userPlans = await prisma.userPlan.findMany({
         where: { userId: user.id },
@@ -94,13 +92,11 @@ export async function GET() {
 
 // POST create a new plan
 export async function POST(req: Request) {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const authResult = await requireActiveUser(req);
+    if (authResult.error) return authResult.error;
+    const user = authResult.user;
 
     await ensureDbSchema();
-
-    const user = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
     const body = await req.json();
     const parsed = planSchema.safeParse(body);

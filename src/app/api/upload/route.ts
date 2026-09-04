@@ -2,15 +2,18 @@ import { NextResponse } from "next/server";
 import { storeUploadedFile } from "@/lib/uploadStorage";
 import { normalizeStoredUploadUrl, resolveUploadUrl } from "@/lib/uploadUrls";
 import { parseMediaPurpose, registerMediaAsset } from "@/lib/mediaAccess";
-import { requireAuthUser } from "@/lib/apiAuth";
+import { requireActiveUser } from "@/lib/apiAuth";
+import { enforceRateLimit } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
     try {
-        const authResult = await requireAuthUser(req);
+        const authResult = await requireActiveUser(req);
         if (authResult.error) return authResult.error;
         const user = authResult.user;
+        const limited = await enforceRateLimit(req, "upload", user.id);
+        if (limited) return limited;
 
         const formData = await req.formData();
         const file = formData.get("file");

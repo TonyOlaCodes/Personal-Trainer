@@ -1,6 +1,6 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireSuperAdmin } from "@/lib/apiAuth";
 import { generateGeneralPremiumAccessCode } from "@/lib/accessCodes";
 import { getUserAccountStatusMap } from "@/lib/userDeactivation";
 import { z } from "zod";
@@ -61,13 +61,8 @@ async function getOrCreateTemplatePlan(templateId: string, creatorId: string) {
 }
 
 export async function GET(req: Request) {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const user = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!user || user.role !== "SUPER_ADMIN") {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    const authResult = await requireSuperAdmin(req);
+    if (authResult.error) return authResult.error;
 
     const url = new URL(req.url);
     const filter = url.searchParams.get("filter") || "ALL";
@@ -117,13 +112,9 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const user = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!user || user.role !== "SUPER_ADMIN") {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    const authResult = await requireSuperAdmin(req);
+    if (authResult.error) return authResult.error;
+    const user = authResult.user;
 
     const parsed = createSchema.safeParse(await req.json());
     if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
@@ -148,13 +139,8 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const user = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!user || user.role !== "SUPER_ADMIN") {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    const authResult = await requireSuperAdmin(req);
+    if (authResult.error) return authResult.error;
 
     const { id, isActive } = z.object({
         id: z.string(),
@@ -181,13 +167,8 @@ export async function PATCH(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const user = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!user || user.role !== "SUPER_ADMIN") {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    const authResult = await requireSuperAdmin(req);
+    if (authResult.error) return authResult.error;
 
     const { id } = z.object({ id: z.string() }).parse(await req.json());
     const code = await prisma.accessCode.findUnique({ where: { id } });

@@ -1,7 +1,6 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { prisma } from "@/lib/prisma";
+import { requireSuperAdmin } from "@/lib/apiAuth";
 import {
     ANNOUNCEMENT_AUDIENCES,
     createAnnouncement,
@@ -25,20 +24,8 @@ const createSchema = z.object({
 
 const updateSchema = createSchema.partial();
 
-async function requireAdmin() {
-    const { userId } = await auth();
-    if (!userId) return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
-
-    const user = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!user || user.role !== "SUPER_ADMIN") {
-        return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
-    }
-
-    return { user };
-}
-
-export async function GET() {
-    const authResult = await requireAdmin();
+export async function GET(req: Request) {
+    const authResult = await requireSuperAdmin(req);
     if (authResult.error) return authResult.error;
 
     const announcements = await listAnnouncementsForAdmin();
@@ -46,7 +33,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-    const authResult = await requireAdmin();
+    const authResult = await requireSuperAdmin(req);
     if (authResult.error) return authResult.error;
 
     try {
@@ -82,7 +69,7 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-    const authResult = await requireAdmin();
+    const authResult = await requireSuperAdmin(req);
     if (authResult.error) return authResult.error;
 
     try {
@@ -123,7 +110,7 @@ export async function PATCH(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-    const authResult = await requireAdmin();
+    const authResult = await requireSuperAdmin(req);
     if (authResult.error) return authResult.error;
 
     try {

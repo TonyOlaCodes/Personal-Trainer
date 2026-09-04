@@ -1,12 +1,15 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireActiveUser } from "@/lib/apiAuth";
+import { enforceRateLimit } from "@/lib/rateLimit";
 import { validateAccessCode } from "@/lib/accessCodes";
 import { z } from "zod";
 
 export async function POST(req: Request) {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const authResult = await requireActiveUser(req);
+    if (authResult.error) return authResult.error;
+    const limited = await enforceRateLimit(req, "codeValidate", authResult.user.id);
+    if (limited) return limited;
 
     const { code } = z.object({ code: z.string().min(1) }).parse(await req.json());
     const result = await validateAccessCode(prisma, code);

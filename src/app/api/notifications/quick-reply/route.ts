@@ -1,8 +1,8 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { canAccessClient } from "@/lib/apiAuth";
+import { canAccessClient, requireCoachUser } from "@/lib/apiAuth";
+import { enforceRateLimit } from "@/lib/rateLimit";
 import {
     getNotifications,
     markNotificationRead,
@@ -21,14 +21,11 @@ function clientIdFromNotification(entityType: string, entityId: string | null) {
 }
 
 export async function POST(req: Request) {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const user = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
-    if (!["COACH", "SUPER_ADMIN"].includes(user.role)) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    const authResult = await requireCoachUser(req);
+    if (authResult.error) return authResult.error;
+    const user = authResult.user;
+    const limited = await enforceRateLimit(req, "messageSend", user.id);
+    if (limited) return limited;
 
     const parsed = schema.safeParse(await req.json());
     if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });

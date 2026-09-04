@@ -18,6 +18,7 @@ import {
 } from "@/lib/profilePrivacy";
 import { getPublicProfileHref } from "@/lib/profileNavigation";
 import { siteConfig } from "@/lib/site";
+import { httpErrorMessage } from "@/lib/httpErrorMessage";
 
 interface Props {
     user: {
@@ -413,8 +414,8 @@ export function SettingsClient({ user }: Props) {
                 alert("Success! Your access has been updated.");
                 window.location.reload();
             } else {
-                const data = await res.json();
-                alert(data.error || "Invalid code");
+                const data = await res.json().catch(() => ({}));
+                alert(httpErrorMessage(res.status, data, "Invalid code"));
             }
         } catch {
             alert("Connection error.");

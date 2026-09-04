@@ -1,7 +1,7 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { requireActiveUser } from "@/lib/apiAuth";
 import {
     MAX_PINNED_EXERCISES,
     normalizePinnedExercises,
@@ -15,14 +15,9 @@ const bodySchema = z.object({
 
 export async function PATCH(req: Request) {
     try {
-        const { userId: clerkId } = await auth();
-        if (!clerkId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-        const actor = await prisma.user.findUnique({
-            where: { clerkId },
-            select: { id: true, role: true },
-        });
-        if (!actor) return NextResponse.json({ error: "User not found" }, { status: 404 });
+        const authResult = await requireActiveUser(req);
+        if (authResult.error) return authResult.error;
+        const actor = authResult.user;
 
         const body = await req.json();
         const parsed = bodySchema.parse(body);

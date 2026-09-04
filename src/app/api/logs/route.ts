@@ -1,8 +1,14 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma, ensureDbSchema } from "@/lib/prisma";
 import { getLocalDayBounds, parseLogDate, toDateKey } from "@/lib/utils";
-import { requireAuthUser, resolveWorkoutLogReadUserId, resolveWorkoutLogSubjectUserId, workoutAssignedToUser } from "@/lib/apiAuth";
+import { requireActiveUser, resolveWorkoutLogReadUserId, resolveWorkoutLogSubjectUserId, workoutAssignedToUser } from "@/lib/apiAuth";
+import { ensureWorkoutLogConcurrencySchema } from "@/lib/workoutLogRevision";
+import {
+    acceptWorkoutRevision,
+    nextWorkoutRevision,
+    shouldEmitCompletionSideEffects,
+    staleRevisionPayload,
+} from "@/lib/workoutSavePolicy";
 import { notifyCoachOfClientWorkout } from "@/lib/notifications";
 import { triggerAchievementSync } from "@/lib/achievements";
 import { normalizeStoredUploadUrl } from "@/lib/uploadUrls";
@@ -41,6 +47,8 @@ const logSchema = z.object({
      * one can start. Without it, a conflicting active session returns 409.
      */
     replaceActiveSession: z.boolean().optional(),
+    /** Server-issued revision the client last acknowledged. Required to update an existing log. */
+    expectedRevision: z.number().int().min(0).optional(),
     sets: z.array(z.object({
         exerciseId: z.string(),
         exerciseName: z.string().optional(),
@@ -95,7 +103,8 @@ export async function POST(req: Request) {
     await ensureLogSetExerciseNameColumn();
     await ensureLogSetExerciseOrderColumn();
     await ensureExerciseTrackingSchema();
-    const authResult = await requireAuthUser(req);
+    await ensureWorkoutLogConcurrencySchema();
+    const authResult = await requireActiveUser(req);
     if (authResult.error) return authResult.error;
     const user = authResult.user;
 
@@ -103,7 +112,7 @@ export async function POST(req: Request) {
     const parsed = logSchema.safeParse(body);
     if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-    const { workoutId, clientId, duration, notes, feeling, status, loggedAt, replaceActiveSession } = parsed.data;
+    const { workoutId, clientId, duration, notes, feeling, status, loggedAt, replaceActiveSession, expectedRevision } = parsed.data;
     const sets = parsed.data.sets.map((set) => ({
         ...set,
         exerciseName: set.exerciseName ? canonicalExerciseName(set.exerciseName) : set.exerciseName,
@@ -232,6 +241,24 @@ export async function POST(req: Request) {
         return NextResponse.json(existingCompleted, { status: 200 });
     }
 
+    const currentRow = existingInProgress ?? existingCompleted;
+    const currentRevision = currentRow?.revision ?? 0;
+    const previousStatus = (existingInProgress?.status ?? existingCompleted?.status ?? null) as
+        | "IN_PROGRESS"
+        | "COMPLETED"
+        | null;
+    if (currentRow && !acceptWorkoutRevision(expectedRevision, currentRevision)) {
+        return NextResponse.json(
+            {
+                ...staleRevisionPayload(currentRevision),
+                log: existingInProgress ?? existingCompleted,
+            },
+            { status: 409 }
+        );
+    }
+    const nextRevision = nextWorkoutRevision(currentRevision);
+    const emitCompletionSideEffects = shouldEmitCompletionSideEffects(previousStatus, status);
+
     // Resolve temp/custom exercise IDs — never mutate plan exercise order from a log save
     const tempToRealId = new Map<string, string>();
 
@@ -294,6 +321,7 @@ export async function POST(req: Request) {
         feeling,
         status: status as "IN_PROGRESS" | "COMPLETED",
         loggedAt: loggedAt ? parseLogDate(loggedAt) : new Date(),
+        revision: nextRevision,
     };
 
     const exerciseOrderById = new Map<string, number>();
@@ -438,7 +466,10 @@ export async function POST(req: Request) {
                 return updatedCompleted;
             });
             await persistExerciseNotes(workoutLog.id);
-            triggerAchievementSync(subjectUserId);
+            if (emitCompletionSideEffects) {
+                await maybeNotifyCoach(workoutLog);
+                triggerAchievementSync(subjectUserId);
+            }
             return NextResponse.json(workoutLog, { status: 200 });
         }
         await prisma.logSet.deleteMany({ where: { workoutLogId: existingInProgress.id } });
@@ -448,8 +479,10 @@ export async function POST(req: Request) {
             include: { sets: true, workout: { select: { name: true } } },
         });
         await persistExerciseNotes(workoutLog.id);
-        await maybeNotifyCoach(workoutLog);
-        triggerAchievementSync(subjectUserId);
+        if (emitCompletionSideEffects) {
+            await maybeNotifyCoach(workoutLog);
+            triggerAchievementSync(subjectUserId);
+        }
         return NextResponse.json(workoutLog, { status: 200 });
     }
 
@@ -461,7 +494,10 @@ export async function POST(req: Request) {
             include: { sets: true, workout: { select: { name: true } } },
         });
         await persistExerciseNotes(workoutLog.id);
-        triggerAchievementSync(subjectUserId);
+        if (emitCompletionSideEffects) {
+            await maybeNotifyCoach(workoutLog);
+            triggerAchievementSync(subjectUserId);
+        }
         return NextResponse.json(workoutLog, { status: 200 });
     }
 
@@ -510,19 +546,34 @@ export async function POST(req: Request) {
             include: { sets: true, workout: { select: { name: true } } },
         });
         await persistExerciseNotes(workoutLog.id);
-        triggerAchievementSync(subjectUserId);
         return NextResponse.json(workoutLog, { status: 200 });
     }
 
-    const workoutLog = await prisma.workoutLog.create({
-        data: {
-            userId: subjectUserId,
-            workoutId,
-            ...logPayload,
-            sets: { create: setsCreate },
-        },
-        include: { sets: true, workout: { select: { name: true } } },
-    });
+    let workoutLog;
+    try {
+        workoutLog = await prisma.workoutLog.create({
+            data: {
+                userId: subjectUserId,
+                workoutId,
+                ...logPayload,
+                sets: { create: setsCreate },
+            },
+            include: { sets: true, workout: { select: { name: true } } },
+        });
+    } catch (error) {
+        const code = typeof error === "object" && error && "code" in error ? String(error.code) : "";
+        if (status === "IN_PROGRESS" && code === "P2002") {
+            const existing = await getActiveWorkoutSession(subjectUserId);
+            if (existing) {
+                const current = await prisma.workoutLog.findUnique({
+                    where: { id: existing.id },
+                    include: { sets: true, workout: { select: { name: true } } },
+                });
+                return NextResponse.json(current ?? existing, { status: 200 });
+            }
+        }
+        throw error;
+    }
 
     if (status === "COMPLETED") {
         await prisma.workoutLog.deleteMany({
@@ -537,20 +588,19 @@ export async function POST(req: Request) {
     }
 
     await persistExerciseNotes(workoutLog.id);
-    await maybeNotifyCoach(workoutLog);
-
-    triggerAchievementSync(subjectUserId);
+    if (emitCompletionSideEffects) {
+        await maybeNotifyCoach(workoutLog);
+        triggerAchievementSync(subjectUserId);
+    }
 
     return NextResponse.json(workoutLog, { status: 201 });
 }
 
 // GET recent logs or active session
 export async function GET(req: Request) {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const user = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+    const authResult = await requireActiveUser(req);
+    if (authResult.error) return authResult.error;
+    const user = authResult.user;
 
     const url = new URL(req.url);
     const activeOnly = url.searchParams.get("active") === "true";

@@ -1,17 +1,18 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireActiveUser } from "@/lib/apiAuth";
+import { enforceRateLimit } from "@/lib/rateLimit";
 import { isCoachRole } from "@/lib/roles";
 import { clonePlanForUser } from "@/lib/planClone";
 import { resolvePlanOriginalCreatorId } from "@/lib/planCreator";
 import { triggerAchievementSyncForUsers } from "@/lib/achievements";
 
 export async function POST(req: Request) {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const user = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+    const authResult = await requireActiveUser(req);
+    if (authResult.error) return authResult.error;
+    const user = authResult.user;
+    const limited = await enforceRateLimit(req, "planImport", user.id);
+    if (limited) return limited;
 
     const { code } = await req.json();
     if (!code) return NextResponse.json({ error: "Share code is required" }, { status: 400 });

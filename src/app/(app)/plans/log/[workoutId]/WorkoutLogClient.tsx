@@ -22,6 +22,7 @@ import { useIsolateScroll } from "@/hooks/useIsolateScroll";
 import { useVisualViewport } from "@/hooks/useVisualViewportHeight";
 import { exerciseIdentityKey } from "@/lib/exerciseIdentity";
 import { parseOptionalNumber } from "@/lib/numericValue";
+import { httpErrorMessage } from "@/lib/httpErrorMessage";
 import {
     EMPTY_EXERCISE_RECORDS,
     evaluateLiveExercisePrs,
@@ -217,6 +218,7 @@ interface InitialActiveLog {
     loggedAt: string;
     duration?: number | null;
     updatedAt?: string;
+    revision?: number;
     sets: ActiveLogSet[];
 }
 
@@ -580,6 +582,7 @@ export function WorkoutLogClient({
     const lastRemoteUpdatedAtRef = useRef(
         remoteUpdatedAtMs(initialActiveLog?.updatedAt)
     );
+    const revisionRef = useRef(initialActiveLog?.revision ?? 0);
     const exerciseNotesRef = useRef(exerciseNotes);
     exerciseNotesRef.current = exerciseNotes;
     const isSavingRef = useRef(false);
@@ -841,11 +844,16 @@ export function WorkoutLogClient({
                 const remoteUpdatedAt = remoteUpdatedAtMs(remote.updatedAt);
                 if (remoteUpdatedAt <= lastRemoteUpdatedAtRef.current) return;
 
+                if (typeof remote.revision === "number") {
+                    revisionRef.current = remote.revision;
+                }
+
                 const remotePayload: InitialActiveLog = {
                     id: remote.id,
                     loggedAt: remote.loggedAt,
                     duration: remote.duration,
                     updatedAt: remote.updatedAt,
+                    revision: remote.revision,
                     sets: (remote.sets ?? []).map((set: {
                         exerciseId?: string;
                         exercise?: Exercise | null;
@@ -1002,6 +1010,7 @@ export function WorkoutLogClient({
                     workoutId: workout.id,
                     status: "IN_PROGRESS",
                     loggedAt: toLoggedAtIso(logDate ?? new Date(now)),
+                    expectedRevision: revisionRef.current,
                     sets: flattenedSets,
                     ...(replaceActiveSession ? { replaceActiveSession: true } : {}),
                     ...logSubjectFields,
@@ -1025,6 +1034,7 @@ export function WorkoutLogClient({
             }
 
             const saved = await createRes.json();
+            if (typeof saved.revision === "number") revisionRef.current = saved.revision;
             if (saved.id) {
                 const hasLoggedWork = Array.isArray(saved.sets) && saved.sets.some(
                     (s: { reps?: number | null; weightKg?: number | null; rpe?: number | null; isCompleted?: boolean | null }) =>
@@ -1149,6 +1159,7 @@ export function WorkoutLogClient({
                     status: "IN_PROGRESS",
                     duration: elapsedMinutes,
                     loggedAt: toLoggedAtIso(logDate ?? new Date(finalStartTime)),
+                    expectedRevision: revisionRef.current,
                     sets: flattenedSets,
                     exerciseNotes: buildExerciseNotesPayload(),
                     ...logSubjectFields,
@@ -1157,8 +1168,16 @@ export function WorkoutLogClient({
             if (res.ok) {
                 const saved = await res.json();
                 if (saved.id) setActiveLogId(saved.id);
+                if (typeof saved.revision === "number") revisionRef.current = saved.revision;
                 if (saved.updatedAt) {
                     lastRemoteUpdatedAtRef.current = remoteUpdatedAtMs(saved.updatedAt);
+                }
+            } else if (res.status === 409) {
+                const payload = await res.json().catch(() => null);
+                if (typeof payload?.currentRevision === "number") {
+                    revisionRef.current = payload.currentRevision;
+                } else if (typeof payload?.log?.revision === "number") {
+                    revisionRef.current = payload.log.revision;
                 }
             }
         } catch (e) {
@@ -1500,6 +1519,7 @@ export function WorkoutLogClient({
     };
 
     const handleSubmit = async (override?: { duration?: number; notes?: string; feeling?: number | null }) => {
+        if (saving || isCompletingRef.current) return;
         setSaving(true);
         isCompletingRef.current = true;
         pendingProgressSaveRef.current = null;
@@ -1533,6 +1553,7 @@ export function WorkoutLogClient({
                     feeling: finalFeeling,
                     status: "COMPLETED",
                     loggedAt: toLoggedAtIso(logDate),
+                    expectedRevision: revisionRef.current,
                     sets: flattenedSets,
                     exerciseNotes: buildExerciseNotesPayload(),
                     ...logSubjectFields,
@@ -1546,18 +1567,28 @@ export function WorkoutLogClient({
                 notifyWorkoutStatsChanged();
                 router.push(appendReturnTo(`/plans/log/view/${saved.id}`, returnTo));
                 router.refresh();
-            } else {
-                let errMsg = "Unknown error";
-                try {
-                    const errData = await res.json();
-                    errMsg = errData.error?.message || JSON.stringify(errData.error) || JSON.stringify(errData) || errMsg;
-                } catch {
-                    try {
-                        errMsg = await res.text();
-                    } catch {}
+            } else if (res.status === 409) {
+                const payload = await res.json().catch(() => null);
+                const completedId = payload?.log?.id;
+                if (payload?.log?.status === "COMPLETED" && completedId) {
+                    localStorage.removeItem(localStorageKey);
+                    setShowFinishModal(false);
+                    notifyWorkoutStatsChanged();
+                    router.push(appendReturnTo(`/plans/log/view/${completedId}`, returnTo));
+                    router.refresh();
+                    return;
                 }
+                alert(httpErrorMessage(res.status, payload, "This workout was updated elsewhere. Reload and try again."));
+            } else {
+                let errData: unknown = null;
+                try {
+                    errData = await res.json();
+                } catch {
+                    errData = null;
+                }
+                const errMsg = httpErrorMessage(res.status, errData, "Failed to save workout");
                 console.error("Save failed:", errMsg);
-                alert(`Failed to save: ${errMsg}`);
+                alert(errMsg);
             }
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : String(err);

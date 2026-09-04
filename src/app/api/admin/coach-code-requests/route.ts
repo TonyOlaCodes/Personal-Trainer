@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireAuthUser } from "@/lib/apiAuth";
+import { requireSuperAdmin } from "@/lib/apiAuth";
 import {
     adminDispatchCoachCodeRequest,
     adminHandleCoachCodeRequestSelf,
@@ -20,24 +20,16 @@ const patchSchema = z.discriminatedUnion("action", [
 ]);
 
 export async function GET() {
-    const authResult = await requireAuthUser();
+    const authResult = await requireSuperAdmin();
     if (authResult.error) return authResult.error;
-
-    if (authResult.user.role !== "SUPER_ADMIN") {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
 
     const requests = await listCoachCodeRequestsForAdmin();
     return NextResponse.json({ requests });
 }
 
 export async function PATCH(req: Request) {
-    const authResult = await requireAuthUser();
+    const authResult = await requireSuperAdmin(req);
     if (authResult.error) return authResult.error;
-
-    if (authResult.user.role !== "SUPER_ADMIN") {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
 
     try {
         const parsed = patchSchema.parse(await req.json());

@@ -20,6 +20,7 @@ import { cn, formatDate, getInitials } from "@/lib/utils";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { formatCoachPlanLabel } from "@/lib/coachPlans";
 import { formatPresenceWithWorkout, getPresenceIndicator } from "@/lib/userPresence";
+import { httpErrorMessage } from "@/lib/httpErrorMessage";
 import {
     ExerciseHistoryModal,
     useExerciseHistoryInspector,
@@ -244,8 +245,8 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
 
                 window.location.reload();
             } else {
-                const data = await res.json();
-                alert(data.error || "Import failed.");
+                const data = await res.json().catch(() => ({}));
+                alert(httpErrorMessage(res.status, data, "Import failed."));
             }
         } catch (e) {
             alert("Network error.");

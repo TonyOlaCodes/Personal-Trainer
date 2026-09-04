@@ -19,6 +19,7 @@ import {
 } from "@/lib/units";
 import { useClerk, useUser } from "@clerk/nextjs";
 import { defaultHomeForRole } from "@/lib/roles";
+import { httpErrorMessage } from "@/lib/httpErrorMessage";
 import {
     EXPERIENCE_SLIDER_LABELS,
     ONBOARDING_GOAL_OPTIONS,
@@ -214,10 +215,10 @@ export function OnboardingPage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ code }),
             });
-            const data = await res.json();
+            const data = await res.json().catch(() => ({}));
             if (!res.ok) {
                 setCodeStatus("error");
-                setCodeMessage(data.error || "Invalid code");
+                setCodeMessage(httpErrorMessage(res.status, data, "Invalid code"));
                 return false;
             }
 

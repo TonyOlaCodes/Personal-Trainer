@@ -1,4 +1,5 @@
 import { resolveUploadUrl } from "@/lib/uploadUrls";
+import { httpErrorMessage } from "@/lib/httpErrorMessage";
 
 /** Resize/compress photos before upload so mobile shots stay under server limits. */
 export async function compressImageForUpload(file: File, maxWidth = 1600): Promise<File> {
@@ -51,7 +52,7 @@ export async function uploadMediaFile(
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
-        throw new Error(typeof data.error === "string" ? data.error : "Upload failed");
+        throw new Error(httpErrorMessage(res.status, data, "Upload failed"));
     }
 
     if (!data.url) {

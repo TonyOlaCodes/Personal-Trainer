@@ -298,6 +298,7 @@ model WorkoutLog {
   notes     String?
   feeling   Int? // 1-5 scale
   status    LogStatus @default(COMPLETED)
+  revision  Int       @default(0)
 
   user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   workout Workout  @relation(fields: [workoutId], references: [id], onDelete: Cascade)

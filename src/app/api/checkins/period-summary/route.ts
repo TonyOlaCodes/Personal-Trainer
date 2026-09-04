@@ -1,17 +1,15 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireActiveUser } from "@/lib/apiAuth";
 import { getCheckInPeriodSummary } from "@/lib/checkInPeriodSummary";
 import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
 import { toDateKey } from "@/lib/utils";
 
 export async function GET(req: Request) {
     try {
-        const { userId: clerkId } = await auth();
-        if (!clerkId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-        const actor = await prisma.user.findUnique({ where: { clerkId } });
-        if (!actor) return NextResponse.json({ error: "User not found" }, { status: 404 });
+        const authResult = await requireActiveUser(req);
+        if (authResult.error) return authResult.error;
+        const actor = authResult.user;
 
         const url = new URL(req.url);
         const date = url.searchParams.get("date") ?? toDateKey(new Date());

@@ -33,6 +33,8 @@ import { ensureOnboardingProfileColumns } from "@/lib/onboardingProfile";
 import { ensureCoachCodeRequestTables } from "@/lib/coachCodeRequest";
 import { ensureAppSettingsTable } from "@/lib/maintenanceMode";
 import { ensureExerciseTrackingSchema } from "@/lib/exerciseTracking/ensure";
+import { ensureRateLimitTable } from "@/lib/rateLimit";
+import { ensureWorkoutLogConcurrencySchema } from "@/lib/workoutLogRevision";
 
 let appSchemaReady = false;
 let appSchemaPromise: Promise<void> | null = null;
@@ -78,6 +80,8 @@ export async function ensureAppSchema() {
             ensureAppSettingsTable(),
             ensureExerciseTrackingSchema(),
             ensureWorkoutHistoryIndexes(),
+            ensureRateLimitTable(),
+            ensureWorkoutLogConcurrencySchema(),
         ]);
         await ensureCheckInUserWeekUnique();
         await migrateLegacyClientGoals();

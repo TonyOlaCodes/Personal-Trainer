@@ -1,6 +1,6 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireActiveUser } from "@/lib/apiAuth";
 import { ensureExerciseDictionary, searchDictionary } from "@/lib/exerciseDictionary";
 import { EXERCISE_SEARCH_LIMIT } from "@/lib/exerciseSearch";
 import { ensureExerciseTrackingSchema } from "@/lib/exerciseTracking/ensure";
@@ -9,8 +9,8 @@ import { guessTrackingSchema } from "@/lib/exerciseTracking/guess";
 import { ensureMuscleTargetsColumn, parseMuscleTargetsJson } from "@/lib/exerciseMuscleTargets";
 
 export async function GET(req: Request) {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const authResult = await requireActiveUser(req);
+    if (authResult.error) return authResult.error;
 
     try {
         await ensureExerciseDictionary();

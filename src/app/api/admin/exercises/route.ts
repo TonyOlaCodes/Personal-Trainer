@@ -1,6 +1,6 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireSuperAdmin } from "@/lib/apiAuth";
 import { updateGlobalExerciseMedia } from "@/lib/exerciseMedia";
 import { mergeExercisesIntoTarget, syncExerciseRename } from "@/lib/mergeExercises";
 import {
@@ -115,19 +115,9 @@ function withTrackingResponse(
     };
 }
 
-async function requireAdmin() {
-    const { userId } = await auth();
-    if (!userId) return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
-    const user = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!user || user.role !== "SUPER_ADMIN") {
-        return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
-    }
-    return { user };
-}
-
 export async function POST(req: Request) {
-    const authz = await requireAdmin();
-    if ("error" in authz) return authz.error;
+    const authz = await requireSuperAdmin(req);
+    if (authz.error) return authz.error;
 
     const body = await req.json();
 
@@ -232,8 +222,8 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-    const authz = await requireAdmin();
-    if ("error" in authz) return authz.error;
+    const authz = await requireSuperAdmin(req);
+    if (authz.error) return authz.error;
 
     const parsed = exerciseSchema.extend({ id: z.string().min(1) }).safeParse(await req.json());
     if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });

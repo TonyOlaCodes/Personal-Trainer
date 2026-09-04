@@ -1,6 +1,6 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireActiveUser } from "@/lib/apiAuth";
 import {
     clearCheckInRequest,
     getPriorityActiveCheckInRequestForClient,
@@ -43,12 +43,12 @@ async function isRequestStillOutstanding(
 }
 
 /** Active coach-requested check-in reminder for the signed-in client (one prioritized). */
-export async function GET() {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function GET(req: Request) {
+    const authResult = await requireActiveUser(req);
+    if (authResult.error) return authResult.error;
 
     const user = await prisma.user.findUnique({
-        where: { clerkId: userId },
+        where: { id: authResult.user.id },
         select: {
             id: true,
             role: true,

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Loader2, MessageSquare, Shield, X } from "lucide-react";
 import { ModalOverlay } from "@/components/shared/ModalOverlay";
 import { cn } from "@/lib/utils";
+import { httpErrorMessage } from "@/lib/httpErrorMessage";
 
 interface AccessRequestStatus {
     eligible: boolean;
@@ -37,8 +38,8 @@ export function GainAccessModal({ open, onClose }: Props) {
         void (async () => {
             try {
                 const res = await fetch("/api/access-request");
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.error ?? "Could not load access request");
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(httpErrorMessage(res.status, data, "Could not load access request"));
                 if (cancelled) return;
                 setStatus(data);
                 setMessage(data.defaultMessage ?? "");
@@ -66,8 +67,8 @@ export function GainAccessModal({ open, onClose }: Props) {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ message: message.trim() }),
             });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error ?? "Could not send request");
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(httpErrorMessage(res.status, data, "Could not send request"));
 
             if (data.alreadyAssigned && data.chatRoute) {
                 window.location.href = data.chatRoute;

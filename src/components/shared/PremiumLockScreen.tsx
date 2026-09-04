@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Lock, Ticket } from "lucide-react";
 import { GainAccessModal } from "@/components/shared/GainAccessModal";
 import { cn } from "@/lib/utils";
+import { httpErrorMessage } from "@/lib/httpErrorMessage";
 
 interface Props {
     title?: string;
@@ -32,14 +33,14 @@ export function PremiumLockScreen({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ code }),
         });
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         if (res.ok) {
             setCodeStatus("success");
             setCodeMsg("Code redeemed! Account upgraded.");
             setTimeout(() => window.location.reload(), 1500);
         } else {
             setCodeStatus("error");
-            setCodeMsg(data.error ?? "Invalid code");
+            setCodeMsg(httpErrorMessage(res.status, data, "Invalid code"));
         }
     };
 

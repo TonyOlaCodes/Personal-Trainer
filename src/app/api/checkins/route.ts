@@ -1,6 +1,7 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireActiveUser } from "@/lib/apiAuth";
+import { enforceRateLimit } from "@/lib/rateLimit";
 import { CheckInStatus, Prisma } from "@prisma/client";
 import { z } from "zod";
 import {
@@ -34,11 +35,11 @@ const checkInSchema = z.object({
 // POST submit a check-in
 export async function POST(req: Request) {
     try {
-        const { userId: clerkId } = await auth();
-        if (!clerkId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-        const user = await prisma.user.findUnique({ where: { clerkId } });
-        if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+        const authResult = await requireActiveUser(req);
+        if (authResult.error) return authResult.error;
+        const user = authResult.user;
+        const limited = await enforceRateLimit(req, "checkInWrite", user.id);
+        if (limited) return limited;
 
         // Coaches do not submit client check-ins — they review them
         if (user.role === "COACH") {
@@ -115,11 +116,9 @@ export async function POST(req: Request) {
 // GET check-ins (personal or client dashboard)
 export async function GET(req: Request) {
     try {
-        const { userId: clerkId } = await auth();
-        if (!clerkId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-        const user = await prisma.user.findUnique({ where: { clerkId } });
-        if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+        const authResult = await requireActiveUser(req);
+        if (authResult.error) return authResult.error;
+        const user = authResult.user;
 
         const url = new URL(req.url);
         const clientId = url.searchParams.get("clientId");
@@ -192,11 +191,9 @@ export async function GET(req: Request) {
 // PATCH for coach review OR user edit
 export async function PATCH(req: Request) {
     try {
-        const { userId: clerkId } = await auth();
-        if (!clerkId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-        const user = await prisma.user.findUnique({ where: { clerkId } });
-        if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+        const authResult = await requireActiveUser(req);
+        if (authResult.error) return authResult.error;
+        const user = authResult.user;
 
         const body = await req.json();
         const { id, coachResponse, status, feedback, notes, videoUrl, bodyweightKg, sleepRating, dietRating, stressRating, injuryRating, energyRating, intensityRating, frontImageUrl, sideImageUrl } = body;

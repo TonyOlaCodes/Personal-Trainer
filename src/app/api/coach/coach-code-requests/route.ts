@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireAuthUser } from "@/lib/apiAuth";
+import { requireCoachUser } from "@/lib/apiAuth";
 import { coachIgnoreCoachCodeRequest, listCoachCodeRequestsForCoach } from "@/lib/coachCodeRequest";
-import { isCoachRole } from "@/lib/roles";
 
 const patchSchema = z.object({
     action: z.literal("ignore"),
@@ -10,24 +9,16 @@ const patchSchema = z.object({
 });
 
 export async function GET() {
-    const authResult = await requireAuthUser();
+    const authResult = await requireCoachUser();
     if (authResult.error) return authResult.error;
-
-    if (!isCoachRole(authResult.user.role as never)) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
 
     const requests = await listCoachCodeRequestsForCoach(authResult.user.id);
     return NextResponse.json({ requests });
 }
 
 export async function PATCH(req: Request) {
-    const authResult = await requireAuthUser();
+    const authResult = await requireCoachUser();
     if (authResult.error) return authResult.error;
-
-    if (!isCoachRole(authResult.user.role as never)) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
 
     try {
         const parsed = patchSchema.parse(await req.json());

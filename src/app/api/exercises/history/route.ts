@@ -1,7 +1,6 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { resolveWorkoutLogReadUserId } from "@/lib/apiAuth";
+import { requireActiveUser, resolveWorkoutLogReadUserId } from "@/lib/apiAuth";
 import { getExerciseMediaByNames } from "@/lib/exerciseMedia";
 import { loadWorkoutHistorySessions } from "@/lib/workoutHistory";
 import { loadAllTimeExerciseRecords } from "@/lib/exerciseRecordHistory";
@@ -19,11 +18,9 @@ import {
  * appear without leaving and re-entering the log screen.
  */
 export async function GET(req: Request) {
-    const { userId } = await auth();
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const actor = await prisma.user.findUnique({ where: { clerkId: userId } });
-    if (!actor) return NextResponse.json({ error: "User not found" }, { status: 404 });
+    const authResult = await requireActiveUser(req);
+    if (authResult.error) return authResult.error;
+    const actor = authResult.user;
 
     const url = new URL(req.url);
     const rawName = url.searchParams.get("name")?.trim() ?? "";
