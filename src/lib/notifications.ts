@@ -235,24 +235,41 @@ export async function createNotification(input: {
     `;
 }
 
-/** Coach check-in request — one unread alert per coach; skips separate chat notification. */
+/** Coach check-in request — one unread alert per client+week; does not spam on re-open. */
 export async function notifyClientOfCheckInRequest(input: {
     clientUserId: string;
     coachId: string;
     message?: string;
+    weekNumber?: number;
+    coachName?: string | null;
 }) {
     if (!(await userWantsNotification(input.clientUserId, "notifyOnCoachMessage"))) return;
 
     await ensureNotificationsTable();
 
-    const message = input.message ?? "Your coach requested a check-in";
+    const coachLabel = input.coachName?.trim() || "Your coach";
+    const message =
+        input.message
+        ?? (input.weekNumber != null
+            ? `Check-in requested\n${coachLabel} has asked you to complete your overdue check-in.`
+            : `Check-in requested\n${coachLabel} has asked you to complete your check-in.`);
+
+    const entityId =
+        input.weekNumber != null
+            ? `${input.clientUserId}:${input.weekNumber}`
+            : input.coachId;
+    const route =
+        input.weekNumber != null
+            ? `/checkins?week=${input.weekNumber}&start=1`
+            : "/checkins";
+
     const existing = await prisma.$queryRaw<Array<{ id: string }>>`
         SELECT "id"
         FROM "notifications"
         WHERE "userId" = ${input.clientUserId}
           AND "type" = 'MISSED_CHECKIN'
           AND "entityType" = 'CHECKIN'
-          AND "entityId" = ${input.coachId}
+          AND "entityId" = ${entityId}
           AND "read" = false
         ORDER BY "createdAt" DESC
         LIMIT 1
@@ -262,7 +279,7 @@ export async function notifyClientOfCheckInRequest(input: {
         await prisma.$executeRaw`
             UPDATE "notifications"
             SET "message" = ${message},
-                "route" = '/checkins',
+                "route" = ${route},
                 "createdAt" = CURRENT_TIMESTAMP
             WHERE "id" = ${existing[0].id}
         `;
@@ -274,8 +291,8 @@ export async function notifyClientOfCheckInRequest(input: {
         type: "MISSED_CHECKIN",
         message,
         entityType: "CHECKIN",
-        entityId: input.coachId,
-        route: "/checkins",
+        entityId,
+        route,
     });
 }
 

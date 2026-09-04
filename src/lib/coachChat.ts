@@ -163,17 +163,42 @@ export async function sendPlanViaChat(coach: User, clientId: string, planId: str
     });
 }
 
-export async function sendCheckInRequestViaChat(coach: User, clientId: string, note?: string) {
+export async function sendCheckInRequestViaChat(
+    coach: User,
+    clientId: string,
+    note?: string,
+    options?: { weekNumber?: number; periodDueDateKey?: string | null; skipChat?: boolean }
+) {
     const client = await requireOwnActiveClient(coach, clientId);
 
     const content = note?.trim()
         || await buildGeneratedCheckInReminder(client);
 
+    if (options?.weekNumber != null) {
+        const { upsertCheckInRequest } = await import("@/lib/checkInRequests");
+        await upsertCheckInRequest({
+            coachId: coach.id,
+            clientId,
+            weekNumber: options.weekNumber,
+            periodDueDateKey: options.periodDueDateKey ?? null,
+            enforceCooldown: true,
+        });
+    }
+
     await notifyClientOfCheckInRequest({
         clientUserId: clientId,
         coachId: coach.id,
-        message: content,
+        coachName: coach.name,
+        weekNumber: options?.weekNumber,
+        message:
+            options?.weekNumber != null
+                ? `Check-in requested\n${coach.name?.trim() || "Your coach"} has asked you to complete your overdue check-in.`
+                : content,
     });
+
+    if (options?.skipChat) {
+        return null;
+    }
 
     return createCoachDirectMessage({
         coach,

@@ -18,6 +18,7 @@ import { ensurePlanOriginalCreatorColumn } from "@/lib/planCreator";
 import { ensureAccessRequestColumns } from "@/lib/accessRequest";
 import { ensureAchievementsTables } from "@/lib/achievements";
 import { ensureCoachAttentionActionsTable } from "@/lib/coachAttentionActions";
+import { ensureCheckInRequestsTable } from "@/lib/checkInRequests";
 import { ensurePlanMissedSessionHistoryTable } from "@/lib/planMissedSessionHistory";
 import { ensureGeneralPremiumRole } from "@/lib/ensureGeneralPremiumRole";
 import { ensureLogExerciseNotesTable } from "@/lib/logExerciseNotes";
@@ -61,6 +62,7 @@ export async function ensureAppSchema() {
             ensureAccessRequestColumns(),
             ensureAchievementsTables(),
             ensureCoachAttentionActionsTable(),
+            ensureCheckInRequestsTable(),
             ensurePlanMissedSessionHistoryTable(),
             ensureGeneralPremiumRole(),
             ensureLogExerciseNotesTable(),

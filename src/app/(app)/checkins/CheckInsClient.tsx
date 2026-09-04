@@ -88,6 +88,8 @@ interface Props {
         daysOverdue?: number | null;
         isOverdue: boolean;
         isDueToday?: boolean;
+        requestedAt?: string | null;
+        lastRequestedAt?: string | null;
     }>;
 }
 
@@ -636,6 +638,8 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
     const highlightedCheckInId = searchParams.get("highlight");
     const statusParam = searchParams.get("status");
     const viewParam = searchParams.get("view");
+    const weekParam = searchParams.get("week");
+    const startParam = searchParams.get("start");
     const coachView = viewParam === "overdue" ? "overdue" : "submissions";
     const initialStatusFilter =
         statusParam === "PENDING" || statusParam === "REVIEWED" ? statusParam : "ALL";
@@ -664,7 +668,27 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
     const [coachSortBy, setCoachSortBy] = useState<"WEEK" | "CLIENT">("WEEK");
     const [dismissedOverdueCheckIns, setDismissedOverdueCheckIns] = useState<Set<string>>(() => new Set());
     const [dismissingCheckInKey, setDismissingCheckInKey] = useState<string | null>(null);
+    const [requestingCheckInKey, setRequestingCheckInKey] = useState<string | null>(null);
+    const [requestedCheckIns, setRequestedCheckIns] = useState<Record<string, string>>(() => {
+        const initial: Record<string, string> = {};
+        for (const client of overdueClients) {
+            if (client.lastRequestedAt || client.requestedAt) {
+                initial[getOverdueCheckInAlertKey(client)] =
+                    client.lastRequestedAt ?? client.requestedAt!;
+            }
+        }
+        return initial;
+    });
     const [coachActionError, setCoachActionError] = useState<string | null>(null);
+    const [coachActionToast, setCoachActionToast] = useState<string | null>(null);
+    const deepLinkStartedRef = useRef(false);
+
+    useEffect(() => {
+        if (!coachActionToast) return;
+        const t = window.setTimeout(() => setCoachActionToast(null), 2500);
+        return () => window.clearTimeout(t);
+    }, [coachActionToast]);
+
     const filteredCheckIns = checkIns.filter(c => {
         if (statusFilter === "PENDING") return c.status === "PENDING";
         if (statusFilter === "REVIEWED") return c.status === "REVIEWED";
@@ -743,6 +767,60 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
         loadPeriodSummary();
         return () => { cancelled = true; };
     }, [selectedDate, isCoach, checkIns, isLogging, editMode]);
+
+    // Deep-link from coach request notification/popup: open the form for that week.
+    useEffect(() => {
+        if (isCoach || deepLinkStartedRef.current || isLogging || editMode) return;
+        if (!isPremium) return;
+        if (startParam !== "1" || !weekParam) return;
+        const targetWeek = Number(weekParam);
+        if (!Number.isFinite(targetWeek)) return;
+
+        const existing = checkIns.find((c) => c.weekNumber === targetWeek);
+        if (existing) {
+            deepLinkStartedRef.current = true;
+            return;
+        }
+
+        let periodDate: string | null = null;
+        const outstanding = checkInDueState.outstandingWeekNumber ?? getWeekNumber();
+        if (targetWeek === outstanding && checkInDueState.currentPeriodDueDate) {
+            periodDate = checkInDueState.currentPeriodDueDate.split("T")[0];
+        } else {
+            try {
+                const year = getIsoWeekYear(new Date());
+                periodDate = getIsoWeekStartDate(targetWeek, year).toISOString().split("T")[0];
+            } catch {
+                return;
+            }
+        }
+
+        deepLinkStartedRef.current = true;
+        setCheckInId(null);
+        setSelectedDate(periodDate);
+        setEnergy(0);
+        setSleep(0);
+        setNutrition(0);
+        setStress(0);
+        setAches(0);
+        setTraining(0);
+        setNotes("");
+        setFrontImg("");
+        setSideImg("");
+        setEditMode(false);
+        setEditingWasReviewed(false);
+        setIsLogging(true);
+    }, [
+        isCoach,
+        isPremium,
+        isLogging,
+        editMode,
+        startParam,
+        weekParam,
+        checkIns,
+        checkInDueState.outstandingWeekNumber,
+        checkInDueState.currentPeriodDueDate,
+    ]);
 
     if (!isPremium && !isCoach) {
         return (
@@ -969,10 +1047,57 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                 next.add(alertKey);
                 return next;
             });
+            setRequestedCheckIns((prev) => {
+                if (!(alertKey in prev)) return prev;
+                const next = { ...prev };
+                delete next[alertKey];
+                return next;
+            });
         } catch (err) {
             setCoachActionError(err instanceof Error ? err.message : "Could not dismiss check-in");
         } finally {
             setDismissingCheckInKey(null);
+        }
+    };
+
+    const requestCoachCheckIn = async (client: OverdueCheckInClient) => {
+        const alertKey = getOverdueCheckInAlertKey(client);
+        if (requestingCheckInKey) return;
+
+        const lastAt = requestedCheckIns[alertKey];
+        if (lastAt) {
+            const elapsed = Date.now() - new Date(lastAt).getTime();
+            if (elapsed < 60_000) {
+                setCoachActionToast("Check-in requested");
+                return;
+            }
+        }
+
+        setRequestingCheckInKey(alertKey);
+        setCoachActionError(null);
+
+        try {
+            const res = await fetch("/api/coach/check-in-requests", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    clientId: client.id,
+                    weekNumber: client.weekNumber,
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error ?? "Could not request check-in");
+
+            const requestedAt =
+                data.request?.lastRequestedAt
+                ?? data.request?.requestedAt
+                ?? new Date().toISOString();
+            setRequestedCheckIns((prev) => ({ ...prev, [alertKey]: requestedAt }));
+            setCoachActionToast(data.message ?? "Check-in requested");
+        } catch (err) {
+            setCoachActionError(err instanceof Error ? err.message : "Could not request check-in");
+        } finally {
+            setRequestingCheckInKey(null);
         }
     };
 
@@ -1038,9 +1163,20 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                                     {coachActionError}
                                 </div>
                             )}
+                            {coachActionToast && (
+                                <div className="rounded-xl border border-success/30 bg-success/10 px-4 py-3 text-sm font-semibold text-success">
+                                    {coachActionToast}
+                                </div>
+                            )}
                             {visibleOverdueClients.map((client) => {
                                 const alertKey = getOverdueCheckInAlertKey(client);
                                 const isDismissing = dismissingCheckInKey === alertKey;
+                                const isRequesting = requestingCheckInKey === alertKey;
+                                const lastRequestedAt = requestedCheckIns[alertKey] ?? null;
+                                const hasRequested = Boolean(lastRequestedAt);
+                                const cooldownActive = lastRequestedAt
+                                    ? Date.now() - new Date(lastRequestedAt).getTime() < 60_000
+                                    : false;
                                 const dueLabel = client.dueDateLabel ?? client.periodLabel ?? formatCheckInWeekLabel(client.weekNumber);
                                 const overdueDetail = client.isOverdue
                                     ? (client.daysOverdue != null && client.daysOverdue > 1
@@ -1083,7 +1219,34 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                                         </p>
                                     </div>
                                     </Link>
-                                    <div className="flex items-center gap-2 sm:justify-end">
+                                    <div className="flex items-center gap-2 flex-wrap sm:justify-end">
+                                        <button
+                                            type="button"
+                                            onClick={() => void requestCoachCheckIn(client)}
+                                            disabled={isRequesting || (hasRequested && cooldownActive)}
+                                            className={cn(
+                                                "px-3 py-2 rounded-xl border text-xs font-bold transition-all disabled:cursor-not-allowed disabled:opacity-60 inline-flex items-center gap-1.5",
+                                                hasRequested
+                                                    ? "border-brand-500/30 bg-brand-500/10 text-brand-300"
+                                                    : "border-warning/30 bg-warning/10 text-warning hover:bg-warning/15"
+                                            )}
+                                            title={
+                                                hasRequested && cooldownActive
+                                                    ? "Already requested — wait a moment before reminding again"
+                                                    : hasRequested
+                                                      ? "Send another reminder"
+                                                      : "Request this check-in from the client"
+                                            }
+                                        >
+                                            {isRequesting ? (
+                                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                            ) : hasRequested ? (
+                                                <Check className="w-3.5 h-3.5" />
+                                            ) : (
+                                                <Send className="w-3.5 h-3.5" />
+                                            )}
+                                            {hasRequested ? "Requested ✓" : "Request Check-in"}
+                                        </button>
                                         <Link
                                             href={`/coach/client/${client.id}`}
                                             className="px-3 py-2 rounded-xl border border-surface-border bg-surface-muted/30 text-xs font-bold text-fg-muted transition-all hover:bg-surface-muted/60 hover:text-fg"

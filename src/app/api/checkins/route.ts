@@ -68,6 +68,9 @@ export async function POST(req: Request) {
             },
         });
 
+        const { clearCheckInRequest } = await import("@/lib/checkInRequests");
+        await clearCheckInRequest(user.id, parsed.data.weekNumber);
+
         if (user.coachId) {
             await notifyCoachOfClientCheckIn({
                 coachId: user.coachId,

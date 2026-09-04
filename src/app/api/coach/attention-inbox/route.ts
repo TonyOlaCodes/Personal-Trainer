@@ -72,6 +72,13 @@ export async function POST(req: Request) {
                 dateKey: parsed.dateKey ?? null,
                 workoutId: parsed.workoutId ?? null,
             });
+            if (
+                (category === "check_in_overdue" || category === "check_in_missed")
+                && parsed.weekNumber != null
+            ) {
+                const { clearCheckInRequest } = await import("@/lib/checkInRequests");
+                await clearCheckInRequest(parsed.clientId, parsed.weekNumber);
+            }
             triggerAchievementSync(coach.id);
             return NextResponse.json({ ok: true });
         }
@@ -102,7 +109,11 @@ export async function POST(req: Request) {
                 await sendCheckInRequestViaChat(
                     coach,
                     parsed.clientId,
-                    parsed.message
+                    parsed.message,
+                    {
+                        weekNumber: parsed.weekNumber,
+                        skipChat: false,
+                    }
                 );
             } else if (category === "missed_workout") {
                 await sendMissedWorkoutNotifyViaChat(coach, parsed.clientId, {

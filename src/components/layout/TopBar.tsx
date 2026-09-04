@@ -77,6 +77,20 @@ function AnnouncementNotificationText({ message }: { message: string }) {
     );
 }
 
+function CheckInRequestedNotificationText({ message }: { message: string }) {
+    const [title, ...rest] = message.split("\n");
+    const body = rest.join(" ").trim();
+    if (!body) {
+        return <span>{message}</span>;
+    }
+    return (
+        <>
+            <span className="font-bold text-fg">{title.trim() || "Check-in requested"}</span>
+            <span className="text-fg-muted font-medium"> — {body}</span>
+        </>
+    );
+}
+
 function LiveTodayHeader() {
     const now = useCurrentDate();
     return (
@@ -363,6 +377,8 @@ export function TopBar({ title, subtitle, showToday = false, streak, hideSearch 
                                                                     <Trophy className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
                                                                     <span>{n.message}</span>
                                                                 </span>
+                                                            ) : n.type === NOTIFICATION_TYPES.MISSED_CHECKIN ? (
+                                                                <CheckInRequestedNotificationText message={n.message} />
                                                             ) : (
                                                                 n.message
                                                             )}

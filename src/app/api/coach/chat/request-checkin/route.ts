@@ -22,6 +22,9 @@ export async function POST(req: Request) {
     try {
         const parsed = schema.parse(await req.json());
         const message = await sendCheckInRequestViaChat(coach, parsed.clientId, parsed.note);
+        if (!message) {
+            return NextResponse.json({ ok: true }, { status: 201 });
+        }
 
         return NextResponse.json(withResolvedUpload({
             ...message,

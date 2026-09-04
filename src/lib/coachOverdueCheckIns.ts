@@ -32,6 +32,9 @@ export interface OverdueCheckInClient {
     daysOverdue: number | null;
     isOverdue: boolean;
     isDueToday: boolean;
+    /** ISO timestamp when coach last requested this overdue check-in; null if never. */
+    requestedAt: string | null;
+    lastRequestedAt: string | null;
 }
 
 /** App-timezone "today" for coach check-in overdue / attention logic. */
@@ -107,6 +110,8 @@ export async function getOverdueCheckInClientsForCoach(coachId: string): Promise
 
     const overdue: OverdueCheckInClient[] = [];
     const pauseStatusByClient = await getCoachPauseStatusMap(clients.map((c) => c.id));
+    const { getActiveCheckInRequestMapForCoach } = await import("@/lib/checkInRequests");
+    const requestMap = await getActiveCheckInRequestMapForCoach(coachId);
 
     for (const client of clients) {
         if (isInactiveAccount(client)) continue;
@@ -145,6 +150,7 @@ export async function getOverdueCheckInClientsForCoach(coachId: string): Promise
         const periodWeek = dueState.outstandingWeekNumber ?? dueState.weekNumber;
         const dueDateLabel = formatCheckInDueDate(dueState.currentPeriodDueDate);
         const daysOverdue = dueState.isOverdue ? (dueState.daysOverdue ?? null) : null;
+        const activeRequest = requestMap.get(`${client.id}:${periodWeek}`);
 
         overdue.push({
             id: client.id,
@@ -162,6 +168,8 @@ export async function getOverdueCheckInClientsForCoach(coachId: string): Promise
             daysOverdue,
             isOverdue: dueState.isOverdue,
             isDueToday: dueState.isDueToday,
+            requestedAt: activeRequest?.requestedAt.toISOString() ?? null,
+            lastRequestedAt: activeRequest?.lastRequestedAt.toISOString() ?? null,
         });
     }
 
