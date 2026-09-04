@@ -10,11 +10,22 @@ import { ensureLogSetExerciseNameColumn } from "@/lib/logSetExerciseName";
 import { ensureLogSetExerciseOrderColumn, resolvePersistedExerciseOrder } from "@/lib/logSetExerciseOrder";
 import { logSetDisplayOrderBy } from "@/lib/logSetGrouping";
 import { canonicalExerciseName } from "@/lib/exerciseCanonical";
-import { buildRecordsByExercise, evaluateSessionPrs } from "@/lib/exercisePrs";
 import { loadWorkoutHistorySessions } from "@/lib/workoutHistory";
 import { EXERCISE_NOTE_MAX_LENGTH, saveLogExerciseNotes } from "@/lib/logExerciseNotes";
 import { closeOtherActiveSessions, getActiveWorkoutSession, resumeWorkoutHref, resumableSessionSince } from "@/lib/activeWorkoutSession";
+import { ensureExerciseTrackingSchema } from "@/lib/exerciseTracking/ensure";
+import { resolveTrackingSchema } from "@/lib/exerciseTracking/resolve";
+import {
+    applySetToMetricRecords,
+    cloneMetricRecords,
+    EMPTY_METRIC_RECORDS,
+    evaluateMetricAwarePr,
+    type MetricExerciseRecords,
+} from "@/lib/exerciseTracking/prs";
+import { calculateOneRM } from "@/lib/oneRepMax";
 import { z } from "zod";
+
+const optionalNonNeg = z.number().min(0).optional();
 
 const logSchema = z.object({
     workoutId: z.string(),
@@ -37,6 +48,15 @@ const logSchema = z.object({
         reps: z.number().optional(),
         weightKg: z.number().optional(),
         rpe: z.number().min(1).max(10).optional(),
+        durationSec: optionalNonNeg,
+        distanceMeters: optionalNonNeg,
+        heightCm: optionalNonNeg,
+        resistance: optionalNonNeg,
+        inclinePct: optionalNonNeg,
+        calories: optionalNonNeg,
+        heartRate: z.number().int().min(0).max(250).optional(),
+        speedKph: optionalNonNeg,
+        rir: optionalNonNeg,
         isWarmup: z.boolean().default(false),
         isCompleted: z.boolean().default(true),
         videoUrl: z.string().optional(),
@@ -57,11 +77,14 @@ type ParsedLogSet = z.infer<typeof logSchema>["sets"][number];
 
 function hasPerformedSetData(set: ParsedLogSet) {
     return (
-        typeof set.reps === "number"
-        && set.reps > 0
-        && typeof set.weightKg === "number"
-        && Number.isFinite(set.weightKg)
-        && set.weightKg >= 0
+        (typeof set.reps === "number" && set.reps > 0) ||
+        (typeof set.weightKg === "number" && Number.isFinite(set.weightKg) && set.weightKg > 0) ||
+        (typeof set.durationSec === "number" && set.durationSec > 0) ||
+        (typeof set.distanceMeters === "number" && set.distanceMeters > 0) ||
+        (typeof set.heightCm === "number" && set.heightCm > 0) ||
+        (typeof set.speedKph === "number" && set.speedKph > 0) ||
+        (typeof set.calories === "number" && set.calories > 0) ||
+        (typeof set.resistance === "number" && set.resistance > 0)
     );
 }
 
@@ -70,6 +93,7 @@ export async function POST(req: Request) {
     await ensureDbSchema();
     await ensureLogSetExerciseNameColumn();
     await ensureLogSetExerciseOrderColumn();
+    await ensureExerciseTrackingSchema();
     const authResult = await requireAuthUser(req);
     if (authResult.error) return authResult.error;
     const user = authResult.user;
@@ -292,20 +316,79 @@ export async function POST(req: Request) {
     if (status === "COMPLETED") {
         const excludeLogId = existingInProgress?.id ?? existingCompleted?.id;
         const history = await loadWorkoutHistorySessions(subjectUserId, { excludeLogId });
-        const records = buildRecordsByExercise(history);
-        const evaluated = evaluateSessionPrs(
-            setsWithRealIds.map((set) => ({
-                exerciseName: resolvedSetName(set),
+
+        // Build metric-aware records per exercise identity using each exercise's tracking schema.
+        const schemaByName = new Map<string, Awaited<ReturnType<typeof resolveTrackingSchema>>>();
+        const recordsByName = new Map<string, MetricExerciseRecords>();
+
+        const ensureSchema = async (name: string) => {
+            if (!schemaByName.has(name)) {
+                schemaByName.set(name, await resolveTrackingSchema(name));
+            }
+            return schemaByName.get(name)!;
+        };
+
+        for (const session of history) {
+            for (const set of session.sets) {
+                const name = set.exerciseName?.trim() || "";
+                if (!name) continue;
+                const schema = await ensureSchema(name);
+                if (!recordsByName.has(name)) {
+                    recordsByName.set(name, cloneMetricRecords(EMPTY_METRIC_RECORDS));
+                }
+                const metrics = {
+                    weightKg: set.weightKg,
+                    reps: set.reps,
+                    durationSec: (set as { durationSec?: number | null }).durationSec,
+                    distanceMeters: (set as { distanceMeters?: number | null }).distanceMeters,
+                    heightCm: (set as { heightCm?: number | null }).heightCm,
+                };
+                const oneRm =
+                    (metrics.weightKg ?? 0) > 0 && (metrics.reps ?? 0) > 0
+                        ? calculateOneRM(metrics.weightKg!, metrics.reps!)
+                        : null;
+                applySetToMetricRecords(recordsByName.get(name)!, metrics, schema, oneRm);
+            }
+        }
+
+        // Evaluate each set in order, advancing records within the session.
+        const liveRecords = new Map<string, MetricExerciseRecords>();
+        for (const [name, rec] of recordsByName) {
+            liveRecords.set(name, cloneMetricRecords(rec));
+        }
+
+        for (let index = 0; index < setsWithRealIds.length; index++) {
+            const set = setsWithRealIds[index];
+            const name = resolvedSetName(set);
+            const schema = await ensureSchema(name);
+            if (!liveRecords.has(name)) {
+                liveRecords.set(name, cloneMetricRecords(EMPTY_METRIC_RECORDS));
+            }
+            const board = liveRecords.get(name)!;
+            const metrics = {
                 weightKg: set.weightKg ?? null,
                 reps: set.reps ?? null,
+                durationSec: set.durationSec ?? null,
+                distanceMeters: set.distanceMeters ?? null,
+                heightCm: set.heightCm ?? null,
+                resistance: set.resistance ?? null,
+                inclinePct: set.inclinePct ?? null,
+                calories: set.calories ?? null,
+                heartRate: set.heartRate ?? null,
+                speedKph: set.speedKph ?? null,
+                rpe: set.rpe ?? null,
+                rir: set.rir ?? null,
                 isWarmup: set.isWarmup,
                 isCompleted: set.isCompleted,
-            })),
-            records
-        );
-        evaluated.forEach((entry, index) => {
-            if (entry.pr.isPr) prBySetIndex.set(index, true);
-        });
+            };
+            const oneRm =
+                (metrics.weightKg ?? 0) > 0 && (metrics.reps ?? 0) > 0
+                    ? calculateOneRM(metrics.weightKg!, metrics.reps!)
+                    : null;
+            const pr = evaluateMetricAwarePr(metrics, board, schema, oneRm);
+            if (pr.isPr) prBySetIndex.set(index, true);
+            applySetToMetricRecords(board, metrics, schema, oneRm);
+        }
     }
 
     const setsCreate = setsWithRealIds.map((s, index) => ({
@@ -316,6 +399,15 @@ export async function POST(req: Request) {
         reps: s.reps,
         weightKg: s.weightKg,
         rpe: s.rpe,
+        durationSec: s.durationSec ?? null,
+        distanceMeters: s.distanceMeters ?? null,
+        heightCm: s.heightCm ?? null,
+        resistance: s.resistance ?? null,
+        inclinePct: s.inclinePct ?? null,
+        calories: s.calories ?? null,
+        heartRate: s.heartRate ?? null,
+        speedKph: s.speedKph ?? null,
+        rir: s.rir ?? null,
         isWarmup: s.isWarmup,
         isCompleted: s.isCompleted,
         isPR: prBySetIndex.get(index) ?? false,

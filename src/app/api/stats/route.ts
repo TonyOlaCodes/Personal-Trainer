@@ -188,11 +188,23 @@ export async function GET() {
 
             if (!exerciseHistory[exName]) exerciseHistory[exName] = [];
             if (isWorkingSet) {
+                const extras = {
+                    durationSec: typeof set.durationSec === "number" ? set.durationSec : undefined,
+                    distanceMeters: typeof set.distanceMeters === "number" ? set.distanceMeters : undefined,
+                    heightCm: typeof set.heightCm === "number" ? set.heightCm : undefined,
+                    primaryMetric: (
+                        sWeight > 0 ? "weight" :
+                        (set.durationSec ?? 0) > 0 ? "duration" :
+                        (set.distanceMeters ?? 0) > 0 ? "distance" :
+                        (set.heightCm ?? 0) > 0 ? "height" :
+                        sReps > 0 ? "reps" : "weight"
+                    ) as "weight" | "duration" | "distance" | "height" | "reps",
+                };
                 const existingSession = exerciseHistory[exName].find((h: any) => h.sessionId === log.id);
                 if (existingSession) {
-                    mergeSetIntoExerciseSession(existingSession, sWeight, sReps, sVol);
+                    mergeSetIntoExerciseSession(existingSession, sWeight, sReps, sVol, extras);
                 } else {
-                    exerciseHistory[exName].push(createExerciseSessionEntry(log.id, sessionDate, sWeight, sReps, sVol));
+                    exerciseHistory[exName].push(createExerciseSessionEntry(log.id, sessionDate, sWeight, sReps, sVol, extras));
                 }
             }
         });

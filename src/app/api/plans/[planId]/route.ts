@@ -16,6 +16,12 @@ interface PlanExercisePayload {
     sets: number;
     reps: string;
     weightTargetKg?: number | null;
+    targetDurationSec?: number | null;
+    targetDistanceMeters?: number | null;
+    targetHeightCm?: number | null;
+    targetRpe?: number | null;
+    targetResistance?: number | null;
+    targetInclinePct?: number | null;
     restSeconds?: number | null;
     notes?: string | null;
     order?: number | null;

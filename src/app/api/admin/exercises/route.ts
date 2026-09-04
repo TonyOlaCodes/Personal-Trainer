@@ -3,11 +3,26 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { updateGlobalExerciseMedia } from "@/lib/exerciseMedia";
 import { mergeExercisesIntoTarget, syncExerciseRename } from "@/lib/mergeExercises";
+import {
+    TRACKING_PRESETS,
+    type ExerciseTrackingSchema,
+    type TrackingPreset,
+} from "@/lib/exerciseTracking/types";
+import {
+    ensureExerciseTrackingSchema,
+    normalizeTrackingSchema,
+    parseTrackingSchemaFromDb,
+    saveTrackingSchema,
+} from "@/lib/exerciseTracking";
 import { z } from "zod";
 
 const optionalUrl = z.preprocess(
     (value) => typeof value === "string" && value.trim() === "" ? null : value,
     z.string().url("Enter a valid URL").nullable().optional()
+);
+
+const trackingPresetEnum = z.enum(
+    TRACKING_PRESETS as unknown as [TrackingPreset, ...TrackingPreset[]]
 );
 
 const exerciseSchema = z.object({
@@ -17,6 +32,20 @@ const exerciseSchema = z.object({
     videoUrl: optionalUrl,
     instructions: z.string().trim().nullable().optional(),
     thumbnailUrl: optionalUrl,
+    trackingPreset: trackingPresetEnum.optional().nullable(),
+    trackingFields: z
+        .array(
+            z.object({
+                key: z.string(),
+                enabled: z.boolean(),
+                required: z.boolean().optional(),
+                planTarget: z.boolean().optional(),
+                usedForPr: z.boolean().optional(),
+                usedForProgress: z.boolean().optional(),
+            })
+        )
+        .optional()
+        .nullable(),
 });
 
 const mergeSchema = z.object({
@@ -29,6 +58,45 @@ const mergeSchema = z.object({
 
 function cleanText(value?: string | null) {
     return value && value.trim() ? value.trim() : null;
+}
+
+function schemaFromPayload(data: {
+    trackingPreset?: TrackingPreset | null;
+    trackingFields?: Array<{
+        key: string;
+        enabled: boolean;
+        required?: boolean;
+        planTarget?: boolean;
+        usedForPr?: boolean;
+        usedForProgress?: boolean;
+    }> | null;
+}): ExerciseTrackingSchema {
+    return normalizeTrackingSchema({
+        preset: data.trackingPreset ?? undefined,
+        fields: (data.trackingFields ?? undefined) as ExerciseTrackingSchema["fields"] | undefined,
+    });
+}
+
+function withTrackingResponse(
+    exercise: {
+        id: string;
+        name: string;
+        videoUrl: string | null;
+        instructions: string | null;
+        thumbnailUrl: string | null;
+        muscleGroup: string | null;
+        trackingPreset?: string | null;
+        trackingFields?: string | null;
+        createdAt?: Date;
+    },
+    schema: ExerciseTrackingSchema
+) {
+    return {
+        ...exercise,
+        trackingPreset: schema.preset,
+        trackingFields: schema.fields,
+        trackingSchema: schema,
+    };
 }
 
 async function requireAdmin() {
@@ -79,10 +147,18 @@ export async function POST(req: Request) {
                     db: tx,
                 })
             );
+            await ensureExerciseTrackingSchema();
             const target = await prisma.globalExercise.findFirst({
                 where: { name: { equals: result.targetName, mode: "insensitive" } },
             });
-            return NextResponse.json({ ...result, exercise: target });
+            if (!target) {
+                return NextResponse.json({ ...result, exercise: target });
+            }
+            const schema = parseTrackingSchemaFromDb(target);
+            return NextResponse.json({
+                ...result,
+                exercise: withTrackingResponse(target, schema),
+            });
         } catch (error) {
             console.error("[Admin Exercises] Merge failed:", error);
             return NextResponse.json(
@@ -94,17 +170,31 @@ export async function POST(req: Request) {
 
     const parsed = exerciseSchema.safeParse(body);
     if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-    const { name, muscleGroup, videoUrl, instructions, thumbnailUrl } = parsed.data;
+    const { name, muscleGroup, videoUrl, instructions, thumbnailUrl, trackingPreset, trackingFields } =
+        parsed.data;
 
     try {
+        await ensureExerciseTrackingSchema();
+        const schema = schemaFromPayload({ trackingPreset, trackingFields });
+
         const exercise = await prisma.globalExercise.create({
-            data: { name, muscleGroup: cleanText(muscleGroup), videoUrl: videoUrl ?? null }
+            data: {
+                name,
+                muscleGroup: cleanText(muscleGroup),
+                videoUrl: videoUrl ?? null,
+            },
         });
         await updateGlobalExerciseMedia(exercise.id, {
             instructions: cleanText(instructions),
             thumbnailUrl: thumbnailUrl ?? null,
         });
-        return NextResponse.json(exercise, { status: 201 });
+        await saveTrackingSchema(exercise.id, schema);
+
+        const refreshed = await prisma.globalExercise.findUnique({ where: { id: exercise.id } });
+        return NextResponse.json(
+            withTrackingResponse(refreshed ?? exercise, schema),
+            { status: 201 }
+        );
     } catch (error) {
         console.error("[Admin Exercises] Create failed:", error);
         return NextResponse.json({ error: "Already exists" }, { status: 400 });
@@ -118,11 +208,15 @@ export async function PATCH(req: Request) {
     const parsed = exerciseSchema.extend({ id: z.string().min(1) }).safeParse(await req.json());
     if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
-    const { id, name, muscleGroup, videoUrl, instructions, thumbnailUrl } = parsed.data;
+    const { id, name, muscleGroup, videoUrl, instructions, thumbnailUrl, trackingPreset, trackingFields } =
+        parsed.data;
 
     try {
+        await ensureExerciseTrackingSchema();
         const existing = await prisma.globalExercise.findUnique({ where: { id } });
         if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+        const schema = schemaFromPayload({ trackingPreset, trackingFields });
 
         const exercise = await prisma.globalExercise.update({
             where: { id },
@@ -136,6 +230,7 @@ export async function PATCH(req: Request) {
             instructions: cleanText(instructions),
             thumbnailUrl: thumbnailUrl ?? null,
         });
+        await saveTrackingSchema(exercise.id, schema);
 
         // Keep plan exercises + logged history names aligned with the dictionary rename.
         await syncExerciseRename({
@@ -144,7 +239,8 @@ export async function PATCH(req: Request) {
             muscleGroup: cleanText(muscleGroup),
         });
 
-        return NextResponse.json(exercise);
+        const refreshed = await prisma.globalExercise.findUnique({ where: { id: exercise.id } });
+        return NextResponse.json(withTrackingResponse(refreshed ?? exercise, schema));
     } catch (error) {
         console.error("[Admin Exercises] Update failed:", error);
         return NextResponse.json({ error: "Could not update exercise" }, { status: 400 });

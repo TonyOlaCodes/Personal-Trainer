@@ -9,8 +9,14 @@ import {
 import { cn, generateId, formatDate, isSameCalendarDay, parseLogDate, toDateKey, toLoggedAtIso, calculateOneRM } from "@/lib/utils";
 import { appendReturnTo, getReturnToFromSearchParams } from "@/lib/navigation";
 import { notifyWorkoutStatsChanged } from "@/lib/workoutStatsRefresh";
-import { isCardio, ExerciseAutocomplete } from "@/components/shared/ExerciseAutocomplete";
+import { ExerciseAutocomplete } from "@/components/shared/ExerciseAutocomplete";
 import { WorkoutFeelingPicker } from "@/components/shared/WorkoutFeelingPicker";
+import {
+    SetMetricHeaders,
+    SetMetricInputs,
+    emptySetMetrics,
+    type SetMetricStrings,
+} from "@/components/workout/SetMetricInputs";
 import { useScrollLock } from "@/hooks/useScrollLock";
 import { useIsolateScroll } from "@/hooks/useIsolateScroll";
 import { useVisualViewport } from "@/hooks/useVisualViewportHeight";
@@ -18,11 +24,20 @@ import { exerciseIdentityKey } from "@/lib/exerciseIdentity";
 import {
     EMPTY_EXERCISE_RECORDS,
     evaluateLiveExercisePrs,
-    formatPreviousSetLine,
     type ExerciseRecords,
     type PreviousSessionPerformance,
+    type PreviousSet,
     type SetPrResult,
 } from "@/lib/exercisePrs";
+import {
+    coerceSetMetrics,
+    formatSetSummary,
+    guessTrackingSchema,
+    hasPerformedMetrics,
+    usesStrengthOneRm,
+    type ExerciseTrackingSchema,
+    type TrackingFieldKey,
+} from "@/lib/exerciseTracking";
 import { EXERCISE_NOTE_MAX_LENGTH } from "@/lib/logExerciseNotesShared";
 import { buildWorkoutMuscleBreakdown } from "@/lib/exerciseMuscles";
 import { MuscleMap, MuscleChips } from "@/components/shared/MuscleMap";
@@ -37,6 +52,9 @@ interface Exercise {
     sets: number;
     reps: string;
     weightTargetKg?: number | null;
+    targetDurationSec?: number | null;
+    targetDistanceMeters?: number | null;
+    targetHeightCm?: number | null;
     notes?: string | null;
     order?: number;
     muscleGroup?: string | null;
@@ -48,11 +66,8 @@ interface Workout {
     exercises: Exercise[];
 }
 
-interface SetLog {
+interface SetLog extends SetMetricStrings {
     setNumber: number;
-    reps: number;
-    weightKg: string;
-    rpe: string;
     isCompleted: boolean;
     isWarmup: boolean;
     videoUrl?: string;
@@ -65,9 +80,88 @@ interface ActiveLogSet {
     reps?: number | null;
     weightKg?: number | null;
     rpe?: number | null;
+    durationSec?: number | null;
+    distanceMeters?: number | null;
+    heightCm?: number | null;
+    resistance?: number | null;
+    inclinePct?: number | null;
+    calories?: number | null;
+    heartRate?: number | null;
+    speedKph?: number | null;
+    rir?: number | null;
     isCompleted?: boolean | null;
     isWarmup?: boolean | null;
     videoUrl?: string | null;
+}
+
+function optionalNumToString(value?: number | null): string {
+    return value != null && Number.isFinite(value) ? String(value) : "";
+}
+
+function parseOptionalFloat(value: string): number | undefined {
+    if (!value.trim()) return undefined;
+    const n = parseFloat(value);
+    return Number.isFinite(n) ? n : undefined;
+}
+
+function setLogToPayloadMetrics(set: SetLog) {
+    return {
+        reps: set.reps || undefined,
+        weightKg: parseOptionalFloat(set.weightKg),
+        rpe: set.rpe ? parseInt(set.rpe, 10) || undefined : undefined,
+        durationSec: parseOptionalFloat(set.durationSec),
+        distanceMeters: parseOptionalFloat(set.distanceMeters),
+        heightCm: parseOptionalFloat(set.heightCm),
+        resistance: parseOptionalFloat(set.resistance),
+        inclinePct: parseOptionalFloat(set.inclinePct),
+        calories: parseOptionalFloat(set.calories),
+        heartRate: parseOptionalFloat(set.heartRate),
+        speedKph: parseOptionalFloat(set.speedKph),
+        rir: parseOptionalFloat(set.rir),
+    };
+}
+
+function activeSetToSetLog(s: ActiveLogSet): SetLog {
+    return {
+        setNumber: s.setNumber,
+        ...emptySetMetrics(),
+        reps: s.reps ?? 0,
+        weightKg: optionalNumToString(s.weightKg),
+        rpe: optionalNumToString(s.rpe),
+        durationSec: optionalNumToString(s.durationSec),
+        distanceMeters: optionalNumToString(s.distanceMeters),
+        heightCm: optionalNumToString(s.heightCm),
+        resistance: optionalNumToString(s.resistance),
+        inclinePct: optionalNumToString(s.inclinePct),
+        calories: optionalNumToString(s.calories),
+        heartRate: optionalNumToString(s.heartRate),
+        speedKph: optionalNumToString(s.speedKph),
+        rir: optionalNumToString(s.rir),
+        isCompleted: s.isCompleted ?? true,
+        isWarmup: s.isWarmup ?? false,
+        videoUrl: s.videoUrl ?? undefined,
+    };
+}
+
+function blankSetLog(setNumber: number, seed?: Partial<SetMetricStrings>): SetLog {
+    return {
+        setNumber,
+        ...emptySetMetrics(),
+        ...seed,
+        isCompleted: false,
+        isWarmup: false,
+    };
+}
+
+function getSchemaForExercise(
+    ex: Pick<Exercise, "id" | "name" | "muscleGroup">,
+    trackingSchemas: Record<string, ExerciseTrackingSchema>
+): ExerciseTrackingSchema {
+    return (
+        trackingSchemas[ex.id] ||
+        trackingSchemas[exerciseIdentityKey(ex.name)] ||
+        guessTrackingSchema(ex.name, ex.muscleGroup)
+    );
 }
 
 function sortWorkoutExercises(exercises: Exercise[]): Exercise[] {
@@ -91,14 +185,7 @@ function resolvePersistedExerciseOrderValue(exercise: Exercise | undefined, list
 function buildInitialLogs(exercises: Exercise[]): Record<string, SetLog[]> {
     const initialLogs: Record<string, SetLog[]> = {};
     exercises.forEach((ex) => {
-        initialLogs[ex.id] = Array.from({ length: ex.sets }, (_, i) => ({
-            setNumber: i + 1,
-            reps: 0,
-            weightKg: "",
-            rpe: "",
-            isCompleted: false,
-            isWarmup: false,
-        }));
+        initialLogs[ex.id] = Array.from({ length: ex.sets }, (_, i) => blankSetLog(i + 1));
     });
     return initialLogs;
 }
@@ -182,6 +269,9 @@ function restoreSessionState(
                 sets: ex.sets || 1,
                 reps: ex.reps || "10",
                 weightTargetKg: ex.weightTargetKg,
+                targetDurationSec: ex.targetDurationSec,
+                targetDistanceMeters: ex.targetDistanceMeters,
+                targetHeightCm: ex.targetHeightCm,
                 notes: ex.notes,
                 order: ex.order ?? 0,
                 muscleGroup: ex.muscleGroup ?? null,
@@ -189,15 +279,7 @@ function restoreSessionState(
         }
 
         if (!restored[s.exerciseId]) restored[s.exerciseId] = [];
-        restored[s.exerciseId].push({
-            setNumber: s.setNumber,
-            reps: s.reps ?? 0,
-            weightKg: s.weightKg?.toString() ?? "",
-            rpe: s.rpe?.toString() ?? "",
-            isCompleted: s.isCompleted ?? true,
-            isWarmup: s.isWarmup ?? false,
-            videoUrl: s.videoUrl ?? undefined,
-        });
+        restored[s.exerciseId].push(activeSetToSetLog(s));
     });
 
     reconstructedExercises.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
@@ -233,6 +315,7 @@ function restoreSessionState(
 
 interface Props {
     workout: Workout;
+    trackingSchemas?: Record<string, ExerciseTrackingSchema>;
     exerciseMedia?: Record<string, ExercisePreviewMedia>;
     logDate?: string;
     clientId?: string;
@@ -311,30 +394,87 @@ function formatTargetWeight(weight?: number | null) {
     return Number.isInteger(weight) ? String(weight) : weight.toFixed(1).replace(/\.0$/, "");
 }
 
-function hasEnteredWeight(value: string) {
-    if (value.trim() === "") return false;
-    const parsed = Number(value);
-    return Number.isFinite(parsed) && parsed >= 0;
+function hasPerformedSetData(set: SetLog, schema: ExerciseTrackingSchema) {
+    return hasPerformedMetrics(
+        coerceSetMetrics({
+            weightKg: parseOptionalFloat(set.weightKg),
+            reps: set.reps,
+            rpe: set.rpe ? parseInt(set.rpe, 10) : undefined,
+            durationSec: parseOptionalFloat(set.durationSec),
+            distanceMeters: parseOptionalFloat(set.distanceMeters),
+            heightCm: parseOptionalFloat(set.heightCm),
+            resistance: parseOptionalFloat(set.resistance),
+            inclinePct: parseOptionalFloat(set.inclinePct),
+            calories: parseOptionalFloat(set.calories),
+            heartRate: parseOptionalFloat(set.heartRate),
+            speedKph: parseOptionalFloat(set.speedKph),
+            rir: parseOptionalFloat(set.rir),
+        }),
+        schema
+    );
 }
 
-function hasPerformedSetData(set: Pick<SetLog, "reps" | "weightKg">, cardio = false) {
-    if (cardio) return set.reps > 0 || hasEnteredWeight(set.weightKg);
-    return set.reps > 0 && hasEnteredWeight(set.weightKg);
-}
-
-function getExerciseTargetSummary(ex: Exercise, cardio: boolean) {
-    const parts = [`${ex.sets} ${cardio ? "rounds" : "sets"}`];
-    const reps = ex.reps?.trim();
+function getExerciseTargetSummary(ex: Exercise, schema: ExerciseTrackingSchema) {
+    const parts = [`${ex.sets} sets`];
+    if (usesStrengthOneRm(schema) || schema.fields.some((f) => f.key === "reps" && f.enabled)) {
+        const reps = ex.reps?.trim();
+        if (reps) parts.push(`${reps} reps`);
+    }
     const targetWeight = formatTargetWeight(ex.weightTargetKg);
-
-    if (reps) parts.push(`${reps} ${cardio ? "mins" : "reps"}`);
-    if (targetWeight) parts.push(`${targetWeight} kg`);
-
+    if (targetWeight && schema.fields.some((f) => f.key === "weight" && f.enabled)) {
+        parts.push(`${targetWeight} kg`);
+    }
+    if (ex.targetDurationSec != null && ex.targetDurationSec > 0) {
+        parts.push(`${ex.targetDurationSec}s`);
+    }
+    if (ex.targetDistanceMeters != null && ex.targetDistanceMeters > 0) {
+        parts.push(`${ex.targetDistanceMeters} m`);
+    }
+    if (ex.targetHeightCm != null && ex.targetHeightCm > 0) {
+        parts.push(`${ex.targetHeightCm} cm`);
+    }
     return parts.join(" / ");
 }
 
+function previousSetSummary(set: PreviousSet, schema: ExerciseTrackingSchema) {
+    return formatSetSummary(
+        {
+            weightKg: set.weightKg,
+            reps: set.reps,
+            rpe: set.rpe,
+            durationSec: set.durationSec,
+            distanceMeters: set.distanceMeters,
+            heightCm: set.heightCm,
+            resistance: set.resistance,
+            inclinePct: set.inclinePct,
+            calories: set.calories,
+            heartRate: set.heartRate,
+            speedKph: set.speedKph,
+        },
+        schema
+    );
+}
+
+const METRIC_SAVE_KEYS = [
+    "isCompleted",
+    "weightKg",
+    "reps",
+    "rpe",
+    "durationSec",
+    "distanceMeters",
+    "heightCm",
+    "resistance",
+    "inclinePct",
+    "calories",
+    "heartRate",
+    "speedKph",
+    "rir",
+    "isWarmup",
+] as const;
+
 export function WorkoutLogClient({
     workout,
+    trackingSchemas: initialTrackingSchemas = {},
     exerciseMedia: initialExerciseMedia = {},
     logDate,
     clientId,
@@ -363,6 +503,10 @@ export function WorkoutLogClient({
     const [previousSessions, setPreviousSessions] = useState(initialPreviousSessions);
     const [exerciseRecords, setExerciseRecords] = useState(initialExerciseRecords);
     const [mediaByName, setMediaByName] = useState(initialExerciseMedia);
+    const [trackingSchemas] = useState(initialTrackingSchemas);
+
+    const schemaFor = (ex: Pick<Exercise, "id" | "name" | "muscleGroup">) =>
+        getSchemaForExercise(ex, trackingSchemas);
 
     const [initialSession] = useState(() => {
         if (initialActiveLog) {
@@ -534,6 +678,41 @@ export function WorkoutLogClient({
         return "";
     };
 
+    const getMetricPlaceholders = (
+        ex: Exercise,
+        setNumber: number
+    ): Partial<Record<TrackingFieldKey, string>> => {
+        const lastSet = findLastCompletedSet(ex.name, setNumber);
+        const ph: Partial<Record<TrackingFieldKey, string>> = {};
+        const weight = getWeightPlaceholder(ex.name, setNumber) || formatTargetWeight(ex.weightTargetKg);
+        if (weight) ph.weight = weight;
+        const reps = getRepsPlaceholder(ex.name, setNumber) || ex.reps?.trim() || "";
+        if (reps) ph.reps = reps;
+        const rpe = getRpePlaceholder(ex.name, setNumber);
+        if (rpe) ph.rpe = rpe;
+        if (lastSet?.durationSec != null && lastSet.durationSec > 0) {
+            ph.duration = String(lastSet.durationSec);
+        } else if (ex.targetDurationSec != null && ex.targetDurationSec > 0) {
+            ph.duration = String(ex.targetDurationSec);
+        }
+        if (lastSet?.distanceMeters != null && lastSet.distanceMeters > 0) {
+            ph.distance = String(lastSet.distanceMeters);
+        } else if (ex.targetDistanceMeters != null && ex.targetDistanceMeters > 0) {
+            ph.distance = String(ex.targetDistanceMeters);
+        }
+        if (lastSet?.heightCm != null && lastSet.heightCm > 0) {
+            ph.height = String(lastSet.heightCm);
+        } else if (ex.targetHeightCm != null && ex.targetHeightCm > 0) {
+            ph.height = String(ex.targetHeightCm);
+        }
+        if (lastSet?.resistance != null) ph.resistance = String(lastSet.resistance);
+        if (lastSet?.inclinePct != null) ph.incline = String(lastSet.inclinePct);
+        if (lastSet?.calories != null && lastSet.calories > 0) ph.calories = String(lastSet.calories);
+        if (lastSet?.heartRate != null && lastSet.heartRate > 0) ph.heartRate = String(lastSet.heartRate);
+        if (lastSet?.speedKph != null && lastSet.speedKph > 0) ph.speed = String(lastSet.speedKph);
+        return ph;
+    };
+
     // Restore an in-progress session if one exists — never auto-start a new one.
     useEffect(() => {
         if (initialActiveLog || activeLogId) {
@@ -620,6 +799,15 @@ export function WorkoutLogClient({
                         reps?: number | null;
                         weightKg?: number | null;
                         rpe?: number | null;
+                        durationSec?: number | null;
+                        distanceMeters?: number | null;
+                        heightCm?: number | null;
+                        resistance?: number | null;
+                        inclinePct?: number | null;
+                        calories?: number | null;
+                        heartRate?: number | null;
+                        speedKph?: number | null;
+                        rir?: number | null;
                         isCompleted?: boolean | null;
                         isWarmup?: boolean | null;
                         videoUrl?: string | null;
@@ -629,6 +817,15 @@ export function WorkoutLogClient({
                         reps: set.reps,
                         weightKg: set.weightKg,
                         rpe: set.rpe,
+                        durationSec: set.durationSec,
+                        distanceMeters: set.distanceMeters,
+                        heightCm: set.heightCm,
+                        resistance: set.resistance,
+                        inclinePct: set.inclinePct,
+                        calories: set.calories,
+                        heartRate: set.heartRate,
+                        speedKph: set.speedKph,
+                        rir: set.rir,
                         isCompleted: set.isCompleted,
                         isWarmup: set.isWarmup,
                         videoUrl: set.videoUrl,
@@ -879,11 +1076,9 @@ export function WorkoutLogClient({
                 exerciseName: exInfo?.name || "Unknown",
                 exerciseOrder: resolvePersistedExerciseOrderValue(exInfo, exOrder),
                 setNumber: s.setNumber,
-                reps: s.reps,
-                weightKg: s.weightKg ? parseFloat(s.weightKg) : undefined,
-                rpe: s.rpe ? parseInt(s.rpe) : undefined,
+                ...setLogToPayloadMetrics(s),
                 isWarmup: s.isWarmup,
-                isCompleted: s.isCompleted || hasPerformedSetData(s, exInfo ? isCardio(exInfo.name) : false),
+                isCompleted: s.isCompleted || (exInfo ? hasPerformedSetData(s, schemaFor(exInfo)) : false),
                 videoUrl: s.videoUrl || undefined,
             }));
         });
@@ -964,7 +1159,8 @@ export function WorkoutLogClient({
         if (!sessionActive) return result;
 
         for (const ex of activeExercises) {
-            if (isCardio(ex.name, ex.muscleGroup)) continue;
+            const schema = schemaFor(ex);
+            if (!usesStrengthOneRm(schema)) continue;
             const sets = logs[ex.id] ?? [];
             result[ex.id] = evaluateLiveExercisePrs(
                 sets.map((set) => ({
@@ -977,7 +1173,7 @@ export function WorkoutLogClient({
             );
         }
         return result;
-    }, [sessionActive, activeExercises, logs, exerciseRecords]);
+    }, [sessionActive, activeExercises, logs, exerciseRecords, trackingSchemas]);
 
     const viewport = useVisualViewport();
 
@@ -1022,7 +1218,7 @@ export function WorkoutLogClient({
             if (
                 updates.isCompleted === undefined
                 && !currentSet.isCompleted
-                && hasPerformedSetData(nextSet, exercise ? isCardio(exercise.name) : false)
+                && hasPerformedSetData(nextSet, exercise ? schemaFor(exercise) : guessTrackingSchema(""))
             ) {
                 finalUpdates.isCompleted = true;
             }
@@ -1031,7 +1227,7 @@ export function WorkoutLogClient({
                 ...prev,
                 [exId]: prev[exId].map((set, i) => i === setIdx ? { ...set, ...finalUpdates } : set),
             };
-            if (Object.keys(finalUpdates).some(k => ["isCompleted", "weightKg", "reps", "rpe"].includes(k))) {
+            if (Object.keys(finalUpdates).some((k) => (METRIC_SAVE_KEYS as readonly string[]).includes(k))) {
                 saveProgress(next);
             }
             return next;
@@ -1046,14 +1242,20 @@ export function WorkoutLogClient({
                 ...prev,
                 [exId]: [
                     ...sets,
-                    {
-                        setNumber: sets.length + 1,
-                        reps: 0,
+                    blankSetLog(sets.length + 1, {
                         weightKg: lastSet?.weightKg || "",
+                        reps: lastSet?.reps || 0,
                         rpe: lastSet?.rpe || "",
-                        isCompleted: false,
-                        isWarmup: false,
-                    },
+                        durationSec: lastSet?.durationSec || "",
+                        distanceMeters: lastSet?.distanceMeters || "",
+                        heightCm: lastSet?.heightCm || "",
+                        resistance: lastSet?.resistance || "",
+                        inclinePct: lastSet?.inclinePct || "",
+                        calories: lastSet?.calories || "",
+                        heartRate: lastSet?.heartRate || "",
+                        speedKph: lastSet?.speedKph || "",
+                        rir: lastSet?.rir || "",
+                    }),
                 ],
             };
             saveProgress(next);
@@ -1102,14 +1304,7 @@ export function WorkoutLogClient({
                 next[newExId] = existingSets;
             } else {
                 const count = originalEx?.sets || 3;
-                next[newExId] = Array.from({ length: count }, (_, i) => ({
-                    setNumber: i + 1,
-                    reps: 0,
-                    weightKg: "",
-                    rpe: "",
-                    isCompleted: false,
-                    isWarmup: false,
-                }));
+                next[newExId] = Array.from({ length: count }, (_, i) => blankSetLog(i + 1));
             }
             delete next[substitutingId];
             
@@ -1140,14 +1335,7 @@ export function WorkoutLogClient({
         setLogs(prev => {
             const next = {
                 ...prev,
-                [newEx.id]: Array.from({ length: 3 }, (_, i) => ({
-                    setNumber: i + 1,
-                    reps: 0,
-                    weightKg: "",
-                    rpe: "",
-                    isCompleted: false,
-                    isWarmup: false,
-                })),
+                [newEx.id]: Array.from({ length: 3 }, (_, i) => blankSetLog(i + 1)),
             };
             saveProgress(next, nextExercises);
             return next;
@@ -1176,7 +1364,7 @@ export function WorkoutLogClient({
         );
         return flattenedSets.some((set) => {
             const exercise = activeExercises.find((ex) => ex.id === set.exerciseId);
-            return set.isCompleted || hasPerformedSetData(set, exercise ? isCardio(exercise.name) : false);
+            return set.isCompleted || (exercise ? hasPerformedSetData(set, schemaFor(exercise)) : false);
         });
     };
 
@@ -1202,11 +1390,9 @@ export function WorkoutLogClient({
                 exerciseName: exInfo?.name || "Unknown",
                 exerciseOrder: resolvePersistedExerciseOrderValue(exInfo, exOrder),
                 setNumber: s.setNumber,
-                reps: s.reps || undefined,
-                weightKg: s.weightKg ? parseFloat(s.weightKg) : undefined,
-                rpe: s.rpe ? parseInt(s.rpe) : undefined,
+                ...setLogToPayloadMetrics(s),
                 isWarmup: s.isWarmup,
-                isCompleted: s.isCompleted || hasPerformedSetData(s, exInfo ? isCardio(exInfo.name) : false),
+                isCompleted: s.isCompleted || (exInfo ? hasPerformedSetData(s, schemaFor(exInfo)) : false),
                 videoUrl: s.videoUrl || undefined,
             }));
         });
@@ -1435,8 +1621,9 @@ export function WorkoutLogClient({
                     {activeExercises.map((ex) => {
                         const media = mediaByName[ex.name];
                         const hasPreview = !!(media?.videoUrl || media?.instructions);
-                        const cardio = isCardio(ex.name, ex.muscleGroup);
-                        const targetSummary = getExerciseTargetSummary(ex, cardio);
+                        const schema = schemaFor(ex);
+                        const strengthOneRm = usesStrengthOneRm(schema);
+                        const targetSummary = getExerciseTargetSummary(ex, schema);
                         const previous = previousSessionFor(ex.name);
                         const hasNote = Boolean(exerciseNotes[ex.id]?.trim());
                         const noteOpen = openNoteExerciseId === ex.id;
@@ -1492,7 +1679,7 @@ export function WorkoutLogClient({
                                             {previous.dateKey ? ` · ${formatDate(previous.dateKey)}` : ""}
                                         </p>
                                         <p className="text-[11px] font-semibold text-fg-muted mt-0.5 leading-relaxed">
-                                            {previous.sets.map((set) => formatPreviousSetLine(set)).join("  ·  ")}
+                                            {previous.sets.map((set) => previousSetSummary(set, schema)).join("  ·  ")}
                                         </p>
                                     </div>
                                 )}
@@ -1519,57 +1706,26 @@ export function WorkoutLogClient({
 
                             <div className="space-y-2">
                                 <div className={cn(
-                                    "grid gap-1.5 md:gap-2 text-[10px] md:text-[11px] font-black text-fg-subtle uppercase px-1 mb-1 tracking-wide md:tracking-wider",
-                                    sessionActive ? "grid-cols-10 md:grid-cols-12" : "grid-cols-12"
+                                    "grid gap-1.5 md:gap-2 text-[10px] md:text-[11px] font-black text-fg-subtle uppercase px-1 mb-1 tracking-wide md:tracking-wider grid-cols-12"
                                 )}>
-                                    <div className="col-span-1 text-center">{cardio ? "Rd" : "Set"}</div>
-                                    {!cardio && (
-                                        <>
-                                            <div className={cn("text-center", sessionActive ? "col-span-4 md:col-span-3" : "col-span-3")}>Weight</div>
-                                            <div className="col-span-2 text-center">Reps</div>
-                                        </>
-                                    )}
-                                    {cardio && (
-                                        <>
-                                            <div className={cn("text-center", sessionActive ? "col-span-4 md:col-span-3" : "col-span-3")}>Lvl/Spd</div>
-                                            <div className="col-span-2 text-center">Mins</div>
-                                        </>
-                                    )}
-                                    <div className={cn("text-center", sessionActive ? "col-span-3 md:col-span-2" : "col-span-2")}>RPE</div>
-                                    {!cardio && (
-                                        <div
-                                            className={cn(
-                                                "text-center",
-                                                sessionActive ? "hidden md:block md:col-span-2" : "col-span-4"
-                                            )}
-                                            title="Estimated 1RM"
-                                        >
-                                            Est 1RM
-                                        </div>
-                                    )}
-                                    {!sessionActive && cardio && <div className="col-span-4" />}
+                                    <div className="col-span-1 text-center">Set</div>
+                                    <SetMetricHeaders schema={schema} sessionActive={sessionActive} showEst1Rm={strengthOneRm} />
                                     {sessionActive && (
-                                        <div className={cn(
-                                            "text-center hidden md:block",
-                                            cardio ? "md:col-span-4" : "md:col-span-2"
-                                        )}>
+                                        <div className="text-center hidden md:block md:col-span-2">
                                             Actions
                                         </div>
                                     )}
                                 </div>
 
                                 {logs[ex.id]?.map((set, sIdx) => {
-                                    const lastWeightPlaceholder = getWeightPlaceholder(ex.name, set.setNumber);
-                                    const lastRepsPlaceholder = getRepsPlaceholder(ex.name, set.setNumber);
-                                    const weightPlaceholder = lastWeightPlaceholder || formatTargetWeight(ex.weightTargetKg);
-                                    const repsPlaceholder = lastRepsPlaceholder || ex.reps?.trim() || "";
-                                    const rpePlaceholder = getRpePlaceholder(ex.name, set.setNumber);
-                                    const displayWeight = set.weightKg || (sessionActive ? "" : lastWeightPlaceholder);
-                                    const displayReps = set.reps > 0 ? set.reps : (sessionActive ? "" : lastRepsPlaceholder);
-                                    const weightNum = parseFloat(String(displayWeight)) || 0;
-                                    const repsNum = typeof displayReps === "number" ? displayReps : parseInt(String(displayReps), 10) || 0;
-                                    const est1RM = !cardio && !set.isWarmup && weightNum > 0 && repsNum > 0 ? calculateOneRM(weightNum, repsNum) : null;
+                                    const placeholders = getMetricPlaceholders(ex, set.setNumber);
                                     const pr = livePrByExerciseId[ex.id]?.[sIdx] ?? null;
+                                    const weightNum = parseFloat(String(set.weightKg)) || 0;
+                                    const est1RM =
+                                        strengthOneRm && !set.isWarmup && weightNum > 0 && set.reps > 0
+                                            ? calculateOneRM(weightNum, set.reps)
+                                            : null;
+                                    const showMobile1Rm = sessionActive && strengthOneRm;
 
                                     const setActions = sessionActive && !coachObserver ? (
                                         <div className="flex items-center justify-end gap-1 shrink-0">
@@ -1605,10 +1761,7 @@ export function WorkoutLogClient({
                                             sessionActive && !set.isCompleted && "hover:border-brand-700/30"
                                         )}
                                     >
-                                        <div className={cn(
-                                            "grid gap-1.5 md:gap-2",
-                                            sessionActive ? "grid-cols-10 md:grid-cols-12" : "grid-cols-12"
-                                        )}>
+                                        <div className="grid gap-1.5 md:gap-2 grid-cols-12">
                                         <div className="col-span-1 flex items-center justify-center">
                                             {sessionActive ? (
                                                 <button
@@ -1627,76 +1780,19 @@ export function WorkoutLogClient({
                                             )}
                                         </div>
 
-                                        <div className={cn(sessionActive ? "col-span-4 md:col-span-3" : "col-span-3")}>
-                                            <div className="relative">
-                                                <input
-                                                    type="number"
-                                                    readOnly={!sessionActive}
-                                                    disabled={!sessionActive || coachObserver}
-                                                    {...{ [WORKOUT_SET_INPUT_ATTR]: "" }}
-                                                    className={cn(
-                                                        "input-sm w-full bg-surface-elevated border-none text-center text-sm font-semibold rounded-lg h-10",
-                                                        !cardio && (displayWeight || weightPlaceholder) ? "pr-5 pl-1" : "px-1",
-                                                        sessionActive && "focus:ring-1 focus:ring-brand-500"
-                                                    )}
-                                                    value={displayWeight}
-                                                    placeholder={weightPlaceholder}
-                                                    onChange={(e) => updateSet(ex.id, sIdx, { weightKg: e.target.value })}
-                                                />
-                                                {!cardio && (displayWeight || weightPlaceholder) && (
-                                                    <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] text-fg-subtle pointer-events-none">kg</span>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        <div className="col-span-2">
-                                            <input
-                                                type="number"
-                                                readOnly={!sessionActive}
-                                                disabled={!sessionActive || coachObserver}
-                                                {...{ [WORKOUT_SET_INPUT_ATTR]: "" }}
-                                                className={cn(
-                                                    "input-sm w-full bg-surface-elevated border-none text-center text-sm font-semibold rounded-lg h-10 px-0",
-                                                    sessionActive && "focus:ring-1 focus:ring-brand-500"
-                                                )}
-                                                value={displayReps}
-                                                placeholder={repsPlaceholder}
-                                                onChange={(e) => updateSet(ex.id, sIdx, { reps: parseInt(e.target.value) || 0 })}
-                                            />
-                                        </div>
-
-                                        <div className={cn(sessionActive ? "col-span-3 md:col-span-2" : "col-span-2")}>
-                                            <input
-                                                type="number"
-                                                readOnly={!sessionActive}
-                                                disabled={!sessionActive || coachObserver}
-                                                {...{ [WORKOUT_SET_INPUT_ATTR]: "" }}
-                                                className={cn(
-                                                    "input-sm w-full bg-surface-elevated border-none text-center text-sm font-semibold rounded-lg h-10 px-0",
-                                                    sessionActive && "focus:ring-1 focus:ring-brand-500"
-                                                )}
-                                                value={sessionActive ? set.rpe : (set.rpe || rpePlaceholder)}
-                                                placeholder={rpePlaceholder}
-                                                onChange={(e) => updateSet(ex.id, sIdx, { rpe: e.target.value })}
-                                            />
-                                        </div>
-
-                                        {!cardio && (
-                                            <div className={cn(
-                                                "flex items-center justify-center min-w-0",
-                                                sessionActive ? "hidden md:flex md:col-span-2" : "col-span-4"
-                                            )}>
-                                                <span className={cn(
-                                                    "text-xs font-bold tabular-nums whitespace-nowrap",
-                                                    est1RM ? "text-warning-400" : "text-fg-subtle"
-                                                )}>
-                                                    {est1RM ? `${est1RM}kg` : "—"}
-                                                </span>
-                                            </div>
-                                        )}
+                                        <SetMetricInputs
+                                            schema={schema}
+                                            set={set}
+                                            sessionActive={sessionActive}
+                                            disabled={!sessionActive || coachObserver}
+                                            inputAttr={WORKOUT_SET_INPUT_ATTR}
+                                            placeholders={placeholders}
+                                            unitSuffix={{ weight: "kg" }}
+                                            onChange={(patch) => updateSet(ex.id, sIdx, patch)}
+                                        />
 
                                         {sessionActive && (
-                                        <div className={cn("hidden md:flex items-center justify-end gap-1", cardio ? "md:col-span-4" : "md:col-span-2")}>
+                                        <div className="hidden md:flex items-center justify-end gap-1 md:col-span-2">
                                             {setActions}
                                         </div>
                                         )}
@@ -1705,9 +1801,9 @@ export function WorkoutLogClient({
                                         {sessionActive && (
                                             <div className={cn(
                                                 "flex items-center justify-between gap-3 md:hidden",
-                                                !cardio && "pt-1.5 border-t border-surface-border/40"
+                                                strengthOneRm && "pt-1.5 border-t border-surface-border/40"
                                             )}>
-                                                {!cardio && (
+                                                {showMobile1Rm && (
                                                     <div className="flex items-baseline gap-2 min-w-0">
                                                         <span className="text-[10px] font-black uppercase tracking-wider text-fg-subtle shrink-0">Est 1RM</span>
                                                         <span className={cn(

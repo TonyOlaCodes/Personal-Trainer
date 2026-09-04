@@ -9,6 +9,15 @@ export type GroupableLogSet = {
     reps?: number | null;
     weightKg?: number | null;
     rpe?: number | null;
+    durationSec?: number | null;
+    distanceMeters?: number | null;
+    heightCm?: number | null;
+    resistance?: number | null;
+    inclinePct?: number | null;
+    calories?: number | null;
+    heartRate?: number | null;
+    speedKph?: number | null;
+    rir?: number | null;
     isWarmup?: boolean | null;
     isCompleted?: boolean | null;
     isPR?: boolean | null;

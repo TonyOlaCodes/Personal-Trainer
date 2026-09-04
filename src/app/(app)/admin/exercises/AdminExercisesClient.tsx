@@ -3,6 +3,17 @@
 import { useMemo, useState } from "react";
 import { Plus, Check, Search, Loader2, Dumbbell, Pencil, X, Merge, CheckSquare } from "lucide-react";
 import { MUSCLE_GROUPS, muscleGroupBadgeClass } from "@/lib/muscleGroups";
+import {
+    TrackingPresetBadge,
+    TrackingSetupEditor,
+} from "@/components/admin/TrackingSetupEditor";
+import {
+    DEFAULT_STRENGTH_SCHEMA,
+    normalizeTrackingSchema,
+    schemaFromPreset,
+    type ExerciseTrackingSchema,
+    type TrackingPreset,
+} from "@/lib/exerciseTracking";
 
 interface GlobalExercise {
     id: string;
@@ -11,6 +22,8 @@ interface GlobalExercise {
     instructions?: string | null;
     thumbnailUrl?: string | null;
     muscleGroup: string | null;
+    trackingPreset?: TrackingPreset | string | null;
+    trackingSchema?: ExerciseTrackingSchema;
     isSuggestion?: boolean;
 }
 
@@ -20,7 +33,15 @@ type ExerciseDraft = {
     videoUrl: string;
     instructions: string;
     thumbnailUrl: string;
+    trackingSchema: ExerciseTrackingSchema;
 };
+
+function cloneSchema(schema: ExerciseTrackingSchema): ExerciseTrackingSchema {
+    return normalizeTrackingSchema({
+        preset: schema.preset,
+        fields: schema.fields.map((f) => ({ ...f })),
+    });
+}
 
 const emptyDraft: ExerciseDraft = {
     name: "",
@@ -28,15 +49,27 @@ const emptyDraft: ExerciseDraft = {
     videoUrl: "",
     instructions: "",
     thumbnailUrl: "",
+    trackingSchema: cloneSchema(DEFAULT_STRENGTH_SCHEMA),
 };
 
 function draftFromExercise(exercise: GlobalExercise): ExerciseDraft {
+    const trackingSchema = exercise.trackingSchema
+        ? cloneSchema(exercise.trackingSchema)
+        : schemaFromPreset("strength");
     return {
         name: exercise.name,
         muscleGroup: exercise.muscleGroup || "Uncategorized",
         videoUrl: exercise.videoUrl || "",
         instructions: exercise.instructions || "",
         thumbnailUrl: exercise.thumbnailUrl || "",
+        trackingSchema,
+    };
+}
+
+function trackingPayload(schema: ExerciseTrackingSchema) {
+    return {
+        trackingPreset: schema.preset,
+        trackingFields: schema.fields,
     };
 }
 
@@ -110,12 +143,24 @@ export function AdminExercisesClient({ initialExercises }: { initialExercises: G
             const res = await fetch("/api/admin/exercises", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(newExercise)
+                body: JSON.stringify({
+                    name: newExercise.name,
+                    muscleGroup: newExercise.muscleGroup,
+                    videoUrl: newExercise.videoUrl,
+                    instructions: newExercise.instructions,
+                    thumbnailUrl: newExercise.thumbnailUrl,
+                    ...trackingPayload(newExercise.trackingSchema),
+                })
             });
             if (res.ok) {
                 const created = await res.json();
-                setExercises([{ ...created, ...newExercise }, ...exercises].sort((a,b) => a.name.localeCompare(b.name)));
-                setNewExercise(emptyDraft);
+                setExercises([{
+                    ...created,
+                    ...newExercise,
+                    trackingPreset: created.trackingPreset ?? newExercise.trackingSchema.preset,
+                    trackingSchema: created.trackingSchema ?? newExercise.trackingSchema,
+                }, ...exercises].sort((a,b) => a.name.localeCompare(b.name)));
+                setNewExercise({ ...emptyDraft, trackingSchema: cloneSchema(DEFAULT_STRENGTH_SCHEMA) });
                 setIsAdding(false);
             } else {
                 const data = await res.json().catch(() => null);
@@ -133,11 +178,24 @@ export function AdminExercisesClient({ initialExercises }: { initialExercises: G
             const res = await fetch("/api/admin/exercises", {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ id: exercise.id, ...editingExercise })
+                body: JSON.stringify({
+                    id: exercise.id,
+                    name: editingExercise.name,
+                    muscleGroup: editingExercise.muscleGroup,
+                    videoUrl: editingExercise.videoUrl,
+                    instructions: editingExercise.instructions,
+                    thumbnailUrl: editingExercise.thumbnailUrl,
+                    ...trackingPayload(editingExercise.trackingSchema),
+                })
             });
             if (res.ok) {
                 const updated = await res.json();
-                setExercises(prev => prev.map(e => e.id === exercise.id ? { ...updated, ...editingExercise } : e).sort((a,b) => a.name.localeCompare(b.name)));
+                setExercises(prev => prev.map(e => e.id === exercise.id ? {
+                    ...updated,
+                    ...editingExercise,
+                    trackingPreset: updated.trackingPreset ?? editingExercise.trackingSchema.preset,
+                    trackingSchema: updated.trackingSchema ?? editingExercise.trackingSchema,
+                } : e).sort((a,b) => a.name.localeCompare(b.name)));
                 setEditingId(null);
             } else {
                 const data = await res.json().catch(() => null);
@@ -158,7 +216,12 @@ export function AdminExercisesClient({ initialExercises }: { initialExercises: G
             });
             if (res.ok) {
                 const created = await res.json();
-                setExercises(prev => prev.map(e => e.id === exercise.id ? created : e));
+                setExercises(prev => prev.map(e => e.id === exercise.id ? {
+                    ...created,
+                    isSuggestion: false,
+                    trackingPreset: created.trackingPreset ?? created.trackingSchema?.preset ?? exercise.trackingSchema?.preset,
+                    trackingSchema: created.trackingSchema ?? exercise.trackingSchema ?? schemaFromPreset("strength"),
+                } : e));
             } else {
                 alert("Failed to add exercise. Might already exist.");
             }
@@ -206,6 +269,11 @@ export function AdminExercisesClient({ initialExercises }: { initialExercises: G
                       muscleGroup: mergeMuscleGroup,
                       instructions: data.exercise.instructions ?? null,
                       thumbnailUrl: data.exercise.thumbnailUrl ?? null,
+                      trackingPreset: data.exercise.trackingPreset ?? data.exercise.trackingSchema?.preset ?? null,
+                      trackingSchema: data.exercise.trackingSchema
+                          ?? (data.exercise.trackingPreset
+                              ? schemaFromPreset(data.exercise.trackingPreset as TrackingPreset)
+                              : schemaFromPreset("strength")),
                   }
                 : {
                       id: selectedIds[0],
@@ -214,6 +282,8 @@ export function AdminExercisesClient({ initialExercises }: { initialExercises: G
                       videoUrl: null,
                       instructions: null,
                       thumbnailUrl: null,
+                      trackingPreset: "strength" as TrackingPreset,
+                      trackingSchema: schemaFromPreset("strength"),
                   };
 
             setExercises((prev) =>
@@ -462,6 +532,14 @@ export function AdminExercisesClient({ initialExercises }: { initialExercises: G
                                         <input type="url" className="input input-sm sm:col-span-2" placeholder="Video URL" value={editingExercise.videoUrl} onChange={(e) => setEditingExercise(prev => ({ ...prev, videoUrl: e.target.value }))} />
                                         <input type="url" className="input input-sm sm:col-span-2" placeholder="Thumbnail URL" value={editingExercise.thumbnailUrl} onChange={(e) => setEditingExercise(prev => ({ ...prev, thumbnailUrl: e.target.value }))} />
                                         <textarea className="input input-sm min-h-20 sm:col-span-2 resize-none" placeholder="Instructions" value={editingExercise.instructions} onChange={(e) => setEditingExercise(prev => ({ ...prev, instructions: e.target.value }))} />
+                                        <div className="sm:col-span-2">
+                                            <TrackingSetupEditor
+                                                value={editingExercise.trackingSchema}
+                                                onChange={(trackingSchema) =>
+                                                    setEditingExercise((prev) => ({ ...prev, trackingSchema }))
+                                                }
+                                            />
+                                        </div>
                                     </div>
                                 ) : (
                                     <>
@@ -478,9 +556,17 @@ export function AdminExercisesClient({ initialExercises }: { initialExercises: G
                                                 </span>
                                             )}
                                         </div>
-                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wider ${muscleGroupBadgeClass(ex.muscleGroup)}`}>
-                                            {ex.muscleGroup || "Uncategorized"}
-                                        </span>
+                                        <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wider ${muscleGroupBadgeClass(ex.muscleGroup)}`}>
+                                                {ex.muscleGroup || "Uncategorized"}
+                                            </span>
+                                            <TrackingPresetBadge
+                                                preset={
+                                                    (ex.trackingSchema?.preset ??
+                                                        ex.trackingPreset) as TrackingPreset | null | undefined
+                                                }
+                                            />
+                                        </div>
                                         {ex.instructions && <p className="text-xs text-fg-muted mt-1 line-clamp-2">{ex.instructions}</p>}
                                     </>
                                 )}

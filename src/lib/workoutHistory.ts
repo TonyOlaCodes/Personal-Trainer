@@ -21,6 +21,14 @@ export interface LoadedHistorySet {
     reps: number | null;
     weightKg: number | null;
     rpe: number | null;
+    durationSec: number | null;
+    distanceMeters: number | null;
+    heightCm: number | null;
+    resistance: number | null;
+    inclinePct: number | null;
+    calories: number | null;
+    heartRate: number | null;
+    speedKph: number | null;
     isWarmup: boolean;
     isCompleted: boolean;
     isPR: boolean;
@@ -73,6 +81,14 @@ export async function loadWorkoutHistorySessions(
                     reps: true,
                     weightKg: true,
                     rpe: true,
+                    durationSec: true,
+                    distanceMeters: true,
+                    heightCm: true,
+                    resistance: true,
+                    inclinePct: true,
+                    calories: true,
+                    heartRate: true,
+                    speedKph: true,
                     isWarmup: true,
                     isCompleted: true,
                     isPR: true,
@@ -102,6 +118,14 @@ export async function loadWorkoutHistorySessions(
             reps: set.reps ?? null,
             weightKg: set.weightKg ?? null,
             rpe: set.rpe ?? null,
+            durationSec: set.durationSec ?? null,
+            distanceMeters: set.distanceMeters ?? null,
+            heightCm: set.heightCm ?? null,
+            resistance: set.resistance ?? null,
+            inclinePct: set.inclinePct ?? null,
+            calories: set.calories ?? null,
+            heartRate: set.heartRate ?? null,
+            speedKph: set.speedKph ?? null,
             isWarmup: set.isWarmup,
             isCompleted: set.isCompleted,
             isPR: set.isPR,

@@ -27,6 +27,7 @@ import { ensureUserNicknamesTable } from "@/lib/userNicknames";
 import { ensureOnboardingProfileColumns } from "@/lib/onboardingProfile";
 import { ensureCoachCodeRequestTables } from "@/lib/coachCodeRequest";
 import { ensureAppSettingsTable } from "@/lib/maintenanceMode";
+import { ensureExerciseTrackingSchema } from "@/lib/exerciseTracking/ensure";
 
 let appSchemaReady = false;
 let appSchemaPromise: Promise<void> | null = null;
@@ -69,6 +70,7 @@ export async function ensureAppSchema() {
             ensureOnboardingProfileColumns(),
             ensureCoachCodeRequestTables(),
             ensureAppSettingsTable(),
+            ensureExerciseTrackingSchema(),
         ]);
         appSchemaReady = true;
     })();

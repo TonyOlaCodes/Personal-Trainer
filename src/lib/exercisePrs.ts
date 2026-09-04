@@ -44,6 +44,14 @@ export interface HistoricalSetInput {
     weightKg?: number | null;
     reps?: number | null;
     rpe?: number | null;
+    durationSec?: number | null;
+    distanceMeters?: number | null;
+    heightCm?: number | null;
+    resistance?: number | null;
+    inclinePct?: number | null;
+    calories?: number | null;
+    heartRate?: number | null;
+    speedKph?: number | null;
     isWarmup?: boolean | null;
     isCompleted?: boolean | null;
 }
@@ -62,6 +70,14 @@ export interface PreviousSet {
     weightKg: number | null;
     reps: number | null;
     rpe: number | null;
+    durationSec?: number | null;
+    distanceMeters?: number | null;
+    heightCm?: number | null;
+    resistance?: number | null;
+    inclinePct?: number | null;
+    calories?: number | null;
+    heartRate?: number | null;
+    speedKph?: number | null;
 }
 
 export interface PreviousSessionPerformance {
@@ -99,29 +115,49 @@ export function weightKey(weightKg: number): string {
 export function isWorkingSet(set: {
     weightKg?: number | null;
     reps?: number | null;
+    durationSec?: number | null;
+    distanceMeters?: number | null;
+    heightCm?: number | null;
+    speedKph?: number | null;
+    calories?: number | null;
+    resistance?: number | null;
     isWarmup?: boolean | null;
     isCompleted?: boolean | null;
 }): boolean {
     if (set.isWarmup) return false;
     if (set.isCompleted === false) return false;
-    // Incomplete (undefined/null completed) still counts when caller already filtered
-    // to completed sets; treat explicit false as exclude, otherwise require positive data.
     if (set.isCompleted !== true && set.isCompleted !== undefined && set.isCompleted !== null) {
         return false;
     }
-    return (set.weightKg ?? 0) > 0 && (set.reps ?? 0) > 0;
+    if ((set.weightKg ?? 0) > 0 && (set.reps ?? 0) > 0) return true;
+    if ((set.durationSec ?? 0) > 0) return true;
+    if ((set.distanceMeters ?? 0) > 0) return true;
+    if ((set.heightCm ?? 0) > 0) return true;
+    if ((set.reps ?? 0) > 0) return true;
+    if ((set.speedKph ?? 0) > 0) return true;
+    if ((set.calories ?? 0) > 0) return true;
+    if ((set.resistance ?? 0) > 0) return true;
+    return false;
 }
 
 /** Strict completed working set — used for live PR advancement. */
 export function isCompletedWorkingSet(set: {
     weightKg?: number | null;
     reps?: number | null;
+    durationSec?: number | null;
+    distanceMeters?: number | null;
+    heightCm?: number | null;
     isWarmup?: boolean | null;
     isCompleted?: boolean | null;
 }): boolean {
     if (set.isWarmup) return false;
     if (set.isCompleted !== true) return false;
-    return (set.weightKg ?? 0) > 0 && (set.reps ?? 0) > 0;
+    if ((set.weightKg ?? 0) > 0 && (set.reps ?? 0) > 0) return true;
+    if ((set.durationSec ?? 0) > 0) return true;
+    if ((set.distanceMeters ?? 0) > 0) return true;
+    if ((set.heightCm ?? 0) > 0) return true;
+    if ((set.reps ?? 0) > 0) return true;
+    return false;
 }
 
 export function cloneExerciseRecords(records: ExerciseRecords): ExerciseRecords {
@@ -194,6 +230,14 @@ export function findPreviousSessionPerformance(
                 weightKg: set.weightKg ?? null,
                 reps: set.reps ?? null,
                 rpe: set.rpe ?? null,
+                durationSec: set.durationSec ?? null,
+                distanceMeters: set.distanceMeters ?? null,
+                heightCm: set.heightCm ?? null,
+                resistance: set.resistance ?? null,
+                inclinePct: set.inclinePct ?? null,
+                calories: set.calories ?? null,
+                heartRate: set.heartRate ?? null,
+                speedKph: set.speedKph ?? null,
             }));
 
         return {

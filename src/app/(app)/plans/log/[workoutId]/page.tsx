@@ -25,6 +25,11 @@ import {
     applySessionOverrideToPlanned,
     getSessionOverride,
 } from "@/lib/workoutSessionOverrides";
+import {
+    ensureExerciseTrackingSchema,
+    resolveTrackingSchema,
+    type ExerciseTrackingSchema,
+} from "@/lib/exerciseTracking";
 
 export const metadata = { title: "Logging session" };
 const NEW_ACCOUNT_WORKOUT_HINT_DAYS = 30;
@@ -41,6 +46,9 @@ const activeLogInclude = {
                     sets: true,
                     reps: true,
                     weightTargetKg: true,
+                    targetDurationSec: true,
+                    targetDistanceMeters: true,
+                    targetHeightCm: true,
                     notes: true,
                     order: true,
                     muscleGroup: true,
@@ -58,6 +66,7 @@ export default async function WorkoutLogPage({
     searchParams: Promise<{ date?: string; clientId?: string }>;
 }) {
     await ensureDbSchema();
+    await ensureExerciseTrackingSchema();
     const { userId } = await auth();
     if (!userId) redirect("/sign-in");
 
@@ -165,6 +174,39 @@ export default async function WorkoutLogPage({
     );
     const exerciseMedia = Object.fromEntries(mediaByName.entries());
 
+    const workoutExercises = plannedForSession.exercises.map((ex, index) => {
+        const base = workout.exercises.find((row) => row.id === ex.id);
+        const resolvedId = base
+            ? ex.id
+            : ex.id.startsWith("new-") || ex.id.includes(":sub")
+              ? ex.id
+              : `new-${ex.id}`;
+        return {
+            id: resolvedId,
+            name: canonicalExerciseName(ex.name) || ex.name,
+            sets: ex.sets,
+            reps: ex.reps,
+            weightTargetKg: ex.weightTargetKg,
+            targetDurationSec: base?.targetDurationSec ?? null,
+            targetDistanceMeters: base?.targetDistanceMeters ?? null,
+            targetHeightCm: base?.targetHeightCm ?? null,
+            notes:
+                sessionOverride?.exercises.find((row) => row.id === ex.id)?.notes ??
+                base?.notes ??
+                null,
+            order: ex.order ?? index,
+            muscleGroup: base?.muscleGroup ?? null,
+        };
+    });
+
+    const trackingSchemas: Record<string, ExerciseTrackingSchema> = {};
+    for (const ex of workoutExercises) {
+        const schema = await resolveTrackingSchema(ex.name, ex.muscleGroup);
+        trackingSchemas[ex.id] = schema;
+        const identity = exerciseIdentityKey(ex.name);
+        if (identity) trackingSchemas[identity] = schema;
+    }
+
     const initialActiveLog = activeLog
         ? {
               id: activeLog.id,
@@ -177,6 +219,15 @@ export default async function WorkoutLogPage({
                   reps: set.reps,
                   weightKg: set.weightKg,
                   rpe: set.rpe,
+                  durationSec: set.durationSec,
+                  distanceMeters: set.distanceMeters,
+                  heightCm: set.heightCm,
+                  resistance: set.resistance,
+                  inclinePct: set.inclinePct,
+                  calories: set.calories,
+                  heartRate: set.heartRate,
+                  speedKph: set.speedKph,
+                  rir: set.rir,
                   isCompleted: set.isCompleted,
                   isWarmup: set.isWarmup,
                   videoUrl: set.videoUrl,
@@ -192,28 +243,9 @@ export default async function WorkoutLogPage({
                 workout={{
                     id: plannedForSession.id,
                     name: plannedForSession.name,
-                    exercises: plannedForSession.exercises.map((ex, index) => {
-                        const base = workout.exercises.find((row) => row.id === ex.id);
-                        const resolvedId = base
-                            ? ex.id
-                            : ex.id.startsWith("new-") || ex.id.includes(":sub")
-                              ? ex.id
-                              : `new-${ex.id}`;
-                        return {
-                            id: resolvedId,
-                            name: canonicalExerciseName(ex.name) || ex.name,
-                            sets: ex.sets,
-                            reps: ex.reps,
-                            weightTargetKg: ex.weightTargetKg,
-                            notes:
-                                sessionOverride?.exercises.find((row) => row.id === ex.id)?.notes ??
-                                base?.notes ??
-                                null,
-                            order: ex.order ?? index,
-                            muscleGroup: base?.muscleGroup ?? null,
-                        };
-                    }),
+                    exercises: workoutExercises,
                 }}
+                trackingSchemas={trackingSchemas}
                 exerciseMedia={exerciseMedia}
                 logDate={date}
                 clientId={clientId && clientId !== actor.id ? clientId : undefined}

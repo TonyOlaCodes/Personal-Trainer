@@ -20,7 +20,7 @@ import { workoutFeelingEmoji } from "@/lib/workoutFeeling";
 import { PremiumLockScreen } from "@/components/shared/PremiumLockScreen";
 import { ReturnLink } from "@/components/shared/ReturnLink";
 import { ExerciseHistoryTooltipContent } from "@/components/shared/ExerciseHistoryTooltip";
-import { deriveOneRMFromBestSet } from "@/lib/exerciseHistory";
+import { deriveOneRMFromBestSet } from "@/lib/oneRepMax";
 import { MAX_PINNED_EXERCISES, normalizePinnedExercises, orderExerciseNames } from "@/lib/pinnedExercises";
 import { useWorkoutStatsRefresh } from "@/hooks/useWorkoutStatsRefresh";
 import { format, startOfWeek } from "date-fns";
@@ -343,19 +343,65 @@ export function ProgressClient({ userRole, hiddenGoals, todayWorkoutHref = null,
 
     const selectedExerciseHistory = useMemo(() => {
         const raw: any[] = (data?.exerciseHistory ?? {})[selectedExercise] || [];
-        return raw.map((session) => ({
-            ...session,
-            oneRM: deriveOneRMFromBestSet(session.weight, session.reps),
-        }));
+        return raw.map((session) => {
+            const weight = session.weight || 0;
+            const reps = session.reps || 0;
+            return {
+                ...session,
+                oneRM: weight > 0 && reps > 0 ? deriveOneRMFromBestSet(weight, reps) : 0,
+            };
+        });
     }, [data, selectedExercise]);
 
     const selectedExerciseStats = useMemo(() => {
         if (!selectedExercise || selectedExerciseHistory.length === 0) return null;
+        const primary =
+            selectedExerciseHistory.find((h) => h.primaryMetric)?.primaryMetric ||
+            (selectedExerciseHistory.some((h) => (h.weight || 0) > 0)
+                ? "weight"
+                : selectedExerciseHistory.some((h) => (h.durationSec || 0) > 0)
+                  ? "duration"
+                  : selectedExerciseHistory.some((h) => (h.distanceMeters || 0) > 0)
+                    ? "distance"
+                    : selectedExerciseHistory.some((h) => (h.heightCm || 0) > 0)
+                      ? "height"
+                      : "weight");
+
+        const metricValue = (h: any) => {
+            if (primary === "duration") return h.durationSec || 0;
+            if (primary === "distance") return h.distanceMeters || 0;
+            if (primary === "height") return h.heightCm || 0;
+            if (primary === "reps") return h.reps || 0;
+            return h.weight || 0;
+        };
+
+        const showOneRm = primary === "weight";
         return {
-            currentMax: Math.max(...selectedExerciseHistory.map((h) => h.weight || 0)),
-            estimatedMax: Math.max(...selectedExerciseHistory.map((h) => h.oneRM || 0)),
+            primaryMetric: primary as string,
+            currentMax: Math.max(...selectedExerciseHistory.map(metricValue)),
+            estimatedMax: showOneRm
+                ? Math.max(...selectedExerciseHistory.map((h) => h.oneRM || 0))
+                : Math.max(...selectedExerciseHistory.map(metricValue)),
+            showOneRm,
         };
     }, [selectedExercise, selectedExerciseHistory]);
+
+    const selectedExerciseChartData = useMemo(() => {
+        const primary = selectedExerciseStats?.primaryMetric ?? "weight";
+        return selectedExerciseHistory.map((h) => ({
+            ...h,
+            chartValue:
+                primary === "duration"
+                    ? h.durationSec || 0
+                    : primary === "distance"
+                      ? h.distanceMeters || 0
+                      : primary === "height"
+                        ? h.heightCm || 0
+                        : primary === "reps"
+                          ? h.reps || 0
+                          : h.weight || 0,
+        }));
+    }, [selectedExerciseHistory, selectedExerciseStats?.primaryMetric]);
 
     const bodyweightHistory = useMemo(
         () => (data?.bodyweight?.history ?? []) as BodyweightHistoryPoint[],
@@ -643,13 +689,31 @@ export function ProgressClient({ userRole, hiddenGoals, todayWorkoutHref = null,
                             </div>
                             {selectedExerciseStats && (
                                 <div className="flex items-center gap-3 shrink-0">
-                                    <div className="text-center px-3 py-1.5 rounded-xl bg-warning/10 border border-warning/20">
-                                        <p className="text-[9px] font-black text-warning/70 uppercase tracking-widest">Est. Max</p>
-                                        <p className="text-sm font-black text-warning">{selectedExerciseStats.estimatedMax}<span className="text-[9px] ml-0.5 font-bold">kg</span></p>
-                                    </div>
+                                    {selectedExerciseStats.showOneRm && (
+                                        <div className="text-center px-3 py-1.5 rounded-xl bg-warning/10 border border-warning/20">
+                                            <p className="text-[9px] font-black text-warning/70 uppercase tracking-widest">Est. 1RM</p>
+                                            <p className="text-sm font-black text-warning">{Math.round(selectedExerciseStats.estimatedMax)}<span className="text-[9px] ml-0.5 font-bold">kg</span></p>
+                                        </div>
+                                    )}
                                     <div className="text-center px-3 py-1.5 rounded-xl bg-brand-500/10 border border-brand-500/20">
-                                        <p className="text-[9px] font-black text-brand-400/70 uppercase tracking-widest">Current Max</p>
-                                        <p className="text-sm font-black text-brand-400">{selectedExerciseStats.currentMax}<span className="text-[9px] ml-0.5 font-bold">kg</span></p>
+                                        <p className="text-[9px] font-black text-brand-400/70 uppercase tracking-widest">
+                                            {selectedExerciseStats.primaryMetric === "duration"
+                                                ? "Best Time"
+                                                : selectedExerciseStats.primaryMetric === "distance"
+                                                  ? "Best Dist"
+                                                  : selectedExerciseStats.primaryMetric === "height"
+                                                    ? "Best Height"
+                                                    : "Current Max"}
+                                        </p>
+                                        <p className="text-sm font-black text-brand-400">
+                                            {selectedExerciseStats.primaryMetric === "duration"
+                                                ? `${Math.round(selectedExerciseStats.currentMax)}s`
+                                                : selectedExerciseStats.primaryMetric === "distance"
+                                                  ? `${Math.round(selectedExerciseStats.currentMax)}m`
+                                                  : selectedExerciseStats.primaryMetric === "height"
+                                                    ? `${Math.round(selectedExerciseStats.currentMax)}cm`
+                                                    : <>{selectedExerciseStats.currentMax}<span className="text-[9px] ml-0.5 font-bold">kg</span></>}
+                                        </p>
                                     </div>
                                 </div>
                             )}
@@ -657,7 +721,7 @@ export function ProgressClient({ userRole, hiddenGoals, todayWorkoutHref = null,
                         <div className="p-5 sm:p-6">
                             <div className="h-[300px] w-full">
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <AreaChart data={selectedExerciseHistory} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                    <AreaChart data={selectedExerciseChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                         <defs>
                                             <linearGradient id="exGrad" x1="0" y1="0" x2="0" y2="1">
                                                 <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.2} />
@@ -681,21 +745,23 @@ export function ProgressClient({ userRole, hiddenGoals, todayWorkoutHref = null,
                                             }}
                                         />
                                         <Area
-                                            type="monotone" dataKey="weight" stroke="#8B5CF6" strokeWidth={3}
+                                            type="monotone" dataKey="chartValue" stroke="#8B5CF6" strokeWidth={3}
                                             fill="url(#exGrad)"
                                             dot={{ r: 4, fill: "#8B5CF6", stroke: "#0F172A", strokeWidth: 2 }}
                                             activeDot={{ r: 6, fill: "#A78BFA", strokeWidth: 0 }}
                                             animationDuration={800}
                                         />
-                                        <Line
-                                            type="monotone"
-                                            dataKey="oneRM"
-                                            stroke="#FACC15"
-                                            strokeWidth={2}
-                                            strokeDasharray="5 5"
-                                            dot={false}
-                                            activeDot={false}
-                                        />
+                                        {selectedExerciseStats?.showOneRm && (
+                                            <Line
+                                                type="monotone"
+                                                dataKey="oneRM"
+                                                stroke="#FACC15"
+                                                strokeWidth={2}
+                                                strokeDasharray="5 5"
+                                                dot={false}
+                                                activeDot={false}
+                                            />
+                                        )}
                                     </AreaChart>
                                 </ResponsiveContainer>
                             </div>

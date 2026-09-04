@@ -24,6 +24,12 @@ export interface PlanExercisePayload {
     sets: number;
     reps: string;
     weightTargetKg?: number | null;
+    targetDurationSec?: number | null;
+    targetDistanceMeters?: number | null;
+    targetHeightCm?: number | null;
+    targetRpe?: number | null;
+    targetResistance?: number | null;
+    targetInclinePct?: number | null;
     restSeconds?: number | null;
     notes?: string | null;
     order?: number | null;
@@ -92,6 +98,12 @@ async function syncExercises(
             sets: ex.sets,
             reps: ex.reps,
             weightTargetKg: ex.weightTargetKg ?? undefined,
+            targetDurationSec: ex.targetDurationSec ?? undefined,
+            targetDistanceMeters: ex.targetDistanceMeters ?? undefined,
+            targetHeightCm: ex.targetHeightCm ?? undefined,
+            targetRpe: ex.targetRpe ?? undefined,
+            targetResistance: ex.targetResistance ?? undefined,
+            targetInclinePct: ex.targetInclinePct ?? undefined,
             restSeconds: ex.restSeconds ?? undefined,
             notes: ex.notes ?? undefined,
             order: ex.order ?? i,

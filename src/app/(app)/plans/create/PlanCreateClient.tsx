@@ -9,9 +9,14 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PLAN_TEMPLATES } from "@/lib/templates";
-import { ExerciseAutocomplete, isCardio } from "@/components/shared/ExerciseAutocomplete";
+import { ExerciseAutocomplete } from "@/components/shared/ExerciseAutocomplete";
 import { formatPlanText, formatWorkoutText } from "@/lib/formatPlanText";
 import { PlanReviewView } from "./PlanReviewView";
+import {
+    enabledPlanTargetFields,
+    guessTrackingSchema,
+    type TrackingFieldKey,
+} from "@/lib/exerciseTracking";
 
 interface LocalExercise {
     id?: string;
@@ -19,6 +24,12 @@ interface LocalExercise {
     sets: number;
     reps: string;
     weightTargetKg?: number;
+    targetDurationSec?: number;
+    targetDistanceMeters?: number;
+    targetHeightCm?: number;
+    targetRpe?: number;
+    targetResistance?: number;
+    targetInclinePct?: number;
     order: number;
     muscleGroup?: string | null;
 }
@@ -42,6 +53,12 @@ interface PlanExercisePayload {
     sets: number;
     reps: string;
     weightTargetKg?: number | null;
+    targetDurationSec?: number | null;
+    targetDistanceMeters?: number | null;
+    targetHeightCm?: number | null;
+    targetRpe?: number | null;
+    targetResistance?: number | null;
+    targetInclinePct?: number | null;
     order?: number | null;
     muscleGroup?: string | null;
 }
@@ -136,9 +153,29 @@ export function PlanCreateClient() {
         sets: typeof e.sets === "number" && Number.isFinite(e.sets) ? e.sets : 3,
         reps: e.reps != null ? String(e.reps) : "10",
         weightTargetKg: e.weightTargetKg ?? undefined,
+        targetDurationSec: e.targetDurationSec ?? undefined,
+        targetDistanceMeters: e.targetDistanceMeters ?? undefined,
+        targetHeightCm: e.targetHeightCm ?? undefined,
+        targetRpe: e.targetRpe ?? undefined,
+        targetResistance: e.targetResistance ?? undefined,
+        targetInclinePct: e.targetInclinePct ?? undefined,
         order: e.order ?? 0,
         muscleGroup: e.muscleGroup ?? null,
     });
+
+    const planTargetFieldsFor = (ex: LocalExercise): TrackingFieldKey[] =>
+        enabledPlanTargetFields(guessTrackingSchema(ex.name ?? "", ex.muscleGroup));
+
+    const FIELD_PLAN_LABEL: Partial<Record<TrackingFieldKey, string>> = {
+        weight: "Weight",
+        reps: "Reps",
+        duration: "Sec",
+        distance: "Dist",
+        height: "Ht",
+        rpe: "RPE",
+        resistance: "Lvl",
+        incline: "Inc",
+    };
 
     // Load data (Template or Edit)
     useEffect(() => {
@@ -524,6 +561,12 @@ export function PlanCreateClient() {
                         sets: e.sets,
                         reps: e.reps,
                         weightTargetKg: e.weightTargetKg,
+                        targetDurationSec: e.targetDurationSec,
+                        targetDistanceMeters: e.targetDistanceMeters,
+                        targetHeightCm: e.targetHeightCm,
+                        targetRpe: e.targetRpe,
+                        targetResistance: e.targetResistance,
+                        targetInclinePct: e.targetInclinePct,
                         order: e.order,
                         muscleGroup: e.muscleGroup ?? undefined,
                     }))
@@ -1188,7 +1231,6 @@ export function PlanCreateClient() {
                                                                             updateExercise(activeWorkoutIdx, eIdx, nameChanged ? {
                                                                                 name: val,
                                                                                 muscleGroup: muscleGroup ?? null,
-                                                                                reps: isCardio(val, muscleGroup) ? "20" : ex.reps,
                                                                             } : {
                                                                                 name: val,
                                                                                 muscleGroup: muscleGroup ?? ex.muscleGroup ?? null,
@@ -1199,10 +1241,10 @@ export function PlanCreateClient() {
                                                                     />
                                                                 )}
                                                             </div>
-                                                            <div className="flex items-end gap-2 shrink-0">
+                                                            <div className="flex items-end gap-2 shrink-0 flex-wrap justify-end">
                                                                 <div className="w-14 sm:w-16">
                                                                     <label className="label-mini block text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1 px-1 text-center">
-                                                                        {isCardio(ex.name ?? "", ex.muscleGroup) ? "Rounds" : "Sets"}
+                                                                        Sets
                                                                     </label>
                                                                     <input
                                                                         type="text"
@@ -1217,32 +1259,72 @@ export function PlanCreateClient() {
                                                                         readOnly={isViewOnly}
                                                                     />
                                                                 </div>
-                                                                <div className="w-14 sm:w-16">
-                                                                    <label className="label-mini block text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1 px-1 text-center">
-                                                                        {isCardio(ex.name ?? "", ex.muscleGroup) ? "Mins" : "Reps"}
-                                                                    </label>
-                                                                    <input
-                                                                        type="text"
-                                                                        placeholder={isCardio(ex.name ?? "", ex.muscleGroup) ? "20" : "8-12"}
-                                                                        className="w-full bg-surface-muted border border-surface-border rounded-xl px-2 py-2 text-[16px] sm:text-sm text-fg text-center"
-                                                                        value={ex.reps}
-                                                                        onChange={(e) => updateExercise(activeWorkoutIdx, eIdx, { reps: e.target.value })}
-                                                                        readOnly={isViewOnly}
-                                                                    />
-                                                                </div>
-                                                                <div className="w-16 sm:w-[4.5rem]">
-                                                                    <label className="label-mini block text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1 px-1 text-center">
-                                                                        Weight
-                                                                    </label>
-                                                                    <input
-                                                                        type="number"
-                                                                        placeholder="0"
-                                                                        className="w-full bg-surface-muted border border-surface-border rounded-xl px-2 py-2 text-[16px] sm:text-sm text-fg text-center"
-                                                                        value={ex.weightTargetKg || ""}
-                                                                        onChange={(e) => updateExercise(activeWorkoutIdx, eIdx, { weightTargetKg: parseFloat(e.target.value) || undefined })}
-                                                                        readOnly={isViewOnly}
-                                                                    />
-                                                                </div>
+                                                                {planTargetFieldsFor(ex).map((field) => {
+                                                                    const label = FIELD_PLAN_LABEL[field] ?? field;
+                                                                    if (field === "reps") {
+                                                                        return (
+                                                                            <div key={field} className="w-14 sm:w-16">
+                                                                                <label className="label-mini block text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1 px-1 text-center">
+                                                                                    {label}
+                                                                                </label>
+                                                                                <input
+                                                                                    type="text"
+                                                                                    placeholder="8-12"
+                                                                                    className="w-full bg-surface-muted border border-surface-border rounded-xl px-2 py-2 text-[16px] sm:text-sm text-fg text-center"
+                                                                                    value={ex.reps}
+                                                                                    onChange={(e) => updateExercise(activeWorkoutIdx, eIdx, { reps: e.target.value })}
+                                                                                    readOnly={isViewOnly}
+                                                                                />
+                                                                            </div>
+                                                                        );
+                                                                    }
+                                                                    if (field === "weight") {
+                                                                        return (
+                                                                            <div key={field} className="w-16 sm:w-[4.5rem]">
+                                                                                <label className="label-mini block text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1 px-1 text-center">
+                                                                                    {label}
+                                                                                </label>
+                                                                                <input
+                                                                                    type="number"
+                                                                                    placeholder="0"
+                                                                                    className="w-full bg-surface-muted border border-surface-border rounded-xl px-2 py-2 text-[16px] sm:text-sm text-fg text-center"
+                                                                                    value={ex.weightTargetKg || ""}
+                                                                                    onChange={(e) => updateExercise(activeWorkoutIdx, eIdx, { weightTargetKg: parseFloat(e.target.value) || undefined })}
+                                                                                    readOnly={isViewOnly}
+                                                                                />
+                                                                            </div>
+                                                                        );
+                                                                    }
+                                                                    const numKey =
+                                                                        field === "duration" ? "targetDurationSec" as const
+                                                                        : field === "distance" ? "targetDistanceMeters" as const
+                                                                        : field === "height" ? "targetHeightCm" as const
+                                                                        : field === "rpe" ? "targetRpe" as const
+                                                                        : field === "resistance" ? "targetResistance" as const
+                                                                        : field === "incline" ? "targetInclinePct" as const
+                                                                        : null;
+                                                                    if (!numKey) return null;
+                                                                    return (
+                                                                        <div key={field} className="w-14 sm:w-16">
+                                                                            <label className="label-mini block text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-1 px-1 text-center">
+                                                                                {label}
+                                                                            </label>
+                                                                            <input
+                                                                                type="number"
+                                                                                placeholder="0"
+                                                                                className="w-full bg-surface-muted border border-surface-border rounded-xl px-2 py-2 text-[16px] sm:text-sm text-fg text-center"
+                                                                                value={ex[numKey] || ""}
+                                                                                onChange={(e) => {
+                                                                                    const parsed = parseFloat(e.target.value);
+                                                                                    updateExercise(activeWorkoutIdx, eIdx, {
+                                                                                        [numKey]: Number.isFinite(parsed) ? parsed : undefined,
+                                                                                    });
+                                                                                }}
+                                                                                readOnly={isViewOnly}
+                                                                            />
+                                                                        </div>
+                                                                    );
+                                                                })}
                                                                 {!isViewOnly && (
                                                                     <button
                                                                         type="button"

@@ -12,15 +12,24 @@ import { BackButton } from "@/components/shared/BackButton";
 import { defaultHomeForRole } from "@/lib/roles";
 import { canEditWorkoutLog, canViewWorkoutLog } from "@/lib/userProfile";
 import { getNickname, pickDisplayName } from "@/lib/userNicknames";
-import { groupLogSetsByExercise, logSetDisplayOrderBy, formatLoggedWeight } from "@/lib/logSetGrouping";
+import { groupLogSetsByExercise, logSetDisplayOrderBy } from "@/lib/logSetGrouping";
 import { resolveLogSetExerciseName } from "@/lib/logSetExerciseName";
 import { getLogExerciseNotes } from "@/lib/logExerciseNotes";
 import { canonicalExerciseName } from "@/lib/exerciseCanonical";
+import {
+    ensureExerciseTrackingSchema,
+    formatSetSummary,
+    resolveTrackingSchema,
+    usesStrengthOneRm,
+    type ExerciseTrackingSchema,
+} from "@/lib/exerciseTracking";
 
 export default async function LogViewPage({ params }: { params: Promise<{ logId: string }> }) {
     const { logId } = await params;
     const { userId } = await auth();
     if (!userId) redirect("/sign-in");
+
+    await ensureExerciseTrackingSchema();
 
     const actor = await prisma.user.findUnique({ where: { clerkId: userId } });
     if (!actor) redirect("/sign-in");
@@ -57,6 +66,13 @@ export default async function LogViewPage({ params }: { params: Promise<{ logId:
     const groupedExercises = groupLogSetsByExercise(log.sets, (set) =>
         canonicalExerciseName(resolveLogSetExerciseName(set)) || resolveLogSetExerciseName(set)
     );
+
+    const schemaByExerciseId: Record<string, ExerciseTrackingSchema> = {};
+    for (const ex of groupedExercises) {
+        const muscleGroup = ex.muscleGroup ?? ex.sets[0]?.exercise?.muscleGroup ?? null;
+        schemaByExerciseId[ex.exerciseId] = await resolveTrackingSchema(ex.name, muscleGroup);
+    }
+
     const exerciseNotes = await getLogExerciseNotes(log.id);
 
     return (
@@ -134,7 +150,10 @@ export default async function LogViewPage({ params }: { params: Promise<{ logId:
                 )}
 
                 <div className="space-y-6">
-                    {groupedExercises.map((ex) => (
+                    {groupedExercises.map((ex) => {
+                        const schema = schemaByExerciseId[ex.exerciseId];
+                        const show1rm = usesStrengthOneRm(schema);
+                        return (
                         <div key={ex.exerciseId} className="card p-6 border-brand-500/10">
                             <div className="flex items-center justify-between mb-6">
                                 <div className="flex items-center gap-4">
@@ -156,35 +175,47 @@ export default async function LogViewPage({ params }: { params: Promise<{ logId:
                             )}
                             
                             <div className="space-y-3">
-                                <div className="grid grid-cols-6 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-fg-subtle border-b border-surface-border mb-3">
-                                    <span className="col-span-1">SET</span>
-                                    <span className="col-span-1 text-center">REPS</span>
-                                    <span className="col-span-1 text-center">LOAD</span>
-                                    <span className="col-span-1 text-center">RPE</span>
-                                    <span className="col-span-1 text-center">Est 1RM</span>
-                                    <span className="col-span-1 text-right">MEDIA</span>
+                                <div className="grid grid-cols-12 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-fg-subtle border-b border-surface-border mb-3">
+                                    <span className="col-span-2">SET</span>
+                                    <span className="col-span-6">PERFORMANCE</span>
+                                    {show1rm && <span className="col-span-2 text-center">Est 1RM</span>}
+                                    <span className={cn("text-right", show1rm ? "col-span-2" : "col-span-4")}>MEDIA</span>
                                 </div>
-                                {ex.sets.map((set: any) => {
-                                    const isCardioExercise = ex.muscleGroup?.toLowerCase() === "cardio";
-                                    const est1RM = !isCardioExercise && !set.isWarmup && set.weightKg && set.reps
+                                {ex.sets.map((set) => {
+                                    const summary = formatSetSummary(
+                                        {
+                                            weightKg: set.weightKg,
+                                            reps: set.reps,
+                                            rpe: set.rpe,
+                                            durationSec: set.durationSec,
+                                            distanceMeters: set.distanceMeters,
+                                            heightCm: set.heightCm,
+                                            resistance: set.resistance,
+                                            inclinePct: set.inclinePct,
+                                            calories: set.calories,
+                                            heartRate: set.heartRate,
+                                            speedKph: set.speedKph,
+                                            rir: set.rir,
+                                        },
+                                        schema
+                                    );
+                                    const est1RM = show1rm && !set.isWarmup && set.weightKg && set.reps
                                         ? calculateOneRM(set.weightKg, set.reps)
                                         : null;
                                     return (
                                     <div key={set.id} className="space-y-3">
                                         <div className={cn(
-                                            "grid grid-cols-6 px-3 py-3 text-sm items-center rounded-2xl group transition-all",
+                                            "grid grid-cols-12 px-3 py-3 text-sm items-center rounded-2xl group transition-all",
                                             set.isPR ? "bg-brand-500/5 border border-brand-500/20 shadow-glow-brand-sm" : "bg-surface-muted border border-transparent hover:border-surface-border"
                                         )}>
-                                            <span className="col-span-1 font-black text-fg-subtle tracking-tighter">#{set.setNumber}{set.isWarmup ? " W" : ""}</span>
-                                            <span className="col-span-1 font-black text-center text-fg">{set.reps || "-"}</span>
-                                            <span className="col-span-1 font-black text-center text-brand-400 italic">
-                                                {formatLoggedWeight(set.weightKg)}
-                                            </span>
-                                            <span className="col-span-1 font-black text-center text-warning italic">{set.rpe || "-"}</span>
-                                            <span className={cn("col-span-1 font-black text-center", est1RM ? "text-warning-400" : "text-fg-subtle")}>
-                                                {est1RM ? `${est1RM}kg` : "—"}
-                                            </span>
-                                            <div className="col-span-1 flex justify-end">
+                                            <span className="col-span-2 font-black text-fg-subtle tracking-tighter">#{set.setNumber}{set.isWarmup ? " W" : ""}</span>
+                                            <span className="col-span-6 font-semibold text-fg leading-snug">{summary}</span>
+                                            {show1rm && (
+                                                <span className={cn("col-span-2 font-black text-center", est1RM ? "text-warning-400" : "text-fg-subtle")}>
+                                                    {est1RM ? `${est1RM}kg` : "—"}
+                                                </span>
+                                            )}
+                                            <div className={cn("flex justify-end", show1rm ? "col-span-2" : "col-span-4")}>
                                                 {set.videoUrl && <Video className={cn("w-4 h-4", set.videoUrl ? "text-success animate-pulse" : "text-fg-subtle/20")} />}
                                             </div>
                                         </div>
@@ -204,7 +235,7 @@ export default async function LogViewPage({ params }: { params: Promise<{ logId:
                                 )})}
                             </div>
                         </div>
-                    ))}
+                    )})}
                 </div>
             </div>
         </div>

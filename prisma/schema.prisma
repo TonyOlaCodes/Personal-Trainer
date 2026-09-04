@@ -268,6 +268,13 @@ model Exercise {
   sets           Int
   reps           String // e.g. "8-12" or "10"
   weightTargetKg Float?
+  /// Canonical seconds target for timed / cardio-style exercises
+  targetDurationSec    Float?
+  targetDistanceMeters Float?
+  targetHeightCm       Float?
+  targetRpe            Float?
+  targetResistance     Float?
+  targetInclinePct     Float?
   restSeconds    Int?
   notes          String?
   order          Int     @default(0)
@@ -344,6 +351,16 @@ model LogSet {
   reps         Int?
   weightKg     Float?
   rpe          Int? // Rate of Perceived Exertion 1-10
+  /// Extended metrics — only fields enabled in the exercise tracking schema are shown in UI
+  durationSec      Float?
+  distanceMeters   Float?
+  heightCm         Float?
+  resistance       Float?
+  inclinePct       Float?
+  calories         Float?
+  heartRate        Int?
+  speedKph         Float?
+  rir              Float?
   isWarmup     Boolean @default(false)
   isCompleted  Boolean @default(true)
   isPR         Boolean @default(false)
@@ -399,6 +416,10 @@ model GlobalExercise {
   instructions String?
   thumbnailUrl String?
   muscleGroup  String?
+  /// Tracking preset key (strength, timed, cardio, …) — see src/lib/exerciseTracking
+  trackingPreset String?
+  /// JSON array of TrackingFieldConfig — source of truth for logging UI / PRs / plans
+  trackingFields String?
   createdAt    DateTime @default(now())
 
   @@map("global_exercises")
