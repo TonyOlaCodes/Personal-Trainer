@@ -37,7 +37,7 @@ export async function GET(req: Request) {
     if (authResult.error) return authResult.error;
     const user = authResult.user;
 
-    await touchUserLastActive(user.id);
+    // Do NOT touch lastActiveAt here — chat/activity polls must not keep users Online.
 
     const url = new URL(req.url);
     const isGeneral = url.searchParams.get("general") === "true";

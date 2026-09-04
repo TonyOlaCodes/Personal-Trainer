@@ -8,7 +8,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { getInitials, formatRelative, cn, getRoleNameClass } from "@/lib/utils";
-import { getPresenceIndicator } from "@/lib/userPresence";
+import { formatPresenceWithWorkout, getPresenceIndicator } from "@/lib/userPresence";
+import { PresenceAvatarBadge, PresenceWorkoutStatusLine } from "@/components/shared/PresenceAvatarBadge";
 import { sortConversationsByActivity } from "@/lib/chatActivity";
 import {
     formatConversationActivityTime,
@@ -234,9 +235,9 @@ export function ChatClient({
     }, [selectedConv, activeSessions]);
 
     const selectedPresence = useMemo(() => {
-        if (!canViewPresenceDots || !selectedConv || selectedActiveSession) return null;
+        if (!canViewPresenceDots || !selectedConv) return null;
         return getPresenceIndicator(resolveLastActive(selectedConv.userId));
-    }, [canViewPresenceDots, selectedConv, selectedActiveSession, resolveLastActive, conversationPresence]);
+    }, [canViewPresenceDots, selectedConv, resolveLastActive, conversationPresence]);
 
     const showAccessRequestReplyOptions = useMemo(() => {
         if (currentUserRole !== "SUPER_ADMIN" || tab !== "direct" || !selectedConv || selectedConv.isDeleted) return false;
@@ -900,7 +901,7 @@ export function ChatClient({
                     case "unread":
                         return unread > 0;
                     case "online":
-                        return presence.level === "online" || Boolean(session);
+                        return presence.level === "online";
                     case "inWorkout":
                         return Boolean(session);
                     case "missedWorkout":
@@ -1416,7 +1417,7 @@ export function ChatClient({
                     ) : (
                         filteredConversations.map((conv) => {
                             const session = activeSessions[conv.userId];
-                            const presence = canViewPresenceDots && !session
+                            const presence = canViewPresenceDots
                                 ? getPresenceIndicator(resolveLastActive(conv.userId))
                                 : null;
                             const unread = unreadCounts[conv.userId] ?? 0;
@@ -1446,19 +1447,12 @@ export function ChatClient({
                                             getInitials(conv.name)
                                         )}
                                     </span>
-                                    {canViewPresenceDots && presence && (
-                                        <span
-                                            className={cn(
-                                                "absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-surface",
-                                                presence.dotClassName
-                                            )}
-                                            title={presence.label}
-                                        />
-                                    )}
-                                    {isCoachUser && session && (
-                                        <span
-                                            className="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-surface bg-success animate-pulse"
-                                            title={`In workout: ${session.workoutName}`}
+                                    {canViewPresenceDots && (
+                                        <PresenceAvatarBadge
+                                            lastActiveAt={resolveLastActive(conv.userId)}
+                                            inWorkout={isCoachUser && Boolean(session)}
+                                            workoutName={session?.workoutName}
+                                            className="border-surface"
                                         />
                                     )}
                                 </div>
@@ -1487,10 +1481,10 @@ export function ChatClient({
                                     </div>
                                     </div>
                                     {isCoachUser && session ? (
-                                        <p className="text-[10px] text-success font-bold truncate flex items-center gap-1">
-                                            <Activity className="w-3 h-3 shrink-0" />
-                                            In workout · {session.workoutName}
-                                        </p>
+                                        <PresenceWorkoutStatusLine
+                                            lastActiveAt={resolveLastActive(conv.userId)}
+                                            workoutName={session.workoutName}
+                                        />
                                     ) : canViewPresenceLabels && presence ? (
                                         <p className="text-[10px] text-fg-subtle truncate">{presence.label}</p>
                                     ) : conv.isDeleted ? (
@@ -1634,9 +1628,12 @@ export function ChatClient({
                                         <TypingDots />
                                     </p>
                                 ) : selectedActiveSession ? (
-                                    <p className="text-[10px] text-success font-bold flex items-center gap-1 truncate mt-0.5">
+                                    <p className="text-[10px] text-brand-400 font-bold flex items-center gap-1 truncate mt-0.5">
                                         <Activity className="w-3 h-3 shrink-0" />
-                                        In workout · {selectedActiveSession.workoutName}
+                                        {formatPresenceWithWorkout(
+                                            resolveLastActive(selectedConv.userId),
+                                            selectedActiveSession.workoutName
+                                        )}
                                     </p>
                                 ) : canViewPresenceLabels && selectedPresence ? (
                                     <p className="text-[10px] text-fg-subtle font-medium truncate mt-0.5">{selectedPresence.label}</p>

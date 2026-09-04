@@ -15,7 +15,8 @@ import { cn, formatDate, getInitials, toDateKey } from "@/lib/utils";
 import { shiftDateKey } from "@/lib/coachNotificationSchedule";
 import { useCurrentDate } from "@/hooks/useCurrentDate";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
-import { getPresenceIndicator } from "@/lib/userPresence";
+import { formatPresenceWithWorkout } from "@/lib/userPresence";
+import { PresenceAvatarBadge } from "@/components/shared/PresenceAvatarBadge";
 import { PendingReviewsModal, type PendingReviewItem } from "@/components/shared/PendingReviewsModal";
 import { NeedsAttentionInboxModal } from "@/components/coach/NeedsAttentionInboxModal";
 import { CoachCodeRequestsPanel } from "@/components/coach/CoachCodeRequestsPanel";
@@ -689,11 +690,11 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                         ) : (
                             sortedClients.map((c) => {
                                 const session = c.activeSession ?? null;
-                                const presence = session ? null : getPresenceIndicator(c.lastActiveAt);
                                 const insight = insights.clientInsights[c.id];
-                                const presenceTitle = session
-                                    ? `In workout · ${session.workoutName}`
-                                    : presence?.label;
+                                const presenceTitle = formatPresenceWithWorkout(
+                                    c.lastActiveAt,
+                                    session?.workoutName ?? null
+                                );
                                 return (
                                 <Link
                                     key={c.id}
@@ -715,25 +716,24 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                                             )}>
                                                 {c.avatarUrl ? <img src={resolveUploadUrl(c.avatarUrl)} alt="avatar" className="w-full h-full object-cover rounded-2xl" /> : getInitials(c.name)}
                                             </div>
-                                            {session ? (
-                                                <span
-                                                    className="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-surface-card bg-success animate-pulse"
-                                                    title={presenceTitle}
-                                                />
-                                            ) : presence ? (
-                                                <span
-                                                    className={cn(
-                                                        "absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-surface-card",
-                                                        presence.dotClassName
-                                                    )}
-                                                    title={presenceTitle}
-                                                />
-                                            ) : null}
+                                            <PresenceAvatarBadge
+                                                lastActiveAt={c.lastActiveAt}
+                                                inWorkout={Boolean(session)}
+                                                workoutName={session?.workoutName}
+                                            />
                                         </div>
                                         <div className="min-w-0 flex-1">
                                             <div className="flex items-center gap-2 flex-wrap">
                                                 <p className="font-bold text-fg group-hover:text-brand-400 transition-colors truncate">{c.name}</p>
                                                 <SevenDayWeightBadge client={c} />
+                                                {session && (
+                                                    <span
+                                                        className="text-[8px] uppercase font-black px-2 py-0.5 rounded-full border border-brand-500/30 bg-brand-500/10 text-brand-400 shrink-0"
+                                                        title={presenceTitle}
+                                                    >
+                                                        In workout
+                                                    </span>
+                                                )}
                                                 {c.isCoachPaused && (
                                                     <span className="text-[8px] uppercase font-black px-2 py-0.5 rounded-full border border-surface-border bg-surface-muted/50 text-fg-muted shrink-0">
                                                         Paused
@@ -750,6 +750,9 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                                                     </span>
                                                 )}
                                             </div>
+                                            <p className="text-[10px] text-fg-subtle mt-0.5 truncate" title={presenceTitle}>
+                                                {presenceTitle}
+                                            </p>
                                         </div>
                                     </div>
                                     <ClientInsightRow insight={insight} client={c} />

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAuthUser } from "@/lib/apiAuth";
 import { touchUserLastActive } from "@/lib/userPresence";
 
-/** Lightweight heartbeat so active sessions stay marked online. */
+/** Heartbeat for real foreground app activity — not workouts or background polls. */
 export async function POST(req: Request) {
     const authResult = await requireAuthUser(req);
     if (authResult.error) return authResult.error;

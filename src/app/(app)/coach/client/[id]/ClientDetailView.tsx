@@ -19,7 +19,7 @@ import { RecentSessionsExplorer, PREVIEW_LIMIT } from "@/components/shared/Recen
 import { cn, formatDate, getInitials } from "@/lib/utils";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { formatCoachPlanLabel } from "@/lib/coachPlans";
-import { getPresenceIndicator } from "@/lib/userPresence";
+import { formatPresenceWithWorkout, getPresenceIndicator } from "@/lib/userPresence";
 
 const CHECK_IN_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const CHECK_IN_FREQUENCIES = [
@@ -369,8 +369,12 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
     };
 
     const presence = useMemo(
-        () => client.activeSession ? null : getPresenceIndicator(client.lastActiveAt),
-        [client.lastActiveAt, client.activeSession]
+        () => getPresenceIndicator(client.lastActiveAt),
+        [client.lastActiveAt]
+    );
+    const presenceWorkoutLabel = useMemo(
+        () => formatPresenceWithWorkout(client.lastActiveAt, client.activeSession?.workoutName ?? null),
+        [client.lastActiveAt, client.activeSession?.workoutName]
     );
 
     const filteredBodyweightHistory = useMemo(() => {
@@ -683,21 +687,21 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                     <div>
                         <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 justify-center sm:justify-start">
                             <h2 className="text-2xl font-bold text-fg tracking-tight">{client.name || "Strength Athlete"}</h2>
-                            {(client.activeSession || presence) && (
-                                <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface-muted/50 border border-surface-border w-fit h-fit mx-auto sm:mx-0">
-                                    {client.activeSession ? (
-                                        <span
-                                            className="w-1.5 h-1.5 rounded-full bg-success animate-pulse"
-                                            title={`In workout · ${client.activeSession.workoutName}`}
-                                        />
-                                    ) : presence ? (
-                                        <span
-                                            className={cn("w-1.5 h-1.5 rounded-full", presence.dotClassName)}
-                                            title={presence.label}
-                                        />
-                                    ) : null}
-                                </div>
-                            )}
+                            <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface-muted/50 border border-surface-border w-fit h-fit mx-auto sm:mx-0">
+                                <span
+                                    className={cn("w-1.5 h-1.5 rounded-full", presence.dotClassName)}
+                                    title={presence.label}
+                                />
+                                <span className="text-[10px] font-bold text-fg-muted">
+                                    {client.activeSession ? presenceWorkoutLabel : presence.label}
+                                </span>
+                                {client.activeSession && (
+                                    <span
+                                        className="w-1.5 h-1.5 rounded-full bg-brand-400 animate-pulse"
+                                        title={`Workout in progress · ${client.activeSession.workoutName}`}
+                                    />
+                                )}
+                            </div>
                         </div>
                         <p className="text-sm text-fg-muted mb-1 mt-1 sm:mt-0">{client.email}</p>
                         <div className="flex flex-wrap gap-2 mt-3 justify-center sm:justify-start">

@@ -27,6 +27,14 @@ function getYesterdayDateKey(now = new Date()): string {
     return getLocalTimeParts(anchor, APP_TIMEZONE).dateKey;
 }
 
+/** True only when lastActiveAt is within the online window — never based on workouts. */
+export function isOnlineNow(lastActiveAt: string | Date | null | undefined): boolean {
+    if (!lastActiveAt) return false;
+    const lastActive = new Date(lastActiveAt);
+    if (Number.isNaN(lastActive.getTime())) return false;
+    return Date.now() - lastActive.getTime() < ONLINE_THRESHOLD_MS;
+}
+
 /** Readable last-online label for lists and headers. */
 export function formatLastActiveText(lastActiveAt: string | Date | null | undefined): string {
     if (!lastActiveAt) return "Inactive";
@@ -49,6 +57,27 @@ export function formatLastActiveText(lastActiveAt: string | Date | null | undefi
     }
 
     return `Inactive ${days}d`;
+}
+
+/**
+ * Coach-facing presence + optional in-progress workout.
+ * Workout state never forces Online — only lastActiveAt does.
+ */
+export function formatPresenceWithWorkout(
+    lastActiveAt: string | Date | null | undefined,
+    workoutName?: string | null
+): string {
+    const online = isOnlineNow(lastActiveAt);
+    if (workoutName) {
+        const base = online ? "Online · Workout in progress" : "Offline · Workout in progress";
+        return workoutName.trim() ? `${base} · ${workoutName.trim()}` : base;
+    }
+    return formatLastActiveText(lastActiveAt);
+}
+
+/** Short Online / Offline word for compact badges. */
+export function formatOnlineOffline(lastActiveAt: string | Date | null | undefined): string {
+    return isOnlineNow(lastActiveAt) ? "Online" : "Offline";
 }
 
 /** Update lastActiveAt at most once per heartbeat interval. */
