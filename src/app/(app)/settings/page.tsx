@@ -47,7 +47,6 @@ export default async function SettingsPage() {
                     notifyOnMissedCheckInTime: true,
                     notifyOnMissedWorkoutTime: true,
                     bio: true,
-                    isPrivateProfile: true,
                 },
             });
         } catch (dbErr) {

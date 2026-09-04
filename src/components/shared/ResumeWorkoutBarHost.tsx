@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { parseLogDate, toDateKey } from "@/lib/utils";
-import { ResumeWorkoutBar, type ResumeWorkoutSession } from "@/components/shared/ResumeWorkoutBar";
+import { ResumeWorkoutBar, shouldHideResumeWorkoutBar, type ResumeWorkoutSession } from "@/components/shared/ResumeWorkoutBar";
 
 /**
  * Loads the one active session and renders the resume bar under the TopBar spacer
@@ -14,7 +14,7 @@ export function ResumeWorkoutBarHost() {
     const [session, setSession] = useState<ResumeWorkoutSession | null>(null);
 
     useEffect(() => {
-        if (pathname.startsWith("/plans/log/")) {
+        if (shouldHideResumeWorkoutBar(pathname)) {
             setSession(null);
             return;
         }

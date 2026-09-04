@@ -12,8 +12,9 @@ import { cn } from "@/lib/utils";
  *
  * Rendered from the app layout so a session can never be lost by navigating away:
  * it shows on Dashboard, Plans, Calendar, Progress and every other app page, on a
- * scheduled rest day just the same as a training day. Hidden only on the workout
- * screen itself, where the session is already on screen.
+ * scheduled rest day just the same as a training day. Hidden only where it would
+ * be noise (the live workout screen, Settings, and profile pages) — the session
+ * stays active in the background and the bar returns on Dashboard/Calendar/etc.
  */
 
 export interface ResumeWorkoutSession {
@@ -27,14 +28,21 @@ export interface ResumeWorkoutSession {
     isBackdated: boolean;
 }
 
+/** Routes where the resume bar should not render (session stays active). */
+export function shouldHideResumeWorkoutBar(pathname: string): boolean {
+    if (pathname.startsWith("/plans/log/")) return true;
+    if (pathname === "/settings" || pathname.startsWith("/settings/")) return true;
+    if (pathname === "/profile" || pathname.startsWith("/profile/")) return true;
+    return false;
+}
+
 export function ResumeWorkoutBar({ session }: { session: ResumeWorkoutSession }) {
     const pathname = usePathname();
     const router = useRouter();
     const [discarding, setDiscarding] = useState(false);
     const [dismissed, setDismissed] = useState(false);
 
-    // The workout screen owns the session already; a bar there would be noise.
-    if (pathname.startsWith(`/plans/log/`)) return null;
+    if (shouldHideResumeWorkoutBar(pathname)) return null;
     if (dismissed) return null;
 
     const discard = async () => {

@@ -48,7 +48,6 @@ interface Props {
         notifyOnMissedCheckIn?: boolean;
         notifyOnClientMessage?: boolean;
         bio?: string | null;
-        isPrivateProfile?: boolean;
         bannerUrl?: string | null;
         socialLinks?: SocialLinks;
     };
@@ -78,7 +77,6 @@ export function SettingsClient({ user }: Props) {
     // Profile form states
     const [name, setName] = useState(user.name || "");
     const [bio, setBio] = useState(user.bio || "");
-    const [isPrivateProfile, setIsPrivateProfile] = useState(user.isPrivateProfile ?? false);
     const [avatarUrl, setAvatarUrl] = useState(user.avatarUrl || "");
     const [bannerUrl, setBannerUrl] = useState(user.bannerUrl || "");
     const [socialLinks, setSocialLinks] = useState<SocialLinks>(user.socialLinks ?? {});
@@ -207,7 +205,6 @@ export function SettingsClient({ user }: Props) {
         avatarUrl?: string;
         bannerUrl?: string;
         bio?: string | null;
-        isPrivateProfile?: boolean;
         socialLinks?: SocialLinks;
     }) => {
         setProfileSaving(true);
@@ -246,13 +243,12 @@ export function SettingsClient({ user }: Props) {
                 avatarUrl: avatarUrl || "",
                 bannerUrl: bannerUrl || "",
                 bio: bio.trim() ? bio.trim() : null,
-                isPrivateProfile,
                 socialLinks,
             });
         }, 450);
 
         return () => window.clearTimeout(timer);
-    }, [activeSection, name, avatarUrl, bannerUrl, bio, isPrivateProfile, socialLinks, saveProfileFields]);
+    }, [activeSection, name, avatarUrl, bannerUrl, bio, socialLinks, saveProfileFields]);
 
     // Access code state
     const [secretCode, setSecretCode] = useState("");
@@ -434,6 +430,27 @@ export function SettingsClient({ user }: Props) {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 animate-fade-in pb-20">
             {!activeSection ? (
                 <div className="space-y-6">
+                    <Link
+                        href={getPublicProfileHref(user.id)}
+                        className="card p-4 flex items-center justify-between gap-3 hover:border-brand-500/30 transition-colors group"
+                    >
+                        <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-10 h-10 rounded-xl bg-brand-400/10 border border-brand-400/20 flex items-center justify-center shrink-0 overflow-hidden">
+                                {avatarUrl ? (
+                                    <img
+                                        src={resolveUploadUrl(avatarUrl)}
+                                        alt=""
+                                        className="w-full h-full object-cover"
+                                    />
+                                ) : (
+                                    <User className="w-4 h-4 text-brand-400" />
+                                )}
+                            </div>
+                            <span className="text-sm font-bold text-fg">View Your Profile</span>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-fg-subtle shrink-0 group-hover:text-brand-400 transition-colors" />
+                    </Link>
+
                     {(user.role === "FREE" || user.role === "GENERAL_PREMIUM") && (
                         <div className="card p-5 border-brand-500/20 bg-brand-500/5 space-y-3">
                             <div className="flex items-center gap-2">
@@ -549,6 +566,18 @@ export function SettingsClient({ user }: Props) {
                     <div className="space-y-6">
                 {activeSection === "profile" && (
                     <div className="card p-8 space-y-8 animate-slide-up bg-gradient-to-br from-surface-card to-brand-950/5">
+                        <Link
+                            href={getPublicProfileHref(user.id)}
+                            className="flex items-center justify-between gap-3 -mt-1 pb-5 border-b border-surface-border/60 group"
+                        >
+                            <span className="text-sm font-bold text-fg group-hover:text-brand-300 transition-colors">
+                                View Your Profile
+                            </span>
+                            <span className="text-brand-400 font-black text-sm group-hover:translate-x-0.5 transition-transform">
+                                →
+                            </span>
+                        </Link>
+
                         <div className="flex items-start justify-between gap-3">
                             <div className="flex flex-col sm:flex-row items-center gap-6 flex-1 min-w-0">
                             <div className="flex flex-col items-center gap-2">
@@ -697,36 +726,6 @@ export function SettingsClient({ user }: Props) {
                                     </div>
                                 ))}
                             </div>
-                        </div>
-
-                        <div className="p-5 rounded-2xl border border-surface-border bg-surface-muted/30 space-y-4">
-                            <div className="flex items-start justify-between gap-4">
-                                <div>
-                                    <p className="text-sm font-black text-fg">Private account</p>
-                                    <p className="text-xs text-fg-muted mt-1 leading-relaxed">
-                                        When private, others only see your photo, name, username, coach, and online status.
-                                        Your assigned coach and admins can still view your full profile.
-                                    </p>
-                                </div>
-                                <button
-                                    type="button"
-                                    role="switch"
-                                    aria-checked={isPrivateProfile}
-                                    onClick={() => setIsPrivateProfile((prev) => !prev)}
-                                    className={cn(
-                                        "relative w-11 h-6 rounded-full transition-colors shrink-0",
-                                        isPrivateProfile ? "bg-brand-500" : "bg-surface-muted border border-surface-border"
-                                    )}
-                                >
-                                    <span className={cn(
-                                        "absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform",
-                                        isPrivateProfile && "translate-x-5"
-                                    )} />
-                                </button>
-                            </div>
-                            <Link href={getPublicProfileHref(user.id)} className="text-xs font-bold text-brand-400 hover:text-brand-300">
-                                View your public profile →
-                            </Link>
                         </div>
 
                     </div>

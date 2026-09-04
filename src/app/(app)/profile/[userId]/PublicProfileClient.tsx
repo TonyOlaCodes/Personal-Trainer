@@ -79,7 +79,6 @@ interface ProfilePayload {
     role: string;
     bio?: string | null;
     experienceLevel?: string | null;
-    isPrivateProfile?: boolean;
     joinDate: string;
     trainingGoal: string | null;
     goal: string | null;
@@ -411,18 +410,6 @@ export function PublicProfileClient({ userId }: Props) {
                 <div className={cn("px-5 sm:px-8 pb-6 relative", isLimited ? "pt-8" : "-mt-11 sm:-mt-12")}>
                     {viewer.isSelf && (
                         <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2 mb-4">
-                            <Link
-                                href="/settings?section=profile"
-                                className={cn(
-                                    "inline-flex items-center gap-2 h-9 px-4 text-[10px] font-black uppercase tracking-widest rounded-xl border transition-colors",
-                                    profile.isPrivateProfile
-                                        ? "bg-brand-500/15 border-brand-500/35 text-brand-300 shadow-glow-brand-sm"
-                                        : "bg-surface-muted/40 border-surface-border text-fg-muted hover:text-fg hover:border-brand-500/30"
-                                )}
-                            >
-                                <Lock className="w-3.5 h-3.5" />
-                                Private account
-                            </Link>
                             <Link href="/settings?section=profile" className="btn-secondary inline-flex items-center gap-2 h-9 px-4 text-xs">
                                 Edit profile
                             </Link>
