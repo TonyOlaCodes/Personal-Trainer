@@ -30,6 +30,12 @@ import {
     type SessionOverrideExercise,
     type SessionSetTarget,
 } from "@/lib/workoutSessionOverrides";
+import {
+    ExerciseHistoryButton,
+    ExerciseHistorySplit,
+    useExerciseHistoryInspector,
+} from "@/components/exercises/ExerciseHistoryInspector";
+import { LastSessionPreview } from "@/components/exercises/LastSessionPreview";
 
 type SessionExercise = SessionOverrideExercise;
 
@@ -211,6 +217,9 @@ export function SessionEditClient({
     const [pickerMode, setPickerMode] = useState<"add" | "swap" | null>(null);
     const [swappingId, setSwappingId] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
+
+    // Exercise History Inspector — one panel at a time, switches exercise on reopen.
+    const { exerciseName: historyExercise, openHistory, closeHistory } = useExerciseHistoryInspector();
 
     const viewport = useVisualViewport();
     useScrollLock(Boolean(pickerMode));
@@ -415,11 +424,29 @@ export function SessionEditClient({
         }
     }, [dateKey]);
 
+    const historyOpen = Boolean(historyExercise);
+
     return (
+        <div
+            className={cn(
+                // Widen the shell when the inspector is open so the editor shrinks gently.
+                "mx-auto transition-[max-width] duration-300",
+                historyOpen ? "max-w-2xl xl:max-w-6xl" : "max-w-2xl"
+            )}
+        >
+        <ExerciseHistorySplit
+            exerciseName={historyExercise}
+            clientId={clientId}
+            onClose={closeHistory}
+        >
         <div className="space-y-4 animate-fade-in pb-28">
             {/* Sticky top bar with SAVE */}
-            <div className="sticky top-0 z-30 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 bg-surface/95 backdrop-blur-md border-b border-surface-border">
-                <div className="flex items-center gap-3 max-w-2xl mx-auto">
+            <div className={cn(
+                "sticky top-0 z-30 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 bg-surface/95 backdrop-blur-md border-b border-surface-border",
+                // The edge bleed assumes a full-width column; drop it once the editor is split.
+                historyOpen && "xl:mx-0 xl:px-0"
+            )}>
+                <div className="flex items-center gap-3">
                     <Link
                         href={backHref}
                         className="shrink-0 w-10 h-10 rounded-xl bg-surface-muted border border-surface-border flex items-center justify-center text-fg-muted hover:text-fg"
@@ -509,6 +536,11 @@ export function SessionEditClient({
                                                 {ex.sets} sets · planned targets
                                             </p>
                                         </div>
+                                        <ExerciseHistoryButton
+                                            exerciseName={ex.name}
+                                            onOpen={openHistory}
+                                            active={historyExercise === ex.name.trim()}
+                                        />
                                         <button
                                             type="button"
                                             onClick={() => openSwapPicker(ex.id)}
@@ -526,6 +558,14 @@ export function SessionEditClient({
                                             <Trash2 className="w-4 h-4" />
                                         </button>
                                     </div>
+
+                                    {ex.name.trim() && (
+                                        <LastSessionPreview
+                                            exerciseName={ex.name}
+                                            clientId={clientId}
+                                            onViewHistory={openHistory}
+                                        />
+                                    )}
 
                                     {!expanded ? (
                                         <div className="space-y-2">
@@ -744,6 +784,8 @@ export function SessionEditClient({
                     </div>
                 </div>
             )}
+        </div>
+        </ExerciseHistorySplit>
         </div>
     );
 }

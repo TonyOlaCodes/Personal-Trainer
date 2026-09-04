@@ -17,6 +17,12 @@ import {
     guessTrackingSchema,
     type TrackingFieldKey,
 } from "@/lib/exerciseTracking";
+import {
+    ExerciseHistoryButton,
+    ExerciseHistorySplit,
+    useExerciseHistoryInspector,
+} from "@/components/exercises/ExerciseHistoryInspector";
+import { LastSessionPreview } from "@/components/exercises/LastSessionPreview";
 
 interface LocalExercise {
     id?: string;
@@ -116,6 +122,10 @@ export function PlanCreateClient() {
     const [canCopyPlan, setCanCopyPlan] = useState(false);
     const [canEditPlan, setCanEditPlan] = useState(false);
     const [cloningPlan, setCloningPlan] = useState(false);
+
+    // Exercise History Inspector — one panel at a time, switches exercise on reopen.
+    const { exerciseName: historyExercise, openHistory, closeHistory } = useExerciseHistoryInspector();
+    const historyOpen = Boolean(historyExercise);
     // null = "right away", 0-6 = Mon-Sun target weekday for Week 1
     const [weekStartDay, setWeekStartDay] = useState<number | null>(null);
     const workoutTabRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -673,7 +683,19 @@ export function PlanCreateClient() {
     }
 
     return (
-        <div className="max-w-4xl mx-auto p-4 sm:p-6 space-y-6 animate-fade-in pb-24 lg:pb-6">
+        <div
+            className={cn(
+                // Widen the shell when the inspector is open so the editor shrinks gently.
+                "mx-auto p-4 sm:p-6 animate-fade-in pb-24 lg:pb-6 transition-[max-width] duration-300",
+                historyOpen ? "max-w-4xl xl:max-w-[95rem]" : "max-w-4xl"
+            )}
+        >
+        <ExerciseHistorySplit
+            exerciseName={historyExercise}
+            clientId={clientId}
+            onClose={closeHistory}
+        >
+        <div className="space-y-6">
             <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                     <button onClick={() => router.back()} className="btn-icon p-2">
@@ -834,7 +856,11 @@ export function PlanCreateClient() {
             </div>
 
             {/* Week + day switcher — sticky so days stay reachable while editing exercises */}
-            <div className="sticky top-16 z-20 -mx-4 px-4 sm:-mx-6 sm:px-6 py-3 bg-surface/95 backdrop-blur-md border-y border-surface-border space-y-3">
+            <div className={cn(
+                "sticky top-16 z-20 -mx-4 px-4 sm:-mx-6 sm:px-6 py-3 bg-surface/95 backdrop-blur-md border-y border-surface-border space-y-3",
+                // The edge bleed assumes a full-width column; drop it once the editor is split.
+                historyOpen && "xl:mx-0 xl:px-0"
+            )}>
                 <div className="card p-3 flex items-center justify-between gap-3 border-brand-500/20 bg-gradient-brand/5">
                     <button
                         onClick={handlePrevWeek}
@@ -975,7 +1001,15 @@ export function PlanCreateClient() {
                                                     <tr key={eIdx} className="hover:bg-surface-elevated/30 transition-colors group">
                                                         <td className="p-3 border-b border-surface-border">
                                                             <p className="text-xs font-black text-fg mb-1">{templateEx.name || "Unnamed Exercise"}</p>
-                                                            <p className="text-[9px] text-fg-muted font-bold uppercase tracking-tight italic">Position {eIdx + 1}</p>
+                                                            <div className="flex items-center gap-2">
+                                                                <p className="text-[9px] text-fg-muted font-bold uppercase tracking-tight italic">Position {eIdx + 1}</p>
+                                                                <ExerciseHistoryButton
+                                                                    exerciseName={templateEx.name}
+                                                                    onOpen={openHistory}
+                                                                    active={historyExercise === templateEx.name.trim()}
+                                                                    className="px-2 py-1"
+                                                                />
+                                                            </div>
                                                         </td>
                                                         {[0, 1, 2, 3].map(offset => {
                                                             const wIdx = linearityStartWeekIdx + offset;
@@ -1335,6 +1369,12 @@ export function PlanCreateClient() {
                                                                         </div>
                                                                     );
                                                                 })}
+                                                                <ExerciseHistoryButton
+                                                                    exerciseName={ex.name}
+                                                                    onOpen={openHistory}
+                                                                    active={historyExercise === ex.name.trim()}
+                                                                    className="h-10 self-end"
+                                                                />
                                                                 {!isViewOnly && (
                                                                     <button
                                                                         type="button"
@@ -1347,6 +1387,14 @@ export function PlanCreateClient() {
                                                                 )}
                                                             </div>
                                                         </div>
+                                                        {ex.name.trim() && (
+                                                            <LastSessionPreview
+                                                                exerciseName={ex.name}
+                                                                clientId={clientId}
+                                                                onViewHistory={openHistory}
+                                                                className="mt-2.5"
+                                                            />
+                                                        )}
                                                     </div>
                                                 </div>
                                             ))}
@@ -1398,6 +1446,8 @@ export function PlanCreateClient() {
                         </div>
                     )}
             </div>
+        </div>
+        </ExerciseHistorySplit>
         </div>
     );
 }

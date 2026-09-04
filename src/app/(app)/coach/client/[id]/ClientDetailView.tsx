@@ -20,6 +20,10 @@ import { cn, formatDate, getInitials } from "@/lib/utils";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { formatCoachPlanLabel } from "@/lib/coachPlans";
 import { formatPresenceWithWorkout, getPresenceIndicator } from "@/lib/userPresence";
+import {
+    ExerciseHistoryModal,
+    useExerciseHistoryInspector,
+} from "@/components/exercises/ExerciseHistoryInspector";
 
 const CHECK_IN_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const CHECK_IN_FREQUENCIES = [
@@ -188,6 +192,9 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
     
     const [showAllSessions, setShowAllSessions] = useState(false);
     const [sessionsInitialId, setSessionsInitialId] = useState<string | null>(null);
+
+    // Same Exercise History Inspector the plan editor uses, over the same data source.
+    const { exerciseName: historyExercise, openHistory, closeHistory } = useExerciseHistoryInspector();
 
     const router = useRouter();
 
@@ -1852,6 +1859,17 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                 <h4 className="text-base font-black text-fg tracking-tight">{selectedExercise || "Select an exercise"}</h4>
                                 <p className="text-[10px] text-fg-muted font-bold uppercase tracking-wide mt-0.5">Performance curve over time</p>
                             </div>
+                            <div className="flex items-center gap-3 shrink-0 flex-wrap">
+                            {selectedExercise && (
+                                <button
+                                    type="button"
+                                    onClick={() => openHistory(selectedExercise)}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest text-brand-400 bg-brand-500/10 border border-brand-500/20 hover:bg-brand-500/15 transition-colors"
+                                >
+                                    <Activity className="w-3 h-3" />
+                                    View full history
+                                </button>
+                            )}
                             {selectedExerciseStats && (
                                 <div className="flex items-center gap-3 shrink-0">
                                     <div className="text-center px-3 py-1.5 rounded-xl bg-warning/10 border border-warning/20">
@@ -1864,6 +1882,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                     </div>
                                 </div>
                             )}
+                            </div>
                         </div>
                         <div className="p-5 sm:p-6 bg-surface/10">
                             {selectedExercise ? (
@@ -1966,6 +1985,18 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                                  </div>
                                              </div>
                                              <div className="flex items-center gap-1 shrink-0">
+                                                 <button
+                                                     type="button"
+                                                     onClick={(e) => {
+                                                         e.stopPropagation();
+                                                         setSelectedExercise(ex);
+                                                         openHistory(ex);
+                                                     }}
+                                                     className="p-1.5 rounded-lg text-fg-subtle opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-surface-muted/80 hover:text-brand-400 transition-all"
+                                                     title={`View full ${ex} history`}
+                                                 >
+                                                     <Activity className="w-3.5 h-3.5" />
+                                                 </button>
                                                  {!readOnly && (
                                                      <button
                                                          type="button"
@@ -2083,6 +2114,11 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
             </div>
             )}
 
+            <ExerciseHistoryModal
+                exerciseName={historyExercise}
+                clientId={client.id}
+                onClose={closeHistory}
+            />
         </div>
     );
 }

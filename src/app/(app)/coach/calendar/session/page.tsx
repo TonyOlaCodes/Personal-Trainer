@@ -110,7 +110,8 @@ export default async function CoachSessionEditPage({
     return (
         <>
             <TopBar title="Edit Session" subtitle={`${clientName} · ${dateKey}`} hideSearch />
-            <div className="p-4 sm:p-6 max-w-2xl mx-auto">
+            {/* Width is owned by SessionEditClient so it can widen for the history split. */}
+            <div className="p-4 sm:p-6">
                 <SessionEditClient
                     clientId={clientId}
                     clientName={clientName}
