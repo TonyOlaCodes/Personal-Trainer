@@ -26,6 +26,7 @@
     "migrate:forearms": "npx tsx scripts/migrate-forearms-catalog.ts",
     "test:tracking": "npx tsx scripts/test-exercise-tracking.ts",
     "test:muscles": "npx tsx scripts/test-muscle-contribution.ts",
+    "test:achievements": "npx tsx scripts/test-achievements-progressive.ts",
     "test:presence": "npx tsx scripts/test-presence-workout.ts"
   },
   "dependencies": {
