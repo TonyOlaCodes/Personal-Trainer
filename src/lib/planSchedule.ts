@@ -25,6 +25,7 @@ export interface PlanWeekLike {
 export interface ActiveUserPlanLike {
     startedAt: Date | string;
     plan: {
+        id?: string;
         weeks: PlanWeekLike[];
     };
     scheduleRevisions?: PlanScheduleRevisionRecord[];

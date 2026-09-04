@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { SettingsClient } from "./SettingsClient";
-import { getDailyMetricTargets } from "@/lib/dailyMetrics";
+import { getClientGoalTargets } from "@/lib/clientGoalTargets";
 import { ensureNotificationPreferenceColumns, getCoachNotifyOnClientMessage } from "@/lib/notifications";
 import { ensureUserProfileColumns } from "@/lib/userProfile";
 import {
@@ -72,7 +72,7 @@ export default async function SettingsPage() {
         await ensureUserProfileColumns();
         await ensureProfileExtendedColumns();
 
-        const dailyMetricTargets = await getDailyMetricTargets(user.id);
+        const dailyMetricTargets = await getClientGoalTargets(user.id);
         const hiddenGoals = (user as any).hiddenGoals ?? [];
         const notifyOnClientMessage = await getCoachNotifyOnClientMessage(user.id);
 

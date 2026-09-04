@@ -21,7 +21,7 @@ import type { ExerciseHistorySession, ExerciseHistorySet } from "@/lib/exerciseH
 /** Sessions kept for the inspector — deep enough to judge progression, bounded. */
 export const DEFAULT_EXERCISE_HISTORY_SESSIONS = 30;
 
-/** How much raw training history to scan when looking for one exercise. */
+/** UI inspector scan only — not used for all-time PR correctness. */
 const HISTORY_SCAN_LIMIT = 600;
 
 function dayLabelFor(loggedAt: Date): string {

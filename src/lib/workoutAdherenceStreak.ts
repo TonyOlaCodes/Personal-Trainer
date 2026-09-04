@@ -110,16 +110,22 @@ function collectPlanWorkoutIds(activeUserPlan: ActiveUserPlanLike): Set<string> 
 }
 
 /**
- * True when the user completed a workout from their plan on this calendar day.
+ * True when the user trained on this calendar day.
  *
- * Matched by day rather than by exact scheduled slot so that plan edits, swapped
- * sessions and workouts caught up on a rest day all still count as training.
+ * Scheduled training days require the matching workout id (Edit Session keeps
+ * that id). Rest days still count any completed plan workout as catch-up.
  */
 function didTrainOnDay(
     dateKey: string,
     completedLogs: CompletedWorkoutLog[],
-    planWorkoutIds: Set<string>
+    planWorkoutIds: Set<string>,
+    scheduledWorkoutId: string | null
 ): boolean {
+    if (scheduledWorkoutId) {
+        return completedLogs.some(
+            (log) => log.dateKey === dateKey && log.workoutId === scheduledWorkoutId
+        );
+    }
     return completedLogs.some(
         (log) => log.dateKey === dateKey && planWorkoutIds.has(log.workoutId)
     );
@@ -178,8 +184,15 @@ function buildStreakDays(
             continue;
         }
 
-        // Training always counts, even on a rest day or after the plan window closed.
-        if (didTrainOnDay(dateKey, completedLogs, planWorkoutIds)) {
+        const historical = historicalByDate.get(dateKey);
+        const scheduledWorkoutId = isDateAfterPlanEnd(activeUserPlan.startedAt, weekCount, dateKey)
+            ? null
+            : historical
+                ? historical.workoutId
+                : resolveScheduledTrainingWorkoutId(activeUserPlan, dateKey, today);
+
+        // Matching scheduled work, or any plan workout on a rest / post-plan day.
+        if (didTrainOnDay(dateKey, completedLogs, planWorkoutIds, scheduledWorkoutId)) {
             days.push({ dateKey, status: "completed" });
             continue;
         }
@@ -188,11 +201,6 @@ function buildStreakDays(
             days.push({ dateKey, status: "missed" });
             continue;
         }
-
-        const historical = historicalByDate.get(dateKey);
-        const scheduledWorkoutId = historical
-            ? historical.workoutId
-            : resolveScheduledTrainingWorkoutId(activeUserPlan, dateKey, today);
 
         if (!scheduledWorkoutId) {
             days.push({ dateKey, status: "carry" });
@@ -250,22 +258,14 @@ function buildScheduledSlots(
 function markSlotCompletion(
     slots: AdherenceSlot[],
     completedLogs: CompletedWorkoutLog[],
-    excusedKeys?: Set<string>,
-    planWorkoutIds?: Set<string>
+    excusedKeys?: Set<string>
 ): number {
     const logSet = buildCompletedLogSet(completedLogs);
     let hits = 0;
 
     for (const slot of slots) {
         const slotKey = `${slot.dateKey}:${slot.workoutId}`;
-        const exactMatch = logSet.has(slotKey) || (excusedKeys?.has(slotKey) ?? false);
-        const legacyMatch =
-            !exactMatch
-            && planWorkoutIds
-            && completedLogs.some(
-                (log) => log.dateKey === slot.dateKey && planWorkoutIds.has(log.workoutId)
-            );
-        slot.completed = exactMatch || legacyMatch;
+        slot.completed = logSet.has(slotKey) || (excusedKeys?.has(slotKey) ?? false);
         if (slot.completed) hits++;
     }
 
@@ -343,8 +343,7 @@ function computePerfectWeeks(
 
         const weekSlots = buildScheduledSlots(activeUserPlan, weekStart, effectiveEnd);
         if (weekSlots.length > 0) {
-            const planWorkoutIds = collectPlanWorkoutIds(activeUserPlan);
-            markSlotCompletion(weekSlots, completedLogs, excusedKeys, planWorkoutIds);
+            markSlotCompletion(weekSlots, completedLogs, excusedKeys);
             const pendingToday = weekSlots.some(
                 (slot) => slot.dateKey === todayKey && !slot.completed
             );
@@ -383,12 +382,11 @@ export function computeWorkoutAdherence(input: WorkoutAdherenceInput): WorkoutAd
         return EMPTY_RESULT;
     }
 
-    const planWorkoutIds = collectPlanWorkoutIds(input.activeUserPlan);
     const excusedKeys = new Set(input.excusedMissedWorkoutKeys ?? []);
     const historicalMissedSessions = filterHistoricalMissedForActivePlan(
         input.historicalMissedSessions ?? [],
-        input.activeUserPlan.plan.id,
-        input.activeUserPlan.startedAt
+        input.activeUserPlan.plan.id ?? "",
+        startedAt
     );
     const streakDays = buildStreakDays(
         input.activeUserPlan,
@@ -401,8 +399,7 @@ export function computeWorkoutAdherence(input: WorkoutAdherenceInput): WorkoutAd
     const scheduledHits = markSlotCompletion(
         slots,
         input.completedLogs,
-        excusedKeys,
-        planWorkoutIds
+        excusedKeys
     );
 
     return {
@@ -705,7 +702,17 @@ export function runStreakScenarioChecks(): string[] {
         2
     );
 
-    // 15. A finished multi-week plan must not hold a streak open forever
+    // 15. Completing a different plan workout on a scheduled day does not complete that slot
+    expect(
+        "wrong workout on scheduled day is missed",
+        streakFor({
+            todayKey: "2026-01-06",
+            completedLogs: [{ dateKey: "2026-01-05", workoutId: "w-fri" }],
+        }),
+        0
+    );
+
+    // 16. A finished multi-week plan must not hold a streak open forever
     const finishedPlan: ActiveUserPlanLike = {
         startedAt: new Date("2026-01-05T12:00:00Z"),
         plan: {

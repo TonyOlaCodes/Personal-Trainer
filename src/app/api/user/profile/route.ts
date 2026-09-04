@@ -1,7 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { normalizeCalories, normalizeSleepHours, normalizeSteps, updateDailyMetricTargets } from "@/lib/dailyMetrics";
+import { updateClientGoalTargets } from "@/lib/clientGoalTargets";
 import { ensureNotificationPreferenceColumns, getCoachNotifyOnClientMessage, setCoachNotifyOnClientMessage } from "@/lib/notifications";
 import {
     ensureProfileExtendedColumns,
@@ -120,7 +120,6 @@ export async function PATCH(req: Request) {
                     ...(parsed.trainingDaysPerWeek !== undefined && { trainingDaysPerWeek: parsed.trainingDaysPerWeek }),
                     ...(parsed.experienceLevel !== undefined && { experienceLevel: parsed.experienceLevel }),
                     ...(parsed.trainingLocation !== undefined && { trainingLocation: parsed.trainingLocation }),
-                    ...(parsed.targetWeightKg !== undefined && { targetWeightKg: Math.round(parsed.targetWeightKg * 100) / 100 }),
                     ...(parsed.weightKg !== undefined && { weightKg: Math.round(parsed.weightKg * 100) / 100 }),
                     ...(parsed.hiddenGoals !== undefined && { hiddenGoals: parsed.hiddenGoals }),
                     ...(parsed.bio !== undefined && { bio: parsed.bio?.trim() ? parsed.bio.trim() : null }),
@@ -166,7 +165,6 @@ export async function PATCH(req: Request) {
                     ...(parsed.trainingDaysPerWeek !== undefined && { trainingDaysPerWeek: parsed.trainingDaysPerWeek }),
                     ...(parsed.experienceLevel !== undefined && { experienceLevel: parsed.experienceLevel }),
                     ...(parsed.trainingLocation !== undefined && { trainingLocation: parsed.trainingLocation }),
-                    ...(parsed.targetWeightKg !== undefined && { targetWeightKg: Math.round(parsed.targetWeightKg * 100) / 100 }),
                     ...(parsed.weightKg !== undefined && { weightKg: Math.round(parsed.weightKg * 100) / 100 }),
                 },
             });
@@ -177,14 +175,18 @@ export async function PATCH(req: Request) {
         }
 
         if (
-            parsed.targetCalories !== undefined ||
-            parsed.targetSteps !== undefined ||
-            parsed.targetSleepHours !== undefined
+            parsed.goal !== undefined
+            || parsed.targetWeightKg !== undefined
+            || parsed.targetCalories !== undefined
+            || parsed.targetSteps !== undefined
+            || parsed.targetSleepHours !== undefined
         ) {
-            await updateDailyMetricTargets(updated.id, {
-                targetCalories: normalizeCalories(parsed.targetCalories),
-                targetSteps: normalizeSteps(parsed.targetSteps),
-                targetSleepHours: normalizeSleepHours(parsed.targetSleepHours),
+            await updateClientGoalTargets(updated.id, {
+                ...(parsed.goal !== undefined ? { goal: parsed.goal } : {}),
+                ...(parsed.targetWeightKg !== undefined ? { targetWeightKg: parsed.targetWeightKg } : {}),
+                ...(parsed.targetCalories !== undefined ? { targetCalories: parsed.targetCalories } : {}),
+                ...(parsed.targetSteps !== undefined ? { targetSteps: parsed.targetSteps } : {}),
+                ...(parsed.targetSleepHours !== undefined ? { targetSleepHours: parsed.targetSleepHours } : {}),
             });
         }
 

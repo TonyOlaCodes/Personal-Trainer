@@ -4,6 +4,8 @@ import { ensureCheckInScheduleColumns, ensureCheckInUserWeekUnique } from "@/lib
 import { revokeBlockedAccessCodes } from "@/lib/accessCodes";
 import { ensureMediaAssetsTable } from "@/lib/mediaAccess";
 import { ensureDailyMetricsTable, ensureDailyMetricTargetColumns } from "@/lib/dailyMetrics";
+import { migrateLegacyClientGoals } from "@/lib/clientGoalTargets";
+import { ensureWorkoutHistoryIndexes } from "@/lib/workoutHistoryIndexes";
 import { ensureUserAccountStatusColumns } from "@/lib/userDeactivation";
 import { ensureCoachClientPauseColumns } from "@/lib/coachClientPause";
 import { ensureWorkoutSessionOverridesTable } from "@/lib/workoutSessionOverrides";
@@ -75,8 +77,10 @@ export async function ensureAppSchema() {
             ensureCoachCodeRequestTables(),
             ensureAppSettingsTable(),
             ensureExerciseTrackingSchema(),
+            ensureWorkoutHistoryIndexes(),
         ]);
         await ensureCheckInUserWeekUnique();
+        await migrateLegacyClientGoals();
         await ensureMediaAssetsTable();
         await revokeBlockedAccessCodes(prisma);
         appSchemaReady = true;

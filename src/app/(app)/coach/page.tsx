@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { CoachDashboardClient } from "./CoachDashboardClient";
 import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
-import { getDailyMetricTargets } from "@/lib/dailyMetrics";
+import { getClientGoalTargets } from "@/lib/clientGoalTargets";
 import { ensureBodyweightTable } from "@/lib/bodyweight";
 import { dedupeCoachPlansByName, normalizePlanIdForPicker } from "@/lib/coachPlans";
 import { getActiveSessionsForClients } from "@/lib/coachChat";
@@ -140,7 +140,7 @@ export default async function CoachDashboardPage() {
     const clientExtraData = await Promise.all(
         coach.clients.map(async (client) => {
             const schedule = await getUserCheckInSchedule(client.id);
-            const targets = await getDailyMetricTargets(client.id);
+            const targets = await getClientGoalTargets(client.id);
             return {
                 id: client.id,
                 schedule,

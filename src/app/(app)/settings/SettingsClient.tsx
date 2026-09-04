@@ -98,11 +98,11 @@ export function SettingsClient({ user }: Props) {
     const [trainingDays, setTrainingDays] = useState(user.trainingDaysPerWeek ?? 3);
     const [experience, setExperience] = useState(user.experienceLevel || "");
     const [location, setLocation] = useState(user.trainingLocation || "");
-    const [targetWeight, setTargetWeight] = useState(user.targetWeightKg ? user.targetWeightKg.toFixed(2) : "");
-    const [currentWeight, setCurrentWeight] = useState(user.weightKg ? user.weightKg.toFixed(2) : "");
-    const [targetCalories, setTargetCalories] = useState(user.targetCalories ? String(user.targetCalories) : "");
-    const [targetSteps, setTargetSteps] = useState(user.targetSteps ? String(user.targetSteps) : "");
-    const [targetSleepHours, setTargetSleepHours] = useState(user.targetSleepHours ? user.targetSleepHours.toString() : "");
+    const [targetWeight, setTargetWeight] = useState(user.targetWeightKg != null ? user.targetWeightKg.toFixed(2) : "");
+    const [currentWeight, setCurrentWeight] = useState(user.weightKg != null ? user.weightKg.toFixed(2) : "");
+    const [targetCalories, setTargetCalories] = useState(user.targetCalories != null ? String(user.targetCalories) : "");
+    const [targetSteps, setTargetSteps] = useState(user.targetSteps != null ? String(user.targetSteps) : "");
+    const [targetSleepHours, setTargetSleepHours] = useState(user.targetSleepHours != null ? user.targetSleepHours.toString() : "");
     const [hiddenGoals, setHiddenGoals] = useState<string[]>(user.hiddenGoals || []);
     const [goalSaving, setGoalSaving] = useState(false);
     const [goalSaved, setGoalSaved] = useState(false);

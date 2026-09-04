@@ -32,20 +32,12 @@ export interface ActiveWorkoutSession {
 }
 
 /**
- * Sessions older than this are treated as abandoned rather than resumable. Kept
- * generous so an overnight or next-day resume still works; the row itself is never
- * deleted here, so history is untouched.
- */
-const RESUMABLE_WINDOW_DAYS = 7;
-
-/** Oldest `updatedAt` still considered resumable. */
-export function resumableSessionSince(): Date {
-    return new Date(Date.now() - RESUMABLE_WINDOW_DAYS * 24 * 60 * 60 * 1000);
-}
-
-/**
- * The user's active workout, or null. Cleans up drafts that were superseded by a
- * completed log for the same workout and day before deciding.
+ * The user's active workout, or null. Based on IN_PROGRESS status — not recency,
+ * presence, or plan schedule. Cleans up drafts that were superseded by a completed
+ * log for the same workout and day before deciding.
+ *
+ * Abandoned sessions stay IN_PROGRESS and remain resumable. They are never silently
+ * completed or deleted for being old.
  */
 export async function getActiveWorkoutSession(
     userId: string,
@@ -59,7 +51,6 @@ export async function getActiveWorkoutSession(
         where: {
             userId,
             status: "IN_PROGRESS",
-            updatedAt: { gte: resumableSessionSince() },
         },
         select: {
             id: true,

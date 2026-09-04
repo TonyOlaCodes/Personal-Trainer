@@ -14,8 +14,7 @@ import { getAchievementSummary, type AchievementDisplayItem } from "@/lib/achiev
 import { getWorkoutStreak } from "@/lib/workoutAdherenceStreak";
 import { isInactiveAccount } from "@/lib/userDeactivation";
 import { getNickname, loadNicknameMap, pickDisplayName } from "@/lib/userNicknames";
-import { loadWorkoutHistorySessions } from "@/lib/workoutHistory";
-import { buildExerciseRecords } from "@/lib/exercisePrs";
+import { loadCompletedRecordSets, loadAllTimeExerciseRecords } from "@/lib/exerciseRecordHistory";
 import { canonicalExerciseName } from "@/lib/exerciseCanonical";
 import { exerciseIdentityKey } from "@/lib/exerciseIdentity";
 
@@ -308,7 +307,10 @@ async function getPersonalRecordsForProfile(
 ): Promise<PublicProfilePersonalRecord[]> {
     if (pinned.length === 0) return [];
 
-    const history = await loadWorkoutHistorySessions(userId);
+    const [rows, boards] = await Promise.all([
+        loadCompletedRecordSets(userId),
+        loadAllTimeExerciseRecords(userId, { exerciseNames: pinned }),
+    ]);
     const records: PublicProfilePersonalRecord[] = [];
 
     for (const pin of pinned) {
@@ -316,26 +318,23 @@ async function getPersonalRecordsForProfile(
         const key = exerciseIdentityKey(displayName);
         if (!key) continue;
 
-        const exRecords = buildExerciseRecords(history, displayName);
-        if (exRecords.bestWeightKg == null || exRecords.bestWeightKg <= 0) continue;
+        const exRecords = boards[key];
+        if (!exRecords || exRecords.bestWeightKg == null || exRecords.bestWeightKg <= 0) continue;
 
-        let workoutLogId: string | null = null;
-        let loggedAt = new Date(0).toISOString();
         const targetWeight = exRecords.bestWeightKg;
         const targetReps = exRecords.bestWeightReps ?? 0;
+        let workoutLogId: string | null = null;
+        let loggedAt = new Date(0).toISOString();
 
-        for (const session of history) {
-            for (const set of session.sets) {
-                if (exerciseIdentityKey(set.exerciseName) !== key) continue;
-                if (set.isWarmup || !set.isCompleted) continue;
-                if (set.weightKg == null) continue;
-                if (Math.abs(set.weightKg - targetWeight) > 0.001) continue;
-                if (targetReps > 0 && (set.reps ?? 0) !== targetReps) continue;
-                workoutLogId = session.logId;
-                loggedAt = session.loggedAt;
-                break;
-            }
-            if (workoutLogId) break;
+        for (let i = rows.length - 1; i >= 0; i--) {
+            const set = rows[i];
+            if (exerciseIdentityKey(set.exerciseName) !== key) continue;
+            if (set.weightKg == null) continue;
+            if (Math.abs(set.weightKg - targetWeight) > 0.001) continue;
+            if (targetReps > 0 && (set.reps ?? 0) !== targetReps) continue;
+            workoutLogId = set.logId;
+            loggedAt = set.loggedAt;
+            break;
         }
 
         records.push({

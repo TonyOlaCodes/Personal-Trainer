@@ -149,7 +149,6 @@ export function computeWorkoutCompliance(
     }
 
     const referenceToday = options?.referenceToday ?? rangeEnd;
-    const loggedSet = new Set(input.loggedDates.map((l) => l.date));
     const loggedWorkoutSet = new Set(
         input.loggedDates.map((l) => `${l.date}:${l.workoutId ?? ""}`)
     );
@@ -170,7 +169,7 @@ export function computeWorkoutCompliance(
         if (!planned || !isScheduledTrainingWorkout(planned)) continue;
 
         const slotKey = `${dateKey}:${planned.id}`;
-        const isLogged = loggedWorkoutSet.has(slotKey) || loggedSet.has(dateKey);
+        const isLogged = loggedWorkoutSet.has(slotKey);
         const isExcused = !isLogged && excusedSet.has(slotKey);
         // Excused sessions do not enter the completion ratio at all.
         if (isExcused) {
@@ -230,10 +229,12 @@ export function hasPendingTodayWorkout(input: CalendarComplianceInput, today: Da
     if (!activeUserPlan) return false;
 
     const todayKey = toDateKey(today);
-    if (input.loggedDates.some((l) => l.date === todayKey)) return false;
-
     const planned = getPlannedWorkoutForDate(activeUserPlan, parseLogDate(todayKey), { today });
-    return Boolean(planned && isScheduledTrainingWorkout(planned));
+    if (!planned || !isScheduledTrainingWorkout(planned)) return false;
+
+    return !input.loggedDates.some(
+        (log) => log.date === todayKey && log.workoutId === planned.id
+    );
 }
 
 export function computeWeeklyCompliance(

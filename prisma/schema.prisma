@@ -305,6 +305,9 @@ model WorkoutLog {
   coachNotes WorkoutNote[]
   exerciseNotes LogExerciseNote[]
 
+  @@index([userId, status, loggedAt])
+  @@index([userId, status, updatedAt])
+  @@index([userId, workoutId, status, loggedAt])
   @@map("workout_logs")
 }
 

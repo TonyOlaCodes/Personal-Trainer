@@ -23,8 +23,8 @@ import {
     usesStrengthOneRm,
     type ExerciseTrackingSchema,
 } from "@/lib/exerciseTracking";
-import { loadWorkoutHistorySessions } from "@/lib/workoutHistory";
-import { annotateMetricSessionPrs } from "@/lib/annotateSessionPrs";
+import { loadAllTimeMetricRecordBoards } from "@/lib/exerciseRecordHistory";
+import { annotateMetricSessionPrsFromBoards } from "@/lib/annotateSessionPrs";
 import { formatAlsoStrengthPrLabels, type PrKind } from "@/lib/exercisePrs";
 
 export default async function LogViewPage({ params }: { params: Promise<{ logId: string }> }) {
@@ -78,7 +78,7 @@ export default async function LogViewPage({ params }: { params: Promise<{ logId:
 
     const exerciseNotes = await getLogExerciseNotes(log.id);
 
-    const history = await loadWorkoutHistorySessions(log.userId, { excludeLogId: log.id });
+    const recordBoards = await loadAllTimeMetricRecordBoards(log.userId, { excludeLogId: log.id });
     const flatSets = log.sets.map((set) => ({
         id: set.id,
         exerciseName: canonicalExerciseName(resolveLogSetExerciseName(set)) || resolveLogSetExerciseName(set),
@@ -97,9 +97,9 @@ export default async function LogViewPage({ params }: { params: Promise<{ logId:
         isWarmup: set.isWarmup,
         isCompleted: set.isCompleted,
     }));
-    const prBySetId = annotateMetricSessionPrs(
+    const prBySetId = annotateMetricSessionPrsFromBoards(
         flatSets,
-        history,
+        recordBoards,
         (name) => {
             const match = groupedExercises.find(
                 (g) => g.name.toLowerCase() === name.toLowerCase()
@@ -107,8 +107,7 @@ export default async function LogViewPage({ params }: { params: Promise<{ logId:
             if (match) return schemaByExerciseId[match.exerciseId];
             // Fallback: first schema (should rarely happen)
             return Object.values(schemaByExerciseId)[0];
-        },
-        log.id
+        }
     );
 
     return (
@@ -158,7 +157,7 @@ export default async function LogViewPage({ params }: { params: Promise<{ logId:
                         </div>
                         <div className="space-y-1">
                             <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Time Logged</p>
-                            <p className="text-xl font-black text-fg italic">{log.duration || "--"} <span className="text-[10px] text-fg-subtle not-italic">MINS</span></p>
+                            <p className="text-xl font-black text-fg italic">{log.duration != null ? log.duration : "--"} <span className="text-[10px] text-fg-subtle not-italic">MINS</span></p>
                         </div>
                         <div className="space-y-1">
                             <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Sets</p>

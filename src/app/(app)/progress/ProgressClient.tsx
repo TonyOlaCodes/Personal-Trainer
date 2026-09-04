@@ -517,7 +517,7 @@ export function ProgressClient({ userRole, hiddenGoals, todayWorkoutHref = null,
                             <p className="text-[9px] font-bold text-fg-subtle uppercase tracking-widest">Volume</p>
                         </div>
                         <div className="bg-surface-muted/50 rounded-xl p-3 text-center">
-                            <p className="text-lg font-black text-fg">{data.lastWorkout.duration || "--"}</p>
+                            <p className="text-lg font-black text-fg">{data.lastWorkout.duration != null ? data.lastWorkout.duration : "--"}</p>
                             <p className="text-[9px] font-bold text-fg-subtle uppercase tracking-widest">Mins</p>
                         </div>
                     </div>

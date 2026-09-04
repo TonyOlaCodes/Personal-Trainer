@@ -144,19 +144,19 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
     const [sendingCheckInRequest, setSendingCheckInRequest] = useState(false);
     const [checkInRequestSent, setCheckInRequestSent] = useState(false);
     const [checkInRequestError, setCheckInRequestError] = useState<string | null>(null);
-    const [targetWeightKg, setTargetWeightKg] = useState(client.targetWeightKg ? String(client.targetWeightKg) : "");
-    const [targetCalories, setTargetCalories] = useState(client.targetCalories ? String(client.targetCalories) : "");
-    const [targetSteps, setTargetSteps] = useState(client.targetSteps ? String(client.targetSteps) : "");
-    const [targetSleepHours, setTargetSleepHours] = useState(client.targetSleepHours ? String(client.targetSleepHours) : "");
+    const [targetWeightKg, setTargetWeightKg] = useState(client.targetWeightKg != null ? String(client.targetWeightKg) : "");
+    const [targetCalories, setTargetCalories] = useState(client.targetCalories != null ? String(client.targetCalories) : "");
+    const [targetSteps, setTargetSteps] = useState(client.targetSteps != null ? String(client.targetSteps) : "");
+    const [targetSleepHours, setTargetSleepHours] = useState(client.targetSleepHours != null ? String(client.targetSleepHours) : "");
     const [isEditingTargets, setIsEditingTargets] = useState(canEdit && client.checkInSchedule.day === null);
 
     useEffect(() => {
         setCheckInDay(client.checkInSchedule.day ?? 6);
         setCheckInFrequency(client.checkInSchedule.frequencyWeeks ?? 1);
-        setTargetWeightKg(client.targetWeightKg ? String(client.targetWeightKg) : "");
-        setTargetCalories(client.targetCalories ? String(client.targetCalories) : "");
-        setTargetSteps(client.targetSteps ? String(client.targetSteps) : "");
-        setTargetSleepHours(client.targetSleepHours ? String(client.targetSleepHours) : "");
+        setTargetWeightKg(client.targetWeightKg != null ? String(client.targetWeightKg) : "");
+        setTargetCalories(client.targetCalories != null ? String(client.targetCalories) : "");
+        setTargetSteps(client.targetSteps != null ? String(client.targetSteps) : "");
+        setTargetSleepHours(client.targetSleepHours != null ? String(client.targetSleepHours) : "");
         setIsEditingTargets(canEdit && client.checkInSchedule.day === null);
         setIsCoachPaused(Boolean(client.isCoachPaused));
     }, [client, canEdit]);
@@ -352,10 +352,10 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     clientId: client.id,
-                    targetCalories: targetCalories ? Math.round(Number(targetCalories)) : null,
-                    targetSteps: targetSteps ? Math.round(Number(targetSteps)) : null,
-                    targetSleepHours: targetSleepHours ? Number(targetSleepHours) : null,
-                    targetWeightKg: targetWeightKg ? Number(targetWeightKg) : null,
+                    targetCalories: targetCalories.trim() === "" ? null : Math.round(Number(targetCalories)),
+                    targetSteps: targetSteps.trim() === "" ? null : Math.round(Number(targetSteps)),
+                    targetSleepHours: targetSleepHours.trim() === "" ? null : Number(targetSleepHours),
+                    targetWeightKg: targetWeightKg.trim() === "" ? null : Number(targetWeightKg),
                 }),
             });
             if (!goalsRes.ok) throw new Error("Failed to update targets.");
@@ -424,7 +424,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
         ? ((bodyweightPeriodEnd.weightKg - bodyweightPeriodStart.weightKg) / bodyweightPeriodStart.weightKg) * 100
         : null;
     const chartValues = filteredBodyweightHistory.map(r => r.weightKg);
-    if (client.targetWeightKg) chartValues.push(client.targetWeightKg);
+    if (client.targetWeightKg != null) chartValues.push(client.targetWeightKg);
     const chartMin = chartValues.length > 0 ? Math.floor(Math.min(...chartValues) - 2) : 0;
     const chartMax = chartValues.length > 0 ? Math.ceil(Math.max(...chartValues) + 2) : 1;
     const chartRange = Math.max(chartMax - chartMin, 1);
@@ -440,7 +440,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
     const areaPath = chartPoints.length > 0
         ? `${linePath} L ${chartPoints[chartPoints.length - 1].x.toFixed(1)} ${(chartPadding.top + plotHeight).toFixed(1)} L ${chartPoints[0].x.toFixed(1)} ${(chartPadding.top + plotHeight).toFixed(1)} Z`
         : "";
-    const targetY = client.targetWeightKg ? toY(client.targetWeightKg) : null;
+    const targetY = client.targetWeightKg != null ? toY(client.targetWeightKg) : null;
 
     // Sort workout history ascending for chart progression
     const volumeHistory = useMemo(
@@ -1012,7 +1012,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                 <div>
                                     <p className="text-xl font-black text-fg leading-none">{client.currentWeightKg ? `${client.currentWeightKg.toFixed(1)}kg` : "--"}</p>
                                     <p className="text-[10px] text-fg-subtle font-bold uppercase tracking-widest mt-1">
-                                        Target {client.targetWeightKg ? `${client.targetWeightKg.toFixed(1)}kg` : "--"}
+                                        Target {client.targetWeightKg != null ? `${client.targetWeightKg.toFixed(1)}kg` : "--"}
                                     </p>
                                 </div>
                                 <p className="text-[10px] text-fg-subtle font-bold uppercase tracking-widest mt-1">
@@ -1366,7 +1366,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                             <span className="text-[9px] font-black uppercase tracking-widest">Weight Goal</span>
                                         </div>
                                         <p className="text-sm font-black text-fg">
-                                            {client.targetWeightKg ? `${client.targetWeightKg.toFixed(1)} kg` : "--"}
+                                            {client.targetWeightKg != null ? `${client.targetWeightKg.toFixed(1)} kg` : "--"}
                                         </p>
                                     </div>
                                     <div className="p-3 bg-surface-muted/30 rounded-xl border border-surface-border/50 space-y-1">
@@ -1375,7 +1375,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                             <span className="text-[9px] font-black uppercase tracking-widest">Calories</span>
                                         </div>
                                         <p className="text-sm font-black text-fg">
-                                            {client.targetCalories ? `${client.targetCalories.toLocaleString()} kcal` : "--"}
+                                            {client.targetCalories != null ? `${client.targetCalories.toLocaleString()} kcal` : "--"}
                                         </p>
                                     </div>
                                     <div className="p-3 bg-surface-muted/30 rounded-xl border border-surface-border/50 space-y-1">
@@ -1384,7 +1384,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                             <span className="text-[9px] font-black uppercase tracking-widest">Steps</span>
                                         </div>
                                         <p className="text-sm font-black text-fg">
-                                            {client.targetSteps ? `${client.targetSteps.toLocaleString()} steps` : "--"}
+                                            {client.targetSteps != null ? `${client.targetSteps.toLocaleString()} steps` : "--"}
                                         </p>
                                     </div>
                                     <div className="p-3 bg-surface-muted/30 rounded-xl border border-surface-border/50 space-y-1">
@@ -1393,7 +1393,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                             <span className="text-[9px] font-black uppercase tracking-widest">Sleep</span>
                                         </div>
                                         <p className="text-sm font-black text-fg">
-                                            {client.targetSleepHours ? `${client.targetSleepHours.toFixed(1)} hrs` : "--"}
+                                            {client.targetSleepHours != null ? `${client.targetSleepHours.toFixed(1)} hrs` : "--"}
                                         </p>
                                     </div>
                                 </div>

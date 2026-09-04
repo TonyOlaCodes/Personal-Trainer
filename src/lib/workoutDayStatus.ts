@@ -20,7 +20,7 @@ export type WorkoutDayStatus =
     | "rest";
 
 export interface WorkoutDayStatusInput {
-    /** A completed log exists for this day. */
+    /** A completed log exists for this scheduled session (not merely any log on the date). */
     hasCompletedLog: boolean;
     /** An in-progress session is attached to this day. */
     hasActiveSession: boolean;

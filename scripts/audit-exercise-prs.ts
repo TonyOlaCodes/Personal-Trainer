@@ -308,6 +308,31 @@ check("First-ever set on empty board is not a PR", () => {
     assert.equal(pr.isPr, false);
 });
 
+console.log("All-time history vs recent-only scan");
+check("Old 150kg beats recent 147.5; 152.5 is the next Weight PR", () => {
+    const allTime = fromSets([
+        { w: 150, r: 1 },
+        { w: 145, r: 1 },
+    ]);
+    const recentOnly = fromSets([{ w: 145, r: 1 }]);
+
+    assert.equal(
+        evaluateSetPr({ weightKg: 147.5, reps: 1, isCompleted: true }, recentOnly).kinds.includes("weight"),
+        true,
+        "capped history would falsely award 147.5"
+    );
+    assert.equal(
+        evaluateSetPr({ weightKg: 147.5, reps: 1, isCompleted: true }, allTime).kinds.includes("weight"),
+        false,
+        "all-time 150kg must block 147.5"
+    );
+    assert.equal(
+        evaluateSetPr({ weightKg: 152.5, reps: 1, isCompleted: true }, allTime).kinds.includes("weight"),
+        true,
+        "152.5 is a real Weight PR against 150"
+    );
+});
+
 console.log("Session helper");
 check("evaluateSessionPrs agrees with live ordering", () => {
     const hist = fromSets([{ w: 100, r: 8 }]);

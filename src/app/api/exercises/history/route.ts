@@ -4,10 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { resolveWorkoutLogReadUserId } from "@/lib/apiAuth";
 import { getExerciseMediaByNames } from "@/lib/exerciseMedia";
 import { loadWorkoutHistorySessions } from "@/lib/workoutHistory";
-import {
-    buildExerciseRecords,
-    findPreviousSessionPerformance,
-} from "@/lib/exercisePrs";
+import { loadAllTimeExerciseRecords } from "@/lib/exerciseRecordHistory";
+import { findPreviousSessionPerformance } from "@/lib/exercisePrs";
 import { exerciseIdentityKey } from "@/lib/exerciseIdentity";
 import { canonicalExerciseName } from "@/lib/exerciseCanonical";
 import {
@@ -53,8 +51,9 @@ export async function GET(req: Request) {
 
     await ensureMuscleTargetsColumn();
 
-    const [history, mediaByName, global] = await Promise.all([
+    const [history, allTimeRecords, mediaByName, global] = await Promise.all([
         loadWorkoutHistorySessions(readTarget.targetUserId, { excludeLogId }),
+        loadAllTimeExerciseRecords(readTarget.targetUserId, { excludeLogId, exerciseNames: [name] }),
         getExerciseMediaByNames([name]),
         prisma.$queryRaw<
             Array<{ muscleGroup: string | null; name: string; muscleTargets: string | null }>
@@ -67,7 +66,7 @@ export async function GET(req: Request) {
     ]);
 
     const previousSession = findPreviousSessionPerformance(history, name);
-    const records = buildExerciseRecords(history, name);
+    const records = allTimeRecords[key] ?? null;
     const media = mediaByName.get(name) ?? mediaByName.get(global?.name ?? "") ?? null;
     const muscleTargets = parseMuscleTargetsJson(global?.muscleTargets);
 

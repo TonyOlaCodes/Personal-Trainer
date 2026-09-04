@@ -20,6 +20,7 @@ import { SafeFallback, rethrowNextInternalErrors } from "@/components/shared/Saf
 import { cleanupStaleInProgressSessions } from "@/lib/workoutSessionCleanup";
 import { isCoachRole, canAccessCheckIns } from "@/lib/roles";
 import { getWorkoutStreak } from "@/lib/workoutAdherenceStreak";
+import { getClientGoalTargets } from "@/lib/clientGoalTargets";
 
 export const metadata = { title: "Dashboard" };
 
@@ -193,7 +194,7 @@ export default async function DashboardPage() {
             .filter((l: any) => l.status === "COMPLETED" && l.workout && l.id !== activeSession?.id);
 
         recentCompletedLogs.forEach((l: any) => {
-            if (l.duration) {
+            if (l.duration != null) {
                 totalDuration += l.duration;
                 durationCount++;
             }
@@ -219,9 +220,10 @@ export default async function DashboardPage() {
             }
         }
 
-        const [bodyweight, bodyweightHistory] = await Promise.all([
+        const [bodyweight, bodyweightHistory, goalTargets] = await Promise.all([
             getBodyweightSummary(user.id, todayDate),
             getBodyweightHistory(user.id, 14),
+            getClientGoalTargets(user.id),
         ]);
 
         const checkInPanel = canAccessCheckIns(user.role, user.coachId)
@@ -278,7 +280,7 @@ export default async function DashboardPage() {
                 <TopBar showToday streak={streak} hideSearch={true} />
                 <div className="p-6 max-w-5xl mx-auto">
                         <DashboardClient
-                            user={{ name: user.name, role: user.role, weightKg: user.weightKg, targetWeightKg: user.targetWeightKg, goal: user.goal, hiddenGoals: user.hiddenGoals ?? [] }}
+                            user={{ name: user.name, role: user.role, weightKg: user.weightKg, targetWeightKg: goalTargets.targetWeightKg, goal: goalTargets.goal, hiddenGoals: user.hiddenGoals ?? [] }}
                             activePlan={activePlan ? { id: activePlan.id, name: activePlan.name } : null}
                             todayWorkout={todayWorkout}
                             nextTrainingDay={nextTrainingDay}

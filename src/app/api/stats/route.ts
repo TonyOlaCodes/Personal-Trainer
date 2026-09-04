@@ -234,7 +234,7 @@ export async function GET() {
             id: log.id,
             name: log.workout?.name || "Workout",
             date: format(log.loggedAt, "EEE, MMM dd"),
-            duration: log.duration || null,
+            duration: log.duration ?? null,
             totalSets: sessionSets,
             totalVolume: Math.round(sessionVolume),
             exercises: sessionExercises.slice(0, 5),
@@ -448,7 +448,7 @@ export async function GET() {
             totalWorkouts: logs.length,
             consistency: { thisWeek: workoutsThisWeek, lastWeek: workoutsLastWeek, target: user.trainingDaysPerWeek || 4 },
             bodyweight: {
-                current: currentWeight, target: user.targetWeightKg || null, goal: user.goal || null,
+                current: currentWeight, target: user.targetWeightKg ?? null, goal: user.goal || null,
                 changeWeek: weightChangeWeek, totalChange: currentWeight - startWeight, history: bodyweightHistory
             },
             dailyMetrics,

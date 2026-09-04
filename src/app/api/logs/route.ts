@@ -10,9 +10,9 @@ import { ensureLogSetExerciseNameColumn } from "@/lib/logSetExerciseName";
 import { ensureLogSetExerciseOrderColumn, resolvePersistedExerciseOrder } from "@/lib/logSetExerciseOrder";
 import { logSetDisplayOrderBy } from "@/lib/logSetGrouping";
 import { canonicalExerciseName } from "@/lib/exerciseCanonical";
-import { loadWorkoutHistorySessions } from "@/lib/workoutHistory";
+import { loadAllTimeMetricRecordBoards } from "@/lib/exerciseRecordHistory";
 import { EXERCISE_NOTE_MAX_LENGTH, saveLogExerciseNotes } from "@/lib/logExerciseNotes";
-import { closeOtherActiveSessions, getActiveWorkoutSession, resumeWorkoutHref, resumableSessionSince } from "@/lib/activeWorkoutSession";
+import { closeOtherActiveSessions, getActiveWorkoutSession, resumeWorkoutHref } from "@/lib/activeWorkoutSession";
 import { ensureExerciseTrackingSchema } from "@/lib/exerciseTracking/ensure";
 import { resolveTrackingSchema } from "@/lib/exerciseTracking/resolve";
 import {
@@ -318,46 +318,15 @@ export async function POST(req: Request) {
     const prMetaBySetIndex = new Map<number, { kinds: string[]; label: string | null }>();
     if (status === "COMPLETED") {
         const excludeLogId = existingInProgress?.id ?? existingCompleted?.id;
-        const history = await loadWorkoutHistorySessions(subjectUserId, { excludeLogId });
+        const recordsByKey = await loadAllTimeMetricRecordBoards(subjectUserId, { excludeLogId });
 
-        // Build metric-aware records per exercise identity using each exercise's tracking schema.
         const schemaByKey = new Map<string, Awaited<ReturnType<typeof resolveTrackingSchema>>>();
-        const displayNameByKey = new Map<string, string>();
-        const recordsByKey = new Map<string, MetricExerciseRecords>();
-
         const ensureSchema = async (name: string, key: string) => {
             if (!schemaByKey.has(key)) {
                 schemaByKey.set(key, await resolveTrackingSchema(name));
             }
             return schemaByKey.get(key)!;
         };
-
-        for (const session of history) {
-            for (const set of session.sets) {
-                if (set.isWarmup || !set.isCompleted) continue;
-                const name = set.exerciseName?.trim() || "";
-                if (!name) continue;
-                const key = exerciseIdentityKey(name);
-                if (!key) continue;
-                displayNameByKey.set(key, name);
-                const schema = await ensureSchema(name, key);
-                if (!recordsByKey.has(key)) {
-                    recordsByKey.set(key, cloneMetricRecords(EMPTY_METRIC_RECORDS));
-                }
-                const metrics = {
-                    weightKg: set.weightKg,
-                    reps: set.reps,
-                    durationSec: set.durationSec,
-                    distanceMeters: set.distanceMeters,
-                    heightCm: set.heightCm,
-                };
-                const oneRm =
-                    (metrics.weightKg ?? 0) > 0 && (metrics.reps ?? 0) > 0
-                        ? calculateOneRM(metrics.weightKg!, metrics.reps!)
-                        : null;
-                applySetToMetricRecords(recordsByKey.get(key)!, metrics, schema, oneRm);
-            }
-        }
 
         // Evaluate each set in order, advancing records within the session.
         const liveRecords = new Map<string, MetricExerciseRecords>();
@@ -630,14 +599,11 @@ export async function GET(req: Request) {
             return NextResponse.json(activeLog);
         }
 
-        const activeLog = await prisma.workoutLog.findFirst({
-            where: {
-                userId: user.id,
-                status: "IN_PROGRESS",
-                updatedAt: { gte: resumableSessionSince() },
-            },
+        const session = await getActiveWorkoutSession(user.id);
+        if (!session) return NextResponse.json(null);
+        const activeLog = await prisma.workoutLog.findUnique({
+            where: { id: session.id },
             include: activeInclude,
-            orderBy: { updatedAt: "desc" },
         });
         return NextResponse.json(activeLog);
     }

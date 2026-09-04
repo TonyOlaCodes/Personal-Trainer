@@ -45,7 +45,7 @@ export interface LoadedHistorySession extends HistoricalSessionInput {
     sets: LoadedHistorySet[];
 }
 
-/** How much history to load by default — enough for records without unbounded scans. */
+/** UI/previous-session window only. All-time PRs use `loadAllTimeExerciseRecords`. */
 const DEFAULT_SESSION_LIMIT = 400;
 
 /**

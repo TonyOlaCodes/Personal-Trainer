@@ -9,4 +9,4 @@ if (failures.length > 0) {
     process.exit(1);
 }
 
-console.log("Streak scenario checks passed (9 cases).");
+console.log("Streak scenario checks passed.");

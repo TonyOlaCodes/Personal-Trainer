@@ -18,6 +18,11 @@ import {
     type WorkoutDayStatus,
     type WorkoutDayStatusInput,
 } from "../src/lib/workoutDayStatus";
+import {
+    findLogForScheduledSlot,
+    isScheduledSlotCompleted,
+} from "../src/lib/scheduledSessionMatch";
+import { computeWorkoutCompliance } from "../src/lib/calendarCompliance";
 
 let passed = 0;
 
@@ -278,6 +283,71 @@ check("Priority: completed > in-progress > excused > missed > today > upcoming >
         "upcoming"
     );
     assert.equal(status({}), "rest");
+});
+
+console.log("\nscheduled session identity");
+check("Upper scheduled + Upper completed = completed", () => {
+    const logs = [{ date: "2026-03-02", workoutId: "w-upper" }];
+    assert.equal(isScheduledSlotCompleted(logs, "2026-03-02", "w-upper"), true);
+    assert.equal(
+        status({
+            hasCompletedLog: isScheduledSlotCompleted(logs, "2026-03-02", "w-upper"),
+            hasScheduledTraining: true,
+            isPast: true,
+        }),
+        "completed"
+    );
+});
+
+check("Upper scheduled + Arms completed = missed, not completed", () => {
+    const logs = [{ date: "2026-03-02", workoutId: "w-arms" }];
+    assert.equal(isScheduledSlotCompleted(logs, "2026-03-02", "w-upper"), false);
+    assert.equal(findLogForScheduledSlot(logs, "2026-03-02", "w-upper"), null);
+    assert.equal(
+        status({
+            hasCompletedLog: isScheduledSlotCompleted(logs, "2026-03-02", "w-upper"),
+            hasScheduledTraining: true,
+            isPast: true,
+        }),
+        "missed"
+    );
+});
+
+check("Edited session keeps the original scheduled workout id", () => {
+    const logs = [{ date: "2026-03-02", workoutId: "w-upper" }];
+    assert.equal(isScheduledSlotCompleted(logs, "2026-03-02", "w-upper"), true);
+});
+
+check("Two scheduled slots on one date resolve independently", () => {
+    const logs = [
+        { date: "2026-03-02", workoutId: "w-upper" },
+        { date: "2026-03-02", workoutId: "w-arms" },
+    ];
+    assert.equal(isScheduledSlotCompleted(logs, "2026-03-02", "w-upper"), true);
+    assert.equal(isScheduledSlotCompleted(logs, "2026-03-02", "w-legs"), false);
+});
+
+check("Compliance does not count a different workout on the same date", () => {
+    const input = {
+        activePlan: {
+            weeks: [{
+                weekNumber: 1,
+                workouts: [
+                    { id: "w-upper", name: "Upper", dayNumber: 1, dayOfWeek: 0, exercises: [{ id: "e1" }] },
+                ],
+            }],
+        },
+        planStartedAt: "2026-03-02T12:00:00.000Z",
+        loggedDates: [{ date: "2026-03-02", workoutId: "w-arms" }],
+    };
+    const result = computeWorkoutCompliance(
+        input,
+        new Date("2026-03-02T12:00:00Z"),
+        new Date("2026-03-02T12:00:00Z"),
+        { referenceToday: new Date("2026-03-03T12:00:00Z") }
+    );
+    assert.equal(result.due, 1);
+    assert.equal(result.completed, 0);
 });
 
 console.log(`\n${passed} checks passed.`);

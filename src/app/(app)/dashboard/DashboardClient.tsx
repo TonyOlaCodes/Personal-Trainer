@@ -141,7 +141,7 @@ function buildBodyweightSparkline(
     const paddingX = 8;
     const paddingY = 8;
     const weights = history.map((entry) => entry.weightKg);
-    if (targetWeightKg != null && targetWeightKg > 0) weights.push(targetWeightKg);
+    if (targetWeightKg != null) weights.push(targetWeightKg);
     const min = Math.min(...weights);
     const max = Math.max(...weights);
     const range = Math.max(max - min, 0.1);
@@ -159,7 +159,7 @@ function buildBodyweightSparkline(
 
     return {
         points,
-        goalY: targetWeightKg != null && targetWeightKg > 0 ? getY(targetWeightKg) : null,
+        goalY: targetWeightKg != null ? getY(targetWeightKg) : null,
     };
 }
 
@@ -359,7 +359,6 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
             const current = parseFloat(weight);
             if (
                 user.targetWeightKg != null
-                && user.targetWeightKg > 0
                 && Number.isFinite(current)
             ) {
                 return formatWeightDistanceFromGoal(current, user.targetWeightKg, user.goal);

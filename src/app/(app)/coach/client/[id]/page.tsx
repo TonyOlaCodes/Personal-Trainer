@@ -7,7 +7,7 @@ import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
 import { getEffectiveCheckInDueStateForUser } from "@/lib/coachAttentionActions";
 import { formatCheckInDueDate, formatCheckInWeekLabel, getIsoWeekYear } from "@/lib/checkInLabels";
 import { getDayName, getWeekNumber, isSameCalendarDay, parseLogDate, toDateKey } from "@/lib/utils";
-import { getDailyMetricTargets } from "@/lib/dailyMetrics";
+import { getClientGoalTargets } from "@/lib/clientGoalTargets";
 import { format } from "date-fns";
 import { createExerciseSessionEntry, mergeSetIntoExerciseSession, normalizeExerciseHistory } from "@/lib/exerciseHistory";
 
@@ -127,7 +127,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                 },
                 orderBy: { loggedAt: "asc" }
             }),
-            getDailyMetricTargets(target.id),
+            getClientGoalTargets(target.id),
             getUserPinnedExercises(target.id),
         ]);
 

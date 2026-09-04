@@ -580,7 +580,7 @@ export async function getCheckInPeriodSummary(
     const caloriesSummary: CheckInPeriodSummary["calories"] = null;
 
     let stepsSummary: CheckInPeriodSummary["steps"] = null;
-    if (!hiddenGoals.includes("steps") && metricTargets.targetSteps) {
+    if (!hiddenGoals.includes("steps") && metricTargets.targetSteps != null) {
         const rows = await prisma.$queryRaw<Array<{ averageSteps: number | null; entries: bigint }>>`
             SELECT AVG("steps")::float AS "averageSteps", COUNT(*)::bigint AS "entries"
             FROM "daily_metric_logs"

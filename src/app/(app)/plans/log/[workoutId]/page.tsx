@@ -12,8 +12,8 @@ import { canAccessClient } from "@/lib/apiAuth";
 import { isInactiveAccount } from "@/lib/userDeactivation";
 import { defaultHomeForRole, isCoachRole } from "@/lib/roles";
 import { loadWorkoutHistorySessions } from "@/lib/workoutHistory";
+import { loadAllTimeExerciseRecords } from "@/lib/exerciseRecordHistory";
 import {
-    buildExerciseRecords,
     findPreviousSessionPerformance,
     type ExerciseRecords,
     type PreviousSessionPerformance,
@@ -148,24 +148,28 @@ export default async function WorkoutLogPage({
      * only two sets were done. Records exclude the session being logged so a PR badge
      * cannot compare a set against itself.
      */
-    const history = await loadWorkoutHistorySessions(subjectUserId, { excludeLogId: activeLog?.id });
-
     const historyExerciseNames = [
         ...plannedForSession.exercises.map((exercise) => exercise.name),
         ...(activeLog?.sets ?? []).map((set) => resolveLogSetExerciseName(set)),
     ];
 
+    const [history, exerciseRecords] = await Promise.all([
+        loadWorkoutHistorySessions(subjectUserId, { excludeLogId: activeLog?.id }),
+        loadAllTimeExerciseRecords(subjectUserId, {
+            excludeLogId: activeLog?.id,
+            exerciseNames: historyExerciseNames,
+        }),
+    ]);
+
     const previousSessions: Record<string, PreviousSessionPerformance> = {};
-    const exerciseRecords: Record<string, ExerciseRecords> = {};
 
     for (const rawName of historyExerciseNames) {
         const name = canonicalExerciseName(rawName);
         const key = exerciseIdentityKey(name);
-        if (!key || previousSessions[key] || exerciseRecords[key]) continue;
+        if (!key || previousSessions[key]) continue;
 
         const previous = findPreviousSessionPerformance(history, name);
         if (previous) previousSessions[key] = previous;
-        exerciseRecords[key] = buildExerciseRecords(history, name);
     }
 
     const initialExerciseNotes = activeLog ? await getLogExerciseNotes(activeLog.id) : {};

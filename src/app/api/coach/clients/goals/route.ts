@@ -1,7 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { normalizeCalories, normalizeSleepHours, normalizeSteps, updateDailyMetricTargets } from "@/lib/dailyMetrics";
+import { updateClientGoalTargets } from "@/lib/clientGoalTargets";
 import { z } from "zod";
 import { requireCoachCanEditClient } from "@/lib/apiAuth";
 
@@ -32,29 +32,12 @@ export async function POST(req: Request) {
         const client = await prisma.user.findUnique({ where: { id: parsed.clientId } });
         if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 });
 
-        // Update target weight on the client
-        const updateData: any = {};
-        if (parsed.targetWeightKg !== undefined) {
-            updateData.targetWeightKg = parsed.targetWeightKg ? Math.round(parsed.targetWeightKg * 100) / 100 : null;
-        }
-
-        const updatedClient = await prisma.user.update({
-            where: { id: parsed.clientId },
-            data: updateData,
+        await updateClientGoalTargets(client.id, {
+            ...(parsed.targetWeightKg !== undefined ? { targetWeightKg: parsed.targetWeightKg } : {}),
+            ...(parsed.targetCalories !== undefined ? { targetCalories: parsed.targetCalories } : {}),
+            ...(parsed.targetSteps !== undefined ? { targetSteps: parsed.targetSteps } : {}),
+            ...(parsed.targetSleepHours !== undefined ? { targetSleepHours: parsed.targetSleepHours } : {}),
         });
-
-        // Update metric targets
-        if (
-            parsed.targetCalories !== undefined ||
-            parsed.targetSteps !== undefined ||
-            parsed.targetSleepHours !== undefined
-        ) {
-            await updateDailyMetricTargets(client.id, {
-                targetCalories: parsed.targetCalories !== undefined ? normalizeCalories(parsed.targetCalories) : null,
-                targetSteps: parsed.targetSteps !== undefined ? normalizeSteps(parsed.targetSteps) : null,
-                targetSleepHours: parsed.targetSleepHours !== undefined ? normalizeSleepHours(parsed.targetSleepHours) : null,
-            });
-        }
 
         return NextResponse.json({ success: true, userId: client.id });
     } catch (err: unknown) {

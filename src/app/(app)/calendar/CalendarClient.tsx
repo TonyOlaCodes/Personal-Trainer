@@ -141,6 +141,23 @@ type DayWorkoutStatus = WorkoutDayStatus;
 
 const STATUS_CONFIG = WORKOUT_DAY_STATUS_STYLES;
 
+function matchingCompletedLog(logs: LoggedDate[], planned: PlanWorkout | null): LoggedDate | null {
+    if (planned && isScheduledTrainingWorkout(planned)) {
+        return logs.find((log) => log.workoutId === planned.id) ?? null;
+    }
+    return logs[0] ?? null;
+}
+
+function matchingActiveSession(
+    sessions: InProgressSession[],
+    planned: PlanWorkout | null
+): InProgressSession | null {
+    if (planned && isScheduledTrainingWorkout(planned)) {
+        return sessions.find((session) => session.workoutId === planned.id) ?? null;
+    }
+    return sessions[0] ?? null;
+}
+
 function resolveDayStatus(input: {
     log: LoggedDate | null;
     dayInProgress: InProgressSession | null;
@@ -368,11 +385,6 @@ export function CalendarClient({
             return workoutFromLog() ?? workoutFromHistorical();
         }
 
-        if (key < todayKey) {
-            const historicalWorkout = workoutFromLog() ?? workoutFromHistorical();
-            if (historicalWorkout) return historicalWorkout;
-        }
-
         const resolved = resolvePlannedWorkoutWithExercisesForDate({
             startedAt: planStartedAt,
             weeks: serializedPlanWeeks,
@@ -417,7 +429,7 @@ export function CalendarClient({
         }
 
         return workoutFromLog() ?? workoutFromHistorical();
-    }, [serializedPlanWeeks, scheduleRevisions, planStartedAt, todayDate, historicalMissedByDate, logMap, planWeekCount, sessionOverrides, todayKey]);
+    }, [serializedPlanWeeks, scheduleRevisions, planStartedAt, todayDate, historicalMissedByDate, logMap, planWeekCount, sessionOverrides]);
 
     /* ─── Calendar Generation (Europe/Dublin date keys) ─── */
     const monthPrefix = `${view.year}-${String(view.month + 1).padStart(2, "0")}`;
@@ -447,6 +459,7 @@ export function CalendarClient({
     }, [selectedDateKey]);
     const selectedLogs = logMap[selectedDateKey] ?? [];
     const selectedPlanned = resolvePlannedWorkoutForDate(selectedDate, selectedDateKey);
+    const selectedMatchingLog = matchingCompletedLog(selectedLogs, selectedPlanned);
     // An active session must stay resumable even when the day is scheduled as rest or
     // the plan has since moved a different workout onto this date.
     const resumeSession = useMemo(() => {
@@ -481,7 +494,7 @@ export function CalendarClient({
     const selectedIsExcused = Boolean(
         selectedPlanned
         && selectedDateKey < todayKey
-        && selectedLogs.length === 0
+        && !selectedMatchingLog
         && isWorkoutExcused(selectedDateKey, selectedPlanned.id)
     );
     const selectedIsAfterPlan = Boolean(
@@ -491,7 +504,7 @@ export function CalendarClient({
     );
 
     const selectedStatus: DayWorkoutStatus = useMemo(() => {
-        const primaryLog = selectedLogs[0] ?? null;
+        const primaryLog = selectedMatchingLog;
         const isPast = selectedDateKey < todayKey;
         const isTodayDay = selectedDateKey === todayKey;
         const isExcused = Boolean(
@@ -509,7 +522,7 @@ export function CalendarClient({
             isExcused,
         });
     }, [
-        selectedLogs,
+        selectedMatchingLog,
         selectedDateKey,
         todayKey,
         selectedPlanned,
@@ -667,10 +680,12 @@ export function CalendarClient({
                         {cells.map((cell) => {
                             const { dateKey, day, inCurrentMonth } = cell;
                             const dateObj = parseLogDate(dateKey);
-                            const dayLogs = logMap[dateKey] ?? null;
-                            const log = dayLogs?.[0] ?? null;
-                            const dayInProgress = !dayLogs?.length ? inProgressByDate[dateKey]?.[0] ?? null : null;
+                            const dayLogs = logMap[dateKey] ?? [];
                             const planned = resolvePlannedWorkoutForDate(dateObj, dateKey);
+                            const log = matchingCompletedLog(dayLogs, planned);
+                            const dayInProgress = log
+                                ? null
+                                : matchingActiveSession(inProgressByDate[dateKey] ?? [], planned);
                             const isPast = dateKey < todayKey;
                             const isTodayDay = dateKey === todayKey;
                             const selected = dateKey === selectedDateKey;

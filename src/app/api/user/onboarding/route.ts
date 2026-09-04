@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { redeemAccessCodeForUser } from "@/lib/accessCodes";
 import { anonymizeDeletedUserAccount } from "@/lib/accountDeletion";
-import { normalizeCalories, normalizeSleepHours, normalizeSteps, updateDailyMetricTargets } from "@/lib/dailyMetrics";
+import { updateClientGoalTargets } from "@/lib/clientGoalTargets";
 import { getUserDeactivationStatusByClerkId } from "@/lib/userDeactivation";
 import { defaultHomeForRole } from "@/lib/roles";
 import { triggerAchievementSync } from "@/lib/achievements";
@@ -163,10 +163,10 @@ export async function POST(req: Request) {
         }
 
         if (savedUserId) {
-            await updateDailyMetricTargets(savedUserId, {
-                targetCalories: normalizeCalories(toInt(d.targetCalories)),
-                targetSteps: normalizeSteps(toInt(d.targetSteps)),
-                targetSleepHours: normalizeSleepHours(toFloat(d.targetSleepHours)),
+            await updateClientGoalTargets(savedUserId, {
+                targetCalories: toInt(d.targetCalories),
+                targetSteps: toInt(d.targetSteps),
+                targetSleepHours: toFloat(d.targetSleepHours),
             });
         }
 

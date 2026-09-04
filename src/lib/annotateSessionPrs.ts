@@ -16,6 +16,7 @@ import {
     EMPTY_METRIC_RECORDS,
     evaluateMetricAwarePr,
     applySetToMetricRecords,
+    type MetricExerciseRecords,
     type MetricPrResult,
 } from "@/lib/exerciseTracking/prs";
 import type { ExerciseTrackingSchema } from "@/lib/exerciseTracking/types";
@@ -97,6 +98,32 @@ export function annotateMetricSessionPrs(
             applySetToMetricRecords(board, metrics, schema, oneRm);
         }
     }
+
+    return annotateMetricSessionPrsFromBoards(sets, boards, (name) => ensure(name).schema);
+}
+
+/** Annotate a session against already-built all-time metric boards. */
+export function annotateMetricSessionPrsFromBoards(
+    sets: AnnotatableSet[],
+    seedBoards: Map<string, MetricExerciseRecords>,
+    schemaFor: (exerciseName: string) => ExerciseTrackingSchema
+): Map<string, MetricPrResult> {
+    const boards = new Map<string, MetricExerciseRecords>();
+    for (const [key, board] of seedBoards) {
+        boards.set(key, cloneMetricRecords(board));
+    }
+
+    const schemas = new Map<string, ExerciseTrackingSchema>();
+    const ensure = (name: string) => {
+        const key = exerciseIdentityKey(name) || name.toLowerCase();
+        if (!boards.has(key)) {
+            boards.set(key, cloneMetricRecords(EMPTY_METRIC_RECORDS));
+        }
+        if (!schemas.has(key)) {
+            schemas.set(key, schemaFor(name));
+        }
+        return { key, board: boards.get(key)!, schema: schemas.get(key)! };
+    };
 
     const out = new Map<string, MetricPrResult>();
     for (const set of sets) {

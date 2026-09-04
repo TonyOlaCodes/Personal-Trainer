@@ -21,6 +21,7 @@ import { useScrollLock } from "@/hooks/useScrollLock";
 import { useIsolateScroll } from "@/hooks/useIsolateScroll";
 import { useVisualViewport } from "@/hooks/useVisualViewportHeight";
 import { exerciseIdentityKey } from "@/lib/exerciseIdentity";
+import { parseOptionalNumber } from "@/lib/numericValue";
 import {
     EMPTY_EXERCISE_RECORDS,
     evaluateLiveExercisePrs,
@@ -1229,7 +1230,7 @@ export function WorkoutLogClient({
             if (usesStrengthOneRm(schema)) {
                 result[ex.id] = evaluateLiveExercisePrs(
                     sets.map((set) => ({
-                        weightKg: parseFloat(String(set.weightKg)) || 0,
+                        weightKg: parseOptionalNumber(set.weightKg) ?? 0,
                         reps: set.reps,
                         isWarmup: set.isWarmup,
                         isCompleted: set.isCompleted,
@@ -1248,7 +1249,7 @@ export function WorkoutLogClient({
             });
             result[ex.id] = sets.map((set) => {
                 const metrics = {
-                    weightKg: parseFloat(String(set.weightKg)) || null,
+                    weightKg: parseOptionalNumber(set.weightKg),
                     reps: set.reps,
                     durationSec: set.durationSec != null ? parseFloat(String(set.durationSec)) : null,
                     distanceMeters: set.distanceMeters != null ? parseFloat(String(set.distanceMeters)) : null,
@@ -1281,7 +1282,7 @@ export function WorkoutLogClient({
                     label: pr.label,
                     summary: formatSetSummary(
                         {
-                            weightKg: parseFloat(String(set.weightKg)) || null,
+                            weightKg: parseOptionalNumber(set.weightKg),
                             reps: set.reps,
                             durationSec: set.durationSec != null ? parseFloat(String(set.durationSec)) : null,
                             distanceMeters: set.distanceMeters != null ? parseFloat(String(set.distanceMeters)) : null,
@@ -1363,18 +1364,18 @@ export function WorkoutLogClient({
                 [exId]: [
                     ...sets,
                     blankSetLog(sets.length + 1, {
-                        weightKg: lastSet?.weightKg || "",
-                        reps: lastSet?.reps || 0,
-                        rpe: lastSet?.rpe || "",
-                        durationSec: lastSet?.durationSec || "",
-                        distanceMeters: lastSet?.distanceMeters || "",
-                        heightCm: lastSet?.heightCm || "",
-                        resistance: lastSet?.resistance || "",
-                        inclinePct: lastSet?.inclinePct || "",
-                        calories: lastSet?.calories || "",
-                        heartRate: lastSet?.heartRate || "",
-                        speedKph: lastSet?.speedKph || "",
-                        rir: lastSet?.rir || "",
+                        weightKg: lastSet?.weightKg ?? "",
+                        reps: lastSet?.reps ?? 0,
+                        rpe: lastSet?.rpe ?? "",
+                        durationSec: lastSet?.durationSec ?? "",
+                        distanceMeters: lastSet?.distanceMeters ?? "",
+                        heightCm: lastSet?.heightCm ?? "",
+                        resistance: lastSet?.resistance ?? "",
+                        inclinePct: lastSet?.inclinePct ?? "",
+                        calories: lastSet?.calories ?? "",
+                        heartRate: lastSet?.heartRate ?? "",
+                        speedKph: lastSet?.speedKph ?? "",
+                        rir: lastSet?.rir ?? "",
                     }),
                 ],
             };
@@ -1518,7 +1519,8 @@ export function WorkoutLogClient({
         });
 
         try {
-            const finalDuration = override?.duration ?? (parseInt(manualDurationMinutes) || Math.floor(elapsed / 60));
+            const parsedManualDuration = parseInt(manualDurationMinutes, 10);
+            const finalDuration = override?.duration ?? (Number.isFinite(parsedManualDuration) ? parsedManualDuration : Math.floor(elapsed / 60));
             const finalNotes = override ? override.notes : workoutNotes.trim() || undefined;
             const finalFeeling = override ? override.feeling ?? undefined : finishFeeling ?? undefined;
             const res = await fetch("/api/logs", {

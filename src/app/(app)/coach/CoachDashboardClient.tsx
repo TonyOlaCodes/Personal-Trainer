@@ -127,7 +127,7 @@ function isWeightChangeTowardGoal(
 ): boolean | null {
     if (Math.abs(changeKg) < 0.05) return true;
 
-    if (targetWeightKg != null && targetWeightKg > 0) {
+    if (targetWeightKg != null) {
         const startDistance = Math.abs(startWeight - targetWeightKg);
         const endDistance = Math.abs(endWeight - targetWeightKg);
         if (endDistance < startDistance - 0.05) return true;
@@ -143,7 +143,7 @@ function isWeightChangeTowardGoal(
         case "RECOMPOSITION":
             return Math.abs(changeKg) <= 0.5;
         default:
-            if (targetWeightKg != null && targetWeightKg > 0) {
+            if (targetWeightKg != null) {
                 return Math.abs(endWeight - targetWeightKg) <= Math.abs(startWeight - targetWeightKg);
             }
             return null;
@@ -311,10 +311,10 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
         if (currentSetupClient) {
             setSetupDay(currentSetupClient.checkInSchedule?.day !== null ? currentSetupClient.checkInSchedule.day : 6);
             setSetupFreq(currentSetupClient.checkInSchedule?.frequencyWeeks !== null ? currentSetupClient.checkInSchedule.frequencyWeeks : 1);
-            setSetupCal(currentSetupClient.targetCalories ? String(currentSetupClient.targetCalories) : "");
-            setSetupSteps(currentSetupClient.targetSteps ? String(currentSetupClient.targetSteps) : "");
-            setSetupSleep(currentSetupClient.targetSleepHours ? String(currentSetupClient.targetSleepHours) : "");
-            setSetupWeight(currentSetupClient.targetWeightKg ? String(currentSetupClient.targetWeightKg) : "");
+            setSetupCal(currentSetupClient.targetCalories != null ? String(currentSetupClient.targetCalories) : "");
+            setSetupSteps(currentSetupClient.targetSteps != null ? String(currentSetupClient.targetSteps) : "");
+            setSetupSleep(currentSetupClient.targetSleepHours != null ? String(currentSetupClient.targetSleepHours) : "");
+            setSetupWeight(currentSetupClient.targetWeightKg != null ? String(currentSetupClient.targetWeightKg) : "");
             const suggested = currentSetupClient.suggestedPlanId ?? "";
             const validSuggested = suggested && availablePlans.some((plan) => plan.id === suggested)
                 ? suggested
@@ -345,10 +345,10 @@ export function CoachDashboardClient({ clients, recentCheckIns, pendingReviews, 
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     clientId: currentSetupClient.id,
-                    targetCalories: setupCal ? Math.round(Number(setupCal)) : null,
-                    targetSteps: setupSteps ? Math.round(Number(setupSteps)) : null,
-                    targetSleepHours: setupSleep ? Number(setupSleep) : null,
-                    targetWeightKg: setupWeight ? Number(setupWeight) : null,
+                    targetCalories: setupCal.trim() === "" ? null : Math.round(Number(setupCal)),
+                    targetSteps: setupSteps.trim() === "" ? null : Math.round(Number(setupSteps)),
+                    targetSleepHours: setupSleep.trim() === "" ? null : Number(setupSleep),
+                    targetWeightKg: setupWeight.trim() === "" ? null : Number(setupWeight),
                 }),
             });
             if (!goalsRes.ok) throw new Error("Failed to save client targets");
