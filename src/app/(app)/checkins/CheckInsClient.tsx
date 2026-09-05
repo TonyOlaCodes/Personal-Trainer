@@ -9,7 +9,7 @@ import {
     Dumbbell, Flame, Edit2, Clock, Trash2, Loader2, Plus, Utensils, HeartPulse
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { formatDate, getWeekNumber, cn } from "@/lib/utils";
+import { formatDate, getWeekNumber, cn, toDateKey } from "@/lib/utils";
 import {
     formatCheckInDueSubtitle,
     formatCheckInPeriodTitle,
@@ -117,7 +117,7 @@ function PerformanceMetricsFeedbackPanel({ sleep, energy, stress, training, slee
 
     return (
         <div className={cn("px-4 py-4 rounded-2xl border text-[13px] leading-relaxed transition-all animate-slide-up space-y-3", METRIC_TONE_CLASSES[overview.tone])}>
-            <p className="text-[9px] font-black uppercase tracking-[0.2em] opacity-70">AI Overview</p>
+            <p className="text-[9px] font-black uppercase tracking-[0.2em] opacity-70">Check-in answers</p>
             <p className="font-bold text-fg">{overview.headline}</p>
             {overview.progress.length > 0 && (
                 <div>
@@ -342,7 +342,7 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highl
     const [isEditing, setIsEditing] = useState(false);
     const [periodSummary, setPeriodSummary] = useState<CheckInPeriodSummary | null>(null);
     const [loadingSummary, setLoadingSummary] = useState(false);
-    const checkInDate = c.createdAt.slice(0, 10);
+    const checkInDate = toDateKey(new Date(c.createdAt));
 
     useEffect(() => {
         if (!open) return;
@@ -751,7 +751,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                 const currentEntry = checkIns.find((c) => c.weekNumber === todayWeek);
                 const dateForSummary = (isLogging || editMode)
                     ? selectedDate
-                    : (currentEntry?.createdAt.slice(0, 10) ?? selectedDate);
+                    : (currentEntry ? toDateKey(new Date(currentEntry.createdAt)) : selectedDate);
                 const params = new URLSearchParams({ date: dateForSummary });
 
                 const res = await fetch(`/api/checkins/period-summary?${params.toString()}`);
@@ -1452,7 +1452,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                             </div>
                         ) : metricsFeedback.overview ? (
                             <div className={cn("p-4 rounded-2xl border transition-all animate-slide-up text-xs leading-relaxed space-y-2", METRIC_TONE_CLASSES[metricsFeedback.overview.tone])}>
-                                <p className="text-[8px] font-black uppercase tracking-[0.2em] opacity-70">AI Overview</p>
+                                <p className="text-[8px] font-black uppercase tracking-[0.2em] opacity-70">Check-in answers</p>
                                 <p className="font-bold text-fg">{metricsFeedback.overview.headline}</p>
                                 {metricsFeedback.overview.progress.length > 0 && (
                                     <p className="text-[11px] font-medium mt-2">{metricsFeedback.overview.progress[0]}</p>

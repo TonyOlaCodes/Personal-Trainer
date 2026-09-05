@@ -34,6 +34,7 @@
     "test:chat-filters": "npx tsx scripts/test-chat-filters.ts",
     "test:exercise-history-subject": "npx tsx scripts/test-exercise-history-subject.ts",
     "test:exercise-search": "npx tsx scripts/test-exercise-search.ts",
+    "test:check-in-summary": "npx tsx scripts/test-check-in-summary.ts",
     "test:lifestyle-dashboard": "npx tsx scripts/test-lifestyle-dashboard.ts"
   },
   "dependencies": {

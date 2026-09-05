@@ -1,14 +1,41 @@
 import { prisma } from "@/lib/prisma";
 import { addDaysToDateStr, ensureBodyweightTable, getBodyweightAverageInRange } from "@/lib/bodyweight";
-import { ensureDailyMetricsTable, getDailyMetricTargets } from "@/lib/dailyMetrics";
+import { clampPeriodStart, expectedDaysInWindow } from "@/lib/coachClientPeriodStats";
+import {
+    buildLifestyleCheckInCopy,
+    hasEnoughLifestyleAssessmentData,
+    lifestyleMetFlag,
+    resolveLifestyleVerdict,
+    type LifestyleCheckInVerdict,
+} from "@/lib/checkInLifestyleNotes";
+import { ensureDailyMetricsTable, getDailyMetricTargets, getDailyMetricsInRange } from "@/lib/dailyMetrics";
 import { getUserCheckInSchedule, type CheckInSchedule } from "@/lib/checkInSchedule";
+import { isLifestyleShownOnDashboard } from "@/lib/lifestyleDashboardVisibility";
+import { summarizeLifestylePeriod, type LifestyleMetricKey } from "@/lib/lifestylePeriodMetrics";
 import { getWorkoutsTargetFromUserPlan } from "@/lib/planTrainingTarget";
-import { APP_TIMEZONE, mondayOfDateKey, shiftAppDateKey } from "@/lib/appTimezone";
+import { APP_TIMEZONE } from "@/lib/appTimezone";
 import { localDayBoundsUtc } from "@/lib/coachNotificationSchedule";
-import { toDateKey } from "@/lib/utils";
+import { formatDate, toDateKey } from "@/lib/utils";
+
+export type CheckInLifestyleMetricSummary = {
+    average: number | null;
+    target: number | null;
+    daysLogged: number;
+    expectedDays: number;
+    loggingRatePercent: number;
+    onTargetDays: number | null;
+    onTargetPercent: number | null;
+    metGoal: boolean | null;
+    enoughData: boolean;
+    verdict: LifestyleCheckInVerdict;
+    message: string;
+    detail: string;
+};
 
 export type CheckInPeriodSummary = {
     periodDays: number;
+    periodStartDateKey: string;
+    periodEndDateKey: string;
     periodLabel: string;
     frequencyWeeks: number;
     weight: {
@@ -27,27 +54,15 @@ export type CheckInPeriodSummary = {
         message: string;
         detail: string;
     } | null;
-    calories: {
-        average: number | null;
-        target: number | null;
-        daysLogged: number;
-        metGoal: boolean | null;
-        message: string;
-        detail: string;
-    } | null;
-    steps: {
-        average: number | null;
-        target: number | null;
-        daysLogged: number;
-        metGoal: boolean | null;
-        message: string;
-        detail: string;
-    } | null;
+    calories: CheckInLifestyleMetricSummary | null;
+    steps: CheckInLifestyleMetricSummary | null;
+    sleep: CheckInLifestyleMetricSummary | null;
     workouts: {
         completed: number;
         skipped: number;
         target: number;
         completionPercent: number;
+        prCount: number;
         message: string;
         detail: string;
     };
@@ -97,19 +112,28 @@ export function isWeightChangeTowardGoal(
     }
 }
 
-function getCheckInBodyweightWindow(
+/** Inclusive window after the previous submitted check-in, or since account start. */
+export function getCheckInAnalysisWindow(
     periodEndDate: string,
     priorCheckInDate: string | null,
-    accountCreatedAt: Date
-): { startDateStr: string; endDateStr: string } {
-    const endDateStr = periodEndDate;
-    const accountStart = toDateKey(accountCreatedAt);
-    const startDateStr = priorCheckInDate ? addDaysToDateStr(priorCheckInDate, 1) : accountStart;
+    accountCreatedAt: Date | string
+): { startDateKey: string; endDateKey: string } {
+    const endDateKey = periodEndDate;
+    const accountStart = typeof accountCreatedAt === "string" ? accountCreatedAt : toDateKey(accountCreatedAt);
+    const rawStart = priorCheckInDate ? addDaysToDateStr(priorCheckInDate, 1) : accountStart;
+    const startDateKey = clampPeriodStart(rawStart, accountStart);
 
     return {
-        startDateStr: startDateStr > endDateStr ? endDateStr : startDateStr,
-        endDateStr,
+        startDateKey: startDateKey > endDateKey ? endDateKey : startDateKey,
+        endDateKey,
     };
+}
+
+function formatCheckInAnalysisLabel(startDateKey: string, endDateKey: string, hasPreviousCheckIn: boolean): string {
+    const start = formatDate(startDateKey, { year: undefined });
+    const end = formatDate(endDateKey);
+    if (hasPreviousCheckIn) return `${start} – ${end}`;
+    return `${start} – ${end} (since you started)`;
 }
 
 async function findPreviousCheckIn(userId: string, referenceDate: string) {
@@ -140,18 +164,18 @@ export async function getBodyweightAverageSinceLastCheckIn(
 
     const previousCheckIn = await findPreviousCheckIn(userId, referenceDate);
     const priorCheckInDate = previousCheckIn ? toDateKey(previousCheckIn.createdAt) : null;
-    const window = getCheckInBodyweightWindow(referenceDate, priorCheckInDate, accountCreatedAt);
+    const window = getCheckInAnalysisWindow(referenceDate, priorCheckInDate, accountCreatedAt);
     const { averageWeightKg, entries } = await getBodyweightAverageInRange(
         userId,
-        window.startDateStr,
-        window.endDateStr
+        window.startDateKey,
+        window.endDateKey
     );
 
     return {
         averageWeightKg,
         entries,
-        startDateStr: window.startDateStr,
-        endDateStr: window.endDateStr,
+        startDateStr: window.startDateKey,
+        endDateStr: window.endDateKey,
         hasPreviousCheckIn: previousCheckIn != null,
         windowLabel: previousCheckIn ? "since last check-in" : "logged so far",
     };
@@ -245,34 +269,6 @@ function buildWeightAdvice(
     };
 }
 
-function buildStepsAdvice(average: number | null, target: number | null, metGoal: boolean | null, daysLogged: number): { message: string; detail: string } {
-    if (average === null) {
-        return {
-            message: "Not enough step data",
-            detail: "There is not enough step data logged this period to assess daily movement.",
-        };
-    }
-
-    if (target === null) {
-        return {
-            message: "No step target set",
-            detail: "Steps were logged, but no step target is set. Your coach can add one if you want this tracked.",
-        };
-    }
-
-    if (metGoal) {
-        return {
-            message: "Steps on target",
-            detail: `You averaged ${average.toLocaleString()} steps per day across ${daysLogged} logged day${daysLogged === 1 ? "" : "s"}.`,
-        };
-    }
-
-    return {
-        message: "Below step target",
-        detail: `You averaged ${average.toLocaleString()} steps per day versus a target of ${target.toLocaleString()}. Improving daily movement consistency may help.`,
-    };
-}
-
 function workoutCompletionPercent(completed: number, target: number): number {
     if (target <= 0) return completed > 0 ? 100 : 0;
     return Math.min(100, Math.round((completed / target) * 100));
@@ -345,12 +341,29 @@ function buildWorkoutAdvice(completed: number, target: number): { message: strin
     };
 }
 
+function pushLifestyleOverview(
+    metric: CheckInLifestyleMetricSummary | null,
+    label: string,
+    progress: string[],
+    attention: string[],
+    unassessed: string[]
+) {
+    if (!metric) return;
+    if (metric.verdict === "insufficient" || metric.verdict === "no-target") {
+        unassessed.push(label);
+        return;
+    }
+    if (metric.verdict === "good") progress.push(`${label} stayed close to target.`);
+    else attention.push(`${label} ${metric.verdict === "low" ? "sat below" : "sat above"} target.`);
+}
+
 function buildOverallOverview(input: {
     weight: CheckInPeriodSummary["weight"];
+    calories: CheckInPeriodSummary["calories"];
     steps: CheckInPeriodSummary["steps"];
+    sleep: CheckInPeriodSummary["sleep"];
     workouts: CheckInPeriodSummary["workouts"];
     isWeightHidden: boolean;
-    stepsTracked: boolean;
 }): Pick<CheckInPeriodSummary, "overallHeadline" | "overallProgress" | "overallAttention" | "overallNextSteps" | "overallUnassessed"> {
     const progress: string[] = [];
     const attention: string[] = [];
@@ -367,15 +380,9 @@ function buildOverallOverview(input: {
         }
     }
 
-    if (input.stepsTracked) {
-        if (!input.steps || input.steps.average == null) {
-            unassessed.push("Daily steps");
-        } else if (input.steps.metGoal) {
-            progress.push("Daily step average met your target.");
-        } else if (input.steps.metGoal === false) {
-            attention.push("Daily step average was below target.");
-        }
-    }
+    pushLifestyleOverview(input.calories, "Calories", progress, attention, unassessed);
+    pushLifestyleOverview(input.steps, "Steps", progress, attention, unassessed);
+    pushLifestyleOverview(input.sleep, "Sleep", progress, attention, unassessed);
 
     if (input.workouts.completionPercent >= 80) {
         progress.push("Training consistency was strong this period.");
@@ -387,7 +394,7 @@ function buildOverallOverview(input: {
         nextSteps.push("Aim to complete your scheduled workouts where possible.");
     }
     if (unassessed.length > 0) {
-        nextSteps.push("Log missing metrics so the next overview can be more complete.");
+        nextSteps.push("Log missing metrics so the next summary can be more complete.");
     }
     if (attention.length > 0) {
         nextSteps.push("Raise anything you are unsure about with your coach.");
@@ -412,27 +419,6 @@ function buildOverallOverview(input: {
         overallNextSteps: nextSteps,
         overallUnassessed: unassessed,
     };
-}
-
-function getCheckInPeriodBounds(
-    referenceDate: string,
-    frequencyWeeks: number,
-    accountCreatedAt: Date
-): { startDateStr: string; endDateStr: string; effectiveStart: Date; end: Date } {
-    const periodDays = getCheckInPeriodDays({ frequencyWeeks });
-    const endDateStr = referenceDate;
-    let startDateStr = frequencyWeeks <= 1
-        ? mondayOfDateKey(referenceDate)
-        : shiftAppDateKey(referenceDate, -periodDays);
-
-    const accountStart = toDateKey(accountCreatedAt);
-    if (accountStart > startDateStr) startDateStr = accountStart;
-    if (startDateStr > endDateStr) startDateStr = endDateStr;
-
-    const { start: effectiveStart } = localDayBoundsUtc(startDateStr, APP_TIMEZONE);
-    const { end } = localDayBoundsUtc(endDateStr, APP_TIMEZONE);
-
-    return { startDateStr, endDateStr, effectiveStart, end };
 }
 
 export async function getWorkoutsTargetPerWeek(userId: string): Promise<number> {
@@ -501,26 +487,24 @@ export async function getCheckInPeriodSummary(
     const hiddenGoals = options?.hiddenGoals ?? user.hiddenGoals ?? [];
     const isWeightHidden = hiddenGoals.includes("weight");
     const frequencyWeeks = schedule.frequencyWeeks && schedule.frequencyWeeks > 0 ? schedule.frequencyWeeks : 1;
-    const periodDays = getCheckInPeriodDays(schedule);
-    const periodLabel = getCheckInPeriodLabel(frequencyWeeks);
-
-    const { startDateStr, endDateStr, effectiveStart, end } = getCheckInPeriodBounds(
-        referenceDate,
-        frequencyWeeks,
-        user.createdAt
-    );
 
     const previousCheckIn = await findPreviousCheckIn(userId, referenceDate);
     const hasPreviousCheckIn = previousCheckIn != null;
     const priorCheckInDate = previousCheckIn ? toDateKey(previousCheckIn.createdAt) : null;
+    const analysisWindow = getCheckInAnalysisWindow(referenceDate, priorCheckInDate, user.createdAt);
+    const startDateKey = analysisWindow.startDateKey;
+    const endDateKey = analysisWindow.endDateKey;
+    const periodDays = expectedDaysInWindow(startDateKey, endDateKey, toDateKey(user.createdAt));
+    const periodLabel = formatCheckInAnalysisLabel(startDateKey, endDateKey, hasPreviousCheckIn);
+    const { start: effectiveStart } = localDayBoundsUtc(startDateKey, APP_TIMEZONE);
+    const { end } = localDayBoundsUtc(endDateKey, APP_TIMEZONE);
 
     let weightSummary: CheckInPeriodSummary["weight"] = null;
     if (!isWeightHidden) {
-        const currentWindow = getCheckInBodyweightWindow(referenceDate, priorCheckInDate, user.createdAt);
         const periodRows = await getBodyweightAverageInRange(
             userId,
-            currentWindow.startDateStr,
-            currentWindow.endDateStr
+            startDateKey,
+            endDateKey
         );
 
         const averageKg = periodRows.averageWeightKg != null ? round2(periodRows.averageWeightKg) : null;
@@ -536,15 +520,15 @@ export async function getCheckInPeriodSummary(
                 select: { createdAt: true },
             });
             const priorPriorDate = priorPriorCheckIn ? toDateKey(priorPriorCheckIn.createdAt) : null;
-            const prevWindow = getCheckInBodyweightWindow(
+            const prevWindow = getCheckInAnalysisWindow(
                 toDateKey(previousCheckIn.createdAt),
                 priorPriorDate,
                 user.createdAt
             );
             const prevPeriodRows = await getBodyweightAverageInRange(
                 userId,
-                prevWindow.startDateStr,
-                prevWindow.endDateStr
+                prevWindow.startDateKey,
+                prevWindow.endDateKey
             );
 
             if (prevPeriodRows.averageWeightKg != null) {
@@ -577,72 +561,96 @@ export async function getCheckInPeriodSummary(
         };
     }
 
-    const caloriesSummary: CheckInPeriodSummary["calories"] = null;
+    const metricRows = await getDailyMetricsInRange(userId, startDateKey, endDateKey);
+    const lifestyle = summarizeLifestylePeriod(metricRows, metricTargets, periodDays);
 
-    let stepsSummary: CheckInPeriodSummary["steps"] = null;
-    if (!hiddenGoals.includes("steps") && metricTargets.targetSteps != null) {
-        const rows = await prisma.$queryRaw<Array<{ averageSteps: number | null; entries: bigint }>>`
-            SELECT AVG("steps")::float AS "averageSteps", COUNT(*)::bigint AS "entries"
-            FROM "daily_metric_logs"
-            WHERE "userId" = ${userId}
-                AND "loggedDate" >= ${startDateStr}::date
-                AND "loggedDate" <= ${endDateStr}::date
-                AND "steps" IS NOT NULL
-        `;
-        const average = rows[0]?.averageSteps != null ? Math.round(rows[0].averageSteps) : null;
-        const target = metricTargets.targetSteps;
-        const metGoal = average != null && target != null ? average >= target : null;
-        const advice = buildStepsAdvice(average, target, metGoal, Number(rows[0]?.entries ?? 0));
-        stepsSummary = {
-            average,
-            target,
-            daysLogged: Number(rows[0]?.entries ?? 0),
-            metGoal,
-            message: advice.message,
-            detail: advice.detail,
+    const toLifestyleBlock = (
+        key: LifestyleMetricKey
+    ): CheckInLifestyleMetricSummary | null => {
+        if (!isLifestyleShownOnDashboard(hiddenGoals, key)) return null;
+        const summary = lifestyle[key];
+        const enoughData = hasEnoughLifestyleAssessmentData(summary.loggedDays, summary.expectedDays);
+        const verdict = resolveLifestyleVerdict(key, summary, enoughData);
+        const copy = buildLifestyleCheckInCopy(key, summary, verdict);
+        return {
+            average: summary.average,
+            target: summary.target,
+            daysLogged: summary.loggedDays,
+            expectedDays: summary.expectedDays,
+            loggingRatePercent: summary.loggingRatePercent,
+            onTargetDays: summary.onTargetDays,
+            onTargetPercent: summary.adherencePercent,
+            metGoal: lifestyleMetFlag(verdict),
+            enoughData,
+            verdict,
+            message: copy.message,
+            detail: copy.detail,
         };
-    }
+    };
 
-    const completedRows = await prisma.$queryRaw<Array<{ count: bigint }>>`
-        SELECT COUNT(*)::bigint AS "count"
-        FROM "workout_logs"
-        WHERE "userId" = ${userId}
-            AND "status" = 'COMPLETED'
-            AND "loggedAt" >= ${effectiveStart}
-            AND "loggedAt" <= ${end}
-    `;
+    const caloriesSummary = toLifestyleBlock("calories");
+    const stepsSummary = toLifestyleBlock("steps");
+    const sleepSummary = toLifestyleBlock("sleep");
+
+    const [completedRows, prRows] = await Promise.all([
+        prisma.$queryRaw<Array<{ count: bigint }>>`
+            SELECT COUNT(*)::bigint AS "count"
+            FROM "workout_logs"
+            WHERE "userId" = ${userId}
+                AND "status" = 'COMPLETED'
+                AND "loggedAt" >= ${effectiveStart}
+                AND "loggedAt" <= ${end}
+        `,
+        prisma.$queryRaw<Array<{ count: bigint }>>`
+            SELECT COUNT(*)::bigint AS "count"
+            FROM "log_sets" ls
+            INNER JOIN "workout_logs" wl ON wl."id" = ls."workoutLogId"
+            WHERE wl."userId" = ${userId}
+                AND wl."status" = 'COMPLETED'
+                AND ls."isPR" = true
+                AND wl."loggedAt" >= ${effectiveStart}
+                AND wl."loggedAt" <= ${end}
+        `,
+    ]);
     const completed = Number(completedRows[0]?.count ?? 0);
-    const targetWorkouts = workoutsPerWeek * frequencyWeeks;
+    const prCount = Number(prRows[0]?.count ?? 0);
+    const periodWeeks = Math.max(1, periodDays / 7);
+    const targetWorkouts = Math.max(0, Math.round(workoutsPerWeek * periodWeeks));
     const skipped = Math.max(0, targetWorkouts - completed);
     const workoutAdvice = buildWorkoutAdvice(completed, targetWorkouts);
-    const stepsTracked = !hiddenGoals.includes("steps");
     const overall = buildOverallOverview({
         weight: weightSummary,
+        calories: caloriesSummary,
         steps: stepsSummary,
+        sleep: sleepSummary,
         workouts: {
             completed,
             skipped,
             target: targetWorkouts,
             completionPercent: workoutAdvice.completionPercent,
+            prCount,
             message: workoutAdvice.message,
             detail: workoutAdvice.detail,
         },
         isWeightHidden,
-        stepsTracked,
     });
 
     return {
         periodDays,
+        periodStartDateKey: startDateKey,
+        periodEndDateKey: endDateKey,
         periodLabel,
         frequencyWeeks,
         weight: weightSummary,
         calories: caloriesSummary,
         steps: stepsSummary,
+        sleep: sleepSummary,
         workouts: {
             completed,
             skipped,
             target: targetWorkouts,
             completionPercent: workoutAdvice.completionPercent,
+            prCount,
             message: workoutAdvice.message,
             detail: workoutAdvice.detail,
         },

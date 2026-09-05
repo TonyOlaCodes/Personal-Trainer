@@ -1,31 +1,65 @@
 "use client";
 
-import { Scale, Footprints, Dumbbell, TrendingUp, TrendingDown, Minus, Sparkles } from "lucide-react";
+import { Scale, Footprints, Dumbbell, Flame, Moon, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { CheckInPeriodSummary } from "@/lib/checkInPeriodSummary";
+import type { CheckInLifestyleMetricSummary, CheckInPeriodSummary } from "@/lib/checkInPeriodSummary";
 
 function toneClass(met: boolean | null) {
-    if (met === true) return "text-success bg-success/10 border-success/25";
-    if (met === false) return "text-red-400 bg-red-400/10 border-red-400/25";
-    return "text-fg-muted bg-surface-muted border-surface-border";
+    if (met === true) return "text-success";
+    if (met === false) return "text-red-400";
+    return "text-fg-muted";
 }
 
-function StatAdvice({
-    category,
-    message,
-    detail,
-    met,
+function formatCalories(value: number) {
+    return Math.round(value).toLocaleString();
+}
+
+function LifestyleMetricBlock({
+    title,
+    unit,
+    icon: Icon,
+    metric,
+    formatValue,
 }: {
-    category: "Progress" | "Attention" | "Insight";
-    message: string;
-    detail: string;
-    met?: boolean | null;
+    title: string;
+    unit: string;
+    icon: typeof Flame;
+    metric: CheckInLifestyleMetricSummary;
+    formatValue: (value: number) => string;
 }) {
+    const loggedLine = `${metric.daysLogged}/${metric.expectedDays} days logged`;
+
     return (
-        <div className={cn("rounded-xl border px-3 py-2.5 text-xs leading-relaxed", toneClass(met ?? null))}>
-            <p className="text-[9px] font-black uppercase tracking-widest opacity-70 mb-0.5">{category}</p>
-            <p className="font-black uppercase tracking-widest text-[10px] mb-0.5">{message}</p>
-            <p className="opacity-90">{detail}</p>
+        <div className="rounded-2xl border border-surface-border bg-surface-card/40 p-4 space-y-1.5">
+            <div className="flex items-center gap-2">
+                <Icon className="w-4 h-4 text-brand-400" />
+                <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">{title}</span>
+            </div>
+            {metric.verdict === "insufficient" ? (
+                <>
+                    <p className="text-sm font-black text-fg">{loggedLine}</p>
+                    <p className="text-xs font-bold text-fg">Not enough data yet</p>
+                    <p className="text-xs text-fg-muted leading-relaxed">{metric.detail}</p>
+                </>
+            ) : (
+                <>
+                    <p className="text-xl font-black text-fg">
+                        {metric.average != null ? formatValue(metric.average) : "—"}
+                        {metric.target != null && (
+                            <span className="text-sm text-fg-muted font-bold"> / {formatValue(metric.target)} {unit}</span>
+                        )}
+                        {metric.target == null && metric.average != null && (
+                            <span className="text-sm text-fg-muted font-bold"> {unit}</span>
+                        )}
+                    </p>
+                    <p className="text-[10px] text-fg-muted">
+                        {loggedLine}
+                        {metric.onTargetPercent != null ? ` · ${metric.onTargetPercent}% on target` : ""}
+                    </p>
+                    <p className={cn("text-xs font-bold", toneClass(metric.metGoal))}>{metric.message}</p>
+                    <p className="text-xs text-fg-muted leading-relaxed">{metric.detail}</p>
+                </>
+            )}
         </div>
     );
 }
@@ -59,7 +93,7 @@ export function CheckInPeriodSummaryPanel({
     if (loading) {
         return (
             <div className="rounded-2xl border border-surface-border bg-surface-muted/20 p-4 text-xs text-fg-muted animate-pulse">
-                Loading AI overview...
+                Loading check-in summary...
             </div>
         );
     }
@@ -75,50 +109,14 @@ export function CheckInPeriodSummaryPanel({
     return (
         <div className={cn("space-y-4", compact ? "" : "card p-5 border-surface-border")}>
             <div>
-                <div className="flex items-center gap-2">
-                    <Sparkles className="w-3.5 h-3.5 text-brand-400" />
-                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-fg-subtle">
-                        AI Overview
-                    </p>
-                </div>
-                <p className="text-xs text-fg-muted mt-1">
-                    Based on data from {summary.periodLabel}
-                    {summary.frequencyWeeks > 1 ? ` (${summary.frequencyWeeks}-week check-in cycle)` : ""}.
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-fg-subtle">
+                    Check-In Summary
                 </p>
+                <p className="text-xs text-fg-muted mt-1">{summary.periodLabel}</p>
             </div>
 
             <div className={cn("grid gap-3", compact ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1 sm:grid-cols-2")}>
-                {summary.weight && (
-                    <div className="rounded-2xl border border-surface-border bg-surface-card/40 p-4 space-y-2">
-                        <div className="flex items-center gap-2">
-                            <Scale className="w-4 h-4 text-brand-400" />
-                            <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Weight</span>
-                        </div>
-                        <p className="text-xl font-black text-fg">
-                            {summary.weight.currentKg != null ? `${summary.weight.currentKg.toFixed(1)} kg` : "—"}
-                            <span className="text-[10px] font-bold text-fg-muted ml-2">avg {summary.weight.windowLabel}</span>
-                        </p>
-                        {summary.weight.changeKg != null && summary.weight.hasPreviousCheckIn && (
-                            <p className={cn("text-xs font-bold flex items-center gap-1", summary.weight.towardGoal ? "text-success" : summary.weight.towardGoal === false ? "text-red-400" : "text-fg-muted")}>
-                                <WeightIcon className="w-3.5 h-3.5" />
-                                {summary.weight.changeKg > 0 ? "+" : ""}{summary.weight.changeKg.toFixed(1)} kg since last check-in
-                            </p>
-                        )}
-                        {summary.weight.targetKg && summary.weight.currentKg && (
-                            <p className="text-[10px] text-fg-muted">
-                                Goal {summary.weight.targetKg.toFixed(1)} kg · {Math.abs(summary.weight.currentKg - summary.weight.targetKg).toFixed(1)} kg away
-                            </p>
-                        )}
-                        <StatAdvice
-                            category={summary.weight.towardGoal === false ? "Attention" : summary.weight.towardGoal ? "Progress" : "Insight"}
-                            message={summary.weight.message}
-                            detail={summary.weight.detail}
-                            met={summary.weight.towardGoal}
-                        />
-                    </div>
-                )}
-
-                <div className="rounded-2xl border border-surface-border bg-surface-card/40 p-4 space-y-2">
+                <div className="rounded-2xl border border-surface-border bg-surface-card/40 p-4 space-y-1.5">
                     <div className="flex items-center gap-2">
                         <Dumbbell className="w-4 h-4 text-brand-400" />
                         <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Training</span>
@@ -135,58 +133,79 @@ export function CheckInPeriodSummaryPanel({
                             ? `${summary.workouts.skipped} missed`
                             : summary.workouts.target > 0 && summary.workouts.completed >= summary.workouts.target
                                 ? "All planned sessions done"
-                                : "Planned sessions"}
+                                : "Workouts completed"}
+                        {summary.workouts.prCount > 0 ? ` · ${summary.workouts.prCount} PR${summary.workouts.prCount === 1 ? "" : "s"}` : ""}
                     </p>
-                    <StatAdvice
-                        category={
-                            summary.workouts.completionPercent >= 80
-                                ? "Progress"
-                                : summary.workouts.completionPercent < 50
-                                    ? "Attention"
-                                    : "Insight"
-                        }
-                        message={summary.workouts.message}
-                        detail={summary.workouts.detail}
-                        met={summary.workouts.completionPercent >= 80 ? true : summary.workouts.completionPercent >= 50 ? null : false}
-                    />
+                    <p className={cn("text-xs font-bold", toneClass(
+                        summary.workouts.completionPercent >= 80 ? true : summary.workouts.completionPercent < 50 ? false : null
+                    ))}>
+                        {summary.workouts.message}
+                    </p>
                 </div>
 
-                {summary.steps && (
-                    <div className="rounded-2xl border border-surface-border bg-surface-card/40 p-4 space-y-2">
+                {summary.weight && (
+                    <div className="rounded-2xl border border-surface-border bg-surface-card/40 p-4 space-y-1.5">
                         <div className="flex items-center gap-2">
-                            <Footprints className="w-4 h-4 text-success" />
-                            <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Steps</span>
+                            <Scale className="w-4 h-4 text-brand-400" />
+                            <span className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Weight</span>
                         </div>
                         <p className="text-xl font-black text-fg">
-                            {summary.steps.average != null ? summary.steps.average.toLocaleString() : "—"}
-                            <span className="text-sm text-fg-muted font-bold"> avg / day</span>
+                            {summary.weight.currentKg != null ? `${summary.weight.currentKg.toFixed(1)} kg` : "—"}
+                            <span className="text-[10px] font-bold text-fg-muted ml-2">avg {summary.weight.windowLabel}</span>
                         </p>
-                        <p className="text-[10px] text-fg-muted">
-                            Target {summary.steps.target?.toLocaleString() ?? "—"}
-                            {summary.steps.daysLogged > 0 ? ` · ${summary.steps.daysLogged} days logged` : ""}
-                        </p>
-                        <StatAdvice
-                            category={summary.steps.metGoal ? "Progress" : summary.steps.metGoal === false ? "Attention" : "Insight"}
-                            message={summary.steps.message}
-                            detail={summary.steps.detail}
-                            met={summary.steps.metGoal}
-                        />
+                        {summary.weight.changeKg != null && summary.weight.hasPreviousCheckIn && (
+                            <p className={cn("text-xs font-bold flex items-center gap-1", summary.weight.towardGoal ? "text-success" : summary.weight.towardGoal === false ? "text-red-400" : "text-fg-muted")}>
+                                <WeightIcon className="w-3.5 h-3.5" />
+                                {summary.weight.changeKg > 0 ? "+" : ""}{summary.weight.changeKg.toFixed(1)} kg since last check-in
+                            </p>
+                        )}
+                        <p className="text-xs text-fg-muted leading-relaxed">{summary.weight.detail}</p>
                     </div>
+                )}
+
+                {summary.calories && (
+                    <LifestyleMetricBlock
+                        title="Calories"
+                        unit="kcal"
+                        icon={Flame}
+                        metric={summary.calories}
+                        formatValue={formatCalories}
+                    />
+                )}
+
+                {summary.steps && (
+                    <LifestyleMetricBlock
+                        title="Steps"
+                        unit=""
+                        icon={Footprints}
+                        metric={summary.steps}
+                        formatValue={(value) => Math.round(value).toLocaleString()}
+                    />
+                )}
+
+                {summary.sleep && (
+                    <LifestyleMetricBlock
+                        title="Sleep"
+                        unit="hrs"
+                        icon={Moon}
+                        metric={summary.sleep}
+                        formatValue={(value) => value.toFixed(1)}
+                    />
                 )}
             </div>
 
-            <div className="rounded-2xl border border-brand-500/20 bg-brand-500/5 px-4 py-4 space-y-3 text-sm text-fg leading-relaxed">
-                <p className="text-[10px] font-black uppercase tracking-widest text-brand-300">Summary</p>
-                <p className="font-bold text-fg">{summary.overallHeadline}</p>
-                <OverviewList title="What's going well" items={summary.overallProgress} />
-                <OverviewList title="Needs attention" items={summary.overallAttention} />
-                <OverviewList title="Practical next steps" items={summary.overallNextSteps} />
-                {summary.overallUnassessed.length > 0 && (
-                    <p className="text-xs text-fg-muted">
-                        Not enough data to assess: {summary.overallUnassessed.join(", ")}.
-                    </p>
-                )}
-            </div>
+            {!compact && (
+                <div className="rounded-2xl border border-brand-500/20 bg-brand-500/5 px-4 py-4 space-y-3 text-sm text-fg leading-relaxed">
+                    <p className="font-bold text-fg">{summary.overallHeadline}</p>
+                    <OverviewList title="What's going well" items={summary.overallProgress} />
+                    <OverviewList title="Needs attention" items={summary.overallAttention} />
+                    {summary.overallUnassessed.length > 0 && (
+                        <p className="text-xs text-fg-muted">
+                            Not enough data yet: {summary.overallUnassessed.join(", ")}.
+                        </p>
+                    )}
+                </div>
+            )}
         </div>
     );
 }
