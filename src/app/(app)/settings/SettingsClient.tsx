@@ -954,18 +954,6 @@ export function SettingsClient({ user }: Props) {
                             </div>
                         </div>
 
-                        {/* Current snapshot */}
-                        {(goal || experience || location) && (
-                            <div className="p-4 rounded-2xl bg-brand-400/5 border border-brand-400/15 space-y-2">
-                                <p className="text-[10px] font-black text-brand-400 uppercase tracking-widest mb-3">Current Profile</p>
-                                <div className="flex flex-wrap gap-2">
-                                    {goal && <span className="px-3 py-1 rounded-full bg-brand-400/10 border border-brand-400/20 text-xs font-bold text-brand-300">{GOAL_LABELS[goal] ?? goal}</span>}
-                                    {experience && <span className="px-3 py-1 rounded-full bg-success/10 border border-success/20 text-xs font-bold text-success">{EXP_LABELS[experience] ?? experience}</span>}
-                                    {trainingDays && <span className="px-3 py-1 rounded-full bg-surface-muted border border-surface-border text-xs font-bold text-fg-muted">{trainingDays}x / week</span>}
-                                </div>
-                            </div>
-                        )}
-
                     </div>
                 )}
 
