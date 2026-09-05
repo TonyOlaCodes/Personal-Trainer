@@ -6,6 +6,7 @@ import {
     Loader2, MessageSquare,
 } from "lucide-react";
 import { cn, formatDate, formatRelative, getInitials } from "@/lib/utils";
+import { getPublicProfileHref } from "@/lib/profileNavigation";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { formatPresenceWithWorkout, getPresenceIndicator } from "@/lib/userPresence";
 import type { CoachActiveWorkout, CoachAttentionItem } from "@/lib/coachClientProfileData";
@@ -39,15 +40,24 @@ export function ClientHeaderCard({
     return (
         <div className="card px-5 py-4 flex flex-col sm:flex-row items-center gap-4 justify-between text-center sm:text-left">
             <div className="flex flex-col sm:flex-row items-center gap-4 min-w-0">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-brand flex items-center justify-center text-lg font-bold text-white shadow-glow-brand shrink-0">
+                <Link
+                    href={getPublicProfileHref(client.id)}
+                    className="w-14 h-14 rounded-2xl bg-gradient-brand flex items-center justify-center text-lg font-bold text-white shadow-glow-brand shrink-0 overflow-hidden hover:opacity-85 transition-opacity"
+                    aria-label={`Open ${client.name || "client"} public profile`}
+                >
                     {client.avatarUrl
-                        ? <img src={resolveUploadUrl(client.avatarUrl)} alt="" className="w-full h-full object-cover rounded-2xl" />
+                        ? <img src={resolveUploadUrl(client.avatarUrl)} alt="" className="w-full h-full object-cover" />
                         : getInitials(client.name)}
-                </div>
+                </Link>
                 <div className="min-w-0">
                     <div className="flex flex-col sm:flex-row sm:items-center gap-2 justify-center sm:justify-start">
                         <h2 className="text-xl font-bold text-fg tracking-tight truncate">
-                            {client.name || "Client"}
+                            <Link
+                                href={getPublicProfileHref(client.id)}
+                                className="hover:opacity-85 transition-opacity"
+                            >
+                                {client.name || "Client"}
+                            </Link>
                         </h2>
                         <span className={cn(
                             "px-2 py-0.5 rounded-full border text-[10px] font-black uppercase tracking-widest w-fit mx-auto sm:mx-0",

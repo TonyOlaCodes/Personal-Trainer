@@ -84,7 +84,7 @@ export function buildCoachClientAttentionItems(input: {
             detail: "Set a check-in day and frequency so progress reviews stay on track.",
             actionLabel: "Set schedule",
             action: "open_href",
-            href: "#goals-schedule",
+            href: "#check-in-schedule",
         });
     } else if (!paused && (input.checkInDueState.isOverdue || input.checkInDueState.isDueToday)) {
         const dueLabel = formatCheckInDueDate(input.checkInDueState.currentPeriodDueDate)

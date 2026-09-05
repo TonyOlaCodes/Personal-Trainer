@@ -1,7 +1,8 @@
 "use client";
 
+import type { ReactNode } from "react";
 import Link from "next/link";
-import { Calendar, CheckCircle2, ChevronRight, ClipboardList, Loader2, Scale } from "lucide-react";
+import { Calendar, CheckCircle2, ChevronRight, ClipboardList, Edit3, Loader2, Scale, X } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import type { CoachLatestCheckIn } from "@/lib/coachClientProfileData";
 
@@ -13,6 +14,11 @@ export function LatestCheckInCard({
     sendingCheckInRequest,
     checkInRequestSent,
     onRequestCheckIn,
+    scheduleLabel,
+    scheduleUnset,
+    isEditingSchedule,
+    onToggleEditSchedule,
+    scheduleEditor,
 }: {
     checkIn: CoachLatestCheckIn | null;
     overdue: boolean;
@@ -21,15 +27,45 @@ export function LatestCheckInCard({
     sendingCheckInRequest: boolean;
     checkInRequestSent: boolean;
     onRequestCheckIn: () => void;
+    scheduleLabel: string;
+    scheduleUnset: boolean;
+    isEditingSchedule: boolean;
+    onToggleEditSchedule?: () => void;
+    scheduleEditor?: ReactNode;
 }) {
     return (
-        <section className="space-y-3">
-            <h3 className="text-[11px] font-black uppercase tracking-widest text-success flex items-center gap-2 px-1">
-                <Calendar className="w-3.5 h-3.5" />
-                Latest Check-in
-            </h3>
+        <section id="check-in-schedule" className="space-y-3 scroll-mt-24">
+            <div className="px-1 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <h3 className="text-[11px] font-black uppercase tracking-widest text-success flex items-center gap-2">
+                        <Calendar className="w-3.5 h-3.5" />
+                        Latest Check-in
+                    </h3>
+                    <p className={cn(
+                        "text-xs font-bold mt-1",
+                        scheduleUnset ? "text-warning" : "text-fg-muted"
+                    )}>
+                        {scheduleLabel}
+                    </p>
+                </div>
+                {canEdit && onToggleEditSchedule && (
+                    <button
+                        type="button"
+                        onClick={onToggleEditSchedule}
+                        className="text-brand-400 text-[10px] font-black uppercase tracking-wider inline-flex items-center gap-1 shrink-0 pt-0.5"
+                    >
+                        {isEditingSchedule
+                            ? <><X className="w-3 h-3" /> Cancel</>
+                            : <><Edit3 className="w-3 h-3" /> {scheduleUnset ? "Set schedule" : "Edit"}</>}
+                    </button>
+                )}
+            </div>
+            {scheduleEditor}
             {!checkIn ? (
-                <div className="card p-5 border-dashed text-sm text-fg-muted">
+                <div className={cn(
+                    "card p-5 border-dashed text-sm text-fg-muted",
+                    scheduleUnset && "border-warning/30 bg-warning/5"
+                )}>
                     No check-in submitted yet.
                     {overdue && canEdit && (
                         <div className="mt-3">
@@ -105,9 +141,12 @@ export function LatestCheckInCard({
                     <div className="flex flex-wrap gap-2">
                         <Link
                             href={`/checkins?highlight=${checkIn.id}`}
-                            className="btn-primary h-9 px-3 text-[10px] font-black uppercase tracking-widest inline-flex items-center gap-1.5"
+                            className={cn(
+                                "h-9 px-3 text-[10px] font-black uppercase tracking-widest inline-flex items-center gap-1.5",
+                                checkIn.needsReview ? "btn-primary" : "btn-secondary"
+                            )}
                         >
-                            Review Check-in
+                            {checkIn.needsReview ? "Review Check-in" : "View Check-in"}
                             <ChevronRight className="w-3.5 h-3.5" />
                         </Link>
                         <Link

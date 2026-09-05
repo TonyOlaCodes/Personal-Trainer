@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-    Activity, AlertTriangle, Calendar, ChevronRight, Edit3,
-    Loader2, Pin, Plus, Search, Trash2, X,
+    Activity, AlertTriangle, Calendar, ChevronRight,
+    Loader2, Pin, Plus, Search, Trash2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Area, AreaChart, CartesianGrid, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -127,7 +127,8 @@ export function ClientDetailView({
     const [targetCalories, setTargetCalories] = useState(client.targetCalories != null ? String(client.targetCalories) : "");
     const [targetSteps, setTargetSteps] = useState(client.targetSteps != null ? String(client.targetSteps) : "");
     const [targetSleepHours, setTargetSleepHours] = useState(client.targetSleepHours != null ? String(client.targetSleepHours) : "");
-    const [isEditingTargets, setIsEditingTargets] = useState(canEdit && client.checkInSchedule.day === null);
+    const [isEditingGoals, setIsEditingGoals] = useState(false);
+    const [isEditingSchedule, setIsEditingSchedule] = useState(canEdit && client.checkInSchedule.day === null);
     const [periodKey, setPeriodKey] = useState<CoachProfilePeriodKey>("30d");
     const [notes, setNotes] = useState<CoachClientNote[]>(insights.coachNotes);
     const [showAllSessions, setShowAllSessions] = useState(false);
@@ -146,7 +147,7 @@ export function ClientDetailView({
         setTargetCalories(client.targetCalories != null ? String(client.targetCalories) : "");
         setTargetSteps(client.targetSteps != null ? String(client.targetSteps) : "");
         setTargetSleepHours(client.targetSleepHours != null ? String(client.targetSleepHours) : "");
-        setIsEditingTargets(canEdit && client.checkInSchedule.day === null);
+        setIsEditingSchedule(canEdit && client.checkInSchedule.day === null);
         setIsCoachPaused(Boolean(client.isCoachPaused));
         setNotes(insights.coachNotes);
     }, [client, canEdit, insights.coachNotes]);
@@ -271,7 +272,7 @@ export function ClientDetailView({
         }
     };
 
-    const saveClientConfiguration = async () => {
+    const saveCheckInSchedule = async () => {
         if (!canEdit) return;
         setSavingSchedule(true);
         try {
@@ -281,6 +282,19 @@ export function ClientDetailView({
                 body: JSON.stringify({ clientId: client.id, day: checkInDay, frequencyWeeks: checkInFrequency }),
             });
             if (!scheduleRes.ok) throw new Error("Failed to update check-in schedule.");
+            setIsEditingSchedule(false);
+            router.refresh();
+        } catch (error: unknown) {
+            alert(error instanceof Error ? error.message : "Network error.");
+        } finally {
+            setSavingSchedule(false);
+        }
+    };
+
+    const saveClientGoals = async () => {
+        if (!canEdit) return;
+        setSavingSchedule(true);
+        try {
             const goalsRes = await fetch("/api/coach/clients/goals", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -293,6 +307,7 @@ export function ClientDetailView({
                 }),
             });
             if (!goalsRes.ok) throw new Error("Failed to update targets.");
+            setIsEditingGoals(false);
             router.refresh();
         } catch (error: unknown) {
             alert(error instanceof Error ? error.message : "Network error.");
@@ -395,6 +410,64 @@ export function ClientDetailView({
                 : null,
         };
     }, [selectedExercise, selectedExerciseHistory, selectedIsStrength]);
+
+    const checkInDayLabel = client.checkInSchedule.day != null
+        ? CHECK_IN_DAYS[client.checkInSchedule.day]
+        : null;
+    const checkInFrequencyLabel = CHECK_IN_FREQUENCIES.find((item) => item.value === client.checkInSchedule.frequencyWeeks)?.label
+        ?? null;
+    const checkInScheduleLabel = checkInDayLabel && checkInFrequencyLabel
+        ? `${checkInFrequencyLabel} · ${checkInDayLabel}`
+        : checkInDayLabel
+            ?? "Check-in schedule not set";
+
+    const goalsEditor = canEdit && isEditingGoals ? (
+        <div className="card p-4 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+                <label className="space-y-1 block">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Calories</span>
+                    <input type="number" value={targetCalories} onChange={(e) => setTargetCalories(e.target.value)} className="input h-10 text-xs font-bold" />
+                </label>
+                <label className="space-y-1 block">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Steps</span>
+                    <input type="number" value={targetSteps} onChange={(e) => setTargetSteps(e.target.value)} className="input h-10 text-xs font-bold" />
+                </label>
+                <label className="space-y-1 block">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Sleep</span>
+                    <input type="number" step="0.5" value={targetSleepHours} onChange={(e) => setTargetSleepHours(e.target.value)} className="input h-10 text-xs font-bold" />
+                </label>
+                <label className="space-y-1 block">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Weight goal</span>
+                    <input type="number" step="0.1" value={targetWeightKg} onChange={(e) => setTargetWeightKg(e.target.value)} className="input h-10 text-xs font-bold" />
+                </label>
+            </div>
+            <button type="button" onClick={() => void saveClientGoals()} disabled={savingSchedule} className="btn-primary w-full sm:w-auto h-10 px-4 text-xs font-black uppercase tracking-widest">
+                {savingSchedule ? "Saving..." : "Save Goals"}
+            </button>
+        </div>
+    ) : null;
+
+    const scheduleEditor = canEdit && isEditingSchedule ? (
+        <div className={cn("card p-4 space-y-3", client.checkInSchedule.day === null && "border-warning/30 bg-warning/5")}>
+            <div className="grid grid-cols-2 gap-3">
+                <label className="space-y-1 block">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Check-in day</span>
+                    <select value={checkInDay} onChange={(e) => setCheckInDay(Number(e.target.value))} className="input h-10 text-xs font-bold">
+                        {CHECK_IN_DAYS.map((day, idx) => <option key={day} value={idx}>{day}</option>)}
+                    </select>
+                </label>
+                <label className="space-y-1 block">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Frequency</span>
+                    <select value={checkInFrequency} onChange={(e) => setCheckInFrequency(Number(e.target.value))} className="input h-10 text-xs font-bold">
+                        {CHECK_IN_FREQUENCIES.map((freq) => <option key={freq.value} value={freq.value}>{freq.label}</option>)}
+                    </select>
+                </label>
+            </div>
+            <button type="button" onClick={() => void saveCheckInSchedule()} disabled={savingSchedule} className="btn-primary w-full sm:w-auto h-10 px-4 text-xs font-black uppercase tracking-widest">
+                {savingSchedule ? "Saving..." : "Save Schedule"}
+            </button>
+        </div>
+    ) : null;
 
     const planAssignmentPanel = canEdit && assigning ? (
         <div className="mt-4 rounded-2xl border border-surface-border bg-surface-muted/50 p-4 animate-fade-in">
@@ -507,23 +580,35 @@ export function ClientDetailView({
                 weightDirection={insights.weightDirection}
             />
 
-            <div className="grid lg:grid-cols-2 gap-4">
-                <div className="card p-5 space-y-4">
-                    <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">Active Plan</p>
-                            <h3 className="text-lg font-black text-fg truncate">{insights.planProgress?.name ?? client.activePlan?.name ?? "No plan assigned"}</h3>
-                            {insights.planProgress && (
-                                <p className="text-xs text-fg-muted mt-1">
-                                    {insights.planProgress.currentWeek != null
-                                        ? `Week ${insights.planProgress.currentWeek} / ${insights.planProgress.totalWeeks}`
-                                        : `${insights.planProgress.totalWeeks} week programme`}
-                                    {insights.planProgress.weekScheduled > 0
-                                        ? ` · ${insights.planProgress.weekCompleted} / ${insights.planProgress.weekScheduled} this week`
-                                        : ""}
-                                </p>
-                            )}
+            <div className="card px-4 py-4 sm:px-5">
+                <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 min-w-0 flex-1">
+                        <div className="min-w-0 col-span-2 sm:col-span-1">
+                            <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Plan</p>
+                            <p className="text-sm font-black text-fg truncate mt-1">
+                                {insights.planProgress?.name ?? client.activePlan?.name ?? "No plan assigned"}
+                            </p>
                         </div>
+                        <div className="min-w-0">
+                            <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Current week</p>
+                            <p className="text-sm font-black text-fg mt-1">
+                                {insights.planProgress?.currentWeek != null
+                                    ? `Week ${insights.planProgress.currentWeek} / ${insights.planProgress.totalWeeks}`
+                                    : insights.planProgress
+                                        ? `${insights.planProgress.totalWeeks} week programme`
+                                        : "—"}
+                            </p>
+                        </div>
+                        <div className="min-w-0">
+                            <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">This week</p>
+                            <p className="text-sm font-black text-fg mt-1">
+                                {insights.planProgress && insights.planProgress.weekScheduled > 0
+                                    ? `${insights.planProgress.weekCompleted} / ${insights.planProgress.weekScheduled} workouts`
+                                    : "—"}
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 lg:justify-end lg:shrink-0">
                         <Link
                             href={`/coach/calendar?clientId=${client.id}`}
                             className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-brand-500/30 text-brand-400"
@@ -531,15 +616,13 @@ export function ClientDetailView({
                         >
                             <Calendar className="w-4 h-4" />
                         </Link>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
                         {client.activePlan && (
                             <Link href={`/plans/create?id=${client.activePlan.id}&view=true&clientId=${client.id}`} className="btn-secondary h-9 px-3 text-[10px] font-black uppercase tracking-widest inline-flex items-center gap-1">
                                 View / Edit Plan <ChevronRight className="w-3.5 h-3.5" />
                             </Link>
                         )}
                         {canEdit && (
-                            <button type="button" onClick={() => { setAssigning(true); setAssignMode("MENU"); }} className="btn-secondary h-9 px-3 text-[10px] font-black uppercase tracking-widest">
+                            <button type="button" onClick={() => { setAssigning(true); setAssignMode("MENU"); }} className="btn-secondary h-9 px-3 text-[10px] font-black uppercase tracking-widest inline-flex items-center gap-1">
                                 <Plus className="w-3.5 h-3.5" /> Assign New Plan
                             </button>
                         )}
@@ -549,94 +632,17 @@ export function ClientDetailView({
                             </button>
                         )}
                     </div>
-                    {planAssignmentPanel}
                 </div>
-
-                <div id="goals-schedule" className={cn("card p-5 space-y-4 scroll-mt-24", client.checkInSchedule.day === null ? "border-warning/30 bg-warning/5" : "")}>
-                    <div className="flex items-center justify-between">
-                        <h3 className="text-[11px] font-black uppercase tracking-widest text-fg">Goals & Schedule</h3>
-                        {canEdit && client.checkInSchedule.day !== null && (
-                            <button type="button" onClick={() => setIsEditingTargets((prev) => !prev)} className="text-brand-400 text-[10px] font-black uppercase tracking-wider inline-flex items-center gap-1">
-                                {isEditingTargets ? <><X className="w-3 h-3" /> Cancel</> : <><Edit3 className="w-3 h-3" /> Edit</>}
-                            </button>
-                        )}
-                    </div>
-                    {!canEdit || (!isEditingTargets && client.checkInSchedule.day !== null) ? (
-                        <div className="grid grid-cols-2 gap-3">
-                            <div className="p-3 bg-surface-muted/30 rounded-xl border border-surface-border/50">
-                                <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Bodyweight target</p>
-                                <p className="text-sm font-black text-fg mt-1">{client.targetWeightKg != null ? `${client.targetWeightKg.toFixed(1)} kg` : "—"}</p>
-                                <p className="text-[10px] text-fg-muted font-bold uppercase tracking-widest mt-1">
-                                    {insights.weightDirection === "GAINING" ? "Gaining" : insights.weightDirection === "LOSING" ? "Losing" : insights.weightDirection === "MAINTAINING" ? "Maintaining" : "Direction unset"}
-                                </p>
-                            </div>
-                            <div className="p-3 bg-surface-muted/30 rounded-xl border border-surface-border/50">
-                                <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Calories</p>
-                                <p className="text-sm font-black text-fg mt-1">{client.targetCalories != null ? `${client.targetCalories.toLocaleString()} kcal` : "—"}</p>
-                            </div>
-                            <div className="p-3 bg-surface-muted/30 rounded-xl border border-surface-border/50">
-                                <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Steps</p>
-                                <p className="text-sm font-black text-fg mt-1">{client.targetSteps != null ? client.targetSteps.toLocaleString() : "—"}</p>
-                            </div>
-                            <div className="p-3 bg-surface-muted/30 rounded-xl border border-surface-border/50">
-                                <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Sleep</p>
-                                <p className="text-sm font-black text-fg mt-1">{client.targetSleepHours != null ? `${client.targetSleepHours.toFixed(1)} hrs` : "—"}</p>
-                            </div>
-                            <div className="p-3 border border-brand-500/10 bg-brand-500/5 rounded-xl col-span-2 flex items-center justify-between">
-                                <div>
-                                    <p className="text-[8px] font-black uppercase tracking-widest text-fg-subtle">Check-in day</p>
-                                    <p className="text-xs font-black text-fg">{client.checkInSchedule.day != null ? CHECK_IN_DAYS[client.checkInSchedule.day] : "Not set"}</p>
-                                </div>
-                                <div className="text-right">
-                                    <p className="text-[8px] font-black uppercase tracking-widest text-fg-subtle">Frequency</p>
-                                    <p className="text-xs font-black text-brand-400">{CHECK_IN_FREQUENCIES.find((item) => item.value === client.checkInSchedule.frequencyWeeks)?.label || "—"}</p>
-                                </div>
-                            </div>
-                            {client.trainingDaysPerWeek != null && (
-                                <p className="col-span-2 text-xs text-fg-muted">Training frequency: {client.trainingDaysPerWeek} days / week</p>
-                            )}
-                        </div>
-                    ) : (
-                        <div className="space-y-3">
-                            <div className="grid grid-cols-2 gap-3">
-                                <label className="space-y-1 block">
-                                    <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Check-in day</span>
-                                    <select value={checkInDay} onChange={(e) => setCheckInDay(Number(e.target.value))} className="input h-10 text-xs font-bold">
-                                        {CHECK_IN_DAYS.map((day, idx) => <option key={day} value={idx}>{day}</option>)}
-                                    </select>
-                                </label>
-                                <label className="space-y-1 block">
-                                    <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Frequency</span>
-                                    <select value={checkInFrequency} onChange={(e) => setCheckInFrequency(Number(e.target.value))} className="input h-10 text-xs font-bold">
-                                        {CHECK_IN_FREQUENCIES.map((freq) => <option key={freq.value} value={freq.value}>{freq.label}</option>)}
-                                    </select>
-                                </label>
-                                <label className="space-y-1 block">
-                                    <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Calories</span>
-                                    <input type="number" value={targetCalories} onChange={(e) => setTargetCalories(e.target.value)} className="input h-10 text-xs font-bold" />
-                                </label>
-                                <label className="space-y-1 block">
-                                    <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Steps</span>
-                                    <input type="number" value={targetSteps} onChange={(e) => setTargetSteps(e.target.value)} className="input h-10 text-xs font-bold" />
-                                </label>
-                                <label className="space-y-1 block">
-                                    <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Sleep</span>
-                                    <input type="number" step="0.5" value={targetSleepHours} onChange={(e) => setTargetSleepHours(e.target.value)} className="input h-10 text-xs font-bold" />
-                                </label>
-                                <label className="space-y-1 block">
-                                    <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Weight goal</span>
-                                    <input type="number" step="0.1" value={targetWeightKg} onChange={(e) => setTargetWeightKg(e.target.value)} className="input h-10 text-xs font-bold" />
-                                </label>
-                            </div>
-                            <button type="button" onClick={async () => { await saveClientConfiguration(); setIsEditingTargets(false); }} disabled={savingSchedule} className="btn-primary w-full h-10 text-xs font-black uppercase tracking-widest">
-                                {savingSchedule ? "Saving..." : "Save Configuration"}
-                            </button>
-                        </div>
-                    )}
-                </div>
+                {planAssignmentPanel}
             </div>
 
-            <LifestyleProgressSection period={period} />
+            <LifestyleProgressSection
+                period={period}
+                canEdit={canEdit}
+                isEditingGoals={isEditingGoals}
+                onToggleEditGoals={() => setIsEditingGoals((prev) => !prev)}
+                goalsEditor={goalsEditor}
+            />
 
             <ProgressTrendsCard
                 bodyweightHistory={bodyweightHistory}
@@ -661,6 +667,11 @@ export function ClientDetailView({
                 sendingCheckInRequest={sendingCheckInRequest}
                 checkInRequestSent={checkInRequestSent}
                 onRequestCheckIn={sendCheckInRequest}
+                scheduleLabel={checkInScheduleLabel}
+                scheduleUnset={client.checkInSchedule.day === null}
+                isEditingSchedule={isEditingSchedule}
+                onToggleEditSchedule={() => setIsEditingSchedule((prev) => !prev)}
+                scheduleEditor={scheduleEditor}
             />
 
             <RecentSessionsCard

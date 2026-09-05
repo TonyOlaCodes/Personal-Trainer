@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Activity, Flame, Footprints, Moon } from "lucide-react";
+import { Activity, Edit3, Flame, Footprints, Moon, X } from "lucide-react";
 import type { CoachProfilePeriodSnapshot } from "@/lib/coachClientProfileData";
 import { DeltaLine, PeriodToggle, formatKg, missingLabel } from "./profileUi";
 import type { CoachProfilePeriodKey } from "@/lib/coachClientPeriodStats";
@@ -176,21 +176,43 @@ function LifestyleCard({
 
 export function LifestyleProgressSection({
     period,
+    canEdit = false,
+    isEditingGoals = false,
+    onToggleEditGoals,
+    goalsEditor,
 }: {
     period: CoachProfilePeriodSnapshot;
+    canEdit?: boolean;
+    isEditingGoals?: boolean;
+    onToggleEditGoals?: () => void;
+    goalsEditor?: ReactNode;
 }) {
     const { lifestyle, vsPrevious, previousLabel } = period;
     return (
         <section className="space-y-3">
-            <div className="px-1">
-                <h3 className="text-[11px] font-black uppercase tracking-widest text-brand-400 flex items-center gap-2">
-                    <Activity className="w-3.5 h-3.5" />
-                    Lifestyle Progress
-                </h3>
-                <p className="text-xs text-fg-muted mt-1">
-                    Same daily metrics the client logs on Dashboard. Missing days are omitted.
-                </p>
+            <div className="px-1 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                    <h3 className="text-[11px] font-black uppercase tracking-widest text-brand-400 flex items-center gap-2">
+                        <Activity className="w-3.5 h-3.5" />
+                        Lifestyle Progress
+                    </h3>
+                    <p className="text-xs text-fg-muted mt-1">
+                        Same daily metrics the client logs on Dashboard. Missing days are omitted.
+                    </p>
+                </div>
+                {canEdit && onToggleEditGoals && (
+                    <button
+                        type="button"
+                        onClick={onToggleEditGoals}
+                        className="text-brand-400 text-[10px] font-black uppercase tracking-wider inline-flex items-center gap-1 shrink-0 pt-0.5"
+                    >
+                        {isEditingGoals
+                            ? <><X className="w-3 h-3" /> Cancel</>
+                            : <><Edit3 className="w-3 h-3" /> Edit Goals</>}
+                    </button>
+                )}
             </div>
+            {goalsEditor}
             <div className="grid md:grid-cols-3 gap-4">
                 <LifestyleCard
                     title="Calories"

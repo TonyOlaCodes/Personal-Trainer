@@ -294,8 +294,8 @@ check("genuine issues still surface: no plan and pending review", () => {
         },
     });
     assert.ok(items.some((item) => item.kind === "no_plan"));
-    assert.ok(items.some((item) => item.kind === "checkin_review"));
-    assert.ok(items.some((item) => item.kind === "setup_checkin"));
+    assert.ok(items.some((item) => item.kind === "checkin_review" && item.actionLabel === "Review Check-in"));
+    assert.ok(items.some((item) => item.kind === "setup_checkin" && item.href === "#check-in-schedule"));
 });
 
 console.log(`\n${passed} passed\n`);
