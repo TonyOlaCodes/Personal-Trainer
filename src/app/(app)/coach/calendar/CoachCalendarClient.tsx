@@ -4,8 +4,9 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, UserCircle } from "lucide-react";
 import { CalendarClient, type CalendarView } from "@/app/(app)/calendar/CalendarClient";
-import { cn, getInitials, toDateKey } from "@/lib/utils";
+import { getInitials, toDateKey } from "@/lib/utils";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
+import { getPublicProfileHref } from "@/lib/profileNavigation";
 import { useCurrentDate } from "@/hooks/useCurrentDate";
 import type { ClientCalendarPayload } from "@/lib/clientCalendarData";
 import Link from "next/link";
@@ -25,6 +26,81 @@ interface Props {
     selectedClientName: string;
     calendar: ClientCalendarPayload | null;
     initialDateKey?: string | null;
+}
+
+function CoachCalendarClientHeader({
+    clients,
+    selectedClientId,
+    selectedClientName,
+    onClientChange,
+    selectId,
+}: {
+    clients: ClientOption[];
+    selectedClientId: string | null;
+    selectedClientName: string;
+    onClientChange: (clientId: string) => void;
+    selectId: string;
+}) {
+    const selectedClient = clients.find((c) => c.id === selectedClientId) ?? null;
+    const profileHref = selectedClientId ? getPublicProfileHref(selectedClientId) : null;
+
+    const avatar = (
+        <span className="w-8 h-8 rounded-lg bg-gradient-brand flex items-center justify-center text-[11px] font-bold text-white overflow-hidden shrink-0">
+            {selectedClient?.avatarUrl ? (
+                <img
+                    src={resolveUploadUrl(selectedClient.avatarUrl)}
+                    alt=""
+                    className="w-full h-full object-cover"
+                />
+            ) : (
+                getInitials(selectedClientName)
+            )}
+        </span>
+    );
+
+    return (
+        <div className="flex items-center gap-2 min-w-0">
+            {profileHref ? (
+                <Link
+                    href={profileHref}
+                    className="flex items-center gap-2.5 min-w-0 hover:opacity-85 transition-opacity"
+                    title={`View ${selectedClientName} profile`}
+                    aria-label={`View ${selectedClientName} public profile`}
+                >
+                    {avatar}
+                    <span className="text-base font-black text-fg tracking-tight truncate">
+                        {selectedClientName}
+                    </span>
+                </Link>
+            ) : (
+                <div className="flex items-center gap-2.5 min-w-0">
+                    {avatar}
+                    <span className="text-base font-black text-fg tracking-tight truncate">
+                        {selectedClientName}
+                    </span>
+                </div>
+            )}
+            <div className="relative shrink-0">
+                <label htmlFor={selectId} className="sr-only">Select client</label>
+                <select
+                    id={selectId}
+                    value={selectedClientId ?? ""}
+                    onChange={(e) => onClientChange(e.target.value)}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    aria-label="Switch client"
+                >
+                    {clients.map((c) => (
+                        <option key={c.id} value={c.id}>
+                            {c.name}{!c.hasActivePlan ? " (no plan)" : ""}
+                        </option>
+                    ))}
+                </select>
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center text-fg-muted pointer-events-none">
+                    <ChevronDown className="w-4 h-4" />
+                </div>
+            </div>
+        </div>
+    );
 }
 
 export function CoachCalendarClient({ clients, selectedClientId, selectedClientName, calendar, initialDateKey }: Props) {
@@ -81,8 +157,6 @@ export function CoachCalendarClient({ clients, selectedClientId, selectedClientN
         }
     }, [clients, router]);
 
-    const selectedClient = clients.find((c) => c.id === selectedClientId) ?? null;
-
     if (clients.length === 0) {
         return (
             <div className="card p-10 text-center space-y-4">
@@ -99,83 +173,35 @@ export function CoachCalendarClient({ clients, selectedClientId, selectedClientN
     }
 
     return (
-        <div className="space-y-6 animate-fade-in">
-            <div className="space-y-2">
-                <p className="text-[10px] font-black tracking-[0.2em] text-brand-400 uppercase">Client Schedule</p>
-                <div className="relative w-full max-w-md">
-                    <label htmlFor="coach-calendar-client" className="sr-only">Select client</label>
-                    {selectedClient && (
-                        <Link
-                            href={`/coach/client/${selectedClient.id}`}
-                            className="absolute left-2.5 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-lg bg-gradient-brand flex items-center justify-center text-[11px] font-bold text-white overflow-hidden hover:opacity-85 transition-opacity"
-                            title={`View ${selectedClientName}`}
-                            aria-label={`View ${selectedClientName} profile`}
-                        >
-                            {selectedClient.avatarUrl ? (
-                                <img
-                                    src={resolveUploadUrl(selectedClient.avatarUrl)}
-                                    alt=""
-                                    className="w-full h-full object-cover"
-                                />
-                            ) : (
-                                getInitials(selectedClientName)
-                            )}
-                        </Link>
-                    )}
-                    <select
-                        id="coach-calendar-client"
-                        value={selectedClientId ?? ""}
-                        onChange={(e) => onClientChange(e.target.value)}
-                        className={cn(
-                            "w-full appearance-none pr-11 py-2.5 rounded-xl bg-surface-card border border-surface-border text-lg sm:text-xl font-black text-fg tracking-tight focus:outline-none focus:ring-2 focus:ring-brand-400/40",
-                            selectedClient ? "pl-[3.25rem]" : "pl-4"
-                        )}
-                    >
-                        {clients.map((c) => (
-                            <option key={c.id} value={c.id}>
-                                {c.name}{!c.hasActivePlan ? " (no plan)" : ""}
-                            </option>
-                        ))}
-                    </select>
-                    <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-fg-subtle pointer-events-none" />
-                </div>
-            </div>
-
-            {!calendar?.activePlan ? (
-                <div className="card p-10 text-center space-y-4 border-dashed">
-                    <p className="text-sm text-fg-muted font-bold">
-                        {selectedClientName} has no active training plan assigned.
-                    </p>
-                    {selectedClientId && (
-                        <Link
-                            href={`/coach/client/${selectedClientId}`}
-                            className="btn-primary inline-flex"
-                        >
-                            Assign Plan
-                        </Link>
-                    )}
-                </div>
-            ) : (
-                <CalendarClient
-                    activePlan={calendar.activePlan}
-                    planStartedAt={calendar.planStartedAt}
-                    loggedDates={calendar.loggedDates}
-                    inProgressSessions={calendar.inProgressSessions}
-                    scheduleRevisions={calendar.scheduleRevisions}
-                    excusedMissedWorkoutKeys={calendar.excusedMissedWorkoutKeys}
-                    historicalMissedSessions={calendar.historicalMissedSessions}
-                    sessionOverrides={calendar.sessionOverrides}
-                    view={calendarView}
-                    onViewChange={setCalendarView}
-                    initialSelectedDateKey={initialDateKey ?? undefined}
-                    focusSelection={Boolean(initialDateKey)}
-                    coachView={{
-                        clientId: selectedClientId!,
-                        clientName: selectedClientName,
-                        planId: calendar.activePlan.id,
-                    }}
-                />
-            )}
+        <div className="animate-fade-in">
+            <CalendarClient
+                activePlan={calendar?.activePlan ?? null}
+                planStartedAt={calendar?.planStartedAt ?? null}
+                loggedDates={calendar?.loggedDates ?? []}
+                inProgressSessions={calendar?.inProgressSessions ?? []}
+                scheduleRevisions={calendar?.scheduleRevisions ?? []}
+                excusedMissedWorkoutKeys={calendar?.excusedMissedWorkoutKeys ?? []}
+                historicalMissedSessions={calendar?.historicalMissedSessions ?? []}
+                sessionOverrides={calendar?.sessionOverrides ?? {}}
+                view={calendarView}
+                onViewChange={setCalendarView}
+                initialSelectedDateKey={initialDateKey ?? undefined}
+                focusSelection={Boolean(initialDateKey)}
+                coachView={selectedClientId ? {
+                    clientId: selectedClientId,
+                    clientName: selectedClientName,
+                    planId: calendar?.activePlan?.id ?? null,
+                } : undefined}
+                renderCoachClientHeader={(selectId) => (
+                    <CoachCalendarClientHeader
+                        clients={clients}
+                        selectedClientId={selectedClientId}
+                        selectedClientName={selectedClientName}
+                        onClientChange={onClientChange}
+                        selectId={selectId}
+                    />
+                )}
+            />
         </div>
     );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback, type ReactNode } from "react";
 import {
     ChevronLeft, ChevronRight,
     Info, Clock,
@@ -124,6 +124,7 @@ interface Props {
         clientName: string;
         planId: string | null;
     };
+    renderCoachClientHeader?: (selectId: string) => ReactNode;
     view?: CalendarView;
     onViewChange?: (view: CalendarView) => void;
     initialSelectedDateKey?: string;
@@ -190,6 +191,7 @@ export function CalendarClient({
     historicalMissedSessions = [],
     sessionOverrides = {},
     coachView,
+    renderCoachClientHeader,
     view: controlledView,
     onViewChange,
     initialSelectedDateKey,
@@ -606,6 +608,11 @@ export function CalendarClient({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fade-in">
             {/* ── Main Grid ── */}
             <div className="lg:col-span-8 space-y-6">
+                {isCoachView && renderCoachClientHeader && !mobileDetailOpen && (
+                    <div className="lg:hidden px-2">
+                        {renderCoachClientHeader("coach-calendar-client-mobile")}
+                    </div>
+                )}
                 <div className="flex min-w-0 flex-col gap-3 px-2 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0 space-y-1">
                         {!isCoachView && (
@@ -797,6 +804,11 @@ export function CalendarClient({
                         && !selectedIsExcused
                         && "border-danger/40 ring-2 ring-danger/30 streak-fire-glow"
                 )}>
+                    {isCoachView && renderCoachClientHeader && (
+                        <div className="mb-4">
+                            {renderCoachClientHeader("coach-calendar-client-panel")}
+                        </div>
+                    )}
                     <div className="flex items-start justify-between mb-6 gap-3">
                         <div className="min-w-0">
                             <p className="text-[10px] font-black text-fg-muted uppercase tracking-widest mb-1">
@@ -1097,6 +1109,15 @@ export function CalendarClient({
                                         </ReturnLink>
                                     </div>
                                 )}
+                            </div>
+                        ) : isCoachView && coachView && !activePlan ? (
+                            <div className="flex flex-col items-center justify-center p-12 text-center space-y-4 bg-surface-muted/10 rounded-3xl border border-dashed border-surface-border/60">
+                                <p className="text-sm text-fg-muted font-bold max-w-[220px]">
+                                    {coachView.clientName} has no active training plan assigned.
+                                </p>
+                                <Link href={`/coach/client/${coachView.clientId}`} className="btn-primary inline-flex">
+                                    Assign Plan
+                                </Link>
                             </div>
                         ) : selectedIsAfterPlan ? (
                             <div className="flex flex-col items-center justify-center p-12 text-center space-y-4 bg-surface-muted/10 rounded-3xl border border-dashed border-surface-border/60">
