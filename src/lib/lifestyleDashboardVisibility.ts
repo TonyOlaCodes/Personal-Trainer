@@ -26,8 +26,26 @@ export function visibleLifestyleDashboardKeys(
 
 export function lifestyleDashboardGridClass(count: number): string {
     if (count <= 1) return "grid grid-cols-1";
-    if (count === 2) return "grid grid-cols-1 sm:grid-cols-2";
-    return "grid grid-cols-1 sm:grid-cols-3";
+    if (count === 2) return "grid grid-cols-2";
+    return "grid grid-cols-3";
+}
+
+function formatLifestyleGoalValue(key: LifestyleMetricKey, target: number): string {
+    if (key === "sleep") {
+        const rounded = Math.round(target * 10) / 10;
+        return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+    }
+    return Math.round(target).toLocaleString("en-GB");
+}
+
+/** Visual input hint only. Never treat this as a logged value. */
+export function lifestyleMetricInputPlaceholder(
+    key: LifestyleMetricKey,
+    target: number | null | undefined
+): string {
+    const unit = key === "calories" ? "kcal" : key === "steps" ? "steps" : "hrs";
+    if (target == null || !Number.isFinite(target)) return unit;
+    return `${formatLifestyleGoalValue(key, target)} ${unit}`;
 }
 
 export function setLifestyleDashboardHidden(

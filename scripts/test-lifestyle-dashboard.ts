@@ -7,6 +7,7 @@ import { mergeDailyMetricsPatch } from "../src/lib/dailyMetrics";
 import {
     isLifestyleShownOnDashboard,
     lifestyleDashboardGridClass,
+    lifestyleMetricInputPlaceholder,
     sanitizeHiddenGoals,
     setLifestyleDashboardHidden,
     visibleLifestyleDashboardKeys,
@@ -49,8 +50,18 @@ check("toggling Show on Dashboard only changes that key", () => {
 
 check("grid uses the visible card count, not empty columns", () => {
     assert.equal(lifestyleDashboardGridClass(1), "grid grid-cols-1");
-    assert.equal(lifestyleDashboardGridClass(2), "grid grid-cols-1 sm:grid-cols-2");
-    assert.equal(lifestyleDashboardGridClass(3), "grid grid-cols-1 sm:grid-cols-3");
+    assert.equal(lifestyleDashboardGridClass(2), "grid grid-cols-2");
+    assert.equal(lifestyleDashboardGridClass(3), "grid grid-cols-3");
+});
+
+check("unlogged inputs hint the goal without treating it as a log", () => {
+    assert.equal(lifestyleMetricInputPlaceholder("calories", 4000), "4,000 kcal");
+    assert.equal(lifestyleMetricInputPlaceholder("steps", 5000), "5,000 steps");
+    assert.equal(lifestyleMetricInputPlaceholder("sleep", 8), "8 hrs");
+    assert.equal(lifestyleMetricInputPlaceholder("sleep", 7.5), "7.5 hrs");
+    assert.equal(lifestyleMetricInputPlaceholder("calories", null), "kcal");
+    assert.equal(lifestyleMetricInputPlaceholder("steps", undefined), "steps");
+    assert.equal(lifestyleMetricInputPlaceholder("sleep", null), "hrs");
 });
 
 check("saving one metric does not wipe the others", () => {

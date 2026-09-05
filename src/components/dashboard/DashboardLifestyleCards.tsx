@@ -9,7 +9,7 @@ import {
     isStepsOnTarget,
     type LifestyleMetricKey,
 } from "@/lib/lifestylePeriodMetrics";
-import { lifestyleDashboardGridClass } from "@/lib/lifestyleDashboardVisibility";
+import { lifestyleDashboardGridClass, lifestyleMetricInputPlaceholder } from "@/lib/lifestyleDashboardVisibility";
 
 export interface DashboardLifestyleValues {
     calories: number | null;
@@ -83,7 +83,8 @@ function statusText(
         return target != null ? formatGoal(metric, target) : "Tap to log today";
     }
     if (target == null) return "Logged today";
-    return metric.onTarget(value, target) ? "On target" : "Off target";
+    const status = metric.onTarget(value, target) ? "On target" : "Off target";
+    return `${status} · ${formatGoal(metric, target)}`;
 }
 
 export function DashboardLifestyleCards({
@@ -169,19 +170,26 @@ export function DashboardLifestyleCards({
                 <Flame className="w-4 h-4 text-brand-400" />
                 <h3 className="text-sm font-black uppercase tracking-widest text-fg">Lifestyle</h3>
             </div>
-            <div className={cn(lifestyleDashboardGridClass(cards.length), "gap-2")}>
+            <div
+                className={cn(
+                    lifestyleDashboardGridClass(cards.length),
+                    "gap-1.5 sm:gap-2",
+                    cards.length === 1 && "max-w-[13.5rem] sm:max-w-xs"
+                )}
+            >
                 {cards.map((metric) => {
                     const Icon = metric.icon;
                     const loggedValue = values[metric.field];
                     const logged = loggedValue != null;
                     const target = targets[metric.targetField];
                     const onTarget = logged && target != null && metric.onTarget(loggedValue, target);
+                    const placeholder = lifestyleMetricInputPlaceholder(metric.key, target);
 
                     return (
                         <div
                             key={metric.key}
                             className={cn(
-                                "card px-3 py-3 flex items-center gap-2.5 transition-all relative overflow-hidden min-h-[84px]",
+                                "card px-2 py-2 sm:px-2.5 sm:py-2 flex flex-col justify-center gap-0.5 transition-all relative overflow-hidden min-w-0 min-h-[58px]",
                                 logged
                                     ? onTarget
                                         ? "bg-success/10 border-success/30 shadow-glow-success-sm"
@@ -189,48 +197,47 @@ export function DashboardLifestyleCards({
                                     : "bg-surface-muted/10 border-brand-500/10"
                             )}
                         >
-                            <div className={cn(
-                                "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
-                                logged ? "bg-success/15" : "bg-brand-500/5"
-                            )}>
-                                {logged ? <Check className="w-3.5 h-3.5 text-success" /> : <Icon className="w-3.5 h-3.5 text-brand-400" />}
-                            </div>
-                            <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1 min-w-0">
+                                {logged
+                                    ? <Check className="w-3 h-3 text-success shrink-0" />
+                                    : <Icon className="w-3 h-3 text-brand-400 shrink-0" />}
                                 <p className={cn(
-                                    "text-[8px] font-black tracking-widest uppercase",
+                                    "text-[8px] font-black tracking-widest uppercase truncate",
                                     logged ? "text-success" : "text-fg-subtle"
                                 )}>
                                     {metric.label}
                                 </p>
-                                <div className="flex items-baseline gap-1">
-                                    <input
-                                        type="number"
-                                        inputMode="decimal"
-                                        min={0}
-                                        step={metric.step}
-                                        value={drafts[metric.key]}
-                                        onChange={(e) => {
-                                            const next = e.target.value;
-                                            setDrafts((prev) => ({ ...prev, [metric.key]: next }));
-                                        }}
-                                        onBlur={() => void saveMetric(metric)}
-                                        className="w-full min-w-0 bg-transparent text-base font-black text-fg focus:outline-none focus:text-brand-400 transition-colors"
-                                        placeholder={logged ? undefined : "—"}
-                                        aria-label={`Today's ${metric.label.toLowerCase()}`}
-                                    />
-                                    <span className="text-[9px] font-semibold text-fg-muted uppercase shrink-0">{metric.unit}</span>
-                                </div>
-                                <p className={cn(
-                                    "text-[9px] font-bold mt-0.5 truncate",
-                                    logged
-                                        ? onTarget ? "text-success" : "text-fg-muted"
-                                        : "text-fg-subtle"
-                                )}>
-                                    {statusText(logged, loggedValue, target, metric)}
-                                </p>
                             </div>
+                            <div className="flex items-baseline gap-1 min-w-0">
+                                <input
+                                    type="number"
+                                    inputMode="decimal"
+                                    min={0}
+                                    step={metric.step}
+                                    value={drafts[metric.key]}
+                                    onChange={(e) => {
+                                        const next = e.target.value;
+                                        setDrafts((prev) => ({ ...prev, [metric.key]: next }));
+                                    }}
+                                    onBlur={() => void saveMetric(metric)}
+                                    className="w-full min-w-0 bg-transparent text-sm sm:text-base font-black text-fg placeholder:text-fg-subtle/70 placeholder:font-bold focus:outline-none focus:text-brand-400 transition-colors"
+                                    placeholder={logged ? undefined : placeholder}
+                                    aria-label={`Today's ${metric.label.toLowerCase()}`}
+                                />
+                                {logged && (
+                                    <span className="text-[9px] font-semibold text-fg-muted uppercase shrink-0">{metric.unit}</span>
+                                )}
+                            </div>
+                            <p className={cn(
+                                "text-[9px] font-bold truncate",
+                                logged
+                                    ? onTarget ? "text-success" : "text-fg-muted"
+                                    : "text-fg-subtle"
+                            )}>
+                                {statusText(logged, loggedValue, target, metric)}
+                            </p>
                             {savingKey === metric.key && (
-                                <div className="absolute top-2 right-2">
+                                <div className="absolute top-1.5 right-1.5">
                                     <div className="w-3 h-3 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
                                 </div>
                             )}
