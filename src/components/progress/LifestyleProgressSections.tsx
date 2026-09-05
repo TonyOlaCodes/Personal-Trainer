@@ -11,7 +11,7 @@ import {
     YAxis,
     CartesianGrid,
 } from "recharts";
-import { Flame, Footprints, Moon, TrendingDown, TrendingUp } from "lucide-react";
+import { ChevronDown, Flame, Footprints, Moon, TrendingDown, TrendingUp } from "lucide-react";
 import { cn, toDateKey } from "@/lib/utils";
 import { useCurrentDate } from "@/hooks/useCurrentDate";
 import {
@@ -72,14 +72,16 @@ function LifestyleMetricSection({
     metricKey,
     data,
     days,
-    onDaysChange,
     todayKey,
+    expanded,
+    onToggle,
 }: {
     metricKey: LifestyleMetricKey;
     data: LifestyleProgressMetric;
     days: 7 | 30 | 365;
-    onDaysChange: (days: 7 | 30 | 365) => void;
     todayKey: string;
+    expanded: boolean;
+    onToggle: () => void;
 }) {
     const ui = METRIC_UI[metricKey];
     const Icon = ui.icon;
@@ -133,104 +135,109 @@ function LifestyleMetricSection({
     const deltaPct = percentDelta(current.average, previousSummary.average);
 
     return (
-        <section className="card p-5 sm:p-6">
-            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-5">
-                <div className="flex items-center gap-3 min-w-0">
-                    <Icon className="w-5 h-5 text-brand-400 shrink-0" />
-                    <div className="min-w-0">
-                        <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest">{ui.title}</p>
-                        <div className="flex items-end gap-2 flex-wrap">
-                            <h3 className="text-3xl font-black text-fg tracking-tighter leading-none">
-                                {current.average != null ? ui.format(current.average) : "No data"}
-                                {current.average != null && (
-                                    <span className="text-sm font-bold text-fg-muted ml-1">{ui.unit}</span>
-                                )}
-                            </h3>
-                            {delta != null && delta !== 0 && (
-                                <span className={cn(
-                                    "inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-black mb-0.5",
-                                    delta > 0 ? "bg-success/10 text-success" : "bg-danger/10 text-danger"
-                                )}>
-                                    {delta > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                                    {delta > 0 ? "+" : ""}{metricKey === "sleep" ? delta.toFixed(1) : Math.round(delta).toLocaleString()}
-                                    {deltaPct != null ? ` (${deltaPct > 0 ? "+" : ""}${deltaPct}%)` : ""} vs previous
-                                </span>
+        <section className="card p-3 sm:p-6">
+            <button
+                type="button"
+                onClick={onToggle}
+                className="flex w-full items-center gap-2.5 sm:gap-3 text-left sm:pointer-events-none sm:cursor-default"
+                aria-expanded={expanded}
+            >
+                <Icon className="w-4 h-4 sm:w-5 sm:h-5 text-brand-400 shrink-0" />
+                <div className="min-w-0 flex-1">
+                    <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest">{ui.title}</p>
+                    <div className="flex items-end gap-2 flex-wrap">
+                        <h3 className="text-xl sm:text-3xl font-black text-fg tracking-tighter leading-none">
+                            {current.average != null ? ui.format(current.average) : "No data"}
+                            {current.average != null && (
+                                <span className="text-xs sm:text-sm font-bold text-fg-muted ml-1">{ui.unit}</span>
                             )}
-                        </div>
-                        <p className="text-[10px] text-fg-muted mt-1.5">
-                            {data.target != null ? (
-                                <>Goal <span className="font-bold text-fg">{ui.format(data.target)} {ui.unit}</span></>
-                            ) : (
-                                "No goal set"
-                            )}
-                            <span className="mx-1 text-fg-subtle">·</span>
-                            {formatLifestyleLoggedCount(current.loggedDays, current.expectedDays)}
-                            <span className="mx-1 text-fg-subtle">·</span>
-                            {current.adherencePercent != null
-                                ? `${current.adherencePercent}% hit`
-                                : "No data"}
-                            {current.assessment && (
-                                <>
-                                    <span className="mx-1 text-fg-subtle">·</span>
-                                    {current.assessment}
-                                </>
-                            )}
-                        </p>
+                        </h3>
+                        {delta != null && delta !== 0 && (
+                            <span className={cn(
+                                "hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-black mb-0.5",
+                                delta > 0 ? "bg-success/10 text-success" : "bg-danger/10 text-danger"
+                            )}>
+                                {delta > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                                {delta > 0 ? "+" : ""}{metricKey === "sleep" ? delta.toFixed(1) : Math.round(delta).toLocaleString()}
+                                {deltaPct != null ? ` (${deltaPct > 0 ? "+" : ""}${deltaPct}%)` : ""} vs previous
+                            </span>
+                        )}
                     </div>
                 </div>
-                <div className="flex bg-surface-muted p-1 rounded-xl self-start">
-                    {PERIODS.map((period) => (
-                        <button
-                            key={period.days}
-                            type="button"
-                            onClick={() => onDaysChange(period.days)}
-                            className={cn(
-                                "px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
-                                days === period.days ? "bg-surface-card text-brand-400 shadow-sm" : "text-fg-subtle hover:text-fg"
-                            )}
-                        >
-                            {period.label}
-                        </button>
-                    ))}
-                </div>
-            </div>
+                <ChevronDown className={cn(
+                    "w-4 h-4 text-fg-subtle shrink-0 transition-transform sm:hidden",
+                    expanded && "rotate-180"
+                )} />
+            </button>
 
-            <div className="h-[220px] w-full">
-                {chartData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" vertical={false} />
-                            <XAxis dataKey="date" stroke="#4B5563" fontSize={10} tickLine={false} axisLine={false} />
-                            <YAxis stroke="#4B5563" fontSize={10} tickLine={false} axisLine={false} />
-                            <Tooltip
-                                formatter={(value) => [`${ui.format(Number(value ?? 0))} ${ui.unit}`, ui.title]}
-                                contentStyle={{ backgroundColor: "#0F172A", borderRadius: "12px", border: "1px solid #1E293B" }}
-                                labelStyle={{ color: "#6B7280", fontSize: 10, fontWeight: 800, textTransform: "uppercase" }}
-                            />
-                            {data.target != null && (
-                                <ReferenceLine
-                                    y={data.target}
-                                    stroke="#EF4444"
-                                    strokeDasharray="4 4"
-                                    strokeWidth={2}
-                                />
-                            )}
-                            <Line
-                                type="monotone"
-                                dataKey="value"
-                                name={ui.title}
-                                stroke={ui.color}
-                                strokeWidth={3}
-                                dot={{ r: 3, fill: ui.color, strokeWidth: 0 }}
-                                connectNulls={false}
-                            />
-                        </LineChart>
-                    </ResponsiveContainer>
-                ) : (
-                    <div className="h-full rounded-xl border border-dashed border-surface-border bg-surface-muted/20 flex items-center justify-center text-[10px] font-bold text-fg-subtle">
-                        Log {ui.title.toLowerCase()} to build the chart
-                    </div>
+            <div className={cn("mt-3 sm:mt-5 space-y-3", !expanded && "hidden sm:block")}>
+                <p className="text-[10px] text-fg-muted">
+                    {data.target != null ? (
+                        <>Goal <span className="font-bold text-fg">{ui.format(data.target)} {ui.unit}</span></>
+                    ) : (
+                        "No goal set"
+                    )}
+                    <span className="mx-1 text-fg-subtle">·</span>
+                    {formatLifestyleLoggedCount(current.loggedDays, current.expectedDays)}
+                    <span className="mx-1 text-fg-subtle">·</span>
+                    {current.adherencePercent != null
+                        ? `${current.adherencePercent}% hit`
+                        : "No data"}
+                    {current.assessment && (
+                        <>
+                            <span className="mx-1 text-fg-subtle">·</span>
+                            {current.assessment}
+                        </>
+                    )}
+                </p>
+                {delta != null && delta !== 0 && (
+                    <span className={cn(
+                        "inline-flex sm:hidden items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black",
+                        delta > 0 ? "bg-success/10 text-success" : "bg-danger/10 text-danger"
+                    )}>
+                        {delta > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                        {delta > 0 ? "+" : ""}{metricKey === "sleep" ? delta.toFixed(1) : Math.round(delta).toLocaleString()}
+                        {deltaPct != null ? ` (${deltaPct > 0 ? "+" : ""}${deltaPct}%)` : ""} vs previous
+                    </span>
                 )}
+
+                <div className="h-[120px] sm:h-[220px] w-full">
+                    {chartData.length > 0 ? (
+                        <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={chartData} margin={{ top: 8, right: 8, left: -24, bottom: 0 }}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" vertical={false} />
+                                <XAxis dataKey="date" stroke="#4B5563" fontSize={10} tickLine={false} axisLine={false} />
+                                <YAxis stroke="#4B5563" fontSize={10} tickLine={false} axisLine={false} />
+                                <Tooltip
+                                    formatter={(value) => [`${ui.format(Number(value ?? 0))} ${ui.unit}`, ui.title]}
+                                    contentStyle={{ backgroundColor: "#0F172A", borderRadius: "12px", border: "1px solid #1E293B" }}
+                                    labelStyle={{ color: "#6B7280", fontSize: 10, fontWeight: 800, textTransform: "uppercase" }}
+                                />
+                                {data.target != null && (
+                                    <ReferenceLine
+                                        y={data.target}
+                                        stroke="#EF4444"
+                                        strokeDasharray="4 4"
+                                        strokeWidth={2}
+                                    />
+                                )}
+                                <Line
+                                    type="monotone"
+                                    dataKey="value"
+                                    name={ui.title}
+                                    stroke={ui.color}
+                                    strokeWidth={3}
+                                    dot={{ r: 3, fill: ui.color, strokeWidth: 0 }}
+                                    connectNulls={false}
+                                />
+                            </LineChart>
+                        </ResponsiveContainer>
+                    ) : (
+                        <div className="h-full rounded-xl border border-dashed border-surface-border bg-surface-muted/20 flex items-center justify-center text-[10px] font-bold text-fg-subtle">
+                            Log {ui.title.toLowerCase()} to build the chart
+                        </div>
+                    )}
+                </div>
             </div>
         </section>
     );
@@ -249,16 +256,34 @@ export function LifestyleProgressSections({
 }) {
     const todayKey = toDateKey(useCurrentDate());
     const [days, setDays] = useState<7 | 30 | 365>(30);
+    const [mobileOpenKey, setMobileOpenKey] = useState<LifestyleMetricKey | null>(visibleKeys[0] ?? null);
     const byKey = { calories, steps, sleep };
 
     if (visibleKeys.length === 0) return null;
 
     return (
-        <div className="space-y-5">
-            <h2 className="text-xs font-black text-fg-subtle uppercase tracking-[0.2em] flex items-center gap-2">
-                <Flame className="w-4 h-4 text-brand-400" />
-                Lifestyle
-            </h2>
+        <div className="space-y-3 sm:space-y-5">
+            <div className="flex items-center justify-between gap-3">
+                <h2 className="text-xs font-black text-fg-subtle uppercase tracking-[0.2em] flex items-center gap-2">
+                    <Flame className="w-4 h-4 text-brand-400" />
+                    Lifestyle
+                </h2>
+                <div className="flex bg-surface-muted p-1 rounded-xl shrink-0">
+                    {PERIODS.map((period) => (
+                        <button
+                            key={period.days}
+                            type="button"
+                            onClick={() => setDays(period.days)}
+                            className={cn(
+                                "px-2.5 sm:px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
+                                days === period.days ? "bg-surface-card text-brand-400 shadow-sm" : "text-fg-subtle hover:text-fg"
+                            )}
+                        >
+                            {period.label}
+                        </button>
+                    ))}
+                </div>
+            </div>
             {visibleKeys.map((key) => {
                 const metric = byKey[key];
                 if (!metric) return null;
@@ -268,8 +293,9 @@ export function LifestyleProgressSections({
                         metricKey={key}
                         data={metric}
                         days={days}
-                        onDaysChange={setDays}
                         todayKey={todayKey}
+                        expanded={mobileOpenKey === key}
+                        onToggle={() => setMobileOpenKey((current) => current === key ? null : key)}
                     />
                 );
             })}
