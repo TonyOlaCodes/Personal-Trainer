@@ -5,7 +5,7 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
 import {
     Timer, Flame, Check, HelpCircle,
-    Trash2, Plus, InfoIcon, Award, Play, Zap, X, ChevronLeft, NotebookPen, PencilLine, PlayCircle
+    Trash2, Plus, InfoIcon, Award, Play, Zap, X, ChevronLeft, NotebookPen, PencilLine
 } from "lucide-react";
 import { cn, generateId, formatDate, isSameCalendarDay, parseLogDate, toDateKey, toLoggedAtIso, calculateOneRM } from "@/lib/utils";
 import { appendReturnTo, getReturnToFromSearchParams } from "@/lib/navigation";
@@ -1660,12 +1660,12 @@ export function WorkoutLogClient({
     return (
         <div className="min-h-screen bg-surface flex flex-col pt-safe-area">
             {/* Header */}
-            <div className="flex items-center justify-between px-4 h-16 border-b border-surface-border glass fixed top-[var(--maintenance-banner-height,0px)] left-0 right-0 z-40 md:left-[var(--sidebar-width)]">
+            <div className="flex items-center gap-2 px-3 sm:px-4 h-16 border-b border-surface-border glass fixed top-[var(--maintenance-banner-height,0px)] left-0 right-0 z-40 md:left-[var(--sidebar-width)]">
                 <button 
                     onClick={handleDiscard} 
                     disabled={isDiscarding}
                     className={cn(
-                        "btn-icon",
+                        "btn-icon shrink-0",
                         sessionActive && !coachObserver
                             ? "text-danger/60 hover:text-danger hover:bg-danger/10"
                             : "text-fg-muted hover:text-fg hover:bg-surface-muted"
@@ -1678,8 +1678,8 @@ export function WorkoutLogClient({
                 >
                     {sessionActive && !coachObserver ? <Trash2 className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
                 </button>
-                <div className="text-center">
-                    <h2 className="text-sm font-bold text-fg truncate max-w-[180px]">{workout.name}</h2>
+                <div className="min-w-0 flex-1 text-center">
+                    <h2 className="text-sm font-bold text-fg truncate">{workout.name}</h2>
                     {sessionActive ? (
                         <div className="flex items-center justify-center gap-1 text-[10px] text-brand-400 font-semibold uppercase tracking-widest">
                             <Timer className="w-3 h-3" />
@@ -1703,27 +1703,41 @@ export function WorkoutLogClient({
                     coachObserver ? (
                         <button
                             onClick={handleExitSession}
-                            className="btn-secondary btn-sm px-3"
+                            className="btn-secondary btn-sm px-3 shrink-0"
                         >
                             Exit
                         </button>
                     ) : (
-                        <button onClick={handleInitiateFinish} disabled={saving} className="btn-primary btn-sm px-4 shadow-glow-brand">
+                        <button onClick={handleInitiateFinish} disabled={saving} className="btn-primary btn-sm px-4 shadow-glow-brand shrink-0">
                             Finish
                         </button>
                     )
-                ) : coachObserver && coachStartSessionHref ? (
-                    <Link
-                        href={coachStartSessionHref}
-                        className="btn-primary btn-sm px-3 sm:px-4 shadow-glow-brand shrink-0 text-[10px] sm:text-xs font-black uppercase tracking-wider flex items-center gap-1.5"
-                    >
-                        <Flame className="w-3.5 h-3.5" />
-                        Start
-                    </Link>
                 ) : coachObserver ? (
-                    <span className="text-[10px] font-black uppercase tracking-wider text-brand-400 px-2">
-                        Review
-                    </span>
+                    <div className="flex items-center justify-end gap-1.5 shrink-0">
+                        {coachEditSessionHref && (
+                            <Link
+                                href={coachEditSessionHref}
+                                className="btn-secondary btn-sm px-2 sm:px-3 h-8 text-[9px] sm:text-[10px] font-black uppercase tracking-wider flex items-center gap-1 sm:gap-1.5 whitespace-nowrap"
+                            >
+                                <PencilLine className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                                Edit Session
+                            </Link>
+                        )}
+                        {coachStartSessionHref && (
+                            <Link
+                                href={coachStartSessionHref}
+                                className="btn-primary btn-sm px-2.5 sm:px-3 h-8 text-[9px] sm:text-[10px] font-black uppercase tracking-wider flex items-center gap-1 sm:gap-1.5 shadow-glow-brand whitespace-nowrap"
+                            >
+                                <Flame className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                                Start
+                            </Link>
+                        )}
+                        {!coachEditSessionHref && !coachStartSessionHref && (
+                            <span className="text-[10px] font-black uppercase tracking-wider text-brand-400 px-2">
+                                Review
+                            </span>
+                        )}
+                    </div>
                 ) : (
                     <button
                         onClick={handleStartWorkout}
@@ -1762,42 +1776,21 @@ export function WorkoutLogClient({
                     )}
 
                     {!sessionActive && (
-                        <div className="card p-4 border-brand-500/20 bg-brand-950/10 space-y-3">
+                        <div className="card p-3 border-brand-500/20 bg-brand-950/10 space-y-2">
                             <div>
                                 <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">
                                     Workout preview
                                 </p>
-                                <p className="text-sm text-fg-muted mt-1">
+                                <p className="text-xs text-fg-muted mt-0.5">
                                     {coachObserver
-                                        ? "Planned work for this date. Edit the session for this day only, or start it to log the workout."
+                                        ? "Planned work for this date."
                                         : isPreviewMode
-                                          ? "Preview only — press Start Workout when you are ready to begin logging."
+                                          ? "Preview only — press Start when you are ready to begin logging."
                                           : "Review sets below, then start when you're ready."}
                                 </p>
                             </div>
-                            {coachObserver && (coachEditSessionHref || coachStartSessionHref) && (
-                                <div className="flex flex-col sm:flex-row gap-2">
-                                    {coachEditSessionHref && (
-                                        <Link
-                                            href={coachEditSessionHref}
-                                            className="btn-secondary flex-1 h-11 text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2"
-                                        >
-                                            <PencilLine className="w-4 h-4" />
-                                            Edit Session
-                                        </Link>
-                                    )}
-                                    {coachStartSessionHref && (
-                                        <Link
-                                            href={coachStartSessionHref}
-                                            className="btn-primary flex-1 h-11 text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 shadow-glow-brand"
-                                        >
-                                            <PlayCircle className="w-4 h-4" />
-                                            Start Session
-                                        </Link>
-                                    )}
-                                </div>
-                            )}
-                            <MuscleMap breakdown={muscleBreakdown} />
+                            <MuscleMap breakdown={muscleBreakdown} size="sm" showLegend={false} />
+                            <MuscleChips breakdown={muscleBreakdown} />
                         </div>
                     )}
 
