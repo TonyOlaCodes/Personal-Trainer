@@ -34,7 +34,7 @@ export function RecentSessionsCard({
                 <p className="text-sm text-fg-muted px-1 italic">No sessions logged yet.</p>
             ) : (
                 <div className="space-y-2">
-                    {sessions.slice(0, 5).map((session) => (
+                    {sessions.slice(0, 3).map((session) => (
                         <button
                             key={session.id}
                             type="button"
