@@ -131,7 +131,6 @@ export function CoachCalendarClient({ clients, selectedClientId, selectedClientN
     const onClientChange = (clientId: string) => {
         localStorage.setItem(LAST_COACH_CALENDAR_CLIENT_KEY, clientId);
         const params = new URLSearchParams({ clientId });
-        if (initialDateKey) params.set("date", initialDateKey);
         router.push(`/coach/calendar?${params.toString()}`);
     };
 
@@ -173,6 +172,7 @@ export function CoachCalendarClient({ clients, selectedClientId, selectedClientN
     return (
         <div className="animate-fade-in">
             <CalendarClient
+                key={selectedClientId}
                 activePlan={calendar?.activePlan ?? null}
                 planStartedAt={calendar?.planStartedAt ?? null}
                 loggedDates={calendar?.loggedDates ?? []}
@@ -183,7 +183,7 @@ export function CoachCalendarClient({ clients, selectedClientId, selectedClientN
                 sessionOverrides={calendar?.sessionOverrides ?? {}}
                 view={calendarView}
                 onViewChange={setCalendarView}
-                initialSelectedDateKey={initialDateKey ?? undefined}
+                initialSelectedDateKey={initialDateKey ?? todayKey}
                 focusSelection={Boolean(initialDateKey)}
                 coachView={selectedClientId ? {
                     clientId: selectedClientId,

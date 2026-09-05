@@ -25,6 +25,7 @@ import {
 import { httpErrorMessage } from "@/lib/httpErrorMessage";
 import { DashboardLifestyleCards } from "@/components/dashboard/DashboardLifestyleCards";
 import { visibleLifestyleDashboardKeys } from "@/lib/lifestyleDashboardVisibility";
+import { formatWorkoutDurationEstimate } from "@/lib/workoutDurationEstimate";
 
 interface Exercise {
     id: string;
@@ -90,6 +91,7 @@ interface Props {
             userId?: string;
             createdAt: string;
             weekNumber: number;
+            periodDueDateKey?: string | null;
             bodyweightKg?: number | null;
             feedback: string | null;
             notes?: string | null;
@@ -138,6 +140,7 @@ interface Props {
             targetSleepHours: number | null;
         };
     };
+    todayWorkoutDurationEstimate?: { minutes: number; fromHistory: boolean } | null;
 }
 
 const TODAY_EXERCISE_PREVIEW = 3;
@@ -176,7 +179,7 @@ function buildBodyweightSparkline(
     };
 }
 
-export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDay, todayCompleted, activeSession, recentLogs, avgDurationMin, currentCheckin, checkInDueState, checkInPanel, bodyweight, dailyLifestyle }: Props) {
+export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDay, todayCompleted, activeSession, recentLogs, avgDurationMin, currentCheckin, checkInDueState, checkInPanel, bodyweight, dailyLifestyle, todayWorkoutDurationEstimate }: Props) {
     const router = useRouter();
     const currentPath = useCurrentPath();
     const now = useCurrentDate();
@@ -197,6 +200,11 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
     const [weightLogged, setWeightLogged] = useState(
         bodyweight.selectedDate === todayDate && Boolean(bodyweight.selectedWeightKg)
     );
+    const [lifestyleValues, setLifestyleValues] = useState({
+        calories: dailyLifestyle.calories,
+        steps: dailyLifestyle.steps,
+        sleepHours: dailyLifestyle.sleepHours,
+    });
     const [weightMsg, setWeightMsg] = useState("");
     const [savingWeight, setSavingWeight] = useState(false);
     const [localActiveSession, setLocalActiveSession] = useState(activeSession);
@@ -325,6 +333,41 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
             cancelled = true;
         };
     }, [weightDate]);
+
+    useEffect(() => {
+        let cancelled = false;
+        async function loadLifestyle() {
+            if (weightDate === todayDate) {
+                setLifestyleValues({
+                    calories: dailyLifestyle.calories,
+                    steps: dailyLifestyle.steps,
+                    sleepHours: dailyLifestyle.sleepHours,
+                });
+                return;
+            }
+            try {
+                const res = await fetch(`/api/daily-metrics?date=${weightDate}`);
+                const data = await res.json();
+                if (!res.ok || cancelled) return;
+                const selected = data.selected as {
+                    calories: number | null;
+                    steps: number | null;
+                    sleepHours: number | null;
+                } | null;
+                setLifestyleValues({
+                    calories: selected?.calories ?? null,
+                    steps: selected?.steps ?? null,
+                    sleepHours: selected?.sleepHours ?? null,
+                });
+            } catch (e) {
+                console.error(e);
+            }
+        }
+        loadLifestyle();
+        return () => {
+            cancelled = true;
+        };
+    }, [weightDate, todayDate, dailyLifestyle.calories, dailyLifestyle.steps, dailyLifestyle.sleepHours]);
 
     async function handleUpdateWeight(val: string) {
         if (!val || savingWeight) return;
@@ -547,6 +590,38 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
 
         const bodyweightSparkline = buildBodyweightSparkline(bodyweightHistory, user.targetWeightKg);
         const canOpenBodyweightProgress = isPremium && isBodyweightEnabled;
+        const logDatePicker = (
+            <div className="flex flex-col gap-1.5">
+                <button
+                    type="button"
+                    onClick={() => {
+                        viewingTodayRef.current = true;
+                        setWeightDate(todayDate);
+                    }}
+                    className={cn(
+                        "h-7 rounded-lg border px-2 text-[8px] font-black uppercase tracking-widest transition-all",
+                        isWeightDateToday
+                            ? "border-success/30 bg-success/10 text-success shadow-glow-success-sm"
+                            : "border-surface-border bg-surface-muted/40 text-fg-muted hover:text-fg"
+                    )}
+                >
+                    Today
+                </button>
+                <label className="flex h-7 items-center gap-1.5 rounded-lg border border-surface-border bg-surface-muted/40 px-2 text-[10px] font-bold text-fg-muted cursor-pointer hover:border-brand-500/20 transition-all">
+                    <Calendar className="w-3 h-3 text-brand-400" />
+                    <input
+                        type="date"
+                        value={weightDate}
+                        onChange={(e) => {
+                            const next = e.target.value;
+                            viewingTodayRef.current = next === todayDate;
+                            setWeightDate(next);
+                        }}
+                        className="w-[6.8rem] bg-transparent text-fg focus:outline-none cursor-pointer"
+                    />
+                </label>
+            </div>
+        );
         const bodyweightChart = isBodyweightEnabled ? (
             <div
                 className={cn(
@@ -665,37 +740,13 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                     </div>
                 )}
                 </div>
-                <div className="flex flex-col gap-1.5">
-                    <button
-                        type="button"
-                        onClick={() => {
-                            viewingTodayRef.current = true;
-                            setWeightDate(todayDate);
-                        }}
-                        className={cn(
-                            "h-7 rounded-lg border px-2 text-[8px] font-black uppercase tracking-widest transition-all",
-                            isWeightDateToday
-                                ? "border-success/30 bg-success/10 text-success shadow-glow-success-sm"
-                                : "border-surface-border bg-surface-muted/40 text-fg-muted hover:text-fg"
-                        )}
-                    >
-                        Today
-                    </button>
-                    <label className="flex h-7 items-center gap-1.5 rounded-lg border border-surface-border bg-surface-muted/40 px-2 text-[10px] font-bold text-fg-muted cursor-pointer hover:border-brand-500/20 transition-all">
-                        <Calendar className="w-3 h-3 text-brand-400" />
-                        <input
-                            type="date"
-                            value={weightDate}
-                            onChange={(e) => {
-                                const next = e.target.value;
-                                viewingTodayRef.current = next === todayDate;
-                                setWeightDate(next);
-                            }}
-                            className="w-[6.8rem] bg-transparent text-fg focus:outline-none cursor-pointer"
-                        />
-                    </label>
-                </div>
+                {logDatePicker}
             </div>
+            )}
+            {!isBodyweightEnabled && visibleLifestyleKeys.length > 0 && (
+                <div className="flex justify-end">
+                    {logDatePicker}
+                </div>
             )}
             {bodyweightChart && (
                 canOpenBodyweightProgress ? (
@@ -708,13 +759,9 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
             )}
             {visibleLifestyleKeys.length > 0 && (
                 <DashboardLifestyleCards
-                    date={todayDate}
+                    date={weightDate}
                     visibleKeys={visibleLifestyleKeys}
-                    initialValues={{
-                        calories: dailyLifestyle.calories,
-                        steps: dailyLifestyle.steps,
-                        sleepHours: dailyLifestyle.sleepHours,
-                    }}
+                    initialValues={lifestyleValues}
                     targets={dailyLifestyle.targets}
                 />
             )}
@@ -932,7 +979,9 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                             </div>
                             <div className="badge-muted">
                                 <Clock className="w-3 h-3" />
-                                ~60 min
+                                {todayWorkoutDurationEstimate
+                                    ? formatWorkoutDurationEstimate(todayWorkoutDurationEstimate.minutes)
+                                    : formatWorkoutDurationEstimate(45)}
                             </div>
                         </div>
 

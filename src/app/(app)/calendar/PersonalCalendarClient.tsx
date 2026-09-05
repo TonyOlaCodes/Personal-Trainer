@@ -50,6 +50,7 @@ export function PersonalCalendarClient({ calendar, coachId }: Props) {
                 coachId={coachId}
                 view={calendarView}
                 onViewChange={setCalendarView}
+                initialSelectedDateKey={todayKey}
             />
         </div>
     );

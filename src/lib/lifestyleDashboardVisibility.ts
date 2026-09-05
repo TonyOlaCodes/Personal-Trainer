@@ -54,12 +54,17 @@ function lifestyleUnit(key: LifestyleMetricKey): string {
     return "hrs";
 }
 
+export type LifestyleGoalDistance = {
+    status: "below" | "reached";
+    text: string;
+};
+
 /** Distance from a real logged value to the goal. Null when unlogged or no goal. */
-export function lifestyleGoalDistanceText(
+export function lifestyleGoalDistance(
     key: LifestyleMetricKey,
     loggedValue: number | null | undefined,
     target: number | null | undefined
-): string | null {
+): LifestyleGoalDistance | null {
     if (loggedValue == null || !Number.isFinite(loggedValue)) return null;
     if (target == null || !Number.isFinite(target)) return null;
 
@@ -67,18 +72,27 @@ export function lifestyleGoalDistanceText(
         const value = Math.round(loggedValue * 10) / 10;
         const goal = Math.round(target * 10) / 10;
         const delta = Math.round((goal - value) * 10) / 10;
-        if (delta === 0) return "Goal reached";
-        const amount = Number.isInteger(Math.abs(delta)) ? String(Math.abs(delta)) : Math.abs(delta).toFixed(1);
-        return delta > 0 ? `${amount} hrs to goal` : `${amount} hrs over goal`;
+        if (delta <= 0) return { status: "reached", text: "Goal reached" };
+        const amount = Number.isInteger(delta) ? String(delta) : delta.toFixed(1);
+        return { status: "below", text: `${amount} hrs to goal` };
     }
 
     const value = Math.round(loggedValue);
     const goal = Math.round(target);
     const delta = goal - value;
-    if (delta === 0) return "Goal reached";
-    const amount = Math.abs(delta).toLocaleString("en-GB");
-    const unit = lifestyleUnit(key);
-    return delta > 0 ? `${amount} ${unit} to goal` : `${amount} ${unit} over goal`;
+    if (delta <= 0) return { status: "reached", text: "Goal reached" };
+    return {
+        status: "below",
+        text: `${delta.toLocaleString("en-GB")} ${lifestyleUnit(key)} to goal`,
+    };
+}
+
+export function lifestyleGoalDistanceText(
+    key: LifestyleMetricKey,
+    loggedValue: number | null | undefined,
+    target: number | null | undefined
+): string | null {
+    return lifestyleGoalDistance(key, loggedValue, target)?.text ?? null;
 }
 
 export function setLifestyleDashboardHidden(

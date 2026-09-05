@@ -295,7 +295,7 @@ export function CalendarClient({
     };
     const [selectedDateKey, setSelectedDateKey] = useState<string>(initialSelectedDateKey ?? todayKey);
     const detailPanelRef = useRef<HTMLDivElement>(null);
-    const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
+    const [mobileDetailOpen, setMobileDetailOpen] = useState(true);
 
     useEffect(() => {
         if (!initialSelectedDateKey) return;

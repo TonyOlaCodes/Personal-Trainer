@@ -22,6 +22,7 @@ const checkInSchema = z.object({
     notes: z.string().optional(),
     videoUrl: z.string().optional(),
     weekNumber: z.number(),
+    periodDueDateKey: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
     sleepRating: z.number().min(1).max(5).optional(),
     dietRating: z.number().min(1).max(5).optional(),
     stressRating: z.number().min(1).max(5).optional(),
@@ -57,9 +58,20 @@ export async function POST(req: Request) {
         const { maybeAutoResumeCoachPausedClient } = await import("@/lib/coachClientPause");
         await maybeAutoResumeCoachPausedClient(user.id);
 
-        const existing = await prisma.checkIn.findFirst({
-            where: { userId: user.id, weekNumber: parsed.data.weekNumber },
-        });
+        const periodDueDateKey = parsed.data.periodDueDateKey;
+        const existing = periodDueDateKey
+            ? await prisma.checkIn.findFirst({
+                where: {
+                    userId: user.id,
+                    OR: [
+                        { periodDueDateKey },
+                        { weekNumber: parsed.data.weekNumber, periodDueDateKey: null },
+                    ],
+                },
+            })
+            : await prisma.checkIn.findFirst({
+                where: { userId: user.id, weekNumber: parsed.data.weekNumber },
+            });
         if (existing) {
             const { clearCheckInRequest } = await import("@/lib/checkInRequests");
             await clearCheckInRequest(user.id, parsed.data.weekNumber);
@@ -72,6 +84,7 @@ export async function POST(req: Request) {
                 data: {
                     userId: user.id,
                     ...parsed.data,
+                    periodDueDateKey: periodDueDateKey ?? null,
                     bodyweightKg: parsed.data.bodyweightKg ? Math.round(parsed.data.bodyweightKg * 100) / 100 : undefined,
                     feedback: parsed.data.feedback?.trim() || null,
                     frontImageUrl: normalizeStoredUploadUrl(parsed.data.frontImageUrl) ?? undefined,
@@ -83,7 +96,9 @@ export async function POST(req: Request) {
         } catch (error) {
             if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
                 const raced = await prisma.checkIn.findFirst({
-                    where: { userId: user.id, weekNumber: parsed.data.weekNumber },
+                    where: periodDueDateKey
+                        ? { userId: user.id, periodDueDateKey }
+                        : { userId: user.id, weekNumber: parsed.data.weekNumber },
                 });
                 if (raced) {
                     const { clearCheckInRequest } = await import("@/lib/checkInRequests");

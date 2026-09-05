@@ -13,6 +13,7 @@ export async function GET(req: Request) {
 
         const url = new URL(req.url);
         const date = url.searchParams.get("date") ?? toDateKey(new Date());
+        const periodDueDateKey = url.searchParams.get("periodDueDate") ?? url.searchParams.get("periodDueDateKey");
         const clientId = url.searchParams.get("clientId");
 
         let targetUserId = actor.id;
@@ -35,9 +36,10 @@ export async function GET(req: Request) {
         }
 
         const schedule = await getUserCheckInSchedule(targetUserId);
-        const summary = await getCheckInPeriodSummary(targetUserId, date, {
+        const summary = await getCheckInPeriodSummary(targetUserId, periodDueDateKey ?? date, {
             schedule,
             hiddenGoals,
+            periodDueDateKey: periodDueDateKey ?? undefined,
         });
 
         return NextResponse.json(summary);

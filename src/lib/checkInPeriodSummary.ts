@@ -10,12 +10,19 @@ import {
 } from "@/lib/checkInLifestyleNotes";
 import { ensureDailyMetricsTable, getDailyMetricTargets, getDailyMetricsInRange } from "@/lib/dailyMetrics";
 import { getUserCheckInSchedule, type CheckInSchedule } from "@/lib/checkInSchedule";
+import {
+    buildScheduledPeriod,
+    formatScheduledPeriodLabel,
+    isCheckInScheduleConfigured,
+    scheduledPeriodContainingDate,
+    scheduledPeriodWindow,
+} from "@/lib/checkInPeriods";
 import { isLifestyleShownOnDashboard } from "@/lib/lifestyleDashboardVisibility";
 import { summarizeLifestylePeriod, type LifestyleMetricKey } from "@/lib/lifestylePeriodMetrics";
 import { getWorkoutsTargetFromUserPlan } from "@/lib/planTrainingTarget";
-import { APP_TIMEZONE } from "@/lib/appTimezone";
+import { APP_TIMEZONE, dateKeyToUtcNoon, shiftAppDateKey } from "@/lib/appTimezone";
 import { localDayBoundsUtc } from "@/lib/coachNotificationSchedule";
-import { formatDate, toDateKey } from "@/lib/utils";
+import { formatDate, getWeekNumber, toDateKey } from "@/lib/utils";
 
 export type CheckInLifestyleMetricSummary = {
     average: number | null;
@@ -466,6 +473,7 @@ export async function getCheckInPeriodSummary(
     options?: {
         schedule?: CheckInSchedule;
         hiddenGoals?: string[];
+        periodDueDateKey?: string;
     }
 ): Promise<CheckInPeriodSummary> {
     await Promise.all([ensureBodyweightTable(), ensureDailyMetricsTable()]);
@@ -488,14 +496,37 @@ export async function getCheckInPeriodSummary(
     const isWeightHidden = hiddenGoals.includes("weight");
     const frequencyWeeks = schedule.frequencyWeeks && schedule.frequencyWeeks > 0 ? schedule.frequencyWeeks : 1;
 
-    const previousCheckIn = await findPreviousCheckIn(userId, referenceDate);
-    const hasPreviousCheckIn = previousCheckIn != null;
-    const priorCheckInDate = previousCheckIn ? toDateKey(previousCheckIn.createdAt) : null;
-    const analysisWindow = getCheckInAnalysisWindow(referenceDate, priorCheckInDate, user.createdAt);
-    const startDateKey = analysisWindow.startDateKey;
-    const endDateKey = analysisWindow.endDateKey;
+    const scheduledPeriod = options?.periodDueDateKey
+        ? buildScheduledPeriod(options.periodDueDateKey, frequencyWeeks, referenceDate)
+        : isCheckInScheduleConfigured(schedule)
+            ? scheduledPeriodContainingDate(schedule, referenceDate, referenceDate)
+            : null;
+    const startDateKey = scheduledPeriod?.startDateKey
+        ?? scheduledPeriodWindow(referenceDate, frequencyWeeks).startDateKey;
+    const endDateKey = scheduledPeriod?.endDateKey ?? referenceDate;
+    const previousDueDateKey = scheduledPeriod
+        ? shiftAppDateKey(scheduledPeriod.dueDateKey, -(frequencyWeeks * 7))
+        : null;
+    const previousWindow = previousDueDateKey
+        ? scheduledPeriodWindow(previousDueDateKey, frequencyWeeks)
+        : null;
+
+    const previousCheckIn = previousDueDateKey
+        ? await prisma.checkIn.findFirst({
+            where: {
+                userId,
+                OR: [
+                    { periodDueDateKey: previousDueDateKey },
+                    { weekNumber: getWeekNumber(dateKeyToUtcNoon(previousDueDateKey)) },
+                ],
+            },
+            orderBy: { createdAt: "desc" },
+            select: { createdAt: true, bodyweightKg: true, periodDueDateKey: true },
+        })
+        : await findPreviousCheckIn(userId, referenceDate);
     const periodDays = expectedDaysInWindow(startDateKey, endDateKey, toDateKey(user.createdAt));
-    const periodLabel = formatCheckInAnalysisLabel(startDateKey, endDateKey, hasPreviousCheckIn);
+    const periodLabel = scheduledPeriod?.label
+        ?? formatScheduledPeriodLabel(startDateKey, endDateKey);
     const { start: effectiveStart } = localDayBoundsUtc(startDateKey, APP_TIMEZONE);
     const { end } = localDayBoundsUtc(endDateKey, APP_TIMEZONE);
 
@@ -510,43 +541,30 @@ export async function getCheckInPeriodSummary(
         const averageKg = periodRows.averageWeightKg != null ? round2(periodRows.averageWeightKg) : null;
 
         let baselineKg: number | null = null;
-        if (hasPreviousCheckIn && previousCheckIn) {
-            const priorPriorCheckIn = await prisma.checkIn.findFirst({
-                where: {
-                    userId,
-                    createdAt: { lt: previousCheckIn.createdAt },
-                },
-                orderBy: { createdAt: "desc" },
-                select: { createdAt: true },
-            });
-            const priorPriorDate = priorPriorCheckIn ? toDateKey(priorPriorCheckIn.createdAt) : null;
-            const prevWindow = getCheckInAnalysisWindow(
-                toDateKey(previousCheckIn.createdAt),
-                priorPriorDate,
-                user.createdAt
-            );
+        if (previousWindow) {
             const prevPeriodRows = await getBodyweightAverageInRange(
                 userId,
-                prevWindow.startDateKey,
-                prevWindow.endDateKey
+                previousWindow.startDateKey,
+                previousWindow.endDateKey
             );
 
             if (prevPeriodRows.averageWeightKg != null) {
                 baselineKg = round2(prevPeriodRows.averageWeightKg);
-            } else if (previousCheckIn.bodyweightKg != null) {
+            } else if (previousCheckIn?.bodyweightKg != null) {
                 baselineKg = round2(previousCheckIn.bodyweightKg);
             }
         }
 
-        const changeKg = averageKg != null && baselineKg != null && hasPreviousCheckIn
+        const hasPreviousPeriodData = baselineKg != null;
+        const changeKg = averageKg != null && baselineKg != null
             ? round2(averageKg - baselineKg)
             : null;
         const towardGoal = changeKg != null
             ? isWeightChangeTowardGoal(changeKg, user.goal, frequencyWeeks)
             : null;
 
-        const weightWindowLabel = hasPreviousCheckIn ? "since last check-in" : "logged so far";
-        const advice = buildWeightAdvice(changeKg, towardGoal, user.goal, weightWindowLabel, hasPreviousCheckIn);
+        const weightWindowLabel = scheduledPeriod?.label ?? periodLabel;
+        const advice = buildWeightAdvice(changeKg, towardGoal, user.goal, weightWindowLabel, hasPreviousPeriodData);
         weightSummary = {
             currentKg: averageKg,
             baselineKg,
@@ -554,7 +572,7 @@ export async function getCheckInPeriodSummary(
             entries: periodRows.entries,
             towardGoal,
             targetKg: user.targetWeightKg,
-            hasPreviousCheckIn,
+            hasPreviousCheckIn: hasPreviousPeriodData,
             windowLabel: weightWindowLabel,
             message: advice.message,
             detail: advice.detail,

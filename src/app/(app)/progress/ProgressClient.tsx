@@ -27,6 +27,7 @@ import { useWorkoutStatsRefresh } from "@/hooks/useWorkoutStatsRefresh";
 import { format, startOfWeek } from "date-fns";
 import { LifestyleProgressSections } from "@/components/progress/LifestyleProgressSections";
 import { visibleLifestyleDashboardKeys } from "@/lib/lifestyleDashboardVisibility";
+import { bodyweightDistanceToGoal, isProgressWeightChangeTowardGoal } from "@/lib/progressWeightTrend";
 
 interface Props {
     userRole: string;
@@ -169,41 +170,6 @@ function LockedProgressPreview({
             </div>
         </div>
     );
-}
-
-function isWeightChangeTowardGoal(
-    changeKg: number,
-    goal: string | null | undefined,
-    target: number | null | undefined,
-    startWeight: number,
-    endWeight: number
-) {
-    if (changeKg === 0) return true;
-
-    if (target != null && target > 0) {
-        const startDistance = Math.abs(startWeight - target);
-        const endDistance = Math.abs(endWeight - target);
-        if (endDistance < startDistance) return true;
-        if (endDistance > startDistance) return false;
-    }
-
-    switch (goal) {
-        case "LOSE_WEIGHT":
-            return changeKg < 0;
-        case "GAIN_MUSCLE":
-        case "STRENGTH":
-            return changeKg > 0;
-        case "RECOMPOSITION":
-            if (target != null && target > 0) {
-                return Math.abs(endWeight - target) <= Math.abs(startWeight - target);
-            }
-            return changeKg < 0;
-        default:
-            if (target != null && target > 0) {
-                return Math.abs(endWeight - target) < Math.abs(startWeight - target);
-            }
-            return changeKg < 0;
-    }
 }
 
 export function ProgressClient({ userRole, hiddenGoals, todayWorkoutHref = null, canAccessCheckIns = false }: Props) {
@@ -416,7 +382,7 @@ export function ProgressClient({ userRole, hiddenGoals, todayWorkoutHref = null,
 
         return {
             ...period,
-            towardGoal: isWeightChangeTowardGoal(
+            towardGoal: isProgressWeightChangeTowardGoal(
                 period.change,
                 data?.bodyweight?.goal,
                 data?.bodyweight?.target,
@@ -425,6 +391,11 @@ export function ProgressClient({ userRole, hiddenGoals, todayWorkoutHref = null,
             ),
         };
     }, [bodyweightHistory, bwDays, data?.bodyweight?.goal, data?.bodyweight?.target]);
+
+    const weightGoalDistance = bodyweightDistanceToGoal(
+        data?.bodyweight?.current,
+        data?.bodyweight?.target
+    );
 
     const bodyweightData = useMemo(
         () => filteredBodyweightHistory.map((d) => ({
@@ -545,16 +516,18 @@ export function ProgressClient({ userRole, hiddenGoals, todayWorkoutHref = null,
                                 {/* ── BIG current weight ── */}
                                 <div className="flex items-end gap-3">
                                     <h3 className="text-4xl font-black text-fg tracking-tighter leading-none">
-                                        {data?.bodyweight?.current ? data.bodyweight.current.toFixed(1) : "--"}
+                                        {data?.bodyweight?.current != null ? data.bodyweight.current.toFixed(1) : "--"}
                                         <span className="text-lg font-bold text-fg-muted ml-1">kg</span>
                                     </h3>
                                     {/* Period delta badge */}
                                     {bodyweightPeriodStats && bodyweightPeriodStats.change !== 0 && (
                                         <span className={cn(
                                             "inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-black mb-1",
-                                            bodyweightPeriodStats.towardGoal
+                                            bodyweightPeriodStats.towardGoal === true
                                                 ? "bg-success/10 text-success"
-                                                : "bg-red-500/10 text-red-400"
+                                                : bodyweightPeriodStats.towardGoal === false
+                                                    ? "bg-red-500/10 text-red-400"
+                                                    : "bg-surface-muted text-fg-muted"
                                         )}>
                                             {bodyweightPeriodStats.change > 0
                                                 ? <TrendingUp className="w-3 h-3" />
@@ -565,13 +538,20 @@ export function ProgressClient({ userRole, hiddenGoals, todayWorkoutHref = null,
                                     )}
                                 </div>
                                 {/* Target line */}
-                                {data?.bodyweight?.target && (
+                                {data?.bodyweight?.target != null && (
                                     <p className="text-[10px] text-fg-muted mt-1.5">
                                         Goal: <span className="text-red-400 font-bold">{data.bodyweight.target.toFixed(1)} kg</span>
-                                        <span className="mx-1 text-fg-subtle">·</span>
-                                        <span className={cn("font-bold", Math.abs((data?.bodyweight?.current ?? 0) - (data?.bodyweight?.target ?? 0)) < 2 ? "text-success" : "text-fg-muted")}>
-                                            {Math.abs((data?.bodyweight?.current ?? 0) - (data?.bodyweight?.target ?? 0)).toFixed(1)} kg away
-                                        </span>
+                                        {weightGoalDistance != null && (
+                                            <>
+                                                <span className="mx-1 text-fg-subtle">·</span>
+                                                <span className={cn(
+                                                    "font-bold",
+                                                    weightGoalDistance < 2 ? "text-success" : "text-fg-muted"
+                                                )}>
+                                                    {weightGoalDistance.toFixed(1)} kg away
+                                                </span>
+                                            </>
+                                        )}
                                     </p>
                                 )}
                             </div>
@@ -599,7 +579,11 @@ export function ProgressClient({ userRole, hiddenGoals, todayWorkoutHref = null,
                                 <p className={cn(
                                     "text-sm font-black",
                                     bodyweightPeriodStats
-                                        ? bodyweightPeriodStats.towardGoal ? "text-success" : "text-red-400"
+                                        ? bodyweightPeriodStats.towardGoal === true
+                                            ? "text-success"
+                                            : bodyweightPeriodStats.towardGoal === false
+                                                ? "text-red-400"
+                                                : "text-fg"
                                         : "text-fg"
                                 )}>
                                     {bodyweightPeriodStats

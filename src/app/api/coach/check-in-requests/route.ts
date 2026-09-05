@@ -45,7 +45,7 @@ export async function POST(req: Request) {
                     where: {
                         createdAt: { gte: new Date(Date.now() - 90 * 86400000) },
                     },
-                    select: { weekNumber: true },
+                    select: { weekNumber: true, periodDueDateKey: true },
                 },
                 lastActiveAt: true,
             },
@@ -70,7 +70,8 @@ export async function POST(req: Request) {
 
         const hasSubmission = hasCheckInForOutstandingPeriod(
             dueState,
-            client.checkIns.map((c) => c.weekNumber)
+            client.checkIns.map((c) => c.weekNumber),
+            client.checkIns.map((c) => c.periodDueDateKey)
         );
         if (!isCoachClientCheckInAttentionNeeded(dueState, hasSubmission)) {
             return NextResponse.json(

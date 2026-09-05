@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Check, Flame, Footprints, Moon } from "lucide-react";
+import { ArrowDown, Check, Flame, Footprints, Moon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { type LifestyleMetricKey } from "@/lib/lifestylePeriodMetrics";
 import {
     lifestyleDashboardGridClass,
-    lifestyleGoalDistanceText,
+    lifestyleGoalDistance,
     lifestyleMetricInputPlaceholder,
 } from "@/lib/lifestyleDashboardVisibility";
 
@@ -64,10 +64,6 @@ const METRICS: Array<{
     },
 ];
 
-function unloggedHint(metric: (typeof METRICS)[number], target: number | null): string {
-    return target != null ? `Goal ${metric.format(target)} ${metric.unit}` : "Tap to log today";
-}
-
 export function DashboardLifestyleCards({
     date,
     visibleKeys,
@@ -103,13 +99,55 @@ export function DashboardLifestyleCards({
 
     if (cards.length === 0) return null;
 
+    const applySelected = (selected: DashboardLifestyleValues | null | undefined, fallbackField?: keyof DashboardLifestyleValues) => {
+        if (selected) {
+            setValues({
+                calories: selected.calories,
+                steps: selected.steps,
+                sleepHours: selected.sleepHours,
+            });
+            setDrafts({
+                calories: selected.calories != null ? String(selected.calories) : "",
+                steps: selected.steps != null ? String(selected.steps) : "",
+                sleep: selected.sleepHours != null ? selected.sleepHours.toFixed(1) : "",
+            });
+            return;
+        }
+        if (!fallbackField) return;
+        setValues((prev) => ({ ...prev, [fallbackField]: null }));
+        const draftKey = METRICS.find((metric) => metric.field === fallbackField)?.key;
+        if (draftKey) {
+            setDrafts((prev) => ({ ...prev, [draftKey]: "" }));
+        }
+    };
+
     const saveMetric = async (metric: (typeof METRICS)[number]) => {
         const raw = drafts[metric.key].trim();
-        if (raw === "") return;
+        const current = values[metric.field];
+
+        if (raw === "") {
+            if (current == null) return;
+            setSavingKey(metric.key);
+            try {
+                const res = await fetch("/api/daily-metrics", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        date,
+                        [metric.field]: null,
+                    }),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) return;
+                applySelected(data.selected as DashboardLifestyleValues | null, metric.field);
+            } finally {
+                setSavingKey(null);
+            }
+            return;
+        }
+
         const parsed = Number(raw);
         if (!Number.isFinite(parsed) || parsed < 0) return;
-
-        const current = values[metric.field];
         if (current != null && Number(current) === parsed) return;
 
         setSavingKey(metric.key);
@@ -127,16 +165,7 @@ export function DashboardLifestyleCards({
 
             const selected = data.selected as DashboardLifestyleValues | undefined;
             if (selected) {
-                setValues({
-                    calories: selected.calories,
-                    steps: selected.steps,
-                    sleepHours: selected.sleepHours,
-                });
-                setDrafts({
-                    calories: selected.calories != null ? String(selected.calories) : "",
-                    steps: selected.steps != null ? String(selected.steps) : "",
-                    sleep: selected.sleepHours != null ? selected.sleepHours.toFixed(1) : "",
-                });
+                applySelected(selected);
             } else {
                 setValues((prev) => ({ ...prev, [metric.field]: parsed }));
             }
@@ -164,10 +193,7 @@ export function DashboardLifestyleCards({
                     const logged = loggedValue != null;
                     const target = targets[metric.targetField];
                     const placeholder = lifestyleMetricInputPlaceholder(metric.key, target);
-                    const goalDistance = lifestyleGoalDistanceText(metric.key, loggedValue, target);
-                    const statusLine = logged
-                        ? (goalDistance ?? "Logged today")
-                        : unloggedHint(metric, target);
+                    const goalDistance = lifestyleGoalDistance(metric.key, loggedValue, target);
 
                     return (
                         <div
@@ -204,18 +230,23 @@ export function DashboardLifestyleCards({
                                     onBlur={() => void saveMetric(metric)}
                                     className="w-full min-w-0 bg-transparent text-sm sm:text-base font-black text-fg placeholder:text-fg-subtle/70 placeholder:font-bold focus:outline-none focus:text-brand-400 transition-colors"
                                     placeholder={logged ? undefined : placeholder}
-                                    aria-label={`Today's ${metric.label.toLowerCase()}`}
+                                    aria-label={`${metric.label} for ${date}`}
                                 />
                                 {logged && (
                                     <span className="text-[9px] font-semibold text-fg-muted uppercase shrink-0">{metric.unit}</span>
                                 )}
                             </div>
-                            <p className={cn(
-                                "text-[9px] font-bold truncate",
-                                logged ? "text-success" : "text-fg-subtle"
-                            )}>
-                                {statusLine}
-                            </p>
+                            {logged && goalDistance && (
+                                <p className={cn(
+                                    "text-[9px] font-bold truncate flex items-center gap-0.5",
+                                    goalDistance.status === "below" ? "text-red-400" : "text-fg-muted"
+                                )}>
+                                    {goalDistance.status === "below" && (
+                                        <ArrowDown className="w-2.5 h-2.5 shrink-0" aria-hidden />
+                                    )}
+                                    {goalDistance.text}
+                                </p>
+                            )}
                             {savingKey === metric.key && (
                                 <div className="absolute top-1.5 right-1.5">
                                     <div className="w-3 h-3 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />

@@ -156,14 +156,18 @@ export default async function CoachDashboardPage() {
     const periodCheckIns = clientIds.length > 0
         ? await prisma.checkIn.findMany({
             where: { userId: { in: clientIds }, createdAt: { gte: checkInLookback } },
-            select: { userId: true, weekNumber: true },
+            select: { userId: true, weekNumber: true, periodDueDateKey: true },
         })
         : [];
     const recentCheckInWeeksByUserId = new Map<string, number[]>();
+    const recentCheckInPeriodKeysByUserId = new Map<string, Array<string | null>>();
     for (const row of periodCheckIns) {
         const weeks = recentCheckInWeeksByUserId.get(row.userId) ?? [];
         weeks.push(row.weekNumber);
         recentCheckInWeeksByUserId.set(row.userId, weeks);
+        const keys = recentCheckInPeriodKeysByUserId.get(row.userId) ?? [];
+        keys.push(row.periodDueDateKey ?? null);
+        recentCheckInPeriodKeysByUserId.set(row.userId, keys);
     }
 
     const clientNicknameMap = await loadNicknameMap(coach.id, clientIds);
@@ -184,6 +188,7 @@ export default async function CoachDashboardPage() {
                 hasCheckInSchedule: extra?.schedule?.day !== null,
                 checkInSchedule: extra?.schedule ?? { day: null, frequencyWeeks: null, startDate: null },
                 recentCheckInWeekNumbers: recentCheckInWeeksByUserId.get(client.id) ?? [],
+                recentCheckInPeriodKeys: recentCheckInPeriodKeysByUserId.get(client.id) ?? [],
                 isCoachPaused: Boolean(client.isCoachPaused),
                 coachResumedAt: client.coachResumedAt ?? null,
                 activeSession: activeSessions[client.id] ?? null,

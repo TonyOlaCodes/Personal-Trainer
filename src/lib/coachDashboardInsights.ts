@@ -113,6 +113,7 @@ interface ActiveClientRow {
     checkInSchedule: CheckInSchedule;
     /** Recent check-in ISO week numbers (for matching outstanding periods). */
     recentCheckInWeekNumbers: number[];
+    recentCheckInPeriodKeys?: Array<string | null>;
     isCoachPaused?: boolean;
     coachResumedAt?: Date | null;
     activeSession: { workoutName: string } | null;
@@ -324,7 +325,8 @@ export async function loadCoachDashboardInsights(input: {
         );
         const hasCheckInForPeriod = hasCheckInForOutstandingPeriod(
             dueState,
-            client.recentCheckInWeekNumbers
+            client.recentCheckInWeekNumbers,
+            client.recentCheckInPeriodKeys
         );
         const { status: checkInStatus, label: checkInLabel } = buildClientCardCheckInLabel(dueState, hasCheckInForPeriod);
 
@@ -457,7 +459,8 @@ export async function loadCoachDashboardInsights(input: {
 
         const hasOutstandingCheckInCovered = hasCheckInForOutstandingPeriod(
             getCheckInDueState(client.checkInSchedule, today),
-            client.recentCheckInWeekNumbers
+            client.recentCheckInWeekNumbers,
+            client.recentCheckInPeriodKeys
         );
 
         // Paused clients stay on the roster but shouldn't clutter upcoming attention surfaces.

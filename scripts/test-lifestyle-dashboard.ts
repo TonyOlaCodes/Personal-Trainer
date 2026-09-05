@@ -68,14 +68,14 @@ check("unlogged inputs hint the goal without treating it as a log", () => {
 check("goal distance uses the logged value and exact goal, not a placeholder", () => {
     assert.equal(lifestyleGoalDistanceText("calories", null, 4000), null);
     assert.equal(lifestyleGoalDistanceText("calories", 3700, 4000), "300 kcal to goal");
-    assert.equal(lifestyleGoalDistanceText("calories", 4200, 4000), "200 kcal over goal");
+    assert.equal(lifestyleGoalDistanceText("calories", 4200, 4000), "Goal reached");
     assert.equal(lifestyleGoalDistanceText("calories", 4000, 4000), "Goal reached");
     assert.equal(lifestyleGoalDistanceText("calories", 0, 4000), "4,000 kcal to goal");
     assert.equal(lifestyleGoalDistanceText("steps", 4500, 5000), "500 steps to goal");
-    assert.equal(lifestyleGoalDistanceText("steps", 6200, 5000), "1,200 steps over goal");
+    assert.equal(lifestyleGoalDistanceText("steps", 6200, 5000), "Goal reached");
     assert.equal(lifestyleGoalDistanceText("steps", 5000, 5000), "Goal reached");
     assert.equal(lifestyleGoalDistanceText("sleep", 7.5, 8), "0.5 hrs to goal");
-    assert.equal(lifestyleGoalDistanceText("sleep", 8.5, 8), "0.5 hrs over goal");
+    assert.equal(lifestyleGoalDistanceText("sleep", 8.5, 8), "Goal reached");
     assert.equal(lifestyleGoalDistanceText("sleep", 8, 8), "Goal reached");
     assert.equal(lifestyleGoalDistanceText("steps", 4500, null), null);
 });

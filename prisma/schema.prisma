@@ -389,6 +389,8 @@ model CheckIn {
   id            String        @id @default(cuid())
   userId        String
   weekNumber    Int
+  /// Canonical scheduled period identity (Europe/Dublin due date YYYY-MM-DD).
+  periodDueDateKey String?
   bodyweightKg  Float?
   feedback      String?
   notes         String?
@@ -414,7 +416,8 @@ model CheckIn {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, weekNumber])
+  @@unique([userId, periodDueDateKey])
+  @@index([userId, weekNumber])
   @@map("check_ins")
 }
 

@@ -178,6 +178,16 @@ export async function saveDailyMetricsEntry(userId: string, date: string, patch:
         `;
         const entry = mergeDailyMetricsPatch(existing[0] ?? null, patch);
 
+        if (entry.calories == null && entry.steps == null && entry.sleepHours == null) {
+            if (existing[0]) {
+                await prisma.$executeRaw`
+                    DELETE FROM "daily_metric_logs"
+                    WHERE "userId" = ${userId} AND "loggedDate" = ${date}::date
+                `;
+            }
+            return getDailyMetricsSummary(userId, date);
+        }
+
         await prisma.$executeRaw`
             INSERT INTO "daily_metric_logs" ("id", "userId", "loggedDate", "calories", "steps", "sleepHours", "updatedAt")
             VALUES (${randomUUID()}, ${userId}, ${date}::date, ${entry.calories}, ${entry.steps}, ${entry.sleepHours}, CURRENT_TIMESTAMP)

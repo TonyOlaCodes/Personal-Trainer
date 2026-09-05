@@ -22,6 +22,7 @@ import { isCoachRole, canAccessCheckIns } from "@/lib/roles";
 import { getWorkoutStreak } from "@/lib/workoutAdherenceStreak";
 import { getClientGoalTargets } from "@/lib/clientGoalTargets";
 import { getDailyMetricsSummary } from "@/lib/dailyMetrics";
+import { resolveWorkoutDurationEstimate } from "@/lib/workoutDurationEstimate";
 
 export const metadata = { title: "Dashboard" };
 
@@ -203,6 +204,16 @@ export default async function DashboardPage() {
 
         const avgDurationMin = durationCount > 0 ? Math.round(totalDuration / durationCount) : 0;
 
+        const todayWorkoutHistory = todayWorkout
+            ? await prisma.workoutLog.findMany({
+                where: { userId: user.id, workoutId: todayWorkout.id, status: "COMPLETED" },
+                select: { workoutId: true, status: true, duration: true },
+            })
+            : [];
+        const todayWorkoutDurationEstimate = todayWorkout
+            ? resolveWorkoutDurationEstimate(todayWorkout.id, todayWorkoutHistory, todayWorkout.exercises)
+            : null;
+
         const streak = await getWorkoutStreak(user.id);
 
         let nextTrainingDay: { id: string; name: string; date: string; dayLabel: string } | null = null;
@@ -238,6 +249,7 @@ export default async function DashboardPage() {
                     userId: c.userId,
                     createdAt: c.createdAt.toISOString(),
                     weekNumber: c.weekNumber,
+                    periodDueDateKey: c.periodDueDateKey ?? null,
                     bodyweightKg: c.bodyweightKg,
                     feedback: c.feedback,
                     notes: c.notes,
@@ -288,6 +300,7 @@ export default async function DashboardPage() {
                             nextTrainingDay={nextTrainingDay}
                             todayCompleted={!!isTodayWorkoutCompleted}
                             avgDurationMin={avgDurationMin}
+                            todayWorkoutDurationEstimate={todayWorkoutDurationEstimate}
                             activeSession={activeSession?.workout ? {
                                 id: activeSession.id,
                                 workoutId: activeSession.workoutId,

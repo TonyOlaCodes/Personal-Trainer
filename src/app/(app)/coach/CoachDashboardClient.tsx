@@ -22,6 +22,7 @@ import { NeedsAttentionInboxModal } from "@/components/coach/NeedsAttentionInbox
 import { CoachCodeRequestsPanel } from "@/components/coach/CoachCodeRequestsPanel";
 import { StreakBadge } from "@/components/shared/StreakBadge";
 import { formatCoachPlanLabel } from "@/lib/coachPlans";
+import { isProgressWeightChangeTowardGoal } from "@/lib/progressWeightTrend";
 import {
     type CoachDashboardInsights,
     type ClientDashboardInsight,
@@ -118,44 +119,12 @@ function computeSevenDayWeightChange(history: { date: string; weightKg: number }
     return { changeKg, startWeight: baseline.weightKg, endWeight: latest.weightKg };
 }
 
-function isWeightChangeTowardGoal(
-    changeKg: number,
-    goal: string | null | undefined,
-    targetWeightKg: number | null | undefined,
-    startWeight: number,
-    endWeight: number
-): boolean | null {
-    if (Math.abs(changeKg) < 0.05) return true;
-
-    if (targetWeightKg != null) {
-        const startDistance = Math.abs(startWeight - targetWeightKg);
-        const endDistance = Math.abs(endWeight - targetWeightKg);
-        if (endDistance < startDistance - 0.05) return true;
-        if (endDistance > startDistance + 0.05) return false;
-    }
-
-    switch (goal) {
-        case "LOSE_WEIGHT":
-            return changeKg < 0;
-        case "GAIN_MUSCLE":
-        case "STRENGTH":
-            return changeKg > 0;
-        case "RECOMPOSITION":
-            return Math.abs(changeKg) <= 0.5;
-        default:
-            if (targetWeightKg != null) {
-                return Math.abs(endWeight - targetWeightKg) <= Math.abs(startWeight - targetWeightKg);
-            }
-            return null;
-    }
-}
-
 function SevenDayWeightBadge({ client }: { client: Client }) {
     const series = buildClientWeightSeries(client);
     const delta = computeSevenDayWeightChange(series);
     if (!delta) return null;
 
-    const towardGoal = isWeightChangeTowardGoal(
+    const towardGoal = isProgressWeightChangeTowardGoal(
         delta.changeKg,
         client.goal,
         client.targetWeightKg,

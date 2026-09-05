@@ -524,6 +524,9 @@ export function WorkoutLogClient({
     const coachEditSessionHref = isCoachForClient && clientId
         ? `/coach/calendar/session?clientId=${encodeURIComponent(clientId)}&date=${encodeURIComponent(targetDateStr)}&workoutId=${encodeURIComponent(workout.id)}`
         : null;
+    const clientEditSessionHref = !isCoachForClient
+        ? `/calendar/session?date=${encodeURIComponent(targetDateStr)}&workoutId=${encodeURIComponent(workout.id)}`
+        : null;
     const coachStartSessionHref = isCoachForClient && clientId
         ? appendReturnTo(
             `/plans/log/${workout.id}?date=${encodeURIComponent(targetDateStr)}&clientId=${encodeURIComponent(clientId)}&mode=edit&autostart=1`,
@@ -731,6 +734,8 @@ export function WorkoutLogClient({
         ex: Exercise,
         setNumber: number
     ): Partial<Record<TrackingFieldKey, string>> => {
+        const prescribedCount = Math.max(0, ex.sets || 0);
+        if (setNumber > prescribedCount) return {};
         const lastSet = findLastCompletedSet(ex.name, setNumber);
         const setTarget = ex.setTargets?.find((t) => t.setNumber === setNumber);
         const ph: Partial<Record<TrackingFieldKey, string>> = {};
@@ -1427,26 +1432,9 @@ export function WorkoutLogClient({
     const addSet = (exId: string) => {
         setLogs((prev) => {
             const sets = prev[exId] || [];
-            const lastSet = sets[sets.length - 1];
             const next = {
                 ...prev,
-                [exId]: [
-                    ...sets,
-                    blankSetLog(sets.length + 1, {
-                        weightKg: lastSet?.weightKg ?? "",
-                        reps: lastSet?.reps ?? 0,
-                        rpe: lastSet?.rpe ?? "",
-                        durationSec: lastSet?.durationSec ?? "",
-                        distanceMeters: lastSet?.distanceMeters ?? "",
-                        heightCm: lastSet?.heightCm ?? "",
-                        resistance: lastSet?.resistance ?? "",
-                        inclinePct: lastSet?.inclinePct ?? "",
-                        calories: lastSet?.calories ?? "",
-                        heartRate: lastSet?.heartRate ?? "",
-                        speedKph: lastSet?.speedKph ?? "",
-                        rir: lastSet?.rir ?? "",
-                    }),
-                ],
+                [exId]: [...sets, blankSetLog(sets.length + 1)],
             };
             saveProgress(next);
             return next;
@@ -1779,14 +1767,25 @@ export function WorkoutLogClient({
                         )}
                     </div>
                 ) : (
-                    <button
-                        onClick={handleStartWorkout}
-                        disabled={isStarting || isCheckingSession}
-                        className="btn-primary btn-sm px-3 sm:px-4 shadow-glow-brand shrink-0 text-[10px] sm:text-xs font-black uppercase tracking-wider flex items-center gap-1.5"
-                    >
-                        <Flame className="w-3.5 h-3.5" />
-                        {isCheckingSession ? "..." : isStarting ? "..." : "Start"}
-                    </button>
+                    <div className="flex items-center justify-end gap-1.5 shrink-0">
+                        {clientEditSessionHref && (
+                            <Link
+                                href={clientEditSessionHref}
+                                className="btn-secondary btn-sm px-2 sm:px-3 h-8 text-[9px] sm:text-[10px] font-black uppercase tracking-wider flex items-center gap-1 sm:gap-1.5 whitespace-nowrap"
+                            >
+                                <PencilLine className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                                Edit Session
+                            </Link>
+                        )}
+                        <button
+                            onClick={handleStartWorkout}
+                            disabled={isStarting || isCheckingSession}
+                            className="btn-primary btn-sm px-2.5 sm:px-3 h-8 text-[9px] sm:text-[10px] font-black uppercase tracking-wider flex items-center gap-1 sm:gap-1.5 shadow-glow-brand whitespace-nowrap"
+                        >
+                            <Flame className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                            {isCheckingSession ? "..." : isStarting ? "..." : "Start"}
+                        </button>
+                    </div>
                 )}
             </div>
 

@@ -22,6 +22,7 @@ async function isRequestStillOutstanding(
     userId: string,
     lastActiveAt: Date | null | undefined,
     submittedWeeks: number[],
+    submittedPeriodKeys: Array<string | null> = [],
     request: CheckInRequestRow
 ) {
     const schedule = await getUserCheckInSchedule(userId);
@@ -33,7 +34,7 @@ async function isRequestStillOutstanding(
         lastActiveAt
     );
     const periodWeek = dueState.outstandingWeekNumber ?? dueState.weekNumber;
-    const hasSubmission = hasCheckInForOutstandingPeriod(dueState, submittedWeeks);
+    const hasSubmission = hasCheckInForOutstandingPeriod(dueState, submittedWeeks, submittedPeriodKeys);
     const stillNeeded = isCoachClientCheckInAttentionNeeded(dueState, hasSubmission);
 
     return {
@@ -58,7 +59,7 @@ export async function GET(req: Request) {
                 where: {
                     createdAt: { gte: new Date(Date.now() - 90 * 86400000) },
                 },
-                select: { weekNumber: true },
+                select: { weekNumber: true, periodDueDateKey: true },
             },
         },
     });
@@ -68,6 +69,7 @@ export async function GET(req: Request) {
     }
 
     const submittedWeeks = user.checkIns.map((c) => c.weekNumber);
+    const submittedPeriodKeys = user.checkIns.map((c) => c.periodDueDateKey ?? null);
     let attempts = 0;
     let active = await getPriorityActiveCheckInRequestForClient(user.id);
     let dueState = null as Awaited<ReturnType<typeof isRequestStillOutstanding>>["dueState"] | null;
@@ -78,6 +80,7 @@ export async function GET(req: Request) {
             user.id,
             user.lastActiveAt,
             submittedWeeks,
+            submittedPeriodKeys,
             active
         );
         dueState = check.dueState;

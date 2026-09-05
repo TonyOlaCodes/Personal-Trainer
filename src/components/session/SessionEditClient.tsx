@@ -749,11 +749,26 @@ export function SessionEditClient({
             </div>
 
             {pickerMode && (
-                <div className="fixed inset-0 z-[70] flex overflow-hidden overscroll-none items-end sm:items-center justify-center bg-black/80 animate-fade-in sm:p-4">
+                <div
+                    className="fixed inset-x-0 z-[70] flex overflow-hidden overscroll-none items-end sm:items-center justify-center bg-black/80 animate-fade-in sm:px-4"
+                    style={
+                        viewport
+                            ? { top: viewport.offsetTop, height: viewport.height }
+                            : { top: 0, bottom: 0 }
+                    }
+                    onTouchMove={(e) => {
+                        if (e.target === e.currentTarget) e.preventDefault();
+                    }}
+                >
                     <div
-                        className="bg-surface-card w-full sm:max-w-md rounded-t-[1.5rem] sm:rounded-[1.5rem] border border-surface-border shadow-glow-brand-lg flex flex-col animate-slide-up overflow-hidden"
-                        style={{ maxHeight: swapSheetMaxHeight ?? "min(92dvh, 100%)" }}
+                        className="bg-surface-card w-full sm:max-w-md rounded-t-[1.5rem] sm:rounded-[1.5rem] border border-surface-border shadow-glow-brand-lg flex flex-col animate-slide-up overflow-hidden min-h-0"
+                        style={{
+                            maxHeight: swapSheetMaxHeight
+                                ? `${swapSheetMaxHeight}px`
+                                : "min(92dvh, 100%)",
+                        }}
                         onClick={(e) => e.stopPropagation()}
+                        onTouchMove={(e) => e.stopPropagation()}
                     >
                         <div className="flex items-center justify-between px-4 py-3 border-b border-surface-border">
                             <p className="text-sm font-black text-fg uppercase tracking-widest">
@@ -768,7 +783,7 @@ export function SessionEditClient({
                                 <X className="w-4 h-4 text-fg-muted" />
                             </button>
                         </div>
-                        <div className="p-4">
+                        <div className="p-4 min-h-0 flex flex-col pb-[max(0.25rem,env(safe-area-inset-bottom))]">
                             <ExerciseAutocomplete
                                 value={searchQuery}
                                 onChange={setSearchQuery}

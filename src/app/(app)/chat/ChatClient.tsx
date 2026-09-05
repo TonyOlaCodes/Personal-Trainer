@@ -1308,7 +1308,7 @@ export function ChatClient({
                         className={cn("flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[11px] font-bold transition-all",
                             tab === "general" ? "bg-surface-card text-fg shadow-sm" : "text-fg-muted hover:text-fg")}
                     >
-                        <Globe className="w-3 h-3" /> Community
+                        <Globe className="w-3 h-3" /> Global
                     </button>
                 </div>
             </div>
@@ -1352,7 +1352,7 @@ export function ChatClient({
                     {!canUseDirectChat ? (
                         <div className="p-6 text-center space-y-3">
                             <p className="text-sm font-bold text-fg">Direct coach chat is Coached Premium</p>
-                            <p className="text-xs text-fg-muted">Redeem an access code from your coach in Settings to unlock 1-on-1 messaging. Community chat is still available.</p>
+                            <p className="text-xs text-fg-muted">Redeem an access code from your coach in Settings to unlock 1-on-1 messaging. Global Chat is still available.</p>
                         </div>
                     ) : currentUserRole === "PREMIUM" && allConversations.length === 0 ? (
                         <div className="p-6 text-center space-y-4">
@@ -1381,7 +1381,7 @@ export function ChatClient({
                         <div className="p-6 text-center space-y-3">
                             <p className="text-sm font-bold text-fg">No direct messages yet</p>
                             <p className="text-xs text-fg-muted leading-relaxed">
-                                Visit someone&apos;s public profile and tap Message to start a conversation. Community chat is always available in the Global tab.
+                                Visit someone&apos;s public profile and tap Message to start a conversation. Global Chat is always available in the Global tab.
                             </p>
                         </div>
                     ) : filteredConversations.length === 0 ? (
@@ -1481,19 +1481,10 @@ export function ChatClient({
                 <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
                     <div>
                         <Globe className="w-10 h-10 text-brand-400/30 mx-auto mb-3" />
-                        <p className="text-sm font-bold text-fg-muted">Community Chat</p>
-                        <p className="text-[10px] text-fg-subtle mt-1 mb-4">Public conversations between all members</p>
-                        {!isMdUp && (
-                            <button
-                                type="button"
-                                onClick={() => setShowConversationThread(true)}
-                                className="btn-primary w-full max-w-xs h-11 text-xs font-black uppercase tracking-widest mb-4"
-                            >
-                                Open Community Chat
-                            </button>
-                        )}
+                        <p className="text-sm font-bold text-fg-muted">Global Chat</p>
+                        <p className="text-[10px] text-fg-subtle mt-1">Public conversations between all members</p>
                         {isAdmin && (
-                            <div className="text-left bg-surface-muted/40 border border-surface-border rounded-xl p-3 space-y-2">
+                            <div className="text-left bg-surface-muted/40 border border-surface-border rounded-xl p-3 space-y-2 mt-4">
                                 <div className="flex items-center gap-2 text-brand-400">
                                     <Shield className="w-3.5 h-3.5" />
                                     <span className="text-[10px] font-black uppercase tracking-widest">Moderation</span>
@@ -1567,7 +1558,7 @@ export function ChatClient({
                             <>
                                 <Globe className="w-5 h-5 text-brand-400 shrink-0" />
                                 <div>
-                                    <p className="font-bold text-sm">Community Chat</p>
+                                    <p className="font-bold text-sm">Global Chat</p>
                                     <p className="text-[10px] text-fg-muted font-medium">Public · all members</p>
                                 </div>
                             </>

@@ -17,8 +17,6 @@ import {
     formatCheckInWeekFromDate,
     formatCheckInWeekLabel,
     formatCheckInWeekShortFromCheckIn,
-    getIsoWeekStartDate,
-    getIsoWeekYear,
 } from "@/lib/checkInLabels";
 import { uploadMediaFile, resolveUploadUrl } from "@/lib/compressImage";
 import {
@@ -34,10 +32,19 @@ import { MediaLightbox } from "@/components/shared/MediaLightbox";
 import { CheckInPeriodSummaryPanel } from "@/components/shared/CheckInPeriodSummaryPanel";
 import type { CheckInPeriodSummary } from "@/lib/checkInPeriodSummary";
 import { requestCoachCheckIn as postCoachCheckInRequest } from "@/lib/requestCoachCheckIn";
+import {
+    defaultCheckInPeriod,
+    formatScheduledPeriodLabel,
+    listScheduledCheckInPeriods,
+    scheduledPeriodWindow,
+    type ScheduledCheckInPeriod,
+} from "@/lib/checkInPeriods";
+import { dateKeyToUtcNoon } from "@/lib/appTimezone";
 
 /* ─────────────────────────── Types ─────────────────────────── */
 interface CheckIn {
     id: string; userId?: string; createdAt: string; weekNumber: number;
+    periodDueDateKey?: string | null;
     bodyweightKg?: number | null; feedback: string; notes?: string | null;
     status: "PENDING" | "REVIEWED"; coachResponse?: string | null;
     respondedAt?: string | null;
@@ -134,6 +141,19 @@ type OverdueCheckInClient = NonNullable<Props["overdueClients"]>[number];
 
 function getOverdueCheckInAlertKey(client: OverdueCheckInClient) {
     return `check-in:${client.id}:${client.weekNumber}`;
+}
+
+function findCheckInForPeriod(checkIns: CheckIn[], dueDateKey: string, weekNumber: number) {
+    return checkIns.find((c) => c.periodDueDateKey === dueDateKey)
+        ?? checkIns.find((c) => !c.periodDueDateKey && c.weekNumber === weekNumber);
+}
+
+function checkInPeriodLabel(checkIn: CheckIn, frequencyWeeks: number | null | undefined) {
+    if (checkIn.periodDueDateKey && frequencyWeeks) {
+        const window = scheduledPeriodWindow(checkIn.periodDueDateKey, frequencyWeeks);
+        return formatScheduledPeriodLabel(window.startDateKey, window.endDateKey);
+    }
+    return formatCheckInPeriodTitle(checkIn.weekNumber, checkIn.createdAt);
 }
 
 /* ─────────────────── Rating bar component ───────────────────── */
@@ -261,10 +281,6 @@ function ratingChips(c: CheckIn, isSleepHidden?: boolean) {
 }
 
 /* ─────────────────── Previous check-in summary ─────────────── */
-function weekStartDateString(week: number, createdAt: string) {
-    return getIsoWeekStartDate(week, getIsoWeekYear(new Date(createdAt))).toISOString().split("T")[0];
-}
-
 function PrevCheckInCard({ prev, setViewerMedia, isWeightHidden, isSleepHidden }: {
     prev: CheckIn;
     setViewerMedia: (url: string | null) => void;
@@ -357,7 +373,7 @@ function PrevCheckInCard({ prev, setViewerMedia, isWeightHidden, isSleepHidden }
     );
 }
 
-function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highlighted, targetWeightKg, isWeightHidden, isSleepHidden, hideClientIdentity = false }: {
+function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highlighted, targetWeightKg, isWeightHidden, isSleepHidden, hideClientIdentity = false, frequencyWeeks }: {
     c: CheckIn; isCoach: boolean;
     onCoachRespond?: (id: string, resp: string) => Promise<void>;
     onEdit?: (c: CheckIn) => void;
@@ -367,6 +383,7 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highl
     isWeightHidden?: boolean;
     isSleepHidden?: boolean;
     hideClientIdentity?: boolean;
+    frequencyWeeks?: number | null;
 }) {
     const [open, setOpen] = useState(Boolean(highlighted));
     const itemTargetWeight = isCoach ? (c.user as any)?.targetWeightKg : targetWeightKg;
@@ -379,7 +396,7 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highl
     const [isEditing, setIsEditing] = useState(false);
     const [periodSummary, setPeriodSummary] = useState<CheckInPeriodSummary | null>(null);
     const [loadingSummary, setLoadingSummary] = useState(false);
-    const checkInDate = toDateKey(new Date(c.createdAt));
+    const checkInDate = c.periodDueDateKey ?? toDateKey(new Date(c.createdAt));
 
     useEffect(() => {
         if (!open) return;
@@ -389,6 +406,7 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highl
             setLoadingSummary(true);
             try {
                 const params = new URLSearchParams({ date: checkInDate });
+                if (c.periodDueDateKey) params.set("periodDueDate", c.periodDueDateKey);
                 if (isCoach && c.userId) params.set("clientId", c.userId);
 
                 const res = await fetch(`/api/checkins/period-summary?${params.toString()}`);
@@ -422,7 +440,7 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highl
     const clientProfileId = c.userId ?? c.user?.id ?? null;
     const loggedWeightKg = isWeightHidden ? null : loggedFiniteNumber(c.bodyweightKg);
     const goalWeightKg = isWeightHidden ? null : loggedFiniteNumber(itemTargetWeight);
-    const periodLabel = formatCheckInWeekFromCheckIn(c);
+    const periodLabel = checkInPeriodLabel(c, frequencyWeeks);
     const showClientIdentity = isCoach && !hideClientIdentity;
 
     return (
@@ -717,6 +735,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
     const statusParam = searchParams.get("status");
     const viewParam = searchParams.get("view");
     const weekParam = searchParams.get("week");
+    const periodParam = searchParams.get("period");
     const startParam = searchParams.get("start");
     const coachView = viewParam === "overdue" ? "overdue" : "submissions";
     const initialStatusFilter =
@@ -817,7 +836,15 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
         }
         return groups;
     }, [displayCheckIns, isCoach, coachSortBy]);
-    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
+    const todayKey = toDateKey(new Date());
+    const initialPeriod = checkInSchedule
+        ? defaultCheckInPeriod(checkInSchedule, todayKey)
+        : null;
+    const [selectedDate, setSelectedDate] = useState(initialPeriod?.dueDateKey ?? todayKey);
+    const scheduledPeriods = useMemo<ScheduledCheckInPeriod[]>(() => {
+        if (!checkInSchedule) return [];
+        return listScheduledCheckInPeriods(checkInSchedule, todayKey, { past: 12, future: 2 });
+    }, [checkInSchedule, todayKey]);
     const [periodSummary, setPeriodSummary] = useState<CheckInPeriodSummary | null>(null);
     const [loadingPeriodSummary, setLoadingPeriodSummary] = useState(false);
 
@@ -825,9 +852,8 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
         if (isLogging) return;
         if (!editMode) return;
         
-        const date = new Date(selectedDate);
-        const week = getWeekNumber(date);
-        const existing = checkIns.find(c => c.weekNumber === week);
+        const week = getWeekNumber(dateKeyToUtcNoon(selectedDate));
+        const existing = findCheckInForPeriod(checkIns, selectedDate, week);
         
         if (existing) {
             setCheckInId(existing.id);
@@ -850,12 +876,10 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
         async function loadPeriodSummary() {
             setLoadingPeriodSummary(true);
             try {
-                const todayWeek = getWeekNumber();
-                const currentEntry = checkIns.find((c) => c.weekNumber === todayWeek);
-                const dateForSummary = (isLogging || editMode)
-                    ? selectedDate
-                    : (currentEntry ? toDateKey(new Date(currentEntry.createdAt)) : selectedDate);
-                const params = new URLSearchParams({ date: dateForSummary });
+                const params = new URLSearchParams({
+                    date: selectedDate,
+                    periodDueDate: selectedDate,
+                });
 
                 const res = await fetch(`/api/checkins/period-summary?${params.toString()}`);
                 const data = await res.json();
@@ -876,28 +900,29 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
     useEffect(() => {
         if (isCoach || deepLinkStartedRef.current || isLogging || editMode) return;
         if (!isPremium) return;
-        if (startParam !== "1" || !weekParam) return;
-        const targetWeek = Number(weekParam);
-        if (!Number.isFinite(targetWeek)) return;
+        if (startParam !== "1" || (!weekParam && !periodParam)) return;
+        const targetWeek = weekParam ? Number(weekParam) : NaN;
+        const linkedPeriod = periodParam
+            && /^\d{4}-\d{2}-\d{2}$/.test(periodParam)
+            ? periodParam
+            : scheduledPeriods.find((period) => period.dueDateKey === periodParam)?.dueDateKey
+                ?? (Number.isFinite(targetWeek)
+                    ? scheduledPeriods.find((period) => getWeekNumber(dateKeyToUtcNoon(period.dueDateKey)) === targetWeek)?.dueDateKey
+                    : null);
 
-        const existing = checkIns.find((c) => c.weekNumber === targetWeek);
+        if (!linkedPeriod && !Number.isFinite(targetWeek)) return;
+
+        const existing = linkedPeriod
+            ? findCheckInForPeriod(checkIns, linkedPeriod, Number.isFinite(targetWeek) ? targetWeek : getWeekNumber(dateKeyToUtcNoon(linkedPeriod)))
+            : checkIns.find((c) => c.weekNumber === targetWeek);
         if (existing) {
             deepLinkStartedRef.current = true;
             return;
         }
 
-        let periodDate: string | null = null;
-        const outstanding = checkInDueState.outstandingWeekNumber ?? getWeekNumber();
-        if (targetWeek === outstanding && checkInDueState.currentPeriodDueDate) {
-            periodDate = checkInDueState.currentPeriodDueDate.split("T")[0];
-        } else {
-            try {
-                const year = getIsoWeekYear(new Date());
-                periodDate = getIsoWeekStartDate(targetWeek, year).toISOString().split("T")[0];
-            } catch {
-                return;
-            }
-        }
+        const periodDate = linkedPeriod
+            ?? scheduledPeriods.find((period) => period.isCurrent)?.dueDateKey
+            ?? selectedDate;
 
         deepLinkStartedRef.current = true;
         setCheckInId(null);
@@ -921,9 +946,9 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
         editMode,
         startParam,
         weekParam,
+        periodParam,
         checkIns,
-        checkInDueState.outstandingWeekNumber,
-        checkInDueState.currentPeriodDueDate,
+        scheduledPeriods,
     ]);
 
     if (!isPremium && !isCoach) {
@@ -934,13 +959,27 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
         );
     }
 
-    const currentWeekReal = checkInDueState.outstandingWeekNumber ?? getWeekNumber();
-    const currentWeekEntry = checkIns.find(c => c.weekNumber === currentWeekReal);
+    const currentPeriod = checkInSchedule
+        ? defaultCheckInPeriod(checkInSchedule, todayKey)
+        : null;
+    const currentWeekReal = currentPeriod
+        ? getWeekNumber(dateKeyToUtcNoon(currentPeriod.dueDateKey))
+        : getWeekNumber();
+    const currentWeekEntry = currentPeriod
+        ? findCheckInForPeriod(checkIns, currentPeriod.dueDateKey, currentWeekReal)
+        : checkIns.find(c => c.weekNumber === currentWeekReal);
     const hasTodayEntry = !!currentWeekEntry;
 
-    // Derived for currently selected form week
-    const selectedWeek = getWeekNumber(new Date(selectedDate));
-    const existingEntry = checkIns.find(c => c.weekNumber === selectedWeek);
+    // Derived for currently selected scheduled period
+    const selectedWeek = getWeekNumber(dateKeyToUtcNoon(selectedDate));
+    const existingEntry = findCheckInForPeriod(checkIns, selectedDate, selectedWeek);
+    const selectedPeriodLabel = scheduledPeriods.find((period) => period.dueDateKey === selectedDate)?.label
+        ?? (checkInSchedule?.frequencyWeeks
+            ? formatScheduledPeriodLabel(
+                scheduledPeriodWindow(selectedDate, checkInSchedule.frequencyWeeks).startDateKey,
+                selectedDate
+            )
+            : formatCheckInWeekFromDate(selectedDate));
     const isEditingSelection = !!existingEntry && editMode;
     
     const daysUntilNext = checkInDueState.daysUntilNext;
@@ -1000,11 +1039,10 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
 
     const startLogging = () => {
         setCheckInId(null);
-        // When overdue/due, submit against the outstanding period so it clears correctly.
-        const periodDate = checkInDueState.currentPeriodDueDate
-            ? checkInDueState.currentPeriodDueDate.split("T")[0]
-            : new Date().toISOString().split("T")[0];
-        setSelectedDate(periodDate);
+        const current = checkInSchedule
+            ? defaultCheckInPeriod(checkInSchedule, todayKey)
+            : null;
+        setSelectedDate(current?.dueDateKey ?? todayKey);
         setEnergy(0);
         setSleep(0);
         setNutrition(0);
@@ -1034,7 +1072,13 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
 
         setCheckInId(c.id);
         setEditingWasReviewed(c.status === "REVIEWED");
-        setSelectedDate(weekStartDateString(c.weekNumber, c.createdAt));
+        setSelectedDate(
+            c.periodDueDateKey
+            ?? (checkInSchedule
+                ? defaultCheckInPeriod(checkInSchedule, toDateKey(new Date(c.createdAt)))?.dueDateKey
+                : null)
+            ?? todayKey
+        );
         setEnergy(c.energyRating || 0);
         setSleep(c.sleepRating || 0);
         setNutrition(c.dietRating || 0);
@@ -1062,6 +1106,10 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
     };
 
     const submit = async () => {
+        if (!editMode && existingEntry) {
+            alert("You already submitted a check-in for this period.");
+            return;
+        }
         setSaving(true);
         const method = editMode && checkInId ? "PATCH" : "POST";
         const res = await fetch("/api/checkins", {
@@ -1072,6 +1120,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                 bodyweightKg: currentBw ?? undefined,
                 feedback: notes.trim() || undefined,
                 weekNumber: selectedWeek,
+                periodDueDateKey: selectedDate,
                 energyRating: energy || undefined,
                 sleepRating: sleep || undefined,
                 dietRating: nutrition || undefined,
@@ -1732,6 +1781,7 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                             targetWeightKg={targetWeightKg} 
                             isWeightHidden={isWeightHidden}
                             isSleepHidden={isSleepHidden}
+                            frequencyWeeks={checkInDueState.frequencyWeeks}
                         />
                     ))}
                 </div>
@@ -1745,14 +1795,14 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
             <div className="flex items-center justify-between px-1">
                 <div>
                     <h2 className="text-xl font-black text-fg tracking-tight">
-                        {editMode ? `Edit ${formatCheckInWeekLabel(selectedWeek)} check-in` : "New Check-in"}
+                        {editMode ? `Edit ${selectedPeriodLabel} check-in` : "New Check-in"}
                     </h2>
                     <p className="text-xs text-fg-muted mt-0.5">
                         {editMode
                             ? (editingWasReviewed
                                 ? "Changes will send this back to your coach for review"
                                 : "Modify your submission")
-                            : `${formatCheckInWeekFromDate(selectedDate)} · Select date & log`}
+                            : `${selectedPeriodLabel} · Choose a period`}
                     </p>
                 </div>
                 <button 
@@ -1767,44 +1817,44 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                         <Calendar className="w-4 h-4 text-brand-400" />
-                        <span className="text-sm font-black text-fg uppercase tracking-wide">Check-in Date</span>
+                        <span className="text-sm font-black text-fg uppercase tracking-wide">Check-in Period</span>
                     </div>
                     <span className="text-[10px] font-black text-brand-400 uppercase tracking-widest">
-                        {formatCheckInWeekFromDate(selectedDate)}
+                        {selectedPeriodLabel}
                     </span>
                 </div>
-                <div 
+                <select
+                    value={selectedDate}
+                    disabled={editMode}
+                    onChange={(e) => setSelectedDate(e.target.value)}
                     className={cn(
-                        "relative transition-all",
-                        editMode ? "" : "cursor-pointer group active:scale-[0.98]"
+                        "input h-14 text-base font-black px-4 bg-surface-muted/30 border-none focus:ring-2 focus:ring-brand-500/20 transition-all w-full",
+                        editMode && "pointer-events-none opacity-80"
                     )}
-                    onClick={editMode ? undefined : (e) => {
-                        const input = e.currentTarget.querySelector<HTMLInputElement>('input');
-                        if (!input) return;
-                        const dateInput = input as HTMLInputElement & { showPicker?: () => void };
-                        if (dateInput.showPicker) {
-                            try { dateInput.showPicker(); } catch { dateInput.focus(); }
-                        } else {
-                            dateInput.focus();
-                        }
-                    }}
+                    aria-label="Check-in period"
                 >
-                    <input 
-                        type="date"
-                        value={selectedDate}
-                        onChange={(e) => setSelectedDate(e.target.value)}
-                        readOnly={editMode}
-                        className={cn(
-                            "input h-14 text-lg font-black px-4 bg-surface-muted/30 border-none focus:ring-2 focus:ring-brand-500/20 transition-all uppercase w-full",
-                            editMode ? "pointer-events-none opacity-80" : "pointer-events-none"
-                        )}
-                    />
-                    {!editMode && (
-                        <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-fg-subtle group-hover:text-brand-400 transition-colors">
-                             <Edit2 className="w-4 h-4" />
-                        </div>
-                    )}
-                </div>
+                    {(scheduledPeriods.length > 0 ? scheduledPeriods : [{
+                        dueDateKey: selectedDate,
+                        label: selectedPeriodLabel,
+                        isCurrent: true,
+                        isFuture: false,
+                        isPast: false,
+                    }]).map((period) => {
+                        const submitted = findCheckInForPeriod(checkIns, period.dueDateKey, getWeekNumber(dateKeyToUtcNoon(period.dueDateKey)));
+                        const suffix = period.isCurrent
+                            ? " · Current"
+                            : period.isFuture
+                                ? " · Upcoming"
+                                : submitted
+                                    ? " · Submitted"
+                                    : " · Missed";
+                        return (
+                            <option key={period.dueDateKey} value={period.dueDateKey}>
+                                {period.label}{suffix}
+                            </option>
+                        );
+                    })}
+                </select>
                 <div className={cn(
                     "px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider border inline-flex items-center gap-2",
                     (periodSummary?.workouts.completed ?? workoutsThisWeek) >= (periodSummary?.workouts.target ?? workoutsTarget)

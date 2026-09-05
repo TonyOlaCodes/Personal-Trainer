@@ -140,6 +140,7 @@ export default async function CheckInsPage() {
                             userId: c.userId,
                             createdAt: c.createdAt.toISOString(),
                             weekNumber: c.weekNumber,
+                            periodDueDateKey: c.periodDueDateKey ?? null,
                             bodyweightKg: c.bodyweightKg,
                             feedback: c.feedback,
                             notes: c.notes,

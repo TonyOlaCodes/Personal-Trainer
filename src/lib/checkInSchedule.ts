@@ -305,12 +305,19 @@ export function getCheckInDueState(schedule: CheckInSchedule, today = new Date()
 
 /** True when a check-in row covers the outstanding schedule period. */
 export function hasCheckInForOutstandingPeriod(
-    dueState: Pick<CheckInDueState, "outstandingWeekNumber" | "isDueToday" | "isOverdue">,
-    submittedWeekNumbers: Iterable<number>
+    dueState: Pick<CheckInDueState, "outstandingWeekNumber" | "isDueToday" | "isOverdue" | "currentPeriodDueDate">,
+    submittedWeekNumbers: Iterable<number>,
+    submittedPeriodKeys?: Iterable<string | null | undefined>
 ): boolean {
+    if (!dueState.isDueToday && !dueState.isOverdue) return false;
+    const dueKey = canonicalPeriodDueDateKey(dueState.currentPeriodDueDate);
+    if (dueKey && submittedPeriodKeys) {
+        for (const key of submittedPeriodKeys) {
+            if (key === dueKey) return true;
+        }
+    }
     const week = dueState.outstandingWeekNumber;
     if (week == null) return false;
-    if (!dueState.isDueToday && !dueState.isOverdue) return false;
     for (const n of submittedWeekNumbers) {
         if (n === week) return true;
     }
@@ -432,5 +439,132 @@ export async function ensureCheckInUserWeekUnique() {
     await prisma.$executeRaw`
         CREATE UNIQUE INDEX IF NOT EXISTS "check_ins_userId_weekNumber_key"
         ON "check_ins"("userId", "weekNumber")
+    `;
+}
+
+/**
+ * Canonical uniqueness is (userId, periodDueDateKey).
+ * Backfills due-date keys from the client's schedule, then replaces week uniqueness.
+ */
+export async function ensureCheckInPeriodDueDateUnique() {
+    await prisma.$executeRaw`
+        ALTER TABLE "check_ins"
+        ADD COLUMN IF NOT EXISTS "periodDueDateKey" TEXT
+    `;
+
+    const missing = await prisma.$queryRaw<Array<{
+        id: string;
+        userId: string;
+        weekNumber: number;
+        createdAt: Date;
+    }>>`
+        SELECT "id", "userId", "weekNumber", "createdAt"
+        FROM "check_ins"
+        WHERE "periodDueDateKey" IS NULL
+    `;
+
+    if (missing.length > 0) {
+        const userIds = [...new Set(missing.map((row) => row.userId))];
+        const schedules = await getUserCheckInSchedules(userIds);
+        const { scheduledPeriodContainingDate } = await import("@/lib/checkInPeriods");
+
+        for (const row of missing) {
+            const createdKey = toDateKey(row.createdAt);
+            const schedule = schedules.get(row.userId);
+            const period = schedule
+                ? scheduledPeriodContainingDate(schedule, createdKey, createdKey)
+                : null;
+            const dueKey = period?.dueDateKey ?? createdKey;
+            await prisma.$executeRaw`
+                UPDATE "check_ins"
+                SET "periodDueDateKey" = ${dueKey}
+                WHERE "id" = ${row.id} AND "periodDueDateKey" IS NULL
+            `;
+        }
+    }
+
+    const groups = await prisma.$queryRaw<Array<{ userId: string; periodDueDateKey: string; n: number }>>`
+        SELECT "userId", "periodDueDateKey", COUNT(*)::int AS n
+        FROM "check_ins"
+        WHERE "periodDueDateKey" IS NOT NULL
+        GROUP BY "userId", "periodDueDateKey"
+        HAVING COUNT(*) > 1
+    `;
+
+    for (const group of groups) {
+        const rows = await prisma.checkIn.findMany({
+            where: { userId: group.userId, periodDueDateKey: group.periodDueDateKey },
+            orderBy: [{ createdAt: "desc" }],
+        });
+        if (rows.length < 2) continue;
+
+        const ranked = [...rows].sort((a, b) => {
+            const scoreDiff = checkInMergeScore(b) - checkInMergeScore(a);
+            if (scoreDiff !== 0) return scoreDiff;
+            const aUpdated = a.lastUpdatedByClientAt?.getTime() ?? a.createdAt.getTime();
+            const bUpdated = b.lastUpdatedByClientAt?.getTime() ?? b.createdAt.getTime();
+            return bUpdated - aUpdated;
+        });
+        const keeper = ranked[0];
+        const extras = ranked.slice(1);
+        const merged = {
+            coachResponse: keeper.coachResponse,
+            coachVideoUrl: keeper.coachVideoUrl,
+            frontImageUrl: keeper.frontImageUrl,
+            sideImageUrl: keeper.sideImageUrl,
+            videoUrl: keeper.videoUrl,
+            feedback: keeper.feedback,
+            notes: keeper.notes,
+            bodyweightKg: keeper.bodyweightKg,
+            status: keeper.status,
+            respondedAt: keeper.respondedAt,
+            lastUpdatedByClientAt: keeper.lastUpdatedByClientAt,
+            coachLastSeenAt: keeper.coachLastSeenAt,
+        };
+
+        for (const extra of extras) {
+            if (!merged.coachResponse && extra.coachResponse) merged.coachResponse = extra.coachResponse;
+            if (!merged.coachVideoUrl && extra.coachVideoUrl) merged.coachVideoUrl = extra.coachVideoUrl;
+            if (!merged.frontImageUrl && extra.frontImageUrl) merged.frontImageUrl = extra.frontImageUrl;
+            if (!merged.sideImageUrl && extra.sideImageUrl) merged.sideImageUrl = extra.sideImageUrl;
+            if (!merged.videoUrl && extra.videoUrl) merged.videoUrl = extra.videoUrl;
+            if (!merged.feedback && extra.feedback) merged.feedback = extra.feedback;
+            if (!merged.notes && extra.notes) merged.notes = extra.notes;
+            if (merged.bodyweightKg == null && extra.bodyweightKg != null) merged.bodyweightKg = extra.bodyweightKg;
+            if (merged.status !== "REVIEWED" && extra.status === "REVIEWED") merged.status = extra.status;
+            if (!merged.respondedAt && extra.respondedAt) merged.respondedAt = extra.respondedAt;
+            if (
+                extra.lastUpdatedByClientAt
+                && (!merged.lastUpdatedByClientAt || extra.lastUpdatedByClientAt > merged.lastUpdatedByClientAt)
+            ) {
+                merged.lastUpdatedByClientAt = extra.lastUpdatedByClientAt;
+            }
+            if (
+                extra.coachLastSeenAt
+                && (!merged.coachLastSeenAt || extra.coachLastSeenAt > merged.coachLastSeenAt)
+            ) {
+                merged.coachLastSeenAt = extra.coachLastSeenAt;
+            }
+        }
+
+        await prisma.checkIn.update({
+            where: { id: keeper.id },
+            data: merged,
+        });
+        await prisma.checkIn.deleteMany({
+            where: { id: { in: extras.map((row) => row.id) } },
+        });
+        console.warn(
+            `[CheckInUniqueness] Merged ${extras.length} duplicate check-in(s) into ${keeper.id} for user ${group.userId} period ${group.periodDueDateKey}`
+        );
+    }
+
+    await prisma.$executeRaw`
+        CREATE UNIQUE INDEX IF NOT EXISTS "check_ins_userId_periodDueDateKey_key"
+        ON "check_ins"("userId", "periodDueDateKey")
+        WHERE "periodDueDateKey" IS NOT NULL
+    `;
+    await prisma.$executeRaw`
+        DROP INDEX IF EXISTS "check_ins_userId_weekNumber_key"
     `;
 }

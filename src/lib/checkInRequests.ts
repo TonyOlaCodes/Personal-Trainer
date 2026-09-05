@@ -76,7 +76,8 @@ export function buildCheckInRequestEntityId(clientId: string, weekNumber: number
     return `${clientId}:${weekNumber}`;
 }
 
-export function checkInRequestDeepLink(weekNumber: number) {
+export function checkInRequestDeepLink(weekNumber: number, periodDueDateKey?: string | null) {
+    if (periodDueDateKey) return `/checkins?period=${periodDueDateKey}&start=1`;
     return `/checkins?week=${weekNumber}&start=1`;
 }
 
