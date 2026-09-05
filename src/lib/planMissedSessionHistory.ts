@@ -29,27 +29,30 @@ let tableReady = false;
 export async function ensurePlanMissedSessionHistoryTable() {
     if (tableReady) return;
 
-    await prisma.$executeRaw`
-        CREATE TABLE IF NOT EXISTS "plan_missed_session_history" (
-            "id" TEXT NOT NULL,
-            "userId" TEXT NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
-            "planId" TEXT REFERENCES "plans"("id") ON DELETE SET NULL,
-            "dateKey" TEXT NOT NULL,
-            "workoutId" TEXT NOT NULL,
-            "workoutName" TEXT NOT NULL,
-            "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            CONSTRAINT "plan_missed_session_history_pkey" PRIMARY KEY ("id"),
-            CONSTRAINT "plan_missed_session_history_user_date_workout_key"
-                UNIQUE ("userId", "dateKey", "workoutId")
-        )
-    `;
-    await prisma.$executeRaw`
-        CREATE INDEX IF NOT EXISTS "plan_missed_session_history_userId_dateKey_idx"
-        ON "plan_missed_session_history" ("userId", "dateKey")
-    `;
-    await softenPlanMissedSessionHistoryPlanFk();
-
-    tableReady = true;
+    try {
+        await prisma.$executeRaw`
+            CREATE TABLE IF NOT EXISTS "plan_missed_session_history" (
+                "id" TEXT NOT NULL,
+                "userId" TEXT NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+                "planId" TEXT REFERENCES "plans"("id") ON DELETE SET NULL,
+                "dateKey" TEXT NOT NULL,
+                "workoutId" TEXT NOT NULL,
+                "workoutName" TEXT NOT NULL,
+                "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT "plan_missed_session_history_pkey" PRIMARY KEY ("id"),
+                CONSTRAINT "plan_missed_session_history_user_date_workout_key"
+                    UNIQUE ("userId", "dateKey", "workoutId")
+            )
+        `;
+        await prisma.$executeRaw`
+            CREATE INDEX IF NOT EXISTS "plan_missed_session_history_userId_dateKey_idx"
+            ON "plan_missed_session_history" ("userId", "dateKey")
+        `;
+        await softenPlanMissedSessionHistoryPlanFk();
+        tableReady = true;
+    } catch (error) {
+        console.error("[ensurePlanMissedSessionHistoryTable] failed", error);
+    }
 }
 
 /** Keep historical rows if a plan is later deleted. Never cascade-wipe training history. */
@@ -207,6 +210,18 @@ export async function persistPastDueScheduledSessionsForUser(
     userId: string,
     referenceDate = new Date()
 ): Promise<{ recovered: number; preserved: number }> {
+    try {
+        return await persistPastDueScheduledSessionsForUserUnsafe(userId, referenceDate);
+    } catch (error) {
+        console.error("[persistPastDueScheduledSessionsForUser] failed", userId, error);
+        return { recovered: 0, preserved: 0 };
+    }
+}
+
+async function persistPastDueScheduledSessionsForUserUnsafe(
+    userId: string,
+    referenceDate = new Date()
+): Promise<{ recovered: number; preserved: number }> {
     await ensurePlanMissedSessionHistoryTable();
 
     const { dateKey: todayKey } = getLocalTimeParts(referenceDate, APP_TIMEZONE);
@@ -341,27 +356,32 @@ export async function loadHistoricalMissedSessions(
     userId: string,
     options?: { planId?: string }
 ): Promise<HistoricalMissedSession[]> {
-    await ensurePlanMissedSessionHistoryTable();
+    try {
+        await ensurePlanMissedSessionHistoryTable();
 
-    const rows = await prisma.$queryRaw<Array<{
-        planId: string | null;
-        dateKey: string;
-        workoutId: string;
-        workoutName: string;
-    }>>`
-        SELECT "planId", "dateKey", "workoutId", "workoutName"
-        FROM "plan_missed_session_history"
-        WHERE "userId" = ${userId}
-        ${options?.planId ? Prisma.sql`AND "planId" = ${options.planId}` : Prisma.empty}
-        ORDER BY "dateKey" ASC
-    `;
+        const rows = await prisma.$queryRaw<Array<{
+            planId: string | null;
+            dateKey: string;
+            workoutId: string;
+            workoutName: string;
+        }>>`
+            SELECT "planId", "dateKey", "workoutId", "workoutName"
+            FROM "plan_missed_session_history"
+            WHERE "userId" = ${userId}
+            ${options?.planId ? Prisma.sql`AND "planId" = ${options.planId}` : Prisma.empty}
+            ORDER BY "dateKey" ASC
+        `;
 
-    return rows.map((row) => ({
-        planId: row.planId ?? undefined,
-        dateKey: row.dateKey,
-        workoutId: row.workoutId,
-        workoutName: row.workoutName,
-    }));
+        return rows.map((row) => ({
+            planId: row.planId ?? undefined,
+            dateKey: row.dateKey,
+            workoutId: row.workoutId,
+            workoutName: row.workoutName,
+        }));
+    } catch (error) {
+        console.error("[loadHistoricalMissedSessions] failed", userId, error);
+        return [];
+    }
 }
 
 export async function loadHistoricalMissedSessionsByUserIds(
@@ -370,30 +390,34 @@ export async function loadHistoricalMissedSessionsByUserIds(
     const result = new Map<string, HistoricalMissedSession[]>();
     if (userIds.length === 0) return result;
 
-    await ensurePlanMissedSessionHistoryTable();
+    try {
+        await ensurePlanMissedSessionHistoryTable();
 
-    const rows = await prisma.$queryRaw<Array<{
-        userId: string;
-        planId: string | null;
-        dateKey: string;
-        workoutId: string;
-        workoutName: string;
-    }>>`
-        SELECT "userId", "planId", "dateKey", "workoutId", "workoutName"
-        FROM "plan_missed_session_history"
-        WHERE "userId" IN (${Prisma.join(userIds.map((id) => Prisma.sql`${id}`))})
-        ORDER BY "dateKey" ASC
-    `;
+        const rows = await prisma.$queryRaw<Array<{
+            userId: string;
+            planId: string | null;
+            dateKey: string;
+            workoutId: string;
+            workoutName: string;
+        }>>`
+            SELECT "userId", "planId", "dateKey", "workoutId", "workoutName"
+            FROM "plan_missed_session_history"
+            WHERE "userId" IN (${Prisma.join(userIds.map((id) => Prisma.sql`${id}`))})
+            ORDER BY "dateKey" ASC
+        `;
 
-    for (const row of rows) {
-        const sessions = result.get(row.userId) ?? [];
-        sessions.push({
-            planId: row.planId ?? undefined,
-            dateKey: row.dateKey,
-            workoutId: row.workoutId,
-            workoutName: row.workoutName,
-        });
-        result.set(row.userId, sessions);
+        for (const row of rows) {
+            const sessions = result.get(row.userId) ?? [];
+            sessions.push({
+                planId: row.planId ?? undefined,
+                dateKey: row.dateKey,
+                workoutId: row.workoutId,
+                workoutName: row.workoutName,
+            });
+            result.set(row.userId, sessions);
+        }
+    } catch (error) {
+        console.error("[loadHistoricalMissedSessionsByUserIds] failed", error);
     }
 
     return result;

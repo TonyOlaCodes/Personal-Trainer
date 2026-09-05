@@ -87,7 +87,6 @@ export async function loadClientCalendarData(userId: string): Promise<ClientCale
     await cleanupStaleInProgressSessions(userId);
 
     const [userPlan, completedLogs, inProgressLogs] = await Promise.all([
-        persistPastDueScheduledSessionsForUser(userId).then(() => null),
         prisma.userPlan.findFirst({
             where: { userId, isActive: true },
             include: {
@@ -131,7 +130,9 @@ export async function loadClientCalendarData(userId: string): Promise<ClientCale
             include: { workout: { select: { name: true, id: true } } },
             orderBy: { updatedAt: "desc" },
         }),
-        persistPastDueScheduledSessionsForUser(userId),
+        persistPastDueScheduledSessionsForUser(userId).catch((error) => {
+            console.error("[loadClientCalendarData] persist missed sessions failed", error);
+        }),
     ]);
 
     const activePlan = userPlan?.plan ?? null;
