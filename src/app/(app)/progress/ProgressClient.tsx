@@ -22,6 +22,7 @@ import { ReturnLink } from "@/components/shared/ReturnLink";
 import { ExerciseHistoryTooltipContent } from "@/components/shared/ExerciseHistoryTooltip";
 import { deriveOneRMFromBestSet } from "@/lib/oneRepMax";
 import { MAX_PINNED_EXERCISES, normalizePinnedExercises, orderExerciseNames } from "@/lib/pinnedExercises";
+import { searchExerciseNames } from "@/lib/exerciseSearch";
 import { useWorkoutStatsRefresh } from "@/hooks/useWorkoutStatsRefresh";
 import { format, startOfWeek } from "date-fns";
 import { LifestyleProgressSections } from "@/components/progress/LifestyleProgressSections";
@@ -330,16 +331,10 @@ export function ProgressClient({ userRole, hiddenGoals, todayWorkoutHref = null,
         }
     };
 
-    const getRegex = (q: string) => {
-        try {
-            return new RegExp(q.trim().split('').map(c => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*'), 'i');
-        } catch { return new RegExp(q, 'i'); }
-    };
-
     const exerciseList = useMemo(() => {
         if (!data) return [];
         const names = Object.keys(data?.exerciseHistory ?? {});
-        const filtered = names.filter(ex => exerciseSearchQuery ? getRegex(exerciseSearchQuery).test(ex) : true);
+        const filtered = searchExerciseNames(exerciseSearchQuery, names);
         return orderExerciseNames(filtered, pinnedExercises);
     }, [data, exerciseSearchQuery, pinnedExercises]);
 

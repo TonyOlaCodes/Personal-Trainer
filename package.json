@@ -33,6 +33,7 @@
     "test:coach-profile": "npx tsx scripts/test-coach-client-profile.ts",
     "test:chat-filters": "npx tsx scripts/test-chat-filters.ts",
     "test:exercise-history-subject": "npx tsx scripts/test-exercise-history-subject.ts",
+    "test:exercise-search": "npx tsx scripts/test-exercise-search.ts",
     "test:lifestyle-dashboard": "npx tsx scripts/test-lifestyle-dashboard.ts"
   },
   "dependencies": {

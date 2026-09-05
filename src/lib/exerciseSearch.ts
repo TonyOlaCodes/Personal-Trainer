@@ -1,98 +1,127 @@
+import { exerciseIdentityKey } from "@/lib/exerciseIdentity";
+
 export const EXERCISE_SEARCH_LIMIT = 20;
 
 /** About five result rows visible before the list scrolls. */
 export const EXERCISE_RESULTS_VISIBLE_MAX_CLASS = "max-h-56";
 
-function escapeRegex(value: string): string {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const NO_MATCH = 999;
+
+/** Equipment shorthands users type in search boxes. */
+const SEARCH_TOKEN_SYNONYMS: Record<string, string> = {
+    db: "dumbbell",
+    dbs: "dumbbell",
+    bb: "barbell",
+    kb: "kettlebell",
+    kbs: "kettlebell",
+};
+
+/**
+ * Safe text fold for matching. Fixed character classes only — never builds a
+ * RegExp from the user's raw query.
+ */
+export function normalizeExerciseSearchText(value: string): string {
+    return value
+        .toLowerCase()
+        .replace(/[’']/g, "")
+        .replace(/&/g, " and ")
+        .replace(/[^a-z0-9]+/g, " ")
+        .trim()
+        .replace(/\s+/g, " ");
 }
 
-function levenshtein(a: string, b: string): number {
-    if (!a.length) return b.length;
-    if (!b.length) return a.length;
-    const row = Array.from({ length: b.length + 1 }, (_, i) => i);
-    for (let i = 1; i <= a.length; i++) {
-        let prev = i;
-        for (let j = 1; j <= b.length; j++) {
-            const val =
-                a[i - 1] === b[j - 1]
-                    ? row[j - 1]
-                    : Math.min(row[j - 1], prev, row[j]) + 1;
-            row[j - 1] = prev;
-            prev = val;
+export function tokenizeExerciseSearch(value: string): string[] {
+    const normalized = normalizeExerciseSearchText(value);
+    if (!normalized) return [];
+    return normalized.split(" ").filter(Boolean).map((token) => SEARCH_TOKEN_SYNONYMS[token] ?? token);
+}
+
+function tokenAffinity(queryToken: string, nameToken: string): number | null {
+    if (queryToken === nameToken) return 0;
+    if (queryToken.length >= 2 && nameToken.startsWith(queryToken)) return 1;
+    if (nameToken.length >= 2 && queryToken.startsWith(nameToken) && nameToken.length >= 3) return 2;
+    if (queryToken.length >= 3 && nameToken.includes(queryToken)) return 3;
+    if (nameToken.length >= 3 && queryToken.includes(nameToken)) return 4;
+    return null;
+}
+
+function scoreTokenCoverage(queryTokens: string[], nameTokens: string[]): number | null {
+    if (queryTokens.length === 0 || nameTokens.length === 0) return null;
+
+    const used = new Set<number>();
+    let total = 0;
+
+    for (const qToken of queryTokens) {
+        let best: number | null = null;
+        let bestIndex = -1;
+        for (let i = 0; i < nameTokens.length; i++) {
+            if (used.has(i)) continue;
+            const affinity = tokenAffinity(qToken, nameTokens[i]);
+            if (affinity == null) continue;
+            if (best == null || affinity < best) {
+                best = affinity;
+                bestIndex = i;
+            }
         }
-        row[b.length] = prev;
+        if (best == null || bestIndex < 0) return null;
+        used.add(bestIndex);
+        total += best;
     }
-    return row[b.length];
+
+    const strong = total <= queryTokens.length;
+    return strong ? 3 + total * 0.1 : 4 + total * 0.1;
 }
 
-/** Regex with .* between query chars — "latpull" matches "Lat Pullover". */
-function buildCharGapPattern(query: string): RegExp | null {
-    const compact = query.replace(/\s+/g, "");
-    if (!compact) return null;
-    return new RegExp(compact.split("").map(escapeRegex).join(".*"), "i");
-}
-
-/** Words in order with flexible gaps — "lat pull" matches "Cable Lat Pullover". */
-function buildOrderedWordPattern(words: string[]): RegExp | null {
-    if (!words.length) return null;
-    return new RegExp(words.map(escapeRegex).join(".*"), "i");
-}
-
-/** Lower score = better match. 999 = no match. */
+/**
+ * Lower score = better match. 999 = no match.
+ *
+ * 0 exact name
+ * 1 name starts with the search
+ * 2 contiguous normalized phrase
+ * 3–4 all search tokens match (order-independent)
+ * 5 canonical identity / alias
+ */
 export function scoreExerciseMatch(query: string, name: string): number {
-    const q = query.trim().toLowerCase();
-    const n = name.toLowerCase();
-    if (!q) return 999;
-    if (n === q) return 0;
-    if (n.startsWith(q)) return 1;
-    if (n.includes(q)) return 2;
+    const qNorm = normalizeExerciseSearchText(query);
+    const nNorm = normalizeExerciseSearchText(name);
+    if (!qNorm || !nNorm) return NO_MATCH;
+    if (nNorm === qNorm) return 0;
+    if (nNorm.startsWith(`${qNorm} `) || nNorm.startsWith(qNorm)) return 1;
+    if (nNorm.includes(qNorm)) return 2;
 
-    const words = q.split(/\s+/).filter(Boolean);
-    const nameWords = n.split(/[\s\-()/]+/).filter(Boolean);
+    const qTokens = tokenizeExerciseSearch(query);
+    const nTokens = tokenizeExerciseSearch(name);
+    const tokenScore = scoreTokenCoverage(qTokens, nTokens);
+    if (tokenScore != null) return tokenScore;
 
-    if (words.length > 1 && words.every((w) => n.includes(w))) {
-        return 3 + words.length * 0.1;
-    }
+    const qKey = exerciseIdentityKey(query);
+    const nKey = exerciseIdentityKey(name);
+    if (qKey && nKey && qKey === nKey) return 5;
 
-    const ordered = buildOrderedWordPattern(words);
-    if (ordered?.test(n)) return 5 + q.length * 0.01;
-
-    if (words.length === 1) {
-        const w = words[0];
-        for (const nw of nameWords) {
-            if (nw === w) return 4;
-            if (nw.startsWith(w)) return 6;
-            if (w.length >= 3 && nw.includes(w)) return 7;
-            const dist = levenshtein(w, nw);
-            if (dist <= 2 && w.length >= 4) return 12 + dist;
+    if (qKey && nKey) {
+        const qKeyTokens = qKey.split(" ").filter(Boolean);
+        const nKeyTokens = nKey.split(" ").filter(Boolean);
+        if (qKeyTokens.length > 0 && scoreTokenCoverage(qKeyTokens, nKeyTokens) != null) {
+            return 5.5;
         }
     }
 
-    if (words.length > 0) {
-        let total = 0;
-        let allMatched = true;
-        for (const w of words) {
-            let best = Infinity;
-            for (const nw of nameWords) {
-                if (nw.includes(w)) best = Math.min(best, 0);
-                else if (nw.startsWith(w)) best = Math.min(best, 1);
-                else best = Math.min(best, levenshtein(w, nw));
-            }
-            if (best > 3) {
-                allMatched = false;
-                break;
-            }
-            total += best;
+    return NO_MATCH;
+}
+
+function bestScoreForExercise(
+    query: string,
+    name: string,
+    aliases: string[]
+): number {
+    let score = scoreExerciseMatch(query, name);
+    for (const alias of aliases) {
+        const aliasScore = scoreExerciseMatch(query, alias);
+        if (aliasScore < NO_MATCH) {
+            score = Math.min(score, aliasScore + 0.05);
         }
-        if (allMatched) return 15 + total;
     }
-
-    const gap = buildCharGapPattern(q);
-    const compactName = n.replace(/[\s\-()/]/g, "");
-    if (gap?.test(compactName)) return 25 + q.length * 0.1;
-
-    return 999;
+    return score;
 }
 
 export function searchExercises<T extends { name: string }>(
@@ -102,7 +131,10 @@ export function searchExercises<T extends { name: string }>(
     options?: { aliases?: Array<{ alias: string; name: string }> }
 ): T[] {
     const q = query.trim();
-    if (!q) return exercises.slice(0, limit);
+    const cap = Number.isFinite(limit) && limit > 0 ? Math.trunc(limit) : exercises.length;
+    if (!normalizeExerciseSearchText(q)) {
+        return exercises.slice(0, cap);
+    }
 
     const aliasesByCanonical = new Map<string, string[]>();
     for (const row of options?.aliases ?? []) {
@@ -112,15 +144,30 @@ export function searchExercises<T extends { name: string }>(
     }
 
     return exercises
-        .map((ex) => {
-            let score = scoreExerciseMatch(q, ex.name);
-            for (const alias of aliasesByCanonical.get(ex.name) ?? []) {
-                score = Math.min(score, scoreExerciseMatch(q, alias) + 0.05);
-            }
-            return { ex, score };
-        })
-        .filter((item) => item.score < 999)
-        .sort((a, b) => a.score - b.score || a.ex.name.length - b.ex.name.length)
-        .slice(0, limit)
+        .map((ex) => ({
+            ex,
+            score: bestScoreForExercise(q, ex.name, aliasesByCanonical.get(ex.name) ?? []),
+        }))
+        .filter((item) => item.score < NO_MATCH)
+        .sort((a, b) => a.score - b.score || a.ex.name.length - b.ex.name.length || a.ex.name.localeCompare(b.ex.name))
+        .slice(0, cap)
         .map((item) => item.ex);
+}
+
+/** Rank a list of exercise names with the same matcher used by the dictionary. */
+export function searchExerciseNames(
+    query: string,
+    names: string[],
+    limit = names.length
+): string[] {
+    return searchExercises(
+        query,
+        names.map((name) => ({ name })),
+        limit
+    ).map((item) => item.name);
+}
+
+export function exerciseMatchesQuery(query: string, name: string): boolean {
+    if (!normalizeExerciseSearchText(query)) return true;
+    return scoreExerciseMatch(query, name) < NO_MATCH;
 }

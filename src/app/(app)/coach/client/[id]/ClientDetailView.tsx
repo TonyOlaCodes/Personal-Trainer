@@ -11,6 +11,7 @@ import Link from "next/link";
 import { ExerciseHistoryTooltipContent } from "@/components/shared/ExerciseHistoryTooltip";
 import { deriveOneRMFromBestSet } from "@/lib/oneRepMax";
 import { MAX_PINNED_EXERCISES, normalizePinnedExercises, orderExerciseNames } from "@/lib/pinnedExercises";
+import { searchExerciseNames } from "@/lib/exerciseSearch";
 import { RecentSessionsExplorer } from "@/components/shared/RecentSessionsExplorer";
 import { cn } from "@/lib/utils";
 import { httpErrorMessage } from "@/lib/httpErrorMessage";
@@ -380,17 +381,12 @@ export function ClientDetailView({
         }
     };
 
-    const getRegex = (q: string) => {
-        try {
-            return new RegExp(q.trim().split("").map((c) => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*"), "i");
-        } catch {
-            return new RegExp(q, "i");
-        }
-    };
-
     const exerciseListFiltered = useMemo(
-        () => exerciseListOrdered.filter((ex) => (exerciseSearchQuery ? getRegex(exerciseSearchQuery).test(ex) : true)),
-        [exerciseListOrdered, exerciseSearchQuery]
+        () => orderExerciseNames(
+            searchExerciseNames(exerciseSearchQuery, exerciseListOrdered),
+            pinnedExercises
+        ),
+        [exerciseListOrdered, exerciseSearchQuery, pinnedExercises]
     );
 
     const selectedIsStrength = selectedExercise ? guessTrackingPreset(selectedExercise) === "strength" : false;

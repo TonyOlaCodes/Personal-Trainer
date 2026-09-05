@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Plus, Check, Search, Loader2, Dumbbell, Pencil, X, Merge, CheckSquare, Copy } from "lucide-react";
 import { MUSCLE_GROUPS, muscleGroupBadgeClass } from "@/lib/muscleGroups";
+import { searchExercises } from "@/lib/exerciseSearch";
 import {
     TrackingPresetBadge,
     TrackingSetupEditor,
@@ -130,11 +131,13 @@ export function AdminExercisesClient({ initialExercises }: { initialExercises: G
         [exercises]
     );
 
-    const filtered = exercises.filter((e) => {
-        const matchesSearch = e.name.toLowerCase().includes(search.toLowerCase());
-        const matchesGroup = groupFilter === "All" || (e.muscleGroup ?? "Uncategorized") === groupFilter;
-        return matchesSearch && matchesGroup;
-    });
+    const filtered = useMemo(() => {
+        const inGroup = exercises.filter((e) => (
+            groupFilter === "All" || (e.muscleGroup ?? "Uncategorized") === groupFilter
+        ));
+        if (!search.trim()) return inGroup;
+        return searchExercises(search, inGroup, inGroup.length);
+    }, [exercises, search, groupFilter]);
 
     const groupedExercises = useMemo(() => {
         const groups = new Map<string, GlobalExercise[]>();
@@ -148,8 +151,13 @@ export function AdminExercisesClient({ initialExercises }: { initialExercises: G
             ...MUSCLE_GROUPS.filter((g) => groups.has(g)),
             ...Array.from(groups.keys()).filter((k) => !MUSCLE_GROUPS.includes(k as typeof MUSCLE_GROUPS[number])).sort(),
         ];
-        return orderedKeys.map((key) => ({ key, items: groups.get(key)!.sort((a, b) => a.name.localeCompare(b.name)) }));
-    }, [filtered]);
+        return orderedKeys.map((key) => ({
+            key,
+            items: search.trim()
+                ? groups.get(key)!
+                : groups.get(key)!.slice().sort((a, b) => a.name.localeCompare(b.name)),
+        }));
+    }, [filtered, search]);
 
     const groupCounts = useMemo(() => {
         const counts = new Map<string, number>();
