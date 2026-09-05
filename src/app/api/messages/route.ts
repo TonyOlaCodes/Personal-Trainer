@@ -20,6 +20,7 @@ import { isClientRole, isCoachRole } from "@/lib/roles";
 import { getLastActiveMap, touchUserLastActive } from "@/lib/userPresence";
 import { getActiveSessionsForClients } from "@/lib/coachChat";
 import { getCoachClientFilterFlags } from "@/lib/chatConversationMeta";
+import { canActorAttachUploads } from "@/lib/uploadAttachOwnership";
 import { withResolvedUpload, withResolvedAvatar, normalizeStoredUploadUrl } from "@/lib/uploadUrls";
 import {
     markIncomingDeliveredForPeers,
@@ -238,6 +239,10 @@ export async function POST(req: Request) {
     if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
     const { content, receiverId, isGeneral, type, mediaUrl, replyToId, mentions } = parsed.data;
+
+    if (!(await canActorAttachUploads(user.id, [mediaUrl]))) {
+        return NextResponse.json({ error: "You cannot attach another user's upload" }, { status: 403 });
+    }
 
     if (!isGeneral) {
         if (!receiverId) {

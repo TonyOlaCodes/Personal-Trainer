@@ -87,6 +87,11 @@ export async function ensurePendingCoachNotificationsTable() {
         ON "pending_coach_notifications"("coachId", "deliverAfter")
         WHERE "sentAt" IS NULL
     `;
+    await prisma.$executeRaw`
+        CREATE UNIQUE INDEX IF NOT EXISTS "pending_coach_notifications_unsent_identity_key"
+        ON "pending_coach_notifications"("coachId", "type", "entityId")
+        WHERE "sentAt" IS NULL
+    `;
 
     pendingCoachNotificationsReady = true;
 }
@@ -527,6 +532,73 @@ export async function notifyCoachOfClientMessage(input: {
     });
 }
 
+export async function hasPendingOrSentCoachNotification(input: {
+    coachId: string;
+    type: string;
+    entityId: string;
+}): Promise<boolean> {
+    await ensurePendingCoachNotificationsTable();
+    await ensureNotificationsTable();
+
+    const pending = await prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT "id"
+        FROM "pending_coach_notifications"
+        WHERE "coachId" = ${input.coachId}
+          AND "type" = ${input.type}
+          AND "entityId" = ${input.entityId}
+          AND "sentAt" IS NULL
+        LIMIT 1
+    `;
+    if (pending[0]) return true;
+
+    const sent = await prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT "id"
+        FROM "notifications"
+        WHERE "userId" = ${input.coachId}
+          AND "type" = ${input.type}
+          AND "entityId" = ${input.entityId}
+        LIMIT 1
+    `;
+    return Boolean(sent[0]);
+}
+
+export async function queueCoachNotification(input: {
+    coachId: string;
+    prefKey: CoachNotificationPref;
+    type: string;
+    message: string;
+    entityType: string;
+    entityId: string;
+    route: string;
+    deliverAfter: Date;
+}): Promise<"queued" | "duplicate" | "skipped"> {
+    if (!(await userWantsNotification(input.coachId, input.prefKey))) return "skipped";
+    if (await hasPendingOrSentCoachNotification({
+        coachId: input.coachId,
+        type: input.type,
+        entityId: input.entityId,
+    })) {
+        return "duplicate";
+    }
+
+    try {
+        await prisma.$executeRaw`
+            INSERT INTO "pending_coach_notifications"
+                ("id", "coachId", "prefKey", "type", "message", "entityType", "entityId", "route", "deliverAfter")
+            VALUES
+                (${randomUUID()}, ${input.coachId}, ${input.prefKey}, ${input.type}, ${input.message},
+                 ${input.entityType}, ${input.entityId}, ${input.route}, ${input.deliverAfter})
+        `;
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message.includes("unique") || message.includes("duplicate") || message.includes("23505")) {
+            return "duplicate";
+        }
+        throw error;
+    }
+    return "queued";
+}
+
 export async function deliverCoachNotification(
     coachId: string,
     pref: CoachNotificationPref,
@@ -565,6 +637,22 @@ export async function flushPendingCoachNotifications(referenceDate = new Date())
 
     let sent = 0;
     for (const row of pending) {
+        if (row.entityId) {
+            const already = await hasNotificationSince({
+                userId: row.coachId,
+                type: row.type,
+                entityId: row.entityId,
+                since: new Date(0),
+            });
+            if (already) {
+                await prisma.$executeRaw`
+                    UPDATE "pending_coach_notifications"
+                    SET "sentAt" = ${referenceDate}
+                    WHERE "id" = ${row.id}
+                `;
+                continue;
+            }
+        }
         await createNotification({
             userId: row.coachId,
             type: row.type,

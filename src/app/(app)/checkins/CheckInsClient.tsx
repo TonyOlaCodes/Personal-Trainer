@@ -98,6 +98,7 @@ interface Props {
         name: string;
         label: string;
         weekNumber: number;
+        isoWeekYear?: number;
         periodLabel?: string;
         dueDateLabel?: string | null;
         daysOverdue?: number | null;
@@ -140,6 +141,8 @@ function CheckInClientAvatar({
 type OverdueCheckInClient = NonNullable<Props["overdueClients"]>[number];
 
 function getOverdueCheckInAlertKey(client: OverdueCheckInClient) {
+    const year = client.isoWeekYear;
+    if (year != null) return `check-in:${client.id}:${year}-W${client.weekNumber}`;
     return `check-in:${client.id}:${client.weekNumber}`;
 }
 

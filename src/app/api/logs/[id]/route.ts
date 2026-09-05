@@ -7,7 +7,8 @@ import { logSetDisplayOrderBy } from "@/lib/logSetGrouping";
 import { getWorkoutNotes } from "@/lib/workoutNotes";
 import { getLogExerciseNotes } from "@/lib/logExerciseNotes";
 import { canEditWorkoutLog, canViewWorkoutLog } from "@/lib/userProfile";
-import { triggerAchievementSync } from "@/lib/achievements";
+import { triggerAchievementSync, triggerAchievementSyncForUsers } from "@/lib/achievements";
+import { trainingHistoryAchievementSyncTargets } from "@/lib/achievementSyncTargets";
 import {
     closeOtherActiveSessions,
     getActiveWorkoutSession,
@@ -230,6 +231,12 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     }
 
     await prisma.workoutLog.delete({ where: { id } });
+    triggerAchievementSyncForUsers(
+        ...trainingHistoryAchievementSyncTargets({
+            subjectUserId: existing.userId,
+            coachId: existing.user.coachId,
+        })
+    );
 
     return NextResponse.json({ success: true });
 }

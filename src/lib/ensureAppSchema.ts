@@ -37,6 +37,17 @@ import { ensureRateLimitTable } from "@/lib/rateLimit";
 import { ensureWorkoutLogConcurrencySchema } from "@/lib/workoutLogRevision";
 import { ensureCoachClientNotesTable } from "@/lib/coachClientNotes";
 
+/**
+ * Runtime DDL classification (H7):
+ * - migrate now: bodyweight_logs, daily_metric_logs, pending_coach_notifications,
+ *   coach_attention_actions, media_assets, check_in_requests (see Prisma migration
+ *   20260905120000_high_priority_runtime_tables). Prisma schema now owns these.
+ * - temporary compatibility only: remaining ensure* CREATE/ALTER/INDEX calls.
+ *   Kept so older deployed DBs still boot before every environment has applied
+ *   migrations. Do not remove until rollout is confirmed.
+ * - genuinely runtime behavior: migrateLegacyClientGoals, revokeBlockedAccessCodes,
+ *   ensureGeneralPremiumRole, exercise dictionary seed.
+ */
 let appSchemaReady = false;
 let appSchemaPromise: Promise<void> | null = null;
 

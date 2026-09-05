@@ -108,11 +108,7 @@ export async function requireSuperAdmin(req?: Request): Promise<
 }
 
 /** Vercel cron / system routes. Never use requireActiveUser here. */
-export function authorizeCronRequest(req: Request): boolean {
-    const secret = process.env.CRON_SECRET;
-    if (!secret) return process.env.NODE_ENV !== "production";
-    return req.headers.get("authorization") === `Bearer ${secret}`;
-}
+export { authorizeCronRequest } from "@/lib/cronAuth";
 
 export function cronUnauthorized(): NextResponse {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

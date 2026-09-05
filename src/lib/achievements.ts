@@ -556,3 +556,5 @@ export function triggerAchievementSyncForUsers(...userIds: string[]) {
         triggerAchievementSync(userId);
     }
 }
+
+export { trainingHistoryAchievementSyncTargets } from "@/lib/achievementSyncTargets";

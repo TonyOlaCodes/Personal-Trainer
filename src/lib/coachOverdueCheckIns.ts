@@ -26,6 +26,7 @@ export interface OverdueCheckInClient {
     name: string;
     label: string;
     weekNumber: number;
+    isoWeekYear: number;
     periodLabel: string;
     dueDateLabel: string | null;
     daysOverdue: number | null;
@@ -155,6 +156,9 @@ export async function getOverdueCheckInClientsForCoach(coachId: string): Promise
                     : "OVERDUE / MISSED")
                 : "DUE TODAY",
             weekNumber: periodWeek,
+            isoWeekYear: dueState.currentPeriodDueDate
+                ? getIsoWeekYear(new Date(dueState.currentPeriodDueDate))
+                : getIsoWeekYear(today),
             periodLabel:
                 dueDateLabel
                 ?? formatCheckInWeekLabel(periodWeek, getIsoWeekYear(today)),

@@ -22,6 +22,7 @@ import { summarizeLifestylePeriod, type LifestyleMetricKey } from "@/lib/lifesty
 import { getWorkoutsTargetFromUserPlan } from "@/lib/planTrainingTarget";
 import { APP_TIMEZONE, dateKeyToUtcNoon, shiftAppDateKey } from "@/lib/appTimezone";
 import { localDayBoundsUtc } from "@/lib/coachNotificationSchedule";
+import { isBodyweightTowardGoal } from "@/lib/bodyweightGoalProgress";
 import { formatDate, getWeekNumber, toDateKey } from "@/lib/utils";
 
 export type CheckInLifestyleMetricSummary = {
@@ -96,6 +97,7 @@ const GRADUAL_GAIN_KG_PER_WEEK = 1.0;
 const GRADUAL_LOSS_KG_PER_WEEK = 1.2;
 const MAINTENANCE_KG_PER_WEEK = 0.8;
 
+/** Pace-only cap for check-in advice copy. Direction uses isBodyweightTowardGoal. */
 export function isWeightChangeTowardGoal(
     changeKg: number,
     goal: string | null | undefined,
@@ -559,9 +561,12 @@ export async function getCheckInPeriodSummary(
         const changeKg = averageKg != null && baselineKg != null
             ? round2(averageKg - baselineKg)
             : null;
-        const towardGoal = changeKg != null
-            ? isWeightChangeTowardGoal(changeKg, user.goal, frequencyWeeks)
-            : null;
+        const towardGoal = isBodyweightTowardGoal({
+            baselineKg,
+            currentKg: averageKg,
+            targetKg: user.targetWeightKg,
+            goal: user.goal,
+        });
 
         const weightWindowLabel = scheduledPeriod?.label ?? periodLabel;
         const advice = buildWeightAdvice(changeKg, towardGoal, user.goal, weightWindowLabel, hasPreviousPeriodData);

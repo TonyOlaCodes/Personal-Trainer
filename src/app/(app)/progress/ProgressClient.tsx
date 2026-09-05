@@ -27,6 +27,7 @@ import { useWorkoutStatsRefresh } from "@/hooks/useWorkoutStatsRefresh";
 import { format, startOfWeek } from "date-fns";
 import { LifestyleProgressSections } from "@/components/progress/LifestyleProgressSections";
 import { visibleLifestyleDashboardKeys } from "@/lib/lifestyleDashboardVisibility";
+import { bodyweightGoalProgressPercent } from "@/lib/bodyweightGoalProgress";
 import { bodyweightDistanceToGoal, isProgressWeightChangeTowardGoal } from "@/lib/progressWeightTrend";
 
 interface Props {
@@ -52,13 +53,14 @@ function filterBodyweightHistory(history: BodyweightHistoryPoint[], days: number
 }
 
 function getBodyweightPeriodChange(history: BodyweightHistoryPoint[], days: number) {
-    if (history.length === 0) return null;
+    const logged = history.filter((entry) => typeof entry.weight === "number" && Number.isFinite(entry.weight));
+    if (logged.length === 0) return null;
 
     const cutoff = new Date();
     cutoff.setHours(0, 0, 0, 0);
     cutoff.setDate(cutoff.getDate() - days);
 
-    const inPeriod = history.filter((entry) => new Date(entry.dateKey) >= cutoff);
+    const inPeriod = logged.filter((entry) => new Date(entry.dateKey) >= cutoff);
     if (inPeriod.length === 0) return null;
 
     const endWeight = inPeriod[inPeriod.length - 1].weight;
@@ -367,7 +369,9 @@ export function ProgressClient({ userRole, hiddenGoals, todayWorkoutHref = null,
     }, [selectedExerciseHistory, selectedExerciseStats?.primaryMetric]);
 
     const bodyweightHistory = useMemo(
-        () => (data?.bodyweight?.history ?? []) as BodyweightHistoryPoint[],
+        () => ((data?.bodyweight?.history ?? []) as BodyweightHistoryPoint[]).filter(
+            (entry) => typeof entry.weight === "number" && Number.isFinite(entry.weight)
+        ),
         [data]
     );
 
@@ -396,6 +400,25 @@ export function ProgressClient({ userRole, hiddenGoals, todayWorkoutHref = null,
         data?.bodyweight?.current,
         data?.bodyweight?.target
     );
+
+    const weightGoalProgressPercent =
+        bodyweightPeriodStats
+        && data?.bodyweight?.target != null
+        && Number.isFinite(data.bodyweight.target)
+            ? bodyweightGoalProgressPercent(
+                bodyweightPeriodStats.startWeight,
+                bodyweightPeriodStats.endWeight,
+                data.bodyweight.target
+            )
+            : data?.bodyweight?.current != null
+                && data?.bodyweight?.target != null
+                && bodyweightHistory[0]
+                ? bodyweightGoalProgressPercent(
+                    bodyweightHistory[0].weight,
+                    data.bodyweight.current,
+                    data.bodyweight.target
+                )
+                : null;
 
     const bodyweightData = useMemo(
         () => filteredBodyweightHistory.map((d) => ({
@@ -500,7 +523,13 @@ export function ProgressClient({ userRole, hiddenGoals, todayWorkoutHref = null,
             )}
 
             {/* ── BODYWEIGHT TREND ── */}
-            {bodyweightData.length > 0 && !hiddenGoals?.includes("weight") ? (
+            {!hiddenGoals?.includes("weight") && bodyweightData.length === 0 ? (
+                <section id="bodyweight" className="card p-5 sm:p-6 scroll-mt-24">
+                    <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest mb-2">Bodyweight Trend</p>
+                    <p className="text-sm font-bold text-fg-muted">No data</p>
+                    <p className="text-xs text-fg-subtle mt-1">Not enough data for this period.</p>
+                </section>
+            ) : bodyweightData.length > 0 && !hiddenGoals?.includes("weight") ? (
                 <LockedProgressPreview
                     locked={showFreeAccessLock}
                     title="Unlock Bodyweight Trends"
@@ -550,6 +579,14 @@ export function ProgressClient({ userRole, hiddenGoals, todayWorkoutHref = null,
                                                 )}>
                                                     {weightGoalDistance.toFixed(1)} kg away
                                                 </span>
+                                                {weightGoalProgressPercent != null && (
+                                                    <>
+                                                        <span className="mx-1 text-fg-subtle">·</span>
+                                                        <span className="font-bold text-fg-muted">
+                                                            {weightGoalProgressPercent}% toward goal
+                                                        </span>
+                                                    </>
+                                                )}
                                             </>
                                         )}
                                     </p>

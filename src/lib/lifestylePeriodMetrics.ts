@@ -5,6 +5,11 @@
  * Direction is metric-specific — calories are not "higher is better".
  */
 
+import {
+    isBodyweightTowardGoal,
+    resolveWeightGoalDirection,
+} from "@/lib/bodyweightGoalProgress";
+
 export type LifestyleMetricKey = "calories" | "steps" | "sleep";
 
 export interface LifestyleDayValue {
@@ -187,21 +192,32 @@ export function percentDelta(current: number | null, previous: number | null): n
 
 export type WeightDirection = "GAINING" | "LOSING" | "MAINTAINING";
 
-const WEIGHT_EQUAL_KG = 0.25;
+export { WEIGHT_GOAL_EQUAL_KG as WEIGHT_EQUAL_KG } from "@/lib/bodyweightGoalProgress";
 
 export function resolveWeightDirection(
     targetKg: number | null | undefined,
     baselineKg: number | null | undefined
 ): WeightDirection | null {
-    if (targetKg == null || baselineKg == null) return null;
-    if (Math.abs(targetKg - baselineKg) < WEIGHT_EQUAL_KG) return "MAINTAINING";
-    return targetKg > baselineKg ? "GAINING" : "LOSING";
+    return resolveWeightGoalDirection(baselineKg, targetKg);
 }
 
 export function interpretWeightChange(
     changeKg: number | null,
-    direction: WeightDirection | null
+    direction: WeightDirection | null,
+    baselineKg?: number | null,
+    currentKg?: number | null,
+    targetKg?: number | null
 ): "toward" | "away" | "stable" | null {
+    if (
+        baselineKg != null
+        && currentKg != null
+        && targetKg != null
+    ) {
+        const toward = isBodyweightTowardGoal({ baselineKg, currentKg, targetKg });
+        if (toward == null) return null;
+        if (Math.abs(currentKg - baselineKg) < 0.15) return "stable";
+        return toward ? "toward" : "away";
+    }
     if (changeKg == null || direction == null) return null;
     if (Math.abs(changeKg) < 0.15) return "stable";
     if (direction === "MAINTAINING") return Math.abs(changeKg) < 0.8 ? "toward" : "away";

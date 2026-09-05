@@ -4,6 +4,8 @@ import { getLocalTimeParts, shiftDateKey } from "@/lib/coachNotificationSchedule
 import { getUnreadCountsByPeer } from "@/lib/chatUnread";
 import {
     buildCheckInAlertKey,
+    checkInPeriodIsoWeekYear,
+    findCheckInDismissAction,
     buildMissedWorkoutAlertKey,
     buildPendingReviewAlertKey,
     buildSetupNeededAlertKey,
@@ -52,6 +54,7 @@ export interface CoachAttentionInboxItem {
     workoutId?: string;
     workoutName?: string;
     weekNumber?: number;
+    isoWeekYear?: number;
     unreadCount?: number;
     href: string;
     chatHref: string;
@@ -273,11 +276,16 @@ export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAtt
 
         if (dueState && isCoachClientCheckInDueForFilter(dueState, pauseClient)) {
             const periodWeek = dueState.outstandingWeekNumber ?? weekNumber;
-            const alertKey = buildCheckInAlertKey(client.id, periodWeek);
+            const isoWeekYear = checkInPeriodIsoWeekYear(dueState, today);
+            const alertKey = buildCheckInAlertKey(client.id, periodWeek, isoWeekYear);
             const category: CoachAttentionCategory = dueState.isOverdue
                 ? "check_in_overdue"
                 : "check_in_missed";
             const daysOverdue = dueState.daysOverdue;
+            const dismissRow = findCheckInDismissAction(actions, client.id, periodWeek, isoWeekYear);
+            const checkInStatus = isDismissedAlertCurrentlyHidden(dismissRow, clientLastActiveAt, now)
+                ? "dismissed"
+                : getItemStatus(actions, alertKey, clientLastActiveAt, now);
             items.push({
                 id: alertKey,
                 category,
@@ -295,9 +303,10 @@ export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAtt
                 explanation: dueState.isOverdue
                     ? `Weekly check-in was due ${formatCheckInDueDate(dueState.currentPeriodDueDate) ?? "on schedule"}${daysOverdue != null ? ` (${daysOverdue} day${daysOverdue === 1 ? "" : "s"} overdue)` : ""} and has not been submitted.`
                     : `Weekly check-in is due today${formatCheckInDueDate(dueState.currentPeriodDueDate) ? ` · ${formatCheckInDueDate(dueState.currentPeriodDueDate)}` : ""}.`,
-                status: getItemStatus(actions, alertKey, clientLastActiveAt, now),
+                status: checkInStatus,
                 urgent: dueState.isOverdue,
                 weekNumber: periodWeek,
+                isoWeekYear,
                 href: `/coach/client/${client.id}`,
                 chatHref,
             });

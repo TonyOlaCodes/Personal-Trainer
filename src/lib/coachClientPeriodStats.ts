@@ -159,25 +159,28 @@ export function computePeriodBodyweightStats(
     logs: Array<{ date: string; weightKg: number }>,
     startDateKey: string,
     endDateKey: string,
-    latestOverallKg: number | null
+    _latestOverallKg?: number | null
 ): PeriodBodyweightStats {
-    const inPeriod = logs.filter((row) => {
-        const key = row.date.slice(0, 10);
-        return key >= startDateKey && key <= endDateKey && Number.isFinite(row.weightKg);
-    });
+    const inPeriod = logs
+        .filter((row) => {
+            const key = row.date.slice(0, 10);
+            return key >= startDateKey && key <= endDateKey && Number.isFinite(row.weightKg);
+        })
+        .sort((a, b) => a.date.slice(0, 10).localeCompare(b.date.slice(0, 10)));
 
     const entries = inPeriod.length;
     const averageKg = entries === 0
         ? null
         : Math.round((inPeriod.reduce((sum, row) => sum + row.weightKg, 0) / entries) * 10) / 10;
 
-    let changeKg: number | null = null;
-    if (entries >= 2) {
-        changeKg = Math.round((inPeriod[inPeriod.length - 1].weightKg - inPeriod[0].weightKg) * 10) / 10;
-    }
+    const firstKg = entries > 0 ? inPeriod[0].weightKg : null;
+    const lastKg = entries > 0 ? inPeriod[entries - 1].weightKg : null;
+    const changeKg = firstKg != null && lastKg != null && entries >= 2
+        ? Math.round((lastKg - firstKg) * 10) / 10
+        : null;
 
     return {
-        currentKg: latestOverallKg,
+        currentKg: lastKg,
         averageKg,
         changeKg,
         entries,

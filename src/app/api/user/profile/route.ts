@@ -14,6 +14,7 @@ import {
 } from "@/lib/profilePrivacy";
 import { ensureUserProfileColumns } from "@/lib/userProfile";
 import { normalizeNotifyTime } from "@/lib/coachNotificationSchedule";
+import { canActorAttachUploads } from "@/lib/uploadAttachOwnership";
 import { normalizeStoredUploadUrl, withResolvedAvatar } from "@/lib/uploadUrls";
 import { z } from "zod";
 
@@ -91,6 +92,9 @@ export async function PATCH(req: Request) {
 
         const body = await req.json();
         const parsed = profileSchema.parse(body);
+        if (!(await canActorAttachUploads(user.id, [parsed.avatarUrl, parsed.bannerUrl]))) {
+            return NextResponse.json({ error: "You cannot attach another user's upload" }, { status: 403 });
+        }
         const normalizedAvatar =
             parsed.avatarUrl !== undefined
                 ? parsed.avatarUrl === ""

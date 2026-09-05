@@ -257,7 +257,7 @@ export async function GET(req: Request) {
 
     // 1. Weekly check-ins
     (user.checkIns ?? []).forEach((c: any) => {
-        if (c.bodyweightKg) {
+        if (c.bodyweightKg != null && Number.isFinite(c.bodyweightKg)) {
             const cDate = c.createdAt ?? new Date();
             const dateKey = toDateKey(cDate);
             const dateStr = format(cDate, "MMM dd");
@@ -267,7 +267,7 @@ export async function GET(req: Request) {
 
     // 2. Bodyweight logs
     (dbBodyweightLogs ?? []).forEach((row: any) => {
-        if (row.weight) {
+        if (row.weight != null && Number.isFinite(row.weight)) {
             const dateKey = row.dateKey ? row.dateKey.slice(0, 10) : "";
             if (dateKey) {
                 combinedWeightMap.set(dateKey, {
@@ -280,7 +280,7 @@ export async function GET(req: Request) {
     });
 
     // 3. Fallback: If no history exists at all, use user.weightKg at user.createdAt (so there's at least one data point)
-    if (combinedWeightMap.size === 0 && user.weightKg) {
+    if (combinedWeightMap.size === 0 && user.weightKg != null && Number.isFinite(user.weightKg)) {
         const uDate = user.createdAt ?? new Date();
         const dateKey = toDateKey(uDate);
         const dateStr = format(uDate, "MMM dd");
@@ -290,14 +290,18 @@ export async function GET(req: Request) {
     const bodyweightHistory = Array.from(combinedWeightMap.values())
         .sort((a, b) => a.dateKey.localeCompare(b.dateKey));
 
-    const currentWeight = bodyweightHistory[bodyweightHistory.length - 1]?.weight || user.weightKg || 0;
-    const startWeight = bodyweightHistory[0]?.weight || user.weightKg || 0;
+    const currentWeight = bodyweightHistory[bodyweightHistory.length - 1]?.weight
+        ?? (user.weightKg != null && Number.isFinite(user.weightKg) ? user.weightKg : null);
+    const startWeight = bodyweightHistory[0]?.weight
+        ?? (user.weightKg != null && Number.isFinite(user.weightKg) ? user.weightKg : null);
 
     const twoWeeksAgo = subWeeks(now, 2);
     const recentBwLogs = bodyweightHistory.filter(h => new Date(h.dateKey) >= twoWeeksAgo);
     const weightChangeWeek = recentBwLogs.length > 1
-        ? (recentBwLogs[recentBwLogs.length - 1]?.weight || currentWeight) - (recentBwLogs[0]?.weight || currentWeight)
-        : 0;
+        && recentBwLogs[0]?.weight != null
+        && recentBwLogs[recentBwLogs.length - 1]?.weight != null
+        ? recentBwLogs[recentBwLogs.length - 1].weight - recentBwLogs[0].weight
+        : null;
 
     const [dailyMetricRows, dailyMetricTargets] = await Promise.all([
         prisma.$queryRaw<Array<{
@@ -400,7 +404,7 @@ export async function GET(req: Request) {
         volumeComparisonDays: dayIndexInWeek + 1,
         volumeChange,
         volumeChangeKg,
-        weightChange: Math.round(weightChangeWeek * 10) / 10,
+        weightChange: weightChangeWeek == null ? null : Math.round(weightChangeWeek * 10) / 10,
         currentWeight,
         prsThisWeek: prList.filter(pr => pr.improvement > 0).length
     };
@@ -449,7 +453,9 @@ export async function GET(req: Request) {
             consistency: { thisWeek: workoutsThisWeek, lastWeek: workoutsLastWeek, target: user.trainingDaysPerWeek || 4 },
             bodyweight: {
                 current: currentWeight, target: user.targetWeightKg ?? null, goal: user.goal || null,
-                changeWeek: weightChangeWeek, totalChange: currentWeight - startWeight, history: bodyweightHistory
+                changeWeek: weightChangeWeek,
+                totalChange: currentWeight != null && startWeight != null ? currentWeight - startWeight : null,
+                history: bodyweightHistory
             },
             dailyMetrics,
             big3,

@@ -148,6 +148,23 @@ check("bodyweight change needs two logged points", () => {
     assert.equal(two.changeKg, -1.8);
 });
 
+check("historical period latest is in-period, not a later global weight", () => {
+    const august = computePeriodBodyweightStats(
+        [
+            { date: "2026-08-10", weightKg: 77 },
+            { date: "2026-08-28", weightKg: 77 },
+            { date: "2026-09-03", weightKg: 78 },
+        ],
+        "2026-08-01",
+        "2026-08-31",
+        78
+    );
+    assert.equal(august.currentKg, 77);
+    assert.equal(august.averageKg, 77);
+    assert.equal(august.changeKg, 0);
+    assert.equal(august.entries, 2);
+});
+
 check("equivalent period windows do not overlap", () => {
     const current = periodWindow("2026-09-05", 30);
     const previous = previousPeriodWindow(current.startDateKey, 30);

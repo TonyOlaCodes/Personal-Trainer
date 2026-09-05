@@ -6,7 +6,8 @@ import {
     removeCoachAttentionAction,
     setCoachAttentionAction,
 } from "@/lib/coachAttentionActions";
-import { triggerAchievementSync } from "@/lib/achievements";
+import { triggerAchievementSyncForUsers } from "@/lib/achievements";
+import { trainingHistoryAchievementSyncTargets } from "@/lib/achievementSyncTargets";
 
 const schema = z.object({
     clientId: z.string().min(1),
@@ -45,7 +46,12 @@ export async function POST(req: Request) {
             await removeCoachAttentionAction(coach.id, alertKey);
         }
 
-        triggerAchievementSync(coach.id);
+        triggerAchievementSyncForUsers(
+            ...trainingHistoryAchievementSyncTargets({
+                subjectUserId: parsed.clientId,
+                coachId: coach.id,
+            })
+        );
 
         return NextResponse.json({ ok: true, status: parsed.status });
     } catch (err) {

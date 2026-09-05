@@ -13,6 +13,7 @@ import {
 } from "@/lib/workoutSavePolicy";
 import { notifyCoachOfClientWorkout } from "@/lib/notifications";
 import { triggerAchievementSync } from "@/lib/achievements";
+import { canActorAttachUploads } from "@/lib/uploadAttachOwnership";
 import { normalizeStoredUploadUrl } from "@/lib/uploadUrls";
 import { ensureLogSetExerciseNameColumn } from "@/lib/logSetExerciseName";
 import { ensureLogSetExerciseOrderColumn, resolvePersistedExerciseOrder } from "@/lib/logSetExerciseOrder";
@@ -120,6 +121,10 @@ export async function POST(req: Request) {
         exerciseName: set.exerciseName ? canonicalExerciseName(set.exerciseName) : set.exerciseName,
         isCompleted: set.isCompleted || hasPerformedSetData(set),
     }));
+
+    if (!(await canActorAttachUploads(user.id, sets.map((set) => set.videoUrl)))) {
+        return NextResponse.json({ error: "You cannot attach another user's upload" }, { status: 403 });
+    }
 
     const subjectResult = await resolveWorkoutLogSubjectUserId(user, clientId);
     if (subjectResult.error) return subjectResult.error;

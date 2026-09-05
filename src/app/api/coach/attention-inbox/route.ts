@@ -8,7 +8,8 @@ import {
 } from "@/lib/coachAttentionActions";
 import { loadCoachAttentionInbox } from "@/lib/coachAttentionInbox";
 import { createCoachDirectMessage, sendCheckInRequestViaChat, sendMissedWorkoutNotifyViaChat } from "@/lib/coachChat";
-import { triggerAchievementSync } from "@/lib/achievements";
+import { triggerAchievementSyncForUsers } from "@/lib/achievements";
+import { trainingHistoryAchievementSyncTargets } from "@/lib/achievementSyncTargets";
 
 export async function GET(req: Request) {
     const authResult = await requireCoachUser(req);
@@ -82,7 +83,7 @@ export async function POST(req: Request) {
                 const { clearCheckInRequest } = await import("@/lib/checkInRequests");
                 await clearCheckInRequest(parsed.clientId, parsed.weekNumber);
             }
-            triggerAchievementSync(coach.id);
+            triggerAchievementSyncForUsers(coach.id);
             return NextResponse.json({ ok: true });
         }
 
@@ -100,7 +101,12 @@ export async function POST(req: Request) {
                 dateKey: parsed.dateKey ?? null,
                 workoutId: parsed.workoutId ?? null,
             });
-            triggerAchievementSync(coach.id);
+            triggerAchievementSyncForUsers(
+                ...trainingHistoryAchievementSyncTargets({
+                    subjectUserId: parsed.clientId,
+                    coachId: coach.id,
+                })
+            );
             return NextResponse.json({ ok: true });
         }
 

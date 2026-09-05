@@ -11,6 +11,7 @@ import {
     userWantsNotification,
 } from "@/lib/notifications";
 import { triggerAchievementSync } from "@/lib/achievements";
+import { canActorAttachUploads } from "@/lib/uploadAttachOwnership";
 import { withResolvedCheckInMedia, normalizeStoredUploadUrl } from "@/lib/uploadUrls";
 import { isInactiveAccount } from "@/lib/userDeactivation";
 import { canAccessCheckIns } from "@/lib/roles";
@@ -55,6 +56,14 @@ export async function POST(req: Request) {
         const parsed = checkInSchema.safeParse(body);
         if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
+        if (!(await canActorAttachUploads(user.id, [
+            parsed.data.frontImageUrl,
+            parsed.data.sideImageUrl,
+            parsed.data.videoUrl,
+        ]))) {
+            return NextResponse.json({ error: "You cannot attach another user's upload" }, { status: 403 });
+        }
+
         const { maybeAutoResumeCoachPausedClient } = await import("@/lib/coachClientPause");
         await maybeAutoResumeCoachPausedClient(user.id);
 
@@ -85,7 +94,9 @@ export async function POST(req: Request) {
                     userId: user.id,
                     ...parsed.data,
                     periodDueDateKey: periodDueDateKey ?? null,
-                    bodyweightKg: parsed.data.bodyweightKg ? Math.round(parsed.data.bodyweightKg * 100) / 100 : undefined,
+                    bodyweightKg: parsed.data.bodyweightKg != null
+                        ? Math.round(parsed.data.bodyweightKg * 100) / 100
+                        : undefined,
                     feedback: parsed.data.feedback?.trim() || null,
                     frontImageUrl: normalizeStoredUploadUrl(parsed.data.frontImageUrl) ?? undefined,
                     sideImageUrl: normalizeStoredUploadUrl(parsed.data.sideImageUrl) ?? undefined,
@@ -230,6 +241,15 @@ export async function PATCH(req: Request) {
             return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         }
 
+        if (!(await canActorAttachUploads(user.id, [
+            videoUrl,
+            frontImageUrl,
+            sideImageUrl,
+            body.coachVideoUrl,
+        ]))) {
+            return NextResponse.json({ error: "You cannot attach another user's upload" }, { status: 403 });
+        }
+
         if (isCoach) {
             const athlete = await prisma.user.findUnique({
                 where: { id: existing.userId },
@@ -258,7 +278,9 @@ export async function PATCH(req: Request) {
                 feedback: typeof feedback === "string" ? feedback.trim() || null : undefined,
                 notes,
                 videoUrl: normalizeStoredUploadUrl(videoUrl) ?? undefined,
-                bodyweightKg: bodyweightKg ? Math.round(parseFloat(bodyweightKg) * 100) / 100 : undefined,
+                bodyweightKg: bodyweightKg != null && bodyweightKg !== ""
+                    ? Math.round(parseFloat(bodyweightKg) * 100) / 100
+                    : undefined,
                 sleepRating,
                 dietRating,
                 stressRating,

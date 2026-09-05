@@ -10,6 +10,7 @@ import {
     type CheckInDueState,
     type CheckInSchedule,
 } from "@/lib/checkInSchedule";
+import { getIsoWeekYear } from "@/lib/checkInLabels";
 import { getWeekNumber } from "@/lib/utils";
 
 export type CoachAttentionActionType = "dismissed" | "excused";
@@ -72,8 +73,63 @@ export function buildMissedWorkoutAlertKey(clientId: string, dateKey: string, wo
     return `missed-workout:${clientId}:${dateKey}:${workoutId}`;
 }
 
-export function buildCheckInAlertKey(clientId: string, weekNumber: number) {
+export function buildLegacyCheckInAlertKey(clientId: string, weekNumber: number) {
     return `check-in:${clientId}:${weekNumber}`;
+}
+
+/** Year-qualified so ISO week 36 in 2025 cannot dismiss week 36 in 2026. */
+export function buildCheckInAlertKey(clientId: string, weekNumber: number, isoWeekYear: number) {
+    return `check-in:${clientId}:${isoWeekYear}-W${weekNumber}`;
+}
+
+export function buildLegacyFallingBehindAlertKey(clientId: string, weekNumber: number) {
+    return `falling-behind:${clientId}:${weekNumber}`;
+}
+
+export function checkInPeriodIsoWeekYear(
+    dueState: { currentPeriodDueDate?: string | Date | null } | null | undefined,
+    fallbackDate = new Date()
+): number {
+    if (dueState?.currentPeriodDueDate) {
+        const raw = dueState.currentPeriodDueDate;
+        const date = raw instanceof Date ? raw : new Date(raw);
+        if (!Number.isNaN(date.getTime())) return getIsoWeekYear(date);
+    }
+    return getIsoWeekYear(fallbackDate);
+}
+
+function attentionRows(
+    actions: Map<string, CoachAttentionActionRow> | CoachAttentionActionRow[]
+): CoachAttentionActionRow[] {
+    return actions instanceof Map ? [...actions.values()] : actions;
+}
+
+/**
+ * New year-qualified key wins. Legacy week-only keys stay dismissed only when
+ * the dismiss was recorded in the same ISO week-year as this period.
+ */
+export function findCheckInDismissAction(
+    actions: Map<string, CoachAttentionActionRow> | CoachAttentionActionRow[],
+    clientId: string,
+    weekNumber: number,
+    isoWeekYear: number
+): CoachAttentionActionRow | undefined {
+    const rows = attentionRows(actions);
+    const yearKey = buildCheckInAlertKey(clientId, weekNumber, isoWeekYear);
+    const yearMatch = rows.find((row) => row.alertKey === yearKey && row.action === "dismissed");
+    if (yearMatch) return yearMatch;
+
+    const legacyKey = buildLegacyCheckInAlertKey(clientId, weekNumber);
+    return rows.find((row) => {
+        if (row.action !== "dismissed") return false;
+        const isLegacyKey = row.alertKey === legacyKey;
+        const isLegacyCategory =
+            (row.category === "check_in_overdue" || row.category === "check_in_missed")
+            && row.weekNumber === weekNumber
+            && !row.alertKey.includes("-W");
+        if (!isLegacyKey && !isLegacyCategory) return false;
+        return getIsoWeekYear(new Date(row.createdAt)) === isoWeekYear;
+    });
 }
 
 export function buildPendingReviewAlertKey(checkInId: string) {
@@ -88,8 +144,8 @@ export function buildSetupNeededAlertKey(clientId: string) {
     return `setup-needed:${clientId}`;
 }
 
-export function buildFallingBehindAlertKey(clientId: string, weekNumber: number) {
-    return `falling-behind:${clientId}:${weekNumber}`;
+export function buildFallingBehindAlertKey(clientId: string, weekNumber: number, isoWeekYear: number) {
+    return `falling-behind:${clientId}:${isoWeekYear}-W${weekNumber}`;
 }
 
 export async function getCoachAttentionActions(coachId: string): Promise<Map<string, CoachAttentionActionRow>> {
@@ -177,14 +233,15 @@ export function isMissedWorkoutExcused(
 }
 
 export function isCheckInAlertDismissed(
-    actions: Map<string, CoachAttentionActionRow>,
+    actions: Map<string, CoachAttentionActionRow> | CoachAttentionActionRow[],
     clientId: string,
     weekNumber: number,
+    isoWeekYear: number,
     clientLastActiveAt?: Date | null,
     now = new Date()
 ): boolean {
-    const key = buildCheckInAlertKey(clientId, weekNumber);
-    return isDismissedAlertCurrentlyHidden(actions.get(key), clientLastActiveAt, now);
+    const row = findCheckInDismissAction(actions, clientId, weekNumber, isoWeekYear);
+    return isDismissedAlertCurrentlyHidden(row, clientLastActiveAt, now);
 }
 
 export function isClientInactiveOnApp(
@@ -272,17 +329,8 @@ export function applyCheckInAttentionOverrides(
     clientLastActiveAt: Date | null | undefined = null
 ): CheckInDueState {
     const periodWeek = dueState.outstandingWeekNumber ?? weekNumber;
-    const alertKey = buildCheckInAlertKey(clientId, periodWeek);
-    const dismissRow =
-        clientActions.find(
-            (row) => row.alertKey === alertKey && row.action === "dismissed"
-        )
-        ?? clientActions.find(
-            (row) =>
-                (row.category === "check_in_overdue" || row.category === "check_in_missed")
-                && row.action === "dismissed"
-                && row.weekNumber === periodWeek
-        );
+    const isoWeekYear = checkInPeriodIsoWeekYear(dueState, today);
+    const dismissRow = findCheckInDismissAction(clientActions, clientId, periodWeek, isoWeekYear);
     const dismissed = dismissRow
         ? isDismissedAlertCurrentlyHidden(dismissRow, clientLastActiveAt, today)
         : false;

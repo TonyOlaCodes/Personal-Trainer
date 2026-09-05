@@ -8,6 +8,7 @@ import {
     isLifestyleShownOnDashboard,
     lifestyleDashboardGridClass,
     lifestyleMetricInputPlaceholder,
+    lifestyleGoalDistance,
     lifestyleGoalDistanceText,
     sanitizeHiddenGoals,
     setLifestyleDashboardHidden,
@@ -66,18 +67,24 @@ check("unlogged inputs hint the goal without treating it as a log", () => {
 });
 
 check("goal distance uses the logged value and exact goal, not a placeholder", () => {
+    assert.equal(lifestyleGoalDistance("calories", null, 4000), null);
     assert.equal(lifestyleGoalDistanceText("calories", null, 4000), null);
-    assert.equal(lifestyleGoalDistanceText("calories", 3700, 4000), "300 kcal to goal");
-    assert.equal(lifestyleGoalDistanceText("calories", 4200, 4000), "Goal reached");
-    assert.equal(lifestyleGoalDistanceText("calories", 4000, 4000), "Goal reached");
-    assert.equal(lifestyleGoalDistanceText("calories", 0, 4000), "4,000 kcal to goal");
-    assert.equal(lifestyleGoalDistanceText("steps", 4500, 5000), "500 steps to goal");
-    assert.equal(lifestyleGoalDistanceText("steps", 6200, 5000), "Goal reached");
-    assert.equal(lifestyleGoalDistanceText("steps", 5000, 5000), "Goal reached");
-    assert.equal(lifestyleGoalDistanceText("sleep", 7.5, 8), "0.5 hrs to goal");
-    assert.equal(lifestyleGoalDistanceText("sleep", 8.5, 8), "Goal reached");
-    assert.equal(lifestyleGoalDistanceText("sleep", 8, 8), "Goal reached");
+    assert.deepEqual(lifestyleGoalDistance("calories", 3700, 4000), { status: "below", text: "300 kcal to goal" });
+    assert.deepEqual(lifestyleGoalDistance("calories", 4200, 4000), { status: "reached", text: "Goal reached" });
+    assert.deepEqual(lifestyleGoalDistance("calories", 4000, 4000), { status: "reached", text: "Goal reached" });
+    assert.deepEqual(lifestyleGoalDistance("calories", 0, 4000), { status: "below", text: "4,000 kcal to goal" });
+    assert.deepEqual(lifestyleGoalDistance("steps", 4500, 5000), { status: "below", text: "500 steps to goal" });
+    assert.deepEqual(lifestyleGoalDistance("steps", 6200, 5000), { status: "reached", text: "Goal reached" });
+    assert.deepEqual(lifestyleGoalDistance("sleep", 7.5, 8), { status: "below", text: "0.5 hrs to goal" });
+    assert.deepEqual(lifestyleGoalDistance("sleep", 8.5, 8), { status: "reached", text: "Goal reached" });
+    assert.equal(lifestyleGoalDistance("calories", null, 4000), null);
     assert.equal(lifestyleGoalDistanceText("steps", 4500, null), null);
+});
+
+check("clearing a logged value returns the unlogged / neutral state", () => {
+    assert.equal(lifestyleGoalDistance("calories", 1800, 2000)?.status, "below");
+    assert.equal(lifestyleGoalDistance("calories", null, 2000), null);
+    assert.equal(lifestyleMetricInputPlaceholder("calories", 2000), "2,000 kcal");
 });
 
 check("saving one metric does not wipe the others", () => {

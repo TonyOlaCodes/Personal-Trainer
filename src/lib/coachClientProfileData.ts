@@ -337,14 +337,12 @@ export async function loadCoachClientProfileInsights(input: {
         const currentBw = computePeriodBodyweightStats(
             input.bodyweightHistory,
             currentStart,
-            current.endDateKey,
-            latestWeight
+            current.endDateKey
         );
         const previousBw = computePeriodBodyweightStats(
             input.bodyweightHistory,
             previousStart,
-            previous.endDateKey,
-            latestWeight
+            previous.endDateKey
         );
 
         const currentCheckIns = computePeriodCheckInStats(

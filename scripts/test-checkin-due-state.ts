@@ -11,7 +11,13 @@ import {
     toCheckInCalendarDate,
     type CheckInSchedule,
 } from "../src/lib/checkInSchedule";
-import { applyCheckInAttentionOverrides, clearOutstandingCheckInPeriod } from "../src/lib/coachAttentionActions";
+import {
+    applyCheckInAttentionOverrides,
+    buildCheckInAlertKey,
+    buildLegacyCheckInAlertKey,
+    clearOutstandingCheckInPeriod,
+    findCheckInDismissAction,
+} from "../src/lib/coachAttentionActions";
 import { isCoachClientCheckInAttentionNeeded } from "../src/lib/coachOverdueCheckIns";
 import { getWeekNumber } from "../src/lib/utils";
 
@@ -196,6 +202,63 @@ check("Midnight/date boundary: dateKey noon dates compare equal for same calenda
     assert.equal(a.isDueToday, true);
     assert.equal(b.isDueToday, true);
     assert.equal(a.outstandingWeekNumber, b.outstandingWeekNumber);
+});
+
+check("H1: last year's week-only dismiss does not hide the same week next year", () => {
+    const sat = getNextScheduledDueDateAfter(first, 1, d("2026-06-01"));
+    const mon = d(sat.toISOString());
+    mon.setDate(mon.getDate() + 2);
+    const state = getCheckInDueState(weeklySat, mon);
+    const week = state.outstandingWeekNumber!;
+    const lastYearDismiss = {
+        alertKey: buildLegacyCheckInAlertKey("client-1", week),
+        action: "dismissed" as const,
+        clientId: "client-1",
+        category: "check_in_overdue" as const,
+        weekNumber: week,
+        dateKey: null,
+        workoutId: null,
+        createdAt: new Date("2025-06-09T12:00:00.000Z"),
+    };
+
+    assert.equal(findCheckInDismissAction([lastYearDismiss], "client-1", week, 2026), undefined);
+
+    const stillDue = applyCheckInAttentionOverrides(
+        state,
+        [lastYearDismiss],
+        "client-1",
+        week,
+        mon,
+        new Date()
+    );
+    assert.equal(stillDue.isOverdue, true);
+    assert.ok(buildCheckInAlertKey("client-1", week, 2026).includes("2026-W"));
+});
+
+check("H1: same-year legacy dismiss still hides that period", () => {
+    const sat = getNextScheduledDueDateAfter(first, 1, d("2026-06-01"));
+    const mon = d(sat.toISOString());
+    mon.setDate(mon.getDate() + 2);
+    const state = getCheckInDueState(weeklySat, mon);
+    const week = state.outstandingWeekNumber!;
+    const cleared = applyCheckInAttentionOverrides(
+        state,
+        [{
+            alertKey: buildLegacyCheckInAlertKey("client-1", week),
+            action: "dismissed",
+            clientId: "client-1",
+            category: "check_in_overdue",
+            weekNumber: week,
+            dateKey: null,
+            workoutId: null,
+            createdAt: mon,
+        }],
+        "client-1",
+        week,
+        mon,
+        new Date()
+    );
+    assert.equal(cleared.isOverdue, false);
 });
 
 console.log(`\n${passed} checks passed\n`);
