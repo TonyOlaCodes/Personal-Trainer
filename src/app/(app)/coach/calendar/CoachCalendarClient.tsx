@@ -6,7 +6,6 @@ import { ChevronDown, UserCircle } from "lucide-react";
 import { CalendarClient, type CalendarView } from "@/app/(app)/calendar/CalendarClient";
 import { getInitials, toDateKey } from "@/lib/utils";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
-import { getPublicProfileHref } from "@/lib/profileNavigation";
 import { useCurrentDate } from "@/hooks/useCurrentDate";
 import type { ClientCalendarPayload } from "@/lib/clientCalendarData";
 import Link from "next/link";
@@ -42,7 +41,7 @@ function CoachCalendarClientHeader({
     selectId: string;
 }) {
     const selectedClient = clients.find((c) => c.id === selectedClientId) ?? null;
-    const profileHref = selectedClientId ? getPublicProfileHref(selectedClientId) : null;
+    const coachingHref = selectedClientId ? `/coach/client/${selectedClientId}` : null;
 
     const avatar = (
         <span className="w-8 h-8 rounded-lg bg-gradient-brand flex items-center justify-center text-[11px] font-bold text-white overflow-hidden shrink-0">
@@ -59,13 +58,13 @@ function CoachCalendarClientHeader({
     );
 
     return (
-        <div className="flex items-center gap-2 min-w-0">
-            {profileHref ? (
+        <div className="card px-4 py-3 flex items-center gap-2 min-w-0">
+            {coachingHref ? (
                 <Link
-                    href={profileHref}
+                    href={coachingHref}
                     className="flex items-center gap-2.5 min-w-0 hover:opacity-85 transition-opacity"
-                    title={`View ${selectedClientName} profile`}
-                    aria-label={`View ${selectedClientName} public profile`}
+                    title={`Open ${selectedClientName} coaching page`}
+                    aria-label={`Open ${selectedClientName} coaching page`}
                 >
                     {avatar}
                     <span className="text-base font-black text-fg tracking-tight truncate">

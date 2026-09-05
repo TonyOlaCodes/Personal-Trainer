@@ -784,21 +784,19 @@ export function CalendarClient({
             <div
                 ref={detailPanelRef}
                 className={cn(
-                    "lg:col-span-4 space-y-6 lg:sticky lg:top-10 lg:h-fit scroll-mt-4",
+                    "lg:col-span-4 space-y-3 lg:sticky lg:top-10 lg:h-fit scroll-mt-4",
                     mobileDetailOpen ? "block" : "hidden lg:block"
                 )}
             >
+                {isCoachView && renderCoachClientHeader && (
+                    renderCoachClientHeader("coach-calendar-client-panel")
+                )}
                 <div className={cn(
                     "card p-6 border-brand-500/20 bg-gradient-to-br from-surface-card to-brand-950/10 shadow-glow-sm min-h-[320px] lg:min-h-[400px]",
                     selectedStatus === "missed"
                         && !selectedIsExcused
                         && "border-danger/40 ring-2 ring-danger/30 streak-fire-glow"
                 )}>
-                    {isCoachView && renderCoachClientHeader && (
-                        <div className="mb-4">
-                            {renderCoachClientHeader("coach-calendar-client-panel")}
-                        </div>
-                    )}
                     <div className="flex items-start justify-between mb-6 gap-3">
                         <div className="min-w-0">
                             <p className="text-[10px] font-black text-fg-muted uppercase tracking-widest mb-1">
