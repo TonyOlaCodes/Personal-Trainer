@@ -17,6 +17,7 @@ import {
     listSessionOverridesForUser,
     sessionOverrideMapKey,
 } from "@/lib/workoutSessionOverrides";
+import { mapPersistedLogToInProgressPreview } from "@/lib/calendarLiveSessionPreview";
 
 export interface ClientCalendarPayload {
     activePlan: {
@@ -55,6 +56,19 @@ export interface ClientCalendarPayload {
         date: string;
         workoutId: string;
         workoutName: string;
+        duration: number | null;
+        updatedAt: string | null;
+        sets: Array<{
+            exerciseId: string;
+            exerciseName: string;
+            exerciseOrder: number | null;
+            setNumber: number;
+            reps: number | null;
+            weightKg: number | null;
+            rpe: number | null;
+            isWarmup: boolean;
+            isCompleted: boolean;
+        }>;
     }>;
     scheduleRevisions: PlanScheduleRevisionRecord[];
     /** `${dateKey}:${workoutId}` keys for missed workouts excused by the coach */
@@ -127,7 +141,15 @@ export async function loadClientCalendarData(userId: string): Promise<ClientCale
         }),
         prisma.workoutLog.findMany({
             where: { userId, status: "IN_PROGRESS" },
-            include: { workout: { select: { name: true, id: true } } },
+            include: {
+                workout: { select: { name: true, id: true } },
+                sets: {
+                    include: {
+                        exercise: { select: { name: true, order: true, muscleGroup: true, isCustom: true } },
+                    },
+                    orderBy: logSetDisplayOrderBy,
+                },
+            },
             orderBy: { updatedAt: "desc" },
         }),
         persistPastDueScheduledSessionsForUser(userId).catch((error) => {
@@ -267,12 +289,19 @@ export async function loadClientCalendarData(userId: string): Promise<ClientCale
                 })),
             };
         }),
-        inProgressSessions: inProgressLogs.map((l) => ({
-            id: l.id,
-            date: toDateKey(l.loggedAt),
-            workoutId: l.workoutId,
-            workoutName: l.workout.name,
-        })),
+        inProgressSessions: inProgressLogs.flatMap((l) => {
+            const preview = mapPersistedLogToInProgressPreview({
+                id: l.id,
+                workoutId: l.workoutId,
+                loggedAt: l.loggedAt,
+                updatedAt: l.updatedAt,
+                duration: l.duration,
+                status: l.status,
+                workout: l.workout,
+                sets: l.sets,
+            });
+            return preview ? [preview] : [];
+        }),
         scheduleRevisions,
         excusedMissedWorkoutKeys,
         historicalMissedSessions,

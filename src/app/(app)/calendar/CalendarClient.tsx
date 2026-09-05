@@ -40,6 +40,14 @@ import {
 import { CalendarComplianceSummary } from "@/components/calendar/CalendarComplianceSummary";
 import type { CalendarComplianceInput } from "@/lib/calendarCompliance";
 import { pickCalendarScheduledSession } from "@/lib/calendarScheduledSession";
+import {
+    belongsToExpectedActiveSession,
+    buildLiveExercisePreview,
+    liveElapsedMinutes,
+    mapPersistedLogToInProgressPreview,
+    pickFresherLivePreview,
+    type InProgressSessionPreview,
+} from "@/lib/calendarLiveSessionPreview";
 
 /* ─────────────────────────── Types ─────────────────────────── */
 interface PlanExercise {
@@ -91,12 +99,7 @@ interface LoggedDate {
     sets: LogSet[]; 
 }
 
-interface InProgressSession {
-    id: string;
-    date: string;
-    workoutId: string;
-    workoutName: string;
-}
+type InProgressSession = InProgressSessionPreview;
 
 export interface CalendarView {
     year: number;
@@ -179,6 +182,80 @@ function resolveDayStatus(input: {
 
 function displayWorkoutName(name: string): string {
     return name.trim();
+}
+
+const LIVE_SESSION_POLL_MS = 4_000;
+const LIVE_DURATION_TICK_MS = 30_000;
+
+function SessionSummaryBlock({
+    workoutName,
+    totalSets,
+    durationMin,
+    exercises,
+    moreCount,
+    moreLabel,
+    panelBg,
+    panelBorder,
+    panelLabel,
+}: {
+    workoutName: string;
+    totalSets: number;
+    durationMin: number | null;
+    exercises: Array<{ exerciseId: string; name: string; setCount: number }>;
+    moreCount: number;
+    moreLabel: string;
+    panelBg: string;
+    panelBorder: string;
+    panelLabel: string;
+}) {
+    return (
+        <>
+            <div className={cn("p-4 rounded-2xl border", panelBg, panelBorder)}>
+                <p className={cn("text-[10px] font-black uppercase tracking-widest mb-1", panelLabel)}>
+                    {displayWorkoutName(workoutName)}
+                </p>
+                <div className="flex flex-wrap gap-4 mt-3">
+                    <div>
+                        <p className="text-[9px] font-black text-fg-subtle uppercase">Total sets</p>
+                        <p className="text-sm font-black text-fg">{totalSets}</p>
+                    </div>
+                    {durationMin != null && (
+                        <div>
+                            <p className="text-[9px] font-black text-fg-subtle uppercase">Duration</p>
+                            <p className="text-sm font-black text-fg flex items-center gap-1">
+                                <Clock className="w-3.5 h-3.5 text-success" />
+                                {durationMin} min
+                            </p>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            <div className="space-y-2">
+                <p className="text-[10px] font-black text-fg-subtle uppercase px-1 tracking-[0.2em] flex items-center gap-2">
+                    <Zap className="w-3 h-3 text-brand-400" /> Exercises
+                </p>
+                <div className="space-y-1.5">
+                    {exercises.map((exercise) => (
+                        <div
+                            key={exercise.exerciseId}
+                            className="flex items-center justify-between py-2 px-3 bg-surface-muted/15 rounded-xl border border-surface-border/40"
+                        >
+                            <span className="text-xs font-bold text-fg truncate">{exercise.name}</span>
+                            <span className="text-[10px] font-black text-fg-subtle shrink-0 ml-2">
+                                {exercise.setCount} sets
+                            </span>
+                        </div>
+                    ))}
+                    {moreCount > 0 && (
+                        <p className="text-[10px] font-bold text-fg-muted px-1">
+                            +{moreCount} {moreLabel}
+                        </p>
+                    )}
+                </div>
+            </div>
+        </>
+    );
 }
 
 export function CalendarClient({
@@ -284,6 +361,8 @@ export function CalendarClient({
 
     const [localExcusedKeys, setLocalExcusedKeys] = useState(excusedMissedWorkoutKeys);
     const [statusUpdating, setStatusUpdating] = useState(false);
+    const [liveOverride, setLiveOverride] = useState<InProgressSession | null>(null);
+    const [liveClockNow, setLiveClockNow] = useState(() => new Date());
 
     useEffect(() => {
         setLocalExcusedKeys(excusedMissedWorkoutKeys);
@@ -516,8 +595,13 @@ export function CalendarClient({
     const workoutStartHref = selectedPlanned && !coachView
         ? `/plans/log/${selectedPlanned.id}?date=${encodeURIComponent(selectedDateKey)}&autostart=1`
         : "";
-    const coachLiveHref = selectedPlanned && coachView
-        ? `/plans/log/${selectedPlanned.id}?date=${selectedDateKey}&clientId=${coachView.clientId}&mode=live`
+    const liveWorkoutId = resumeSession?.workoutId ?? selectedPlanned?.id ?? "";
+    const liveDateKey = resumeSession?.date ?? selectedDateKey;
+    const coachLiveHref = liveWorkoutId && coachView
+        ? `/plans/log/${liveWorkoutId}?date=${liveDateKey}&clientId=${coachView.clientId}&mode=live`
+        : "";
+    const resumeWorkoutHref = liveWorkoutId
+        ? `/plans/log/${liveWorkoutId}?date=${encodeURIComponent(liveDateKey)}${coachView ? `&clientId=${coachView.clientId}` : ""}`
         : "";
     const editSessionHref = selectedPlanned
         ? coachView
@@ -574,6 +658,89 @@ export function CalendarClient({
         selectedStatus !== "completed" &&
         selectedStatus !== "excused" &&
         !resumeSession;
+
+    const displayLiveSession = useMemo(() => {
+        if (!resumeSession) return null;
+        if (!liveOverride || !belongsToExpectedActiveSession(liveOverride, resumeSession)) {
+            return resumeSession;
+        }
+        return pickFresherLivePreview(resumeSession, liveOverride);
+    }, [resumeSession, liveOverride]);
+
+    useEffect(() => {
+        setLiveOverride(null);
+    }, [resumeSession?.id, selectedDateKey]);
+
+    useEffect(() => {
+        if (!displayLiveSession) return;
+
+        const tick = () => setLiveClockNow(new Date());
+        tick();
+        const interval = setInterval(() => {
+            if (document.visibilityState === "visible") tick();
+        }, LIVE_DURATION_TICK_MS);
+
+        const onVisible = () => {
+            if (document.visibilityState === "visible") tick();
+        };
+        document.addEventListener("visibilitychange", onVisible);
+        return () => {
+            clearInterval(interval);
+            document.removeEventListener("visibilitychange", onVisible);
+        };
+    }, [displayLiveSession?.id]);
+
+    useEffect(() => {
+        if (!resumeSession) return;
+
+        const expected = {
+            id: resumeSession.id,
+            workoutId: resumeSession.workoutId,
+            date: resumeSession.date,
+        };
+        const clientId = coachView?.clientId;
+
+        let cancelled = false;
+        const params = new URLSearchParams({
+            active: "true",
+            workoutId: expected.workoutId,
+            date: expected.date,
+        });
+        if (clientId) params.set("clientId", clientId);
+
+        const pull = async () => {
+            if (document.visibilityState !== "visible") return;
+            try {
+                const res = await fetch(`/api/logs?${params.toString()}`);
+                if (!res.ok || cancelled) return;
+                const payload = await res.json();
+                if (cancelled) return;
+                if (!payload) {
+                    router.refresh();
+                    return;
+                }
+                const next = mapPersistedLogToInProgressPreview(payload);
+                if (!next || !belongsToExpectedActiveSession(next, expected)) return;
+                setLiveOverride(next);
+            } catch {
+                // keep the last persisted preview
+            }
+        };
+
+        void pull();
+        const interval = setInterval(() => {
+            void pull();
+        }, LIVE_SESSION_POLL_MS);
+        const onVisible = () => {
+            if (document.visibilityState === "visible") void pull();
+        };
+        document.addEventListener("visibilitychange", onVisible);
+        return () => {
+            cancelled = true;
+            clearInterval(interval);
+            document.removeEventListener("visibilitychange", onVisible);
+        };
+    }, [resumeSession?.id, resumeSession?.workoutId, resumeSession?.date, coachView?.clientId, router]);
 
     const updateWorkoutStatus = useCallback(async (status: "excused" | "missed") => {
         if (!coachView || !selectedPlanned || statusUpdating) return;
@@ -856,60 +1023,85 @@ export function CalendarClient({
                     </div>
 
                     <div className="space-y-6 animate-slide-up">
-                        {selectedLogs.length > 0 ? (
+                        {displayLiveSession && !selectedMatchingLog ? (() => {
+                            const livePreview = buildLiveExercisePreview(displayLiveSession.sets ?? []);
+                            const liveDuration = liveElapsedMinutes(
+                                displayLiveSession.duration,
+                                displayLiveSession.updatedAt,
+                                liveClockNow
+                            );
+
+                            return (
+                                <div className="space-y-5">
+                                    <SessionSummaryBlock
+                                        workoutName={displayLiveSession.workoutName || selectedPlanned?.name || "Live workout"}
+                                        totalSets={livePreview.totalLoggedSets}
+                                        durationMin={liveDuration}
+                                        exercises={livePreview.preview.map((exercise) => ({
+                                            exerciseId: exercise.exerciseId,
+                                            name: exercise.name,
+                                            setCount: exercise.loggedSets,
+                                        }))}
+                                        moreCount={livePreview.moreCount}
+                                        moreLabel="more in live workout"
+                                        panelBg={selectedStatusStyle.panelBg}
+                                        panelBorder={selectedStatusStyle.panelBorder}
+                                        panelLabel={selectedStatusStyle.panelLabel}
+                                    />
+
+                                    {isCoachView && coachView ? (
+                                        <div className="space-y-2">
+                                            <ReturnLink
+                                                href={coachLiveHref || resumeWorkoutHref || workoutLogHref}
+                                                className="btn-primary w-full h-12 text-xs font-black uppercase tracking-[0.15em] shadow-glow-success bg-success border-success hover:bg-success-600 group hover:scale-[1.02] transition-all flex items-center justify-center"
+                                            >
+                                                <Flame className="w-4 h-4 mr-2 animate-pulse group-hover:scale-110 transition-transform" />
+                                                View Live Workout
+                                            </ReturnLink>
+                                            {coachEditPlanHref && (
+                                                <Link
+                                                    href={coachEditPlanHref}
+                                                    className="btn-ghost w-full h-11 text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 text-fg-muted"
+                                                >
+                                                    Edit Plan
+                                                </Link>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <ReturnLink
+                                            href={resumeWorkoutHref || workoutLogHref}
+                                            className="btn-primary w-full h-12 text-xs font-black uppercase tracking-[0.15em] shadow-glow-success bg-success border-success hover:bg-success-600 group hover:scale-[1.02] transition-all flex items-center justify-center"
+                                        >
+                                            <Flame className="w-4 h-4 mr-2 animate-pulse group-hover:scale-110 transition-transform" />
+                                            Resume Workout
+                                        </ReturnLink>
+                                    )}
+                                </div>
+                            );
+                        })() : selectedLogs.length > 0 ? (
                             <div className="space-y-6">
                                 {selectedLogs.map((sessionLog) => {
                                     const exerciseGroups = groupLogSetsByExercise(sessionLog.sets);
-                                    const totalSets = sessionLog.sets.length;
                                     const previewExercises = exerciseGroups.slice(0, 4);
                                     const moreExercises = exerciseGroups.length - previewExercises.length;
 
                                     return (
                                         <div key={sessionLog.id} className="space-y-5">
-                                            <div className={cn("p-4 rounded-2xl border", selectedStatusStyle.panelBg, selectedStatusStyle.panelBorder)}>
-                                                <p className={cn("text-[10px] font-black uppercase tracking-widest mb-1", selectedStatusStyle.panelLabel)}>
-                                                    {displayWorkoutName(sessionLog.workoutName)}
-                                                </p>
-                                                <div className="flex flex-wrap gap-4 mt-3">
-                                                    <div>
-                                                        <p className="text-[9px] font-black text-fg-subtle uppercase">Total sets</p>
-                                                        <p className="text-sm font-black text-fg">{totalSets}</p>
-                                                    </div>
-                                                    {sessionLog.duration != null && (
-                                                        <div>
-                                                            <p className="text-[9px] font-black text-fg-subtle uppercase">Duration</p>
-                                                            <p className="text-sm font-black text-fg flex items-center gap-1">
-                                                                <Clock className="w-3.5 h-3.5 text-success" />
-                                                                {sessionLog.duration} min
-                                                            </p>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            <div className="space-y-2">
-                                                <p className="text-[10px] font-black text-fg-subtle uppercase px-1 tracking-[0.2em] flex items-center gap-2">
-                                                    <Zap className="w-3 h-3 text-brand-400" /> Exercises
-                                                </p>
-                                                <div className="space-y-1.5">
-                                                    {previewExercises.map((exerciseGroup) => (
-                                                        <div
-                                                            key={exerciseGroup.exerciseId}
-                                                            className="flex items-center justify-between py-2 px-3 bg-surface-muted/15 rounded-xl border border-surface-border/40"
-                                                        >
-                                                            <span className="text-xs font-bold text-fg truncate">{exerciseGroup.name}</span>
-                                                            <span className="text-[10px] font-black text-fg-subtle shrink-0 ml-2">
-                                                                {exerciseGroup.sets.length} sets
-                                                            </span>
-                                                        </div>
-                                                    ))}
-                                                    {moreExercises > 0 && (
-                                                        <p className="text-[10px] font-bold text-fg-muted px-1">
-                                                            +{moreExercises} more in session review
-                                                        </p>
-                                                    )}
-                                                </div>
-                                            </div>
+                                            <SessionSummaryBlock
+                                                workoutName={sessionLog.workoutName}
+                                                totalSets={sessionLog.sets.length}
+                                                durationMin={sessionLog.duration ?? null}
+                                                exercises={previewExercises.map((exerciseGroup) => ({
+                                                    exerciseId: exerciseGroup.exerciseId,
+                                                    name: exerciseGroup.name,
+                                                    setCount: exerciseGroup.sets.length,
+                                                }))}
+                                                moreCount={moreExercises}
+                                                moreLabel="more in session review"
+                                                panelBg={selectedStatusStyle.panelBg}
+                                                panelBorder={selectedStatusStyle.panelBorder}
+                                                panelLabel={selectedStatusStyle.panelLabel}
+                                            />
 
                                             <ReturnLink
                                                 href={`/plans/log/view/${sessionLog.id}`}
@@ -1020,7 +1212,7 @@ export function CalendarClient({
                                     <div className="space-y-2">
                                         {resumeSession || selectedStatus === "in-progress" ? (
                                             <ReturnLink
-                                                href={coachLiveHref || workoutLogHref}
+                                                href={coachLiveHref || resumeWorkoutHref || workoutLogHref}
                                                 className="btn-primary w-full h-12 text-xs font-black uppercase tracking-[0.15em] shadow-glow-success bg-success border-success hover:bg-success-600 group hover:scale-[1.02] transition-all flex items-center justify-center"
                                             >
                                                 <Flame className="w-4 h-4 mr-2 animate-pulse group-hover:scale-110 transition-transform" />
@@ -1057,7 +1249,7 @@ export function CalendarClient({
                                     </div>
                                 ) : selectedStatus === "in-progress" ? (
                                     <ReturnLink
-                                        href={workoutLogHref}
+                                        href={resumeWorkoutHref || workoutLogHref}
                                         className="btn-primary w-full h-12 text-xs font-black uppercase tracking-[0.15em] shadow-glow-success bg-success border-success hover:bg-success-600 group hover:scale-[1.02] transition-all flex items-center justify-center"
                                     >
                                         <Flame className="w-4 h-4 mr-2 animate-pulse group-hover:scale-110 transition-transform" />
