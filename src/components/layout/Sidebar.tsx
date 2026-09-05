@@ -83,14 +83,15 @@ export function Sidebar({ userRole = "FREE", showCheckIns = false, initialCollap
     const activeHref = getActiveNavHref(pathname, filteredItems);
 
     return (
-        <aside className="hidden md:flex flex-col fixed left-0 top-0 h-full w-[var(--sidebar-width)] bg-surface-card border-r border-surface-border z-40 transition-all duration-300">
-            {/* Collapse Toggle Button - Floating on border */}
+        <aside className="hidden md:flex flex-col fixed left-0 top-0 h-full w-[var(--sidebar-width)] bg-surface-card border-r border-surface-border z-50 overflow-visible transition-all duration-300">
+            {/* Collapse Toggle Button - sits on the border above the top bar */}
             <button 
                 onClick={toggleCollapse}
-                className="absolute -right-3 top-5 w-6 h-6 rounded-full bg-surface-card border border-surface-border flex items-center justify-center text-fg-subtle hover:text-fg shadow-md hover:scale-110 transition-all z-50 cursor-pointer"
+                className="absolute -right-3.5 top-5 w-7 h-7 rounded-full bg-surface-elevated border border-surface-border flex items-center justify-center text-fg-muted hover:text-brand-400 hover:border-brand-400/50 shadow-md hover:scale-110 transition-all z-50 cursor-pointer"
                 title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
-                {collapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
+                {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
             </button>
 
             {/* Logo */}
