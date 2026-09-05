@@ -8,6 +8,7 @@ import { getInitials, toDateKey } from "@/lib/utils";
 import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { useCurrentDate } from "@/hooks/useCurrentDate";
 import type { ClientCalendarPayload } from "@/lib/clientCalendarData";
+import { TolgSelectMenu } from "@/components/shared/TolgSelectMenu";
 import Link from "next/link";
 
 const LAST_COACH_CALENDAR_CLIENT_KEY = "coach_calendar_last_client_id";
@@ -42,6 +43,7 @@ function CoachCalendarClientHeader({
 }) {
     const selectedClient = clients.find((c) => c.id === selectedClientId) ?? null;
     const coachingHref = selectedClientId ? `/coach/client/${selectedClientId}` : null;
+    const cardRef = useRef<HTMLDivElement>(null);
 
     const avatar = (
         <span className="w-8 h-8 rounded-lg bg-gradient-brand flex items-center justify-center text-[11px] font-bold text-white overflow-hidden shrink-0">
@@ -58,7 +60,7 @@ function CoachCalendarClientHeader({
     );
 
     return (
-        <div className="card px-4 py-3 flex items-center gap-2 min-w-0">
+        <div ref={cardRef} className="card px-4 py-3 flex items-center gap-2 min-w-0">
             {coachingHref ? (
                 <Link
                     href={coachingHref}
@@ -79,25 +81,22 @@ function CoachCalendarClientHeader({
                     </span>
                 </div>
             )}
-            <div className="relative shrink-0">
-                <label htmlFor={selectId} className="sr-only">Select client</label>
-                <select
-                    id={selectId}
-                    value={selectedClientId ?? ""}
-                    onChange={(e) => onClientChange(e.target.value)}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    aria-label="Switch client"
-                >
-                    {clients.map((c) => (
-                        <option key={c.id} value={c.id}>
-                            {c.name}{!c.hasActivePlan ? " (no plan)" : ""}
-                        </option>
-                    ))}
-                </select>
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center text-fg-muted pointer-events-none">
-                    <ChevronDown className="w-4 h-4" />
-                </div>
-            </div>
+            <TolgSelectMenu
+                value={selectedClientId}
+                onValueChange={onClientChange}
+                ariaLabel="Switch client"
+                triggerId={selectId}
+                minWidthRef={cardRef}
+                triggerClassName="w-8 h-8 rounded-lg flex items-center justify-center text-fg-muted hover:text-fg hover:bg-surface-muted transition-colors data-[state=open]:text-fg data-[state=open]:bg-surface-muted focus-visible:ring-2 focus-visible:ring-brand-500/50"
+                options={clients.map((client) => ({
+                    value: client.id,
+                    label: client.name,
+                    avatarUrl: client.avatarUrl,
+                    hint: client.hasActivePlan ? undefined : "No plan",
+                }))}
+            >
+                <ChevronDown className="w-4 h-4" />
+            </TolgSelectMenu>
         </div>
     );
 }
