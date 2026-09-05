@@ -36,7 +36,8 @@
     "test:exercise-search": "npx tsx scripts/test-exercise-search.ts",
     "test:check-in-summary": "npx tsx scripts/test-check-in-summary.ts",
     "test:lifestyle-dashboard": "npx tsx scripts/test-lifestyle-dashboard.ts",
-    "test:missed-sessions": "npx tsx scripts/test-missed-session-history.ts"
+    "test:missed-sessions": "npx tsx scripts/test-missed-session-history.ts",
+    "test:coach-client-cards": "npx tsx scripts/test-coach-client-cards.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.0.5",

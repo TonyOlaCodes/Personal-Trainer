@@ -214,20 +214,15 @@ function ClientInsightRow({
             <div className="grid grid-cols-2 gap-2">
                 <div>
                     <p className="text-[10px] text-fg-subtle uppercase font-bold tracking-widest">Check-in</p>
-                    <p className={cn(
-                        "text-xs font-semibold",
-                        insight.checkInStatus === "overdue" && "text-warning",
-                        insight.checkInStatus === "due_today" && "text-brand-400",
-                        insight.checkInStatus !== "overdue" && insight.checkInStatus !== "due_today" && "text-fg"
-                    )}>
+                    <p className="text-xs font-semibold text-fg">
                         {insight.checkInLabel}
                     </p>
                 </div>
                 <div>
                     <p className="text-[10px] text-fg-subtle uppercase font-bold tracking-widest">Workouts done</p>
                     <p className="text-xs font-semibold text-fg">
-                        {insight.compliancePercent != null
-                            ? `${insight.compliancePercent}% this week`
+                        {insight.complianceDue > 0 && insight.compliancePercent != null
+                            ? `${insight.complianceCompleted}/${insight.complianceDue} · ${insight.compliancePercent}%`
                             : "—"}
                     </p>
                 </div>

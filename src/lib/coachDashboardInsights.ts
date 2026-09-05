@@ -9,7 +9,6 @@ import {
 import { getLocalTimeParts, shiftDateKey } from "@/lib/coachNotificationSchedule";
 import {
     computeWeeklyCompliance,
-    getMondayStart,
     type CalendarComplianceInput,
 } from "@/lib/calendarCompliance";
 import { getTotalUnreadDirectCount, getUnreadCountsByPeer } from "@/lib/chatUnread";
@@ -80,6 +79,8 @@ export interface ClientDashboardInsight {
     checkInStatus: ClientCheckInStatus;
     checkInLabel: string;
     compliancePercent: number | null;
+    complianceCompleted: number;
+    complianceDue: number;
     unreadMessages: number;
     needsAttention: boolean;
 }
@@ -117,63 +118,31 @@ interface ActiveClientRow {
     activeSession: { workoutName: string } | null;
 }
 
-function buildCheckInLabel(
+/** Card copy is the canonical date only. Urgency lives in Needs Attention. */
+export function buildClientCardCheckInLabel(
     dueState: ReturnType<typeof getCheckInDueState>,
     hasCheckInForPeriod: boolean
 ): { status: ClientCheckInStatus; label: string } {
+    if (!dueState.isConfigured) {
+        return { status: "not_configured", label: "No schedule" };
+    }
+
     const periodDate = formatCheckInDueDate(dueState.currentPeriodDueDate);
     const nextDate = formatCheckInDueDate(dueState.nextDueDate);
 
-    if (!dueState.isConfigured) {
-        return { status: "not_configured", label: "No check-in schedule" };
-    }
     if (hasCheckInForPeriod) {
-        if (dueState.daysUntilNext === 1 && nextDate) {
-            return { status: "scheduled", label: `Next check-in tomorrow · ${nextDate}` };
-        }
-        if (dueState.daysUntilNext != null && dueState.daysUntilNext <= 7 && nextDate) {
-            return { status: "scheduled", label: `Next check-in · ${nextDate}` };
-        }
-        if (nextDate) return { status: "scheduled", label: `Next check-in · ${nextDate}` };
-        return { status: "scheduled", label: "Next check-in scheduled" };
+        return { status: "scheduled", label: nextDate ?? "—" };
     }
     if (dueState.isOverdue) {
-        const days = dueState.daysOverdue;
-        return {
-            status: "overdue",
-            label: periodDate
-                ? (days != null && days > 1
-                    ? `Overdue · due ${periodDate} · ${days} days`
-                    : `Overdue · due ${periodDate}`)
-                : "Check-in overdue",
-        };
+        return { status: "overdue", label: periodDate ?? nextDate ?? "—" };
     }
     if (dueState.isDueToday) {
-        return {
-            status: "due_today",
-            label: periodDate ? `Due today · ${periodDate}` : "Check-in due today",
-        };
+        return { status: "due_today", label: periodDate ?? nextDate ?? "—" };
     }
     if (dueState.isDueWeek) {
-        return {
-            status: "due_soon",
-            label: periodDate ? `Due this week · ${periodDate}` : "Check-in due this week",
-        };
+        return { status: "due_soon", label: periodDate ?? nextDate ?? "—" };
     }
-    if (dueState.daysUntilNext != null && dueState.daysUntilNext > 0) {
-        if (dueState.daysUntilNext === 1 && nextDate) {
-            return { status: "scheduled", label: `Next check-in tomorrow · ${nextDate}` };
-        }
-        if (nextDate) {
-            return { status: "scheduled", label: `Next check-in · ${nextDate}` };
-        }
-        return { status: "scheduled", label: `Next check-in in ${dueState.daysUntilNext}d` };
-    }
-    if (dueState.daysUntilNext != null && dueState.daysUntilNext <= 3 && nextDate) {
-        return { status: "due_soon", label: `Check-in · ${nextDate}` };
-    }
-    if (nextDate) return { status: "scheduled", label: `Next check-in · ${nextDate}` };
-    return { status: "scheduled", label: "Next check-in scheduled" };
+    return { status: "scheduled", label: nextDate ?? periodDate ?? "—" };
 }
 
 function formatUpcomingDateLabel(dateKey: string, todayKey: string): string {
@@ -203,12 +172,10 @@ export async function loadCoachDashboardInsights(input: {
     );
     const activeClientIds = activeClients.map((c) => c.id);
     const { today, todayKey, weekNumber: currentIsoWeek } = getCoachAppToday();
-    const weekStart = getMondayStart(today);
 
     const [
         userPlans,
         todayCompletedLogs,
-        weekLogDates,
         adherenceLogs,
         unreadByPeer,
         missedWorkoutsYesterday,
@@ -264,16 +231,6 @@ export async function loadCoachDashboardInsights(input: {
                 where: {
                     userId: { in: activeClientIds },
                     status: "COMPLETED",
-                    loggedAt: { gte: weekStart },
-                },
-                select: { userId: true, loggedAt: true },
-            })
-            : Promise.resolve([]),
-        activeClientIds.length > 0
-            ? prisma.workoutLog.findMany({
-                where: {
-                    userId: { in: activeClientIds },
-                    status: "COMPLETED",
                 },
                 select: { userId: true, workoutId: true, loggedAt: true },
             })
@@ -298,20 +255,18 @@ export async function loadCoachDashboardInsights(input: {
         todayCompletedByUser.set(log.userId, set);
     }
 
-    const weekDatesByUser = new Map<string, string[]>();
-    for (const log of weekLogDates) {
-        const rows = weekDatesByUser.get(log.userId) ?? [];
-        rows.push(toDateKey(log.loggedAt));
-        weekDatesByUser.set(log.userId, rows);
-    }
-
+    const completedLogsByUser = new Map<string, Array<{ workoutId: string; date: string }>>();
     const adherenceLogsByUser = new Map<string, Array<{ workoutId: string; dateKey: string }>>();
     const completedWorkoutDateKeysByUser = new Map<string, Set<string>>();
     for (const log of adherenceLogs) {
+        const dateKey = getLocalTimeParts(log.loggedAt, APP_TIMEZONE).dateKey;
+        const completedRows = completedLogsByUser.get(log.userId) ?? [];
+        completedRows.push({ workoutId: log.workoutId, date: dateKey });
+        completedLogsByUser.set(log.userId, completedRows);
+
         const startedAt = planStartedAtByUser.get(log.userId);
         if (startedAt != null && log.loggedAt.getTime() < startedAt) continue;
 
-        const dateKey = getLocalTimeParts(log.loggedAt, APP_TIMEZONE).dateKey;
         const rows = adherenceLogsByUser.get(log.userId) ?? [];
         rows.push({
             workoutId: log.workoutId,
@@ -371,7 +326,7 @@ export async function loadCoachDashboardInsights(input: {
             dueState,
             client.recentCheckInWeekNumbers
         );
-        const { status: checkInStatus, label: checkInLabel } = buildCheckInLabel(dueState, hasCheckInForPeriod);
+        const { status: checkInStatus, label: checkInLabel } = buildClientCardCheckInLabel(dueState, hasCheckInForPeriod);
 
         const isPaused = Boolean(client.isCoachPaused);
         if (
@@ -415,14 +370,12 @@ export async function loadCoachDashboardInsights(input: {
         const complianceInput: CalendarComplianceInput = {
             activePlan: activeUserPlan ? { weeks: activeUserPlan.plan.weeks } : null,
             planStartedAt: userPlan?.startedAt.toISOString() ?? null,
-            loggedDates: (weekDatesByUser.get(client.id) ?? []).map((date) => ({ date })),
+            loggedDates: completedLogsByUser.get(client.id) ?? [],
             scheduleRevisions: activeUserPlan?.scheduleRevisions,
             excusedMissedWorkoutKeys: getExcusedMissedWorkoutKeysForClient(attentionActions, client.id),
             historicalMissedSessions: historicalMissedByUserId.get(client.id) ?? [],
         };
-        const compliance = computeWeeklyCompliance(complianceInput, today, {
-            excludeTodayUntilLogged: true,
-        });
+        const compliance = computeWeeklyCompliance(complianceInput, today);
 
         const workoutStreak = activeUserPlan && userPlan
             ? computeWorkoutAdherence({
@@ -484,6 +437,8 @@ export async function loadCoachDashboardInsights(input: {
             checkInStatus,
             checkInLabel,
             compliancePercent: compliance.percent,
+            complianceCompleted: compliance.completed,
+            complianceDue: compliance.due,
             unreadMessages,
             needsAttention,
         };
