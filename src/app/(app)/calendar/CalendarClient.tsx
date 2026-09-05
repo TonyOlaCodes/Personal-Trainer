@@ -622,29 +622,21 @@ export function CalendarClient({
                             {MONTHS[view.month]}
                             <span className="text-brand-400/30 font-light">{view.year}</span>
                         </h2>
-                        {activePlan && planStartedAt && (
-                            planScheduleMode === "repeat" ? (
-                                !isCoachView ? (
-                                    <p className="text-[10px] font-bold text-fg-muted uppercase tracking-widest">
-                                        Repeating weekly · same schedule every week
-                                    </p>
-                                ) : null
-                            ) : (
-                                <p className="text-[10px] font-bold text-fg-muted uppercase tracking-widest">
-                                    {planWeekCount}-week program
-                                    {currentProgramWeek && !isPlanComplete && (
-                                        <> · Week {currentProgramWeek} of {planWeekCount}</>
-                                    )}
-                                    {planEndDateKey && (
-                                        <>
-                                            {" · "}
-                                            {isPlanComplete
-                                                ? "Program complete"
-                                                : `Ends ${formatDate(planEndDateKey)}`}
-                                        </>
-                                    )}
-                                </p>
-                            )
+                        {activePlan && planStartedAt && planScheduleMode !== "repeat" && (
+                            <p className="text-[10px] font-bold text-fg-muted uppercase tracking-widest">
+                                {planWeekCount}-week program
+                                {currentProgramWeek && !isPlanComplete && (
+                                    <> · Week {currentProgramWeek} of {planWeekCount}</>
+                                )}
+                                {planEndDateKey && (
+                                    <>
+                                        {" · "}
+                                        {isPlanComplete
+                                            ? "Program complete"
+                                            : `Ends ${formatDate(planEndDateKey)}`}
+                                    </>
+                                )}
+                            </p>
                         )}
                     </div>
                     <div className="grid grid-cols-[2rem_minmax(4.5rem,1fr)_2rem] items-center gap-1.5 rounded-2xl border border-surface-border bg-surface-muted/50 p-1.5 sm:flex sm:shrink-0">
