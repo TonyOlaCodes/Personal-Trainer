@@ -197,6 +197,7 @@ export async function loadCoachClientProfileInsights(input: {
     canEdit: boolean;
     checkInDueState: CheckInDueState;
     currentStreak: number;
+    historicalMissedSessions?: Array<{ dateKey: string; workoutId: string }>;
     activeUserPlan: ActiveUserPlanLike | null;
     planName: string | null;
     planId: string | null;
@@ -286,6 +287,7 @@ export async function loadCoachClientProfileInsights(input: {
             activeUserPlan: input.activeUserPlan,
             completedLogs: completedForAdherence,
             excusedMissedWorkoutKeys: input.excusedMissedWorkoutKeys,
+            historicalMissedSessions: input.historicalMissedSessions,
             today,
             startDateKey: currentStart,
             endDateKey: current.endDateKey,
@@ -294,6 +296,7 @@ export async function loadCoachClientProfileInsights(input: {
             activeUserPlan: input.activeUserPlan,
             completedLogs: completedForAdherence,
             excusedMissedWorkoutKeys: input.excusedMissedWorkoutKeys,
+            historicalMissedSessions: input.historicalMissedSessions,
             today,
             startDateKey: previousStart,
             endDateKey: previous.endDateKey,

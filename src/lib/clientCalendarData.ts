@@ -3,6 +3,7 @@ import { activeWorkoutWhere } from "@/lib/planWorkouts";
 import { loadPlanScheduleRevisions, type PlanScheduleRevisionRecord } from "@/lib/planScheduleHistory";
 import {
     loadHistoricalMissedSessions,
+    persistPastDueScheduledSessionsForUser,
     type HistoricalMissedSession,
 } from "@/lib/planMissedSessionHistory";
 import { getClientAttentionActions, getExcusedMissedWorkoutKeys } from "@/lib/coachAttentionActions";
@@ -86,6 +87,7 @@ export async function loadClientCalendarData(userId: string): Promise<ClientCale
     await cleanupStaleInProgressSessions(userId);
 
     const [userPlan, completedLogs, inProgressLogs] = await Promise.all([
+        persistPastDueScheduledSessionsForUser(userId).then(() => null),
         prisma.userPlan.findFirst({
             where: { userId, isActive: true },
             include: {
@@ -129,6 +131,7 @@ export async function loadClientCalendarData(userId: string): Promise<ClientCale
             include: { workout: { select: { name: true, id: true } } },
             orderBy: { updatedAt: "desc" },
         }),
+        persistPastDueScheduledSessionsForUser(userId),
     ]);
 
     const activePlan = userPlan?.plan ?? null;

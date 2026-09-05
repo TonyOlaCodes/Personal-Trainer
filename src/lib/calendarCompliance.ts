@@ -137,6 +137,28 @@ export function computeComplianceForMonth(
  * - Future sessions beyond rangeEnd are not counted
  * - In-progress (not completed) does not count as completed
  */
+function countComplianceSlot(
+    slotKey: string,
+    dateKey: string,
+    loggedWorkoutSet: Set<string>,
+    excusedSet: Set<string>,
+    countedSlots: Set<string>,
+    tallies: { completed: number; due: number }
+) {
+    if (countedSlots.has(slotKey) || hasDueSlotOnDate(countedSlots, dateKey)) return;
+
+    const isLogged = loggedWorkoutSet.has(slotKey);
+    const isExcused = !isLogged && excusedSet.has(slotKey);
+    if (isExcused) {
+        countedSlots.add(slotKey);
+        return;
+    }
+
+    tallies.due += 1;
+    if (isLogged) tallies.completed += 1;
+    countedSlots.add(slotKey);
+}
+
 export function computeWorkoutCompliance(
     input: CalendarComplianceInput,
     rangeStart: Date,
@@ -144,10 +166,6 @@ export function computeWorkoutCompliance(
     options?: CalendarComplianceOptions
 ): CalendarComplianceResult {
     const activeUserPlan = toActiveUserPlan(input);
-    if (!activeUserPlan) {
-        return { completed: 0, due: 0, percent: null };
-    }
-
     const referenceToday = options?.referenceToday ?? rangeEnd;
     const loggedWorkoutSet = new Set(
         input.loggedDates.map((l) => `${l.date}:${l.workoutId ?? ""}`)
@@ -157,50 +175,39 @@ export function computeWorkoutCompliance(
     const startKey = toDateKey(rangeStart);
     const endKey = toDateKey(rangeEnd);
     const todayKey = toDateKey(referenceToday);
+    const tallies = { completed: 0, due: 0 };
 
-    let completed = 0;
-    let due = 0;
-
-    for (const dateKey of eachDateKeyInclusive(startKey, endKey)) {
-        if (isDateBeforePlanStart(activeUserPlan.startedAt, dateKey)) continue;
-
-        const day = parseLogDate(dateKey);
-        const planned = getPlannedWorkoutForDate(activeUserPlan, day, { today: referenceToday });
-        if (!planned || !isScheduledTrainingWorkout(planned)) continue;
-
-        const slotKey = `${dateKey}:${planned.id}`;
-        const isLogged = loggedWorkoutSet.has(slotKey);
-        const isExcused = !isLogged && excusedSet.has(slotKey);
-        // Excused sessions do not enter the completion ratio at all.
-        if (isExcused) {
-            countedSlots.add(slotKey);
-            continue;
-        }
-
-        due++;
-        if (isLogged) {
-            completed++;
-        }
-        countedSlots.add(slotKey);
-    }
-
+    // Frozen historical due dates own the past, including previous plan assignments.
     for (const session of input.historicalMissedSessions ?? []) {
         if (session.dateKey < startKey || session.dateKey > endKey) continue;
-        if (isDateBeforePlanStart(activeUserPlan.startedAt, session.dateKey)) continue;
-        const slotKey = `${session.dateKey}:${session.workoutId}`;
-        if (countedSlots.has(slotKey)) continue;
+        if (session.dateKey > todayKey) continue;
+        countComplianceSlot(
+            `${session.dateKey}:${session.workoutId}`,
+            session.dateKey,
+            loggedWorkoutSet,
+            excusedSet,
+            countedSlots,
+            tallies
+        );
+    }
 
-        const isLogged = loggedWorkoutSet.has(slotKey);
-        const isExcused = excusedSet.has(slotKey);
-        if (isExcused) {
-            countedSlots.add(slotKey);
-            continue;
-        }
+    if (activeUserPlan) {
+        for (const dateKey of eachDateKeyInclusive(startKey, endKey)) {
+            if (dateKey < todayKey && hasDueSlotOnDate(countedSlots, dateKey)) continue;
+            if (isDateBeforePlanStart(activeUserPlan.startedAt, dateKey)) continue;
 
-        due++;
-        countedSlots.add(slotKey);
-        if (isLogged) {
-            completed++;
+            const day = parseLogDate(dateKey);
+            const planned = getPlannedWorkoutForDate(activeUserPlan, day, { today: referenceToday });
+            if (!planned || !isScheduledTrainingWorkout(planned)) continue;
+
+            countComplianceSlot(
+                `${dateKey}:${planned.id}`,
+                dateKey,
+                loggedWorkoutSet,
+                excusedSet,
+                countedSlots,
+                tallies
+            );
         }
     }
 
@@ -214,13 +221,13 @@ export function computeWorkoutCompliance(
         if (countedSlots.has(slotKey)) continue;
         if (hasDueSlotOnDate(countedSlots, log.date)) continue;
 
-        due++;
-        completed++;
+        tallies.due += 1;
+        tallies.completed += 1;
         countedSlots.add(slotKey);
     }
 
-    const percent = due > 0 ? Math.round((completed / due) * 100) : null;
-    return { completed, due, percent };
+    const percent = tallies.due > 0 ? Math.round((tallies.completed / tallies.due) * 100) : null;
+    return { completed: tallies.completed, due: tallies.due, percent };
 }
 
 /** True when today has a planned workout that is not logged yet. */

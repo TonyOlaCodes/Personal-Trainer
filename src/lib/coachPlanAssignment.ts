@@ -154,7 +154,7 @@ export async function assignCoachPlanToClient(input: {
             },
         });
 
-        if (previousActive && previousActive.planId !== resolvedPlanId) {
+        if (previousActive) {
             await snapshotMissedSessionsForPlanChange(
                 tx,
                 previousActive.planId,

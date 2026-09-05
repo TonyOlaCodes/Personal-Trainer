@@ -14,6 +14,7 @@ import type { HistoricalMissedSession } from "@/lib/planMissedSessionHistory";
 import {
     filterHistoricalMissedForActivePlan,
     loadHistoricalMissedSessions,
+    persistPastDueScheduledSessionsForUser,
 } from "@/lib/planMissedSessionHistory";
 import { prisma } from "@/lib/prisma";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
@@ -472,7 +473,7 @@ export async function getWorkoutAdherenceForUser(userId: string): Promise<Workou
             select: { workoutId: true, loggedAt: true },
         }),
         getClientAttentionActions(userId),
-        loadHistoricalMissedSessions(userId, { planId: userPlan.plan.id }),
+        persistPastDueScheduledSessionsForUser(userId).then(() => loadHistoricalMissedSessions(userId)),
     ]);
 
     const excusedMissedWorkoutKeys = [...getExcusedMissedWorkoutKeys(clientActions)];

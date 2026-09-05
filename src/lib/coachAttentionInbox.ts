@@ -22,6 +22,7 @@ import {
     logSlotKey,
 } from "@/lib/coachMissedScheduledWorkouts";
 import { type ActiveUserPlanLike } from "@/lib/planSchedule";
+import { loadHistoricalMissedSessionsByUserIds } from "@/lib/planMissedSessionHistory";
 import { loadPlanScheduleRevisionsByPlanIds } from "@/lib/planScheduleHistory";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
 import { isInactiveAccount } from "@/lib/userDeactivation";
@@ -175,12 +176,13 @@ export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAtt
     ]);
 
     const clientIds = clients.map((c) => c.id);
-    const [unreadCounts, pauseStatusByClient, dueStates] = await Promise.all([
+    const [unreadCounts, pauseStatusByClient, dueStates, historicalMissedByUserId] = await Promise.all([
         clientIds.length > 0
             ? getUnreadCountsByPeer(coachId, clientIds)
             : Promise.resolve({} as Record<string, number>),
         getCoachPauseStatusMap(clientIds),
         getEffectiveCheckInDueStatesForUsers(clientIds, today),
+        loadHistoricalMissedSessionsByUserIds(clientIds),
     ]);
 
     const planIds = [
@@ -236,6 +238,7 @@ export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAtt
             inProgressLogKeys,
             excusedKeys: new Set(getExcusedMissedWorkoutKeysForClient(actions, client.id)),
             pauseClient,
+            historicalMissedSessions: historicalMissedByUserId.get(client.id) ?? [],
         });
 
         for (const slot of lookbackSlots) {

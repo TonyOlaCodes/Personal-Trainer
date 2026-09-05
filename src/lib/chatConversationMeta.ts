@@ -13,6 +13,7 @@ import {
 import { getLocalTimeParts, shiftDateKey } from "@/lib/coachNotificationSchedule";
 import { getCoachAppToday, isCoachClientCheckInDueForFilter } from "@/lib/coachOverdueCheckIns";
 import { type ActiveUserPlanLike } from "@/lib/planSchedule";
+import { loadHistoricalMissedSessionsByUserIds } from "@/lib/planMissedSessionHistory";
 import { loadPlanScheduleRevisionsByPlanIds } from "@/lib/planScheduleHistory";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
 import { prisma } from "@/lib/prisma";
@@ -43,7 +44,7 @@ export async function getCoachClientFilterFlags(
     const lookbackStartKey = shiftDateKey(todayKey, -COACH_MISSED_WORKOUT_LOOKBACK_DAYS);
     const lookbackStart = parseLogDate(lookbackStartKey);
 
-    const [clients, pauseStatusByClient, dueStates, attentionActions] = await Promise.all([
+    const [clients, pauseStatusByClient, dueStates, attentionActions, historicalMissedByUserId] = await Promise.all([
         prisma.user.findMany({
             where: {
                 id: { in: clientIds },
@@ -96,6 +97,7 @@ export async function getCoachClientFilterFlags(
         getCoachPauseStatusMap(clientIds),
         getEffectiveCheckInDueStatesForUsers(clientIds, today),
         coachId ? getCoachAttentionActions(coachId) : Promise.resolve(new Map()),
+        loadHistoricalMissedSessionsByUserIds(clientIds),
     ]);
 
     const planIds = [
@@ -154,6 +156,7 @@ export async function getCoachClientFilterFlags(
             inProgressLogKeys,
             excusedKeys: new Set(getExcusedMissedWorkoutKeysForClient(attentionActions, client.id)),
             pauseClient,
+            historicalMissedSessions: historicalMissedByUserId.get(client.id) ?? [],
         });
 
         result[client.id] = { checkInDue, missedWorkout };

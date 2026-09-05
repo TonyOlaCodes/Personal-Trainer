@@ -418,6 +418,7 @@ export async function loadCoachDashboardInsights(input: {
             loggedDates: (weekDatesByUser.get(client.id) ?? []).map((date) => ({ date })),
             scheduleRevisions: activeUserPlan?.scheduleRevisions,
             excusedMissedWorkoutKeys: getExcusedMissedWorkoutKeysForClient(attentionActions, client.id),
+            historicalMissedSessions: historicalMissedByUserId.get(client.id) ?? [],
         };
         const compliance = computeWeeklyCompliance(complianceInput, today, {
             excludeTodayUntilLogged: true,

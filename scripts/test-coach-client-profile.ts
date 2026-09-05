@@ -187,6 +187,41 @@ check("training adherence ignores rest days and pending today", () => {
     assert.equal(stats.adherencePercent, 50);
 });
 
+check("historical misses from a previous plan stay in the period denominator", () => {
+    const stats = computePeriodTrainingStats({
+        activeUserPlan: {
+            startedAt: new Date("2026-09-05T12:00:00Z"),
+            plan: {
+                weeks: [{
+                    weekNumber: 1,
+                    workouts: [
+                        { id: "today", name: "Today", dayNumber: 1, dayOfWeek: 5, exercises: [{ id: "e1" }] },
+                    ],
+                }],
+            },
+        },
+        completedLogs: Array.from({ length: 15 }, (_, index) => ({
+            workoutId: `w${index + 1}`,
+            dateKey: `2026-08-${String(index + 1).padStart(2, "0")}`,
+        })),
+        historicalMissedSessions: [
+            ...Array.from({ length: 15 }, (_, index) => ({
+                dateKey: `2026-08-${String(index + 1).padStart(2, "0")}`,
+                workoutId: `w${index + 1}`,
+            })),
+            { dateKey: "2026-08-16", workoutId: "w16" },
+            { dateKey: "2026-08-17", workoutId: "w17" },
+            { dateKey: "2026-08-18", workoutId: "w18" },
+        ],
+        today: parseLogDate("2026-09-05"),
+        startDateKey: "2026-08-01",
+        endDateKey: "2026-08-31",
+    });
+    assert.equal(stats.completed, 15);
+    assert.equal(stats.scheduled, 18);
+    assert.equal(stats.missed, 3);
+});
+
 check("no plan means training adherence is missing, not 0", () => {
     const stats = computePeriodTrainingStats({
         activeUserPlan: null,

@@ -71,6 +71,7 @@ export interface PeriodTrainingInput {
     activeUserPlan: ActiveUserPlanLike | null;
     completedLogs: CompletedWorkoutLog[];
     excusedMissedWorkoutKeys?: Iterable<string>;
+    historicalMissedSessions?: Array<{ dateKey: string; workoutId: string }>;
     today: Date;
     startDateKey: string;
     endDateKey: string;
@@ -92,37 +93,51 @@ export function computePeriodTrainingStats(input: PeriodTrainingInput): PeriodTr
     const todayKey = input.endDateKey;
     const excused = new Set(input.excusedMissedWorkoutKeys ?? []);
     const completed = new Set(input.completedLogs.map((log) => `${log.dateKey}:${log.workoutId}`));
-
-    if (!input.activeUserPlan?.plan?.weeks?.length) {
-        return { scheduled: 0, completed: 0, missed: 0, adherencePercent: null };
-    }
+    const countedDates = new Set<string>();
 
     let scheduled = 0;
     let hits = 0;
     let missed = 0;
 
-    for (const dateKey of eachDateKeyInclusive(input.startDateKey, input.endDateKey)) {
-        if (isDateBeforePlanStart(input.activeUserPlan.startedAt, dateKey)) continue;
-        if (isDateAfterPlanEnd(input.activeUserPlan.startedAt, input.activeUserPlan.plan.weeks.length, dateKey)) {
-            continue;
+    const countSlot = (dateKey: string, workoutId: string) => {
+        if (countedDates.has(dateKey)) return;
+        const slotKey = `${dateKey}:${workoutId}`;
+        if (excused.has(slotKey)) {
+            countedDates.add(dateKey);
+            return;
         }
 
-        const planned = getPlannedWorkoutForDate(input.activeUserPlan, parseLogDate(dateKey), {
-            today: input.today,
-            dateKey,
-        });
-        if (!planned || !isScheduledTrainingWorkout(planned)) continue;
-
-        const slotKey = `${dateKey}:${planned.id}`;
-        if (excused.has(slotKey)) continue;
-
+        countedDates.add(dateKey);
         scheduled += 1;
         if (completed.has(slotKey)) {
             hits += 1;
-            continue;
+            return;
         }
-        if (dateKey === todayKey) continue;
+        if (dateKey === todayKey) return;
         missed += 1;
+    };
+
+    for (const session of input.historicalMissedSessions ?? []) {
+        if (session.dateKey < input.startDateKey || session.dateKey > input.endDateKey) continue;
+        if (session.dateKey > todayKey) continue;
+        countSlot(session.dateKey, session.workoutId);
+    }
+
+    if (input.activeUserPlan?.plan?.weeks?.length) {
+        for (const dateKey of eachDateKeyInclusive(input.startDateKey, input.endDateKey)) {
+            if (dateKey < todayKey && countedDates.has(dateKey)) continue;
+            if (isDateBeforePlanStart(input.activeUserPlan.startedAt, dateKey)) continue;
+            if (isDateAfterPlanEnd(input.activeUserPlan.startedAt, input.activeUserPlan.plan.weeks.length, dateKey)) {
+                continue;
+            }
+
+            const planned = getPlannedWorkoutForDate(input.activeUserPlan, parseLogDate(dateKey), {
+                today: input.today,
+                dateKey,
+            });
+            if (!planned || !isScheduledTrainingWorkout(planned)) continue;
+            countSlot(dateKey, planned.id);
+        }
     }
 
     return {

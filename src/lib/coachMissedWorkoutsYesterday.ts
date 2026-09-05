@@ -3,6 +3,7 @@ import { APP_TIMEZONE } from "@/lib/appTimezone";
 import { getLocalTimeParts, shiftDateKey } from "@/lib/coachNotificationSchedule";
 import { getPlannedWorkoutForDate, activeWorkoutWhere } from "@/lib/planSchedule";
 import { isScheduledTrainingWorkout } from "@/lib/planTrainingTarget";
+import { loadHistoricalMissedSessionsByUserIds } from "@/lib/planMissedSessionHistory";
 import { loadPlanScheduleRevisionsByPlanIds } from "@/lib/planScheduleHistory";
 import { parseLogDate } from "@/lib/utils";
 import { isInactiveAccount } from "@/lib/userDeactivation";
@@ -109,7 +110,10 @@ export async function getMissedWorkoutsYesterdayForCoach(
                 .filter((id): id is string => Boolean(id))
         ),
     ];
-    const revisionsByPlanId = await loadPlanScheduleRevisionsByPlanIds(planIds);
+    const [revisionsByPlanId, historicalByUserId] = await Promise.all([
+        loadPlanScheduleRevisionsByPlanIds(planIds),
+        loadHistoricalMissedSessionsByUserIds(clients.map((client) => client.id)),
+    ]);
 
     const [y, m, d] = yesterdayKey.split("-").map(Number);
     const yesterdayDate = new Date(Date.UTC(y, m - 1, d, 12, 0, 0, 0));
@@ -133,7 +137,10 @@ export async function getMissedWorkoutsYesterdayForCoach(
         }
 
         const activeUserPlan = client.plans[0] ?? null;
-        const plannedWorkout = getPlannedWorkoutForDate(
+        const historical = (historicalByUserId.get(client.id) ?? []).find(
+            (session) => session.dateKey === yesterdayKey
+        );
+        const liveWorkout = getPlannedWorkoutForDate(
             activeUserPlan
                 ? {
                     startedAt: activeUserPlan.startedAt,
@@ -144,6 +151,9 @@ export async function getMissedWorkoutsYesterdayForCoach(
             yesterdayDate,
             { today }
         );
+        const plannedWorkout = historical
+            ? { id: historical.workoutId, name: historical.workoutName, isScheduledTraining: true }
+            : liveWorkout;
         if (!plannedWorkout || !isScheduledTrainingWorkout(plannedWorkout)) continue;
 
         const completed = client.workoutLogs.some((log) => {

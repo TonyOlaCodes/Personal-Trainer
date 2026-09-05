@@ -213,7 +213,7 @@ async function computeHasPerfectMonth(userId: string): Promise<boolean> {
                 select: { workoutId: true, loggedAt: true },
             }),
             getClientAttentionActions(userId),
-            loadHistoricalMissedSessions(userId, { planId: userPlan.plan.id }),
+            loadHistoricalMissedSessions(userId),
         ]);
 
         const input = {

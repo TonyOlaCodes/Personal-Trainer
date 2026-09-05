@@ -34,22 +34,33 @@ export function listLookbackScheduledWorkoutSlots(input: {
     inProgressLogKeys: Set<string>;
     excusedKeys: Set<string>;
     pauseClient: MissedWorkoutPauseClient;
+    historicalMissedSessions?: Array<{ dateKey: string; workoutId: string; workoutName: string }>;
     lookbackDays?: number;
 }): ScheduledWorkoutLookbackSlot[] {
     const lookbackDays = input.lookbackDays ?? COACH_MISSED_WORKOUT_LOOKBACK_DAYS;
-    if (!input.activeUserPlan) return [];
     if (input.pauseClient.isCoachPaused) return [];
 
+    const historicalByDate = new Map(
+        (input.historicalMissedSessions ?? []).map((session) => [session.dateKey, session] as const)
+    );
     const slots: ScheduledWorkoutLookbackSlot[] = [];
 
     for (let offset = 1; offset <= lookbackDays; offset++) {
         const dateKey = shiftDateKey(input.todayKey, -offset);
         if (shouldSuppressCoachMissedAttention(input.pauseClient, dateKey)) continue;
 
-        const planned = getPlannedWorkoutForDate(input.activeUserPlan, parseLogDate(dateKey), {
-            today: input.today,
-            dateKey,
-        });
+        const historical = historicalByDate.get(dateKey);
+        const live = input.activeUserPlan
+            ? getPlannedWorkoutForDate(input.activeUserPlan, parseLogDate(dateKey), {
+                today: input.today,
+                dateKey,
+            })
+            : null;
+        const planned = historical
+            ? { id: historical.workoutId, name: historical.workoutName, isScheduledTraining: true }
+            : live && isScheduledTrainingWorkout(live)
+                ? live
+                : null;
         const hasScheduledTraining = Boolean(planned && isScheduledTrainingWorkout(planned));
         if (!planned || !hasScheduledTraining) continue;
 

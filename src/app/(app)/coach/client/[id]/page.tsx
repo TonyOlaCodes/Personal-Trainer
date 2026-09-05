@@ -20,7 +20,7 @@ import { getNickname, pickDisplayName } from "@/lib/userNicknames";
 import { activeWorkoutWhere } from "@/lib/planSchedule";
 import { loadPlanScheduleRevisions } from "@/lib/planScheduleHistory";
 import { computeWorkoutAdherence } from "@/lib/workoutAdherenceStreak";
-import { loadHistoricalMissedSessions } from "@/lib/planMissedSessionHistory";
+import { loadHistoricalMissedSessions, persistPastDueScheduledSessionsForUser } from "@/lib/planMissedSessionHistory";
 import { loadCoachClientProfileInsights } from "@/lib/coachClientProfileData";
 
 export const metadata = { title: "Client Details" };
@@ -115,7 +115,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             getClientGoalTargets(target.id),
             getUserPinnedExercises(target.id),
             getClientAttentionActions(target.id),
-            loadHistoricalMissedSessions(target.id, { planId: target.plans[0]?.plan.id }),
+            persistPastDueScheduledSessionsForUser(target.id).then(() => loadHistoricalMissedSessions(target.id)),
             getPriorityActiveCheckInRequestForClient(target.id),
         ]);
 
@@ -196,6 +196,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             canEdit: !isInactiveClient,
             checkInDueState,
             currentStreak: adherence.currentStreak,
+            historicalMissedSessions,
             activeUserPlan: planLike,
             planName: activePlan?.name ?? null,
             planId: activePlan?.id ?? null,

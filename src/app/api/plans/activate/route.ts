@@ -85,7 +85,7 @@ export async function POST(req: Request) {
         : null;
 
     await prisma.$transaction(async (tx) => {
-        if (switchingPlans && previousActive) {
+        if (previousActive) {
             const leavingPlan = await tx.plan.findUnique({
                 where: { id: previousActive.planId },
                 include: {

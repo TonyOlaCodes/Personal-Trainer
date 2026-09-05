@@ -21,7 +21,6 @@ import {
     getPlanEndDateKey,
     getPlanProgramWeekNumber,
     getPlanScheduleMode,
-    getPlanStartDateKey,
     isDateAfterPlanEnd,
     isDateBeforePlanStart,
     type PlanScheduleRevisionRecord,
@@ -40,6 +39,7 @@ import {
 } from "@/lib/workoutDayStatus";
 import { CalendarComplianceSummary } from "@/components/calendar/CalendarComplianceSummary";
 import type { CalendarComplianceInput } from "@/lib/calendarCompliance";
+import { pickCalendarScheduledSession } from "@/lib/calendarScheduledSession";
 
 /* ─────────────────────────── Types ─────────────────────────── */
 interface PlanExercise {
@@ -348,9 +348,30 @@ export function CalendarClient({
 
     const resolvePlannedWorkoutForDate = useCallback((date: Date, dateKey?: string): PlanWorkout | null => {
         const key = dateKey ?? toDateKey(date);
-        const planStartKey = planStartedAt ? getPlanStartDateKey(planStartedAt) : null;
 
-        const workoutFromLog = (): PlanWorkout | null => {
+        const applyOverride = (workout: PlanWorkout): PlanWorkout => {
+            const override = sessionOverrides[`${key}:${workout.id}`];
+            if (!override) return workout;
+            return {
+                ...workout,
+                name: override.workoutName?.trim() || workout.name,
+                exercises: override.exercises?.length
+                    ? sortPlannedExercises(
+                        override.exercises.map((ex, index) => ({
+                            id: ex.id,
+                            name: ex.name,
+                            sets: ex.sets,
+                            reps: ex.reps,
+                            order: ex.order ?? index,
+                            weightTargetKg: ex.weightTargetKg ?? null,
+                            setTargets: ex.setTargets,
+                        })) as PlanExercise[]
+                    )
+                    : workout.exercises,
+            };
+        };
+
+        const completed = (() => {
             const session = logMap[key]?.[0];
             if (!session) return null;
             return {
@@ -358,80 +379,93 @@ export function CalendarClient({
                 name: session.workoutName,
                 dayNumber: 0,
                 dayOfWeek: null,
-                exercises: [],
+                exercises: [] as PlanExercise[],
                 isScheduledTraining: true,
             };
-        };
+        })();
 
-        const workoutFromHistorical = (): PlanWorkout | null => {
-            const historical = historicalMissedByDate.get(key);
-            if (!historical) return null;
+        const inProgress = (() => {
+            if (completed) return null;
+            const session = inProgressByDate[key]?.[0];
+            if (!session) return null;
             return {
-                id: historical.workoutId,
-                name: historical.workoutName,
+                id: session.workoutId,
+                name: session.workoutName,
+                dayNumber: 0,
+                dayOfWeek: null,
+                exercises: [] as PlanExercise[],
+                isScheduledTraining: true,
+            };
+        })();
+
+        const historical = (() => {
+            const session = historicalMissedByDate.get(key);
+            if (!session) return null;
+            return applyOverride({
+                id: session.workoutId,
+                name: session.workoutName,
                 dayNumber: 0,
                 dayOfWeek: null,
                 exercises: [],
                 isScheduledTraining: true,
-            };
-        };
+            });
+        })();
 
-        if (planStartKey && isDateBeforePlanStart(planStartedAt!, key)) {
-            return workoutFromLog();
-        }
+        const shouldResolveLive = !(key < todayKey && (completed || historical));
+        const live = (() => {
+            if (!shouldResolveLive) return null;
+            if (!planStartedAt || serializedPlanWeeks.length === 0) return null;
+            if (isDateBeforePlanStart(planStartedAt, key)) return null;
+            if (planWeekCount > 1 && isDateAfterPlanEnd(planStartedAt, planWeekCount, key)) return null;
 
-        if (!planStartedAt || serializedPlanWeeks.length === 0) {
-            if (planStartedAt && planWeekCount > 1 && isDateAfterPlanEnd(planStartedAt, planWeekCount, key)) {
-                return workoutFromLog();
-            }
-            return workoutFromLog() ?? workoutFromHistorical();
-        }
-
-        const resolved = resolvePlannedWorkoutWithExercisesForDate({
-            startedAt: planStartedAt,
-            weeks: serializedPlanWeeks,
-            scheduleRevisions,
-            date,
-            today: todayDate,
-            dateKey: key,
-        });
-        if (resolved) {
-            const override = sessionOverrides[`${key}:${resolved.id}`];
-            return {
+            const resolved = resolvePlannedWorkoutWithExercisesForDate({
+                startedAt: planStartedAt,
+                weeks: serializedPlanWeeks,
+                scheduleRevisions,
+                date,
+                today: todayDate,
+                dateKey: key,
+            });
+            if (!resolved) return null;
+            return applyOverride({
                 id: resolved.id,
-                name: override?.workoutName?.trim() || resolved.name,
+                name: resolved.name,
                 dayNumber: resolved.dayNumber,
                 dayOfWeek: resolved.dayOfWeek,
                 exercises: sortPlannedExercises(
-                    (override?.exercises?.length
-                        ? override.exercises.map((ex, index) => ({
-                            id: ex.id,
-                            name: ex.name,
-                            sets: ex.sets,
-                            reps: ex.reps,
-                            order: ex.order ?? index,
-                            weightTargetKg: ex.weightTargetKg ?? null,
-                            setTargets: ex.setTargets,
-                        }))
-                        : resolved.exercises.map((ex, index) => ({
-                            id: ex.id,
-                            name: ex.name,
-                            sets: ex.sets,
-                            reps: ex.reps,
-                            order: ex.order ?? index,
-                            weightTargetKg: ex.weightTargetKg ?? null,
-                            setTargets: ex.setTargets,
-                        }))) as PlanExercise[]
+                    resolved.exercises.map((ex, index) => ({
+                        id: ex.id,
+                        name: ex.name,
+                        sets: ex.sets,
+                        reps: ex.reps,
+                        order: ex.order ?? index,
+                        weightTargetKg: ex.weightTargetKg ?? null,
+                        setTargets: ex.setTargets,
+                    })) as PlanExercise[]
                 ),
-            };
-        }
+            });
+        })();
 
-        if (planWeekCount > 1 && isDateAfterPlanEnd(planStartedAt, planWeekCount, key)) {
-            return workoutFromLog();
-        }
-
-        return workoutFromLog() ?? workoutFromHistorical();
-    }, [serializedPlanWeeks, scheduleRevisions, planStartedAt, todayDate, historicalMissedByDate, logMap, planWeekCount, sessionOverrides]);
+        return pickCalendarScheduledSession({
+            dateKey: key,
+            todayKey,
+            completed,
+            inProgress,
+            historical,
+            live,
+        });
+    }, [
+        serializedPlanWeeks,
+        scheduleRevisions,
+        planStartedAt,
+        todayDate,
+        todayKey,
+        historicalMissedByDate,
+        logMap,
+        inProgressByDate,
+        planWeekCount,
+        sessionOverrides,
+    ]);
 
     /* ─── Calendar Generation (Europe/Dublin date keys) ─── */
     const monthPrefix = `${view.year}-${String(view.month + 1).padStart(2, "0")}`;
@@ -696,7 +730,9 @@ export function CalendarClient({
                                 && isDateAfterPlanEnd(planStartedAt, planWeekCount, dateKey)
                             );
                             const isBeforePlan = Boolean(
-                                planStartedAt && isDateBeforePlanStart(planStartedAt, dateKey)
+                                planStartedAt
+                                && isDateBeforePlanStart(planStartedAt, dateKey)
+                                && !planned
                             );
                             const programWeek = planned ? getProgramWeekForDateKey(dateKey) : null;
                             const isExcused = Boolean(
