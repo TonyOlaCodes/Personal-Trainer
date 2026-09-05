@@ -8,6 +8,8 @@ import { withResolvedAvatar, withResolvedUpload } from "@/lib/uploadUrls";
 const schema = z.object({
     clientId: z.string().min(1),
     note: z.string().max(500).optional(),
+    weekNumber: z.number().int().positive().optional(),
+    periodDueDateKey: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
 export async function POST(req: Request) {
@@ -19,7 +21,10 @@ export async function POST(req: Request) {
 
     try {
         const parsed = schema.parse(await req.json());
-        const message = await sendCheckInRequestViaChat(coach, parsed.clientId, parsed.note);
+        const message = await sendCheckInRequestViaChat(coach, parsed.clientId, parsed.note, {
+            weekNumber: parsed.weekNumber,
+            periodDueDateKey: parsed.periodDueDateKey,
+        });
         if (!message) {
             return NextResponse.json({ ok: true }, { status: 201 });
         }

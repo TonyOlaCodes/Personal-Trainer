@@ -22,7 +22,8 @@ export type RateLimitPolicy =
     | "messageReact"
     | "checkInWrite"
     | "checkInRequest"
-    | "coachNotify";
+    | "coachNotify"
+    | "coachClientNote";
 
 export interface RateLimitRule {
     limit: number;
@@ -47,6 +48,7 @@ export const RATE_LIMIT_RULES: Record<RateLimitPolicy, RateLimitRule> = {
     checkInWrite: { limit: 12, windowMs: 60 * 60_000 },
     checkInRequest: { limit: 10, windowMs: 60 * 60_000 },
     coachNotify: { limit: 12, windowMs: 15 * 60_000 },
+    coachClientNote: { limit: 30, windowMs: 15 * 60_000 },
 };
 
 export interface RateLimitStore {

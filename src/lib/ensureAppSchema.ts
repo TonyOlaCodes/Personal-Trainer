@@ -35,6 +35,7 @@ import { ensureAppSettingsTable } from "@/lib/maintenanceMode";
 import { ensureExerciseTrackingSchema } from "@/lib/exerciseTracking/ensure";
 import { ensureRateLimitTable } from "@/lib/rateLimit";
 import { ensureWorkoutLogConcurrencySchema } from "@/lib/workoutLogRevision";
+import { ensureCoachClientNotesTable } from "@/lib/coachClientNotes";
 
 let appSchemaReady = false;
 let appSchemaPromise: Promise<void> | null = null;
@@ -82,6 +83,7 @@ export async function ensureAppSchema() {
             ensureWorkoutHistoryIndexes(),
             ensureRateLimitTable(),
             ensureWorkoutLogConcurrencySchema(),
+            ensureCoachClientNotesTable(),
         ]);
         await ensureCheckInUserWeekUnique();
         await migrateLegacyClientGoals();

@@ -101,6 +101,24 @@ export async function updateDailyMetricTargets(userId: string, targets: DailyMet
     });
 }
 
+export async function getDailyMetricsInRange(
+    userId: string,
+    startDate: string,
+    endDate: string
+): Promise<DailyMetricsEntry[]> {
+    return runWithRetry(async () => {
+        await ensureDailyMetricsTable();
+        return prisma.$queryRaw<DailyMetricsEntry[]>`
+            SELECT "loggedDate"::text AS "date", "calories", "steps", "sleepHours"
+            FROM "daily_metric_logs"
+            WHERE "userId" = ${userId}
+              AND "loggedDate" >= ${startDate}::date
+              AND "loggedDate" <= ${endDate}::date
+            ORDER BY "loggedDate" ASC
+        `;
+    });
+}
+
 export async function getDailyMetricsSummary(userId: string, date: string) {
     return runWithRetry(async () => {
         await ensureDailyMetricsTable();

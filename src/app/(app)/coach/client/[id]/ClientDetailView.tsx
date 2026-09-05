@@ -1,30 +1,32 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-    Users, Activity, Calendar, MessageSquare,
-    MapPin, Info, Dumbbell, Scale, MoreHorizontal, ChevronRight, CheckCircle2, Edit3, Zap,
-    Trash2, AlertTriangle, Clock, Search, X, Pin, ClipboardList, Loader2, Plus,
+    Activity, AlertTriangle, Calendar, ChevronRight, Edit3,
+    Loader2, Pin, Plus, Search, Trash2, X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import {
-    AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Line
-} from "recharts";
+import { Area, AreaChart, CartesianGrid, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import Link from "next/link";
-import { ReturnLink } from "@/components/shared/ReturnLink";
 import { ExerciseHistoryTooltipContent } from "@/components/shared/ExerciseHistoryTooltip";
 import { deriveOneRMFromBestSet } from "@/lib/oneRepMax";
 import { MAX_PINNED_EXERCISES, normalizePinnedExercises, orderExerciseNames } from "@/lib/pinnedExercises";
-import { RecentSessionsExplorer, PREVIEW_LIMIT } from "@/components/shared/RecentSessionsExplorer";
-import { cn, formatDate, getInitials } from "@/lib/utils";
-import { resolveUploadUrl } from "@/lib/uploadUrls";
-import { formatCoachPlanLabel } from "@/lib/coachPlans";
-import { formatPresenceWithWorkout, getPresenceIndicator } from "@/lib/userPresence";
+import { RecentSessionsExplorer } from "@/components/shared/RecentSessionsExplorer";
+import { cn } from "@/lib/utils";
 import { httpErrorMessage } from "@/lib/httpErrorMessage";
+import { guessTrackingPreset } from "@/lib/exerciseTracking/guess";
 import {
     ExerciseHistoryModal,
     useExerciseHistoryInspector,
 } from "@/components/exercises/ExerciseHistoryInspector";
+import type { CoachClientProfileInsights, CoachProfilePeriodKey } from "@/lib/coachClientProfileData";
+import { ClientHeaderCard, CurrentWorkoutCard, NeedsAttentionCard } from "@/components/coach/clientProfile/ProfileTopSections";
+import { CoachSummaryCard, LifestyleProgressSection } from "@/components/coach/clientProfile/CoachSummaryLifestyle";
+import { ProgressTrendsCard } from "@/components/coach/clientProfile/ProgressTrendsCard";
+import { LatestCheckInCard } from "@/components/coach/clientProfile/LatestCheckInCard";
+import { RecentSessionsCard } from "@/components/coach/clientProfile/RecentSessionsCard";
+import { CoachNotesCard } from "@/components/coach/clientProfile/CoachNotesCard";
+import type { CoachClientNote } from "@/lib/coachClientNotes";
 
 const CHECK_IN_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const CHECK_IN_FREQUENCIES = [
@@ -43,7 +45,6 @@ interface Client {
     activePlan: { id: string; name: string } | null;
     experience?: string | null;
     goal?: string | null;
-    trainingLocation?: string | null;
     trainingDaysPerWeek?: number | null;
     checkInSchedule: {
         day: number | null;
@@ -55,46 +56,13 @@ interface Client {
     targetCalories?: number | null;
     targetSteps?: number | null;
     targetSleepHours?: number | null;
-    adherencePercentage?: number;
-    adherenceTrend?: "UP" | "DOWN" | "STABLE";
     lastActiveAt?: string | null;
-    activeSession?: { workoutName: string; logId: string; workoutId: string } | null;
-    currentWorkout?: {
-        id: string;
-        name: string;
-        status: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED";
-        scheduledDay: string;
-        href: string;
-    } | null;
     hiddenGoals?: string[];
     isCoachPaused?: boolean;
 }
 
-interface ClientLog {
-    id: string;
-    workoutName: string;
-    date: string;
-    setCount: number;
-}
-
-interface ClientCheckIn {
-    id: string;
-    week: number;
-    date: string;
-    status: string;
-}
-
-interface ClientWorkoutNote {
-    id: string;
-    workoutLogId: string;
-    text: string;
-    createdAt: string;
-    workoutName: string;
-}
-
 interface WorkoutHistoryEntry {
     id: string;
-    /** Template / planned workout id — used to group same session type. */
     workoutId: string;
     workoutName: string;
     date: string;
@@ -102,33 +70,39 @@ interface WorkoutHistoryEntry {
     volume: number;
 }
 
-import { formatCheckInPeriodTitle, formatCheckInWeekLabel } from "@/lib/checkInLabels";
-
-interface ClientCheckInStatus {
-    label: string;
-    isOverdue: boolean;
-    weekNumber: number;
-    periodLabel: string;
-}
-
 interface Props {
     client: Client;
     currentUserId: string;
     availablePlans: { id: string; name: string; type: string }[];
-    logs: ClientLog[];
-    checkIns: ClientCheckIn[];
-    checkInStatus?: ClientCheckInStatus | null;
     bodyweightHistory: { date: string; weightKg: number }[];
-    workoutNotes: ClientWorkoutNote[];
     workoutHistory: WorkoutHistoryEntry[];
-    exerciseHistory: Record<string, Array<{ date: string, weight: number, reps: number, volume: number, oneRM: number }>>;
+    exerciseHistory: Record<string, Array<{ date: string; weight: number; reps: number; volume: number; oneRM: number }>>;
     exerciseLastDone: Record<string, number>;
     initialPinnedExercises?: string[];
+    insights: CoachClientProfileInsights;
+    checkInRequest: {
+        weekNumber: number | null;
+        periodDueDateKey: string | null;
+        isOverdue: boolean;
+    };
     readOnly?: boolean;
 }
 
-export function ClientDetailView({ client, currentUserId, availablePlans, logs, checkIns, checkInStatus = null, bodyweightHistory, workoutNotes, workoutHistory, exerciseHistory, exerciseLastDone, initialPinnedExercises = [], readOnly = false }: Props) {
+export function ClientDetailView({
+    client,
+    currentUserId,
+    availablePlans,
+    bodyweightHistory,
+    workoutHistory,
+    exerciseHistory,
+    exerciseLastDone,
+    initialPinnedExercises = [],
+    insights,
+    checkInRequest,
+    readOnly = false,
+}: Props) {
     const canEdit = !readOnly;
+    const router = useRouter();
     const [assigning, setAssigning] = useState(false);
     const [assignMode, setAssignMode] = useState<"MENU" | "LIST">("MENU");
     const [updating, setUpdating] = useState(false);
@@ -150,6 +124,16 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
     const [targetSteps, setTargetSteps] = useState(client.targetSteps != null ? String(client.targetSteps) : "");
     const [targetSleepHours, setTargetSleepHours] = useState(client.targetSleepHours != null ? String(client.targetSleepHours) : "");
     const [isEditingTargets, setIsEditingTargets] = useState(canEdit && client.checkInSchedule.day === null);
+    const [periodKey, setPeriodKey] = useState<CoachProfilePeriodKey>("30d");
+    const [notes, setNotes] = useState<CoachClientNote[]>(insights.coachNotes);
+    const [showAllSessions, setShowAllSessions] = useState(false);
+    const [sessionsInitialId, setSessionsInitialId] = useState<string | null>(null);
+    const [selectedExercise, setSelectedExercise] = useState("");
+    const [exerciseSearchQuery, setExerciseSearchQuery] = useState("");
+    const [pinnedExercises, setPinnedExercises] = useState(() =>
+        normalizePinnedExercises(initialPinnedExercises, Object.keys(exerciseHistory))
+    );
+    const { exerciseName: historyExercise, openHistory, closeHistory } = useExerciseHistoryInspector();
 
     useEffect(() => {
         setCheckInDay(client.checkInSchedule.day ?? 6);
@@ -160,44 +144,11 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
         setTargetSleepHours(client.targetSleepHours != null ? String(client.targetSleepHours) : "");
         setIsEditingTargets(canEdit && client.checkInSchedule.day === null);
         setIsCoachPaused(Boolean(client.isCoachPaused));
-    }, [client, canEdit]);
+        setNotes(insights.coachNotes);
+    }, [client, canEdit, insights.coachNotes]);
 
-    const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; date: string; weightKg: number } | null>(null);
-    const [hoveredVolPoint, setHoveredVolPoint] = useState<{
-        id: string;
-        workoutId: string;
-        workoutName: string;
-        date: string;
-        formattedDate: string;
-        volume: number;
-        x: number;
-        y: number;
-    } | null>(null);
-    /** Filter volume chart to one workout template; null = show all. */
-    const [selectedVolumeWorkoutId, setSelectedVolumeWorkoutId] = useState<string | null>(null);
-    const isWeightHidden = client.hiddenGoals?.includes("weight");
-    const [activeChartTab, setActiveChartTab] = useState<"weight" | "volume">(isWeightHidden ? "volume" : "weight");
-    
-    useEffect(() => {
-        if (isWeightHidden && activeChartTab === "weight") {
-            setActiveChartTab("volume");
-        }
-    }, [isWeightHidden, activeChartTab]);
-
-    const [selectedExercise, setSelectedExercise] = useState<string>("");
-    const [exerciseSearchQuery, setExerciseSearchQuery] = useState("");
-    const [pinnedExercises, setPinnedExercises] = useState<string[]>(() =>
-        normalizePinnedExercises(initialPinnedExercises, Object.keys(exerciseHistory))
-    );
-    const [weightTimeframe, setWeightTimeframe] = useState<"week" | "month" | "year" | "all">("all");
-    
-    const [showAllSessions, setShowAllSessions] = useState(false);
-    const [sessionsInitialId, setSessionsInitialId] = useState<string | null>(null);
-
-    // Same Exercise History Inspector the plan editor uses, over the same data source.
-    const { exerciseName: historyExercise, openHistory, closeHistory } = useExerciseHistoryInspector();
-
-    const router = useRouter();
+    const period = insights.periods[periodKey];
+    const isWeightHidden = client.hiddenGoals?.includes("weight") ?? false;
 
     const updatePlan = async (planId: string) => {
         if (!canEdit) return;
@@ -208,12 +159,9 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ clientId: client.id, planId }),
             });
-            if (res.ok) {
-                window.location.reload();
-            } else {
-                alert("Failed to update plan");
-            }
-        } catch (e) {
+            if (res.ok) window.location.reload();
+            else alert("Failed to update plan");
+        } catch {
             alert("Network error.");
         } finally {
             setUpdating(false);
@@ -231,7 +179,6 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
             });
             if (res.ok) {
                 const data = await res.json();
-
                 const assignRes = await fetch("/api/coach/clients/plan", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -242,13 +189,12 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                     alert(assignData.error ?? "Plan imported but could not assign to this client.");
                     return;
                 }
-
                 window.location.reload();
             } else {
                 const data = await res.json().catch(() => ({}));
                 alert(httpErrorMessage(res.status, data, "Import failed."));
             }
-        } catch (e) {
+        } catch {
             alert("Network error.");
         } finally {
             setImporting(false);
@@ -257,10 +203,7 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
 
     const removePlan = async () => {
         if (!canEdit || !client.activePlan) return;
-        if (!confirm(`Remove "${client.activePlan.name}" from this client? Their workout history will be kept.`)) {
-            return;
-        }
-
+        if (!confirm(`Remove "${client.activePlan.name}" from this client? Their workout history will be kept.`)) return;
         setRemovingPlan(true);
         try {
             const res = await fetch("/api/coach/clients/plan", {
@@ -269,11 +212,8 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                 body: JSON.stringify({ clientId: client.id }),
             });
             const data = await res.json();
-            if (res.ok) {
-                window.location.reload();
-            } else {
-                alert(data.error ?? "Failed to remove plan");
-            }
+            if (res.ok) window.location.reload();
+            else alert(data.error ?? "Failed to remove plan");
         } catch {
             alert("Network error.");
         } finally {
@@ -287,7 +227,6 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
             alert("Email mismatch. Operation aborted.");
             return;
         }
-
         setUpdating(true);
         try {
             const res = await fetch("/api/coach/clients/remove", {
@@ -295,12 +234,9 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ clientId: client.id }),
             });
-            if (res.ok) {
-                router.push("/coach");
-            } else {
-                alert("Failed to remove client.");
-            }
-        } catch (e) {
+            if (res.ok) router.push("/coach");
+            else alert("Failed to remove client.");
+        } catch {
             alert("Network error.");
         } finally {
             setUpdating(false);
@@ -335,19 +271,12 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
         if (!canEdit) return;
         setSavingSchedule(true);
         try {
-            // Save schedule
             const scheduleRes = await fetch("/api/coach/clients/checkin-schedule", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    clientId: client.id,
-                    day: checkInDay,
-                    frequencyWeeks: checkInFrequency,
-                }),
+                body: JSON.stringify({ clientId: client.id, day: checkInDay, frequencyWeeks: checkInFrequency }),
             });
             if (!scheduleRes.ok) throw new Error("Failed to update check-in schedule.");
-
-            // Save goals
             const goalsRes = await fetch("/api/coach/clients/goals", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -360,10 +289,9 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                 }),
             });
             if (!goalsRes.ok) throw new Error("Failed to update targets.");
-
             router.refresh();
-        } catch (e: any) {
-            alert(e.message || "Network error.");
+        } catch (error: unknown) {
+            alert(error instanceof Error ? error.message : "Network error.");
         } finally {
             setSavingSchedule(false);
         }
@@ -377,7 +305,13 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
             const res = await fetch("/api/coach/chat/request-checkin", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ clientId: client.id }),
+                body: JSON.stringify({
+                    clientId: client.id,
+                    ...(checkInRequest.weekNumber != null ? {
+                        weekNumber: checkInRequest.weekNumber,
+                        periodDueDateKey: checkInRequest.periodDueDateKey,
+                    } : {}),
+                }),
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(data.error ?? "Failed to send check-in request");
@@ -389,149 +323,9 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
         }
     };
 
-    const presence = useMemo(
-        () => getPresenceIndicator(client.lastActiveAt),
-        [client.lastActiveAt]
-    );
-    const presenceWorkoutLabel = useMemo(
-        () => formatPresenceWithWorkout(client.lastActiveAt, client.activeSession?.workoutName ?? null),
-        [client.lastActiveAt, client.activeSession?.workoutName]
-    );
-
-    const filteredBodyweightHistory = useMemo(() => {
-        if (weightTimeframe === "all") return bodyweightHistory;
-        const now = new Date();
-        const cutoff = new Date();
-        if (weightTimeframe === "week") {
-            cutoff.setDate(now.getDate() - 7);
-        } else if (weightTimeframe === "month") {
-            cutoff.setDate(now.getDate() - 30);
-        } else if (weightTimeframe === "year") {
-            cutoff.setDate(now.getDate() - 365);
-        }
-        return bodyweightHistory.filter(h => new Date(h.date) >= cutoff);
-    }, [bodyweightHistory, weightTimeframe]);
-
-    const bodyweightPeriodLabel = weightTimeframe === "week"
-        ? "Last 7 days"
-        : weightTimeframe === "month"
-            ? "Last 30 days"
-            : weightTimeframe === "year"
-                ? "Last 365 days"
-                : "All time";
-    const bodyweightPeriodStart = filteredBodyweightHistory[0] ?? null;
-    const bodyweightPeriodEnd = filteredBodyweightHistory[filteredBodyweightHistory.length - 1] ?? null;
-    const bodyweightPeriodChangePercent = bodyweightPeriodStart && bodyweightPeriodEnd && bodyweightPeriodStart.weightKg > 0
-        ? ((bodyweightPeriodEnd.weightKg - bodyweightPeriodStart.weightKg) / bodyweightPeriodStart.weightKg) * 100
-        : null;
-    const chartValues = filteredBodyweightHistory.map(r => r.weightKg);
-    if (client.targetWeightKg != null) chartValues.push(client.targetWeightKg);
-    const chartMin = chartValues.length > 0 ? Math.floor(Math.min(...chartValues) - 2) : 0;
-    const chartMax = chartValues.length > 0 ? Math.ceil(Math.max(...chartValues) + 2) : 1;
-    const chartRange = Math.max(chartMax - chartMin, 1);
-    const chartWidth = 640;
-    const chartHeight = 240;
-    const chartPadding = { top: 20, right: 24, bottom: 34, left: 42 };
-    const plotWidth = chartWidth - chartPadding.left - chartPadding.right;
-    const plotHeight = chartHeight - chartPadding.top - chartPadding.bottom;
-    const toX = (index: number) => chartPadding.left + (filteredBodyweightHistory.length === 1 ? plotWidth / 2 : (index / (filteredBodyweightHistory.length - 1)) * plotWidth);
-    const toY = (weight: number) => chartPadding.top + ((chartMax - weight) / chartRange) * plotHeight;
-    const chartPoints = filteredBodyweightHistory.map((row, index) => ({ ...row, x: toX(index), y: toY(row.weightKg) }));
-    const linePath = chartPoints.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(" ");
-    const areaPath = chartPoints.length > 0
-        ? `${linePath} L ${chartPoints[chartPoints.length - 1].x.toFixed(1)} ${(chartPadding.top + plotHeight).toFixed(1)} L ${chartPoints[0].x.toFixed(1)} ${(chartPadding.top + plotHeight).toFixed(1)} Z`
-        : "";
-    const targetY = client.targetWeightKg != null ? toY(client.targetWeightKg) : null;
-
-    // Sort workout history ascending for chart progression
-    const volumeHistory = useMemo(
-        () => [...workoutHistory].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
-        [workoutHistory]
-    );
-    const volumeValues = volumeHistory.map((h) => h.volume);
-
-    const volMin = volumeValues.length > 0 ? Math.max(0, Math.floor(Math.min(...volumeValues) - 200)) : 0;
-    const volMax = volumeValues.length > 0 ? Math.ceil(Math.max(...volumeValues) + 200) : 1000;
-    const volRange = Math.max(volMax - volMin, 1);
-
-    const volChartWidth = 640;
-    const volChartHeight = 240;
-    const volChartPadding = { top: 20, right: 24, bottom: 34, left: 48 };
-    const volPlotWidth = volChartWidth - volChartPadding.left - volChartPadding.right;
-    const volPlotHeight = volChartHeight - volChartPadding.top - volChartPadding.bottom;
-
-    const toVolX = (index: number) =>
-        volChartPadding.left +
-        (volumeHistory.length === 1 ? volPlotWidth / 2 : (index / (volumeHistory.length - 1)) * volPlotWidth);
-    const toVolY = (vol: number) => volChartPadding.top + ((volMax - vol) / volRange) * volPlotHeight;
-
-    const volChartPoints = useMemo(
-        () =>
-            volumeHistory.map((row, index) => ({
-                ...row,
-                formattedDate: new Date(row.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-                x: toVolX(index),
-                y: toVolY(row.volume),
-            })),
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- x/y depend on volumeHistory length + values
-        [volumeHistory, volMin, volMax, volRange]
-    );
-
-    const selectedVolumePoints = useMemo(() => {
-        if (!selectedVolumeWorkoutId) return [];
-        return volChartPoints.filter((p) => p.workoutId === selectedVolumeWorkoutId);
-    }, [volChartPoints, selectedVolumeWorkoutId]);
-
-    const selectedVolumeName =
-        selectedVolumePoints[0]?.workoutName
-        ?? volumeHistory.find((h) => h.workoutId === selectedVolumeWorkoutId)?.workoutName
-        ?? null;
-
-    const volLinePath = volChartPoints
-        .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`)
-        .join(" ");
-    const volAreaPath =
-        volChartPoints.length > 0
-            ? `${volLinePath} L ${volChartPoints[volChartPoints.length - 1].x.toFixed(1)} ${(volChartPadding.top + volPlotHeight).toFixed(1)} L ${volChartPoints[0].x.toFixed(1)} ${(volChartPadding.top + volPlotHeight).toFixed(1)} Z`
-            : "";
-
-    const selectedVolLinePath = selectedVolumePoints
-        .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`)
-        .join(" ");
-    const selectedVolAreaPath =
-        selectedVolumePoints.length > 0
-            ? `${selectedVolLinePath} L ${selectedVolumePoints[selectedVolumePoints.length - 1].x.toFixed(1)} ${(volChartPadding.top + volPlotHeight).toFixed(1)} L ${selectedVolumePoints[0].x.toFixed(1)} ${(volChartPadding.top + volPlotHeight).toFixed(1)} Z`
-            : "";
-
-    const latestVolumeForDisplay = selectedVolumeWorkoutId
-        ? (selectedVolumePoints[selectedVolumePoints.length - 1]?.volume
-            ?? volumeHistory.filter((h) => h.workoutId === selectedVolumeWorkoutId).at(-1)?.volume
-            ?? null)
-        : volumeHistory.length > 0
-          ? volumeHistory[volumeHistory.length - 1].volume
-          : null;
-
-    useEffect(() => {
-        if (
-            selectedVolumeWorkoutId
-            && !volumeHistory.some((h) => h.workoutId === selectedVolumeWorkoutId)
-        ) {
-            setSelectedVolumeWorkoutId(null);
-        }
-    }, [volumeHistory, selectedVolumeWorkoutId]);
-
-    // Average duration math
-    const validDurations = workoutHistory.filter((h) => h.duration > 0);
-    const totalDuration = validDurations.reduce((sum, h) => sum + h.duration, 0);
-    const avgDuration = validDurations.length > 0 ? Math.round(totalDuration / validDurations.length) : 0;
-
     const exerciseListOrdered = useMemo(() => {
         const names = Object.keys(exerciseHistory);
-        return orderExerciseNames(
-            names,
-            pinnedExercises,
-            (a, b) => (exerciseLastDone[b] || 0) - (exerciseLastDone[a] || 0)
-        );
+        return orderExerciseNames(names, pinnedExercises, (a, b) => (exerciseLastDone[b] || 0) - (exerciseLastDone[a] || 0));
     }, [exerciseHistory, exerciseLastDone, pinnedExercises]);
 
     useEffect(() => {
@@ -539,26 +333,21 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
     }, [initialPinnedExercises, exerciseHistory]);
 
     useEffect(() => {
-        if (!selectedExercise && exerciseListOrdered.length > 0) {
-            setSelectedExercise(exerciseListOrdered[0]);
-        }
+        if (!selectedExercise && exerciseListOrdered.length > 0) setSelectedExercise(exerciseListOrdered[0]);
     }, [exerciseListOrdered, selectedExercise]);
 
     const togglePinExercise = async (ex: string, e: React.MouseEvent) => {
         e.stopPropagation();
         if (readOnly) return;
-
         let nextPinned = [...pinnedExercises];
-        if (pinnedExercises.includes(ex)) {
-            nextPinned = nextPinned.filter((name) => name !== ex);
-        } else {
+        if (pinnedExercises.includes(ex)) nextPinned = nextPinned.filter((name) => name !== ex);
+        else {
             if (pinnedExercises.length >= MAX_PINNED_EXERCISES) {
                 alert(`You can only pin up to ${MAX_PINNED_EXERCISES} exercises. Please unpin an exercise first.`);
                 return;
             }
             nextPinned.push(ex);
         }
-
         const previous = pinnedExercises;
         setPinnedExercises(nextPinned);
         try {
@@ -579,146 +368,82 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
 
     const getRegex = (q: string) => {
         try {
-            return new RegExp(q.trim().split('').map(c => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*'), 'i');
-        } catch { return new RegExp(q, 'i'); }
+            return new RegExp(q.trim().split("").map((c) => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*"), "i");
+        } catch {
+            return new RegExp(q, "i");
+        }
     };
 
-    const exerciseListFiltered = useMemo(() => {
-        return exerciseListOrdered.filter(ex => 
-            exerciseSearchQuery ? getRegex(exerciseSearchQuery).test(ex) : true
-        );
-    }, [exerciseListOrdered, exerciseSearchQuery]);
+    const exerciseListFiltered = useMemo(
+        () => exerciseListOrdered.filter((ex) => (exerciseSearchQuery ? getRegex(exerciseSearchQuery).test(ex) : true)),
+        [exerciseListOrdered, exerciseSearchQuery]
+    );
 
+    const selectedIsStrength = selectedExercise ? guessTrackingPreset(selectedExercise) === "strength" : false;
     const selectedExerciseHistory = useMemo(() => {
         const raw = exerciseHistory[selectedExercise] || [];
         return raw.map((session) => ({
             ...session,
-            oneRM: deriveOneRMFromBestSet(session.weight, session.reps),
+            oneRM: selectedIsStrength ? deriveOneRMFromBestSet(session.weight, session.reps) : 0,
         }));
-    }, [exerciseHistory, selectedExercise]);
-
+    }, [exerciseHistory, selectedExercise, selectedIsStrength]);
     const selectedExerciseStats = useMemo(() => {
         if (!selectedExercise || selectedExerciseHistory.length === 0) return null;
         return {
             currentMax: Math.max(...selectedExerciseHistory.map((h) => h.weight || 0)),
-            estimatedMax: Math.max(...selectedExerciseHistory.map((h) => h.oneRM || 0)),
+            estimatedMax: selectedIsStrength
+                ? Math.max(...selectedExerciseHistory.map((h) => h.oneRM || 0))
+                : null,
         };
-    }, [selectedExercise, selectedExerciseHistory]);
-
-    const currentWorkoutMeta = client.currentWorkout
-        ? {
-            label: client.currentWorkout.status === "IN_PROGRESS"
-                ? "In Progress"
-                : client.currentWorkout.status === "COMPLETED"
-                    ? "Completed"
-                    : "Not Started",
-            className: client.currentWorkout.status === "IN_PROGRESS"
-                ? "bg-warning/10 text-warning border-warning/30"
-                : client.currentWorkout.status === "COMPLETED"
-                    ? "bg-success/10 text-success border-success/30"
-                    : "bg-brand-500/10 text-brand-400 border-brand-500/30",
-        }
-        : null;
-    const isScheduledToday = client.currentWorkout?.scheduledDay?.toLowerCase() === "today";
+    }, [selectedExercise, selectedExerciseHistory, selectedIsStrength]);
 
     const planAssignmentPanel = canEdit && assigning ? (
-        <div className="mt-5 rounded-2xl border border-surface-border bg-surface-muted/50 p-4 sm:p-5 animate-fade-in">
+        <div className="mt-4 rounded-2xl border border-surface-border bg-surface-muted/50 p-4 animate-fade-in">
             {assignMode === "MENU" && (
-                <div className="space-y-5">
-                    <div className="space-y-1">
-                        <h4 className="text-sm font-black uppercase tracking-widest text-fg">Assign New Plan</h4>
-                        <p className="text-[10px] text-fg-muted font-bold uppercase tracking-widest leading-relaxed">Choose the next plan for this athlete.</p>
-                    </div>
-                    <div className="grid gap-3">
-                        <button
-                            onClick={() => setAssignMode("LIST")}
-                            className="rounded-2xl p-4 flex items-center justify-between border border-brand-500/20 bg-brand-500/5 group transition-all hover:border-brand-500/40"
-                        >
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-brand-500/10 flex items-center justify-center text-brand-400">
-                                    <Calendar className="w-5 h-5" />
-                                </div>
-                                <div className="text-left">
-                                    <p className="text-sm font-black text-fg uppercase tracking-tight group-hover:text-brand-400">Existing Programme</p>
-                                    <p className="text-[9px] text-fg-muted font-bold uppercase tracking-widest italic">From saved plans</p>
-                                </div>
-                            </div>
-                            <ChevronRight className="w-4 h-4 text-fg-subtle" />
-                        </button>
-
-                        <Link
-                            href={`/plans/create?clientId=${client.id}`}
-                            className="rounded-2xl p-4 flex items-center justify-between border border-warning/20 bg-warning/5 group transition-all hover:border-warning/40"
-                        >
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-warning/10 flex items-center justify-center text-warning">
-                                    <Dumbbell className="w-5 h-5" />
-                                </div>
-                                <div className="text-left">
-                                    <p className="text-sm font-black text-fg uppercase tracking-tight group-hover:text-warning">Create New Plan</p>
-                                    <p className="text-[9px] text-fg-muted font-bold uppercase tracking-widest italic">Build from scratch</p>
-                                </div>
-                            </div>
-                            <ChevronRight className="w-4 h-4 text-fg-subtle" />
-                        </Link>
-                    </div>
-
-                    <div className="rounded-2xl p-5 bg-surface-card border border-brand-500/20 shadow-glow-brand-sm">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-brand-400 mb-2 block">Plan Share Key</label>
-                        <div className="flex flex-col gap-2 sm:flex-row">
-                            <input
-                                type="text"
-                                placeholder="e.g. 20964E4C"
-                                className="input flex-1 font-mono uppercase font-black tracking-widest"
-                                value={shareCode}
-                                onChange={(e) => setShareCode(e.target.value)}
-                            />
-                            <button
-                                onClick={handleImport}
-                                disabled={importing || !shareCode}
-                                className="btn-primary h-12 px-6 shadow-glow-brand"
-                            >
-                                {importing ? "..." : "Import"}
-                            </button>
-                        </div>
-                    </div>
-                    <button
-                        onClick={() => setAssigning(false)}
-                        className="w-full py-3 text-[10px] font-black uppercase tracking-widest text-fg-subtle hover:text-fg transition-all"
-                    >
-                        Cancel
+                <div className="space-y-4">
+                    <h4 className="text-sm font-black uppercase tracking-widest text-fg">Assign New Plan</h4>
+                    <button type="button" onClick={() => setAssignMode("LIST")} className="w-full rounded-2xl p-4 flex items-center justify-between border border-brand-500/20 bg-brand-500/5">
+                        <span className="text-sm font-black text-fg">Existing Programme</span>
+                        <ChevronRight className="w-4 h-4 text-fg-subtle" />
                     </button>
+                    <Link href={`/plans/create?clientId=${client.id}`} className="w-full rounded-2xl p-4 flex items-center justify-between border border-warning/20 bg-warning/5">
+                        <span className="text-sm font-black text-fg">Create New Plan</span>
+                        <ChevronRight className="w-4 h-4 text-fg-subtle" />
+                    </Link>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                        <input type="text" placeholder="Share key" className="input flex-1 font-mono uppercase" value={shareCode} onChange={(e) => setShareCode(e.target.value)} />
+                        <button type="button" onClick={() => void handleImport()} disabled={importing || !shareCode} className="btn-primary h-11 px-5">{importing ? "..." : "Import"}</button>
+                    </div>
+                    <button type="button" onClick={() => setAssigning(false)} className="w-full py-2 text-[10px] font-black uppercase tracking-widest text-fg-subtle">Cancel</button>
                 </div>
             )}
-
             {assignMode === "LIST" && (
-                <div className="space-y-4">
-                    <button onClick={() => setAssignMode("MENU")} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-fg-muted hover:text-fg">
-                        <ChevronRight className="w-3 h-3 rotate-180" /> Back
-                    </button>
+                <div className="space-y-3">
+                    <button type="button" onClick={() => setAssignMode("MENU")} className="text-[10px] font-black uppercase tracking-widest text-fg-muted">Back</button>
                     <div className="grid gap-2 max-h-[300px] overflow-y-auto no-scrollbar">
                         {availablePlans.length === 0 ? (
-                            <p className="p-8 text-center text-[10px] font-bold uppercase tracking-widest text-fg-subtle italic">No plans found.</p>
-                        ) : availablePlans.map((p) => (
-                            <button
-                                key={p.id}
-                                onClick={() => updatePlan(p.id)}
-                                disabled={updating}
-                                className="flex items-center justify-between p-4 rounded-xl bg-surface hover:bg-surface-elevated border border-surface-border transition-all group disabled:opacity-60"
-                            >
-                                <span className="font-bold text-sm text-fg group-hover:text-brand-400">{p.name}</span>
-                                <span className="text-[8px] bg-brand-500/10 text-brand-400 px-1.5 py-0.5 rounded uppercase font-black">{p.type}</span>
+                            <p className="p-6 text-center text-[10px] font-bold uppercase tracking-widest text-fg-subtle">No plans found.</p>
+                        ) : availablePlans.map((plan) => (
+                            <button key={plan.id} type="button" onClick={() => void updatePlan(plan.id)} disabled={updating} className="flex items-center justify-between p-3 rounded-xl border border-surface-border hover:bg-surface-elevated">
+                                <span className="font-bold text-sm text-fg">{plan.name}</span>
+                                <span className="text-[8px] bg-brand-500/10 text-brand-400 px-1.5 py-0.5 rounded uppercase font-black">{plan.type}</span>
                             </button>
                         ))}
                     </div>
                 </div>
             )}
-
         </div>
     ) : null;
 
+    const explorerSessions = insights.recentSessions.map((session) => ({
+        id: session.id,
+        workoutName: session.workoutName,
+        date: session.date,
+        setCount: session.setCount,
+    }));
+
     return (
-        <div className="space-y-8 animate-fade-in">
+        <div className="space-y-6 animate-fade-in">
             <RecentSessionsExplorer
                 open={showAllSessions}
                 onClose={() => {
@@ -729,1163 +454,255 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                 subtitle="Full workout history"
                 fetchHistoryOnOpen
                 historyUserId={client.id}
-                sessions={logs}
+                sessions={explorerSessions}
                 initialSessionId={sessionsInitialId}
                 canAddCoachNote={canEdit}
                 canEditSession={canEdit}
                 editClientId={client.id}
                 alignToAppShell
             />
+
             {readOnly && (
                 <div className="card p-4 border-warning/30 bg-warning/5 flex items-start gap-3">
                     <AlertTriangle className="w-5 h-5 text-warning shrink-0 mt-0.5" />
                     <div>
                         <p className="text-sm font-bold text-fg">View only — account inactive</p>
-                        <p className="text-xs text-fg-muted mt-1">
-                            This athlete&apos;s account was deleted or deactivated. You can review history, but plans, goals, messages, and settings cannot be changed.
-                        </p>
-                    </div>
-                </div>
-            )}
-            {/* Client Profile Header */}
-            <div className="card p-6 flex flex-col sm:flex-row items-center gap-6 justify-between text-center sm:text-left">
-                <div className="flex flex-col sm:flex-row items-center gap-6">
-                    <div className="w-20 h-20 rounded-3xl bg-gradient-brand flex items-center justify-center text-xl font-bold text-white shadow-glow-brand shrink-0">
-                        {client.avatarUrl ? <img src={resolveUploadUrl(client.avatarUrl)} alt="avatar" className="w-full h-full object-cover rounded-3xl" /> : getInitials(client.name)}
-                    </div>
-                    <div>
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 justify-center sm:justify-start">
-                            <h2 className="text-2xl font-bold text-fg tracking-tight">{client.name || "Strength Athlete"}</h2>
-                            <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-surface-muted/50 border border-surface-border w-fit h-fit mx-auto sm:mx-0">
-                                <span
-                                    className={cn("w-1.5 h-1.5 rounded-full", presence.dotClassName)}
-                                    title={presence.label}
-                                />
-                                <span className="text-[10px] font-bold text-fg-muted">
-                                    {client.activeSession ? presenceWorkoutLabel : presence.label}
-                                </span>
-                                {client.activeSession && (
-                                    <span
-                                        className="w-1.5 h-1.5 rounded-full bg-brand-400 animate-pulse"
-                                        title={`Workout in progress · ${client.activeSession.workoutName}`}
-                                    />
-                                )}
-                            </div>
-                        </div>
-                        <p className="text-sm text-fg-muted mb-1 mt-1 sm:mt-0">{client.email}</p>
-                        <div className="flex flex-wrap gap-2 mt-3 justify-center sm:justify-start">
-                            {isCoachPaused && (
-                                <span className="badge text-[9px] bg-surface-muted text-fg-muted border border-surface-border">
-                                    Paused
-                                </span>
-                            )}
-                            {client.assignedCoachName && (
-                                <span className="badge text-[9px] bg-surface-muted text-fg-muted border border-surface-border">
-                                    Coach: {client.assignedCoachName}
-                                </span>
-                            )}
-                            {client.goal && <span className="badge text-[9px] bg-brand-500/10 text-brand-400 border border-brand-500/20">{client.goal.replace("_", " ")}</span>}
-                            {client.experience && <span className="badge text-[9px] bg-warning-500/10 text-warning border border-warning-500/20">{client.experience.replace("_", " ")}</span>}
-                            {client.trainingLocation && <span className="badge text-[9px] bg-success-500/10 text-success border border-success-500/20">{client.trainingLocation} Training</span>}
-                            {client.trainingDaysPerWeek && <span className="badge text-[9px] bg-surface-muted text-fg-muted border border-surface-border">{client.trainingDaysPerWeek} Days / Wk</span>}
-                        </div>
-                    </div>
-                </div>
-                <div className="flex gap-3">
-                    <Link
-                        href={`/chat?with=${client.id}`}
-                        className={cn(
-                            "btn-secondary px-6 h-11 transition-all inline-flex items-center gap-2",
-                            !canEdit && "opacity-50 pointer-events-none"
-                        )}
-                        aria-disabled={!canEdit}
-                        title={canEdit ? "Message athlete" : "Cannot message inactive accounts"}
-                    >
-                        <MessageSquare className="w-4 h-4" /> Message
-                    </Link>
-                </div>
-            </div>
-
-            {client.currentWorkout && currentWorkoutMeta && (
-                <div className="card p-5 sm:p-6 border-warning/30 bg-warning/5 shadow-glow-warning-sm">
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                        <div className="flex items-start gap-4 min-w-0">
-                            <div className="w-12 h-12 rounded-2xl bg-warning/10 border border-warning/25 flex items-center justify-center shrink-0">
-                                <Dumbbell className="w-5 h-5 text-warning" />
-                            </div>
-                            <div className="min-w-0">
-                                <p className="text-[10px] font-black uppercase tracking-widest text-warning">Current Workout</p>
-                                <h3 className="text-xl sm:text-2xl font-black text-fg tracking-tight truncate">
-                                    {client.currentWorkout.name}
-                                </h3>
-                                <div className="mt-3 flex flex-wrap items-center gap-2">
-                                    <span className={cn("px-3 py-1 rounded-xl border text-[10px] font-black uppercase tracking-widest", currentWorkoutMeta.className)}>
-                                        {currentWorkoutMeta.label}
-                                    </span>
-                                    <span className="px-3 py-1 rounded-xl border border-surface-border bg-surface-muted text-[10px] font-black uppercase tracking-widest text-fg-muted">
-                                        Scheduled: {client.currentWorkout.scheduledDay}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                        <Link
-                            href={client.currentWorkout.href}
-                            className="btn-primary h-11 px-5 inline-flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest shadow-glow-brand lg:shrink-0"
-                        >
-                            View Workout
-                            <ChevronRight className="w-4 h-4" />
-                        </Link>
+                        <p className="text-xs text-fg-muted mt-1">History is available, but plans, goals, messages, and settings cannot be changed.</p>
                     </div>
                 </div>
             )}
 
-            {/* Active plan summary */}
-            <div className="card p-5 sm:p-6 border-brand-500/25 bg-brand-500/5 shadow-glow-brand-sm">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                    <div className="flex items-start gap-4 min-w-0">
-                        <div className="w-12 h-12 rounded-2xl bg-brand-500/10 border border-brand-500/25 flex items-center justify-center shrink-0">
-                            <Dumbbell className="w-5 h-5 text-brand-400" />
-                        </div>
+            <ClientHeaderCard
+                client={{
+                    id: client.id,
+                    name: client.name,
+                    email: client.email,
+                    avatarUrl: client.avatarUrl,
+                    assignedCoachName: client.assignedCoachName,
+                    goal: client.goal,
+                    experience: client.experience,
+                    trainingDaysPerWeek: client.trainingDaysPerWeek,
+                    lastActiveAt: client.lastActiveAt,
+                    activeSessionName: insights.activeWorkout?.name ?? null,
+                }}
+                isCoachPaused={isCoachPaused}
+                canEdit={canEdit}
+            />
+
+            {insights.activeWorkout && <CurrentWorkoutCard workout={insights.activeWorkout} />}
+
+            <NeedsAttentionCard
+                items={insights.attention}
+                canEdit={canEdit}
+                sendingCheckInRequest={sendingCheckInRequest}
+                checkInRequestSent={checkInRequestSent}
+                checkInRequestError={checkInRequestError}
+                onRequestCheckIn={sendCheckInRequest}
+            />
+
+            <CoachSummaryCard
+                period={period}
+                periodKey={periodKey}
+                onPeriodChange={setPeriodKey}
+                streak={insights.currentStreak}
+                weightDirection={insights.weightDirection}
+            />
+
+            <div className="grid lg:grid-cols-2 gap-4">
+                <div className="card p-5 space-y-4">
+                    <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                             <p className="text-[10px] font-black uppercase tracking-widest text-brand-400">Active Plan</p>
-                            <h3 className="text-xl sm:text-2xl font-black text-fg tracking-tight truncate">
-                                {client.activePlan?.name ?? "No plan assigned"}
-                            </h3>
-                            <div className="mt-2 flex flex-wrap items-center gap-2">
-                                <p className="text-xs text-fg-muted">
-                                    {client.activePlan ? "Current programme for this client." : "Assign a plan before scheduling workouts."}
+                            <h3 className="text-lg font-black text-fg truncate">{insights.planProgress?.name ?? client.activePlan?.name ?? "No plan assigned"}</h3>
+                            {insights.planProgress && (
+                                <p className="text-xs text-fg-muted mt-1">
+                                    {insights.planProgress.currentWeek != null
+                                        ? `Week ${insights.planProgress.currentWeek} / ${insights.planProgress.totalWeeks}`
+                                        : `${insights.planProgress.totalWeeks} week programme`}
+                                    {insights.planProgress.weekScheduled > 0
+                                        ? ` · ${insights.planProgress.weekCompleted} / ${insights.planProgress.weekScheduled} this week`
+                                        : ""}
                                 </p>
-                                {isScheduledToday && (
-                                    <span className="px-3 py-1 rounded-xl border border-warning/30 bg-warning/10 text-[10px] font-black uppercase tracking-widest text-warning">
-                                        Scheduled: Today
-                                    </span>
-                                )}
-                            </div>
+                            )}
                         </div>
+                        <Link
+                            href={`/coach/calendar?clientId=${client.id}`}
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-brand-500/30 text-brand-400"
+                            aria-label="Open client calendar"
+                        >
+                            <Calendar className="w-4 h-4" />
+                        </Link>
                     </div>
-                    <div className="flex flex-col sm:flex-row gap-2 lg:shrink-0">
+                    <div className="flex flex-wrap gap-2">
                         {client.activePlan && (
-                            <Link
-                                href={`/plans/create?id=${client.activePlan.id}&view=true&clientId=${client.id}`}
-                                className="btn-secondary h-11 px-5 inline-flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest"
-                            >
-                                View Plan
-                                <ChevronRight className="w-4 h-4" />
-                            </Link>
-                        )}
-                        {canEdit && !client.activePlan && (
-                            <Link
-                                href={`/plans/create?clientId=${client.id}`}
-                                className="btn-primary h-11 px-5 inline-flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest shadow-glow-brand"
-                            >
-                                <Plus className="w-4 h-4" />
-                                Create Plan
+                            <Link href={`/plans/create?id=${client.activePlan.id}&view=true&clientId=${client.id}`} className="btn-secondary h-9 px-3 text-[10px] font-black uppercase tracking-widest inline-flex items-center gap-1">
+                                View / Edit Plan <ChevronRight className="w-3.5 h-3.5" />
                             </Link>
                         )}
                         {canEdit && (
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setAssigning(true);
-                                    setAssignMode("MENU");
-                                }}
-                                className="btn-secondary h-11 px-5 inline-flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest"
-                            >
-                                <Plus className="w-4 h-4" />
-                                Assign New Plan
+                            <button type="button" onClick={() => { setAssigning(true); setAssignMode("MENU"); }} className="btn-secondary h-9 px-3 text-[10px] font-black uppercase tracking-widest">
+                                <Plus className="w-3.5 h-3.5" /> Assign New Plan
                             </button>
                         )}
                         {canEdit && client.activePlan && (
-                            <button
-                                type="button"
-                                onClick={() => void removePlan()}
-                                disabled={removingPlan || updating}
-                                className="btn-secondary h-11 px-5 inline-flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest text-danger/80 hover:text-danger hover:border-danger/30 disabled:opacity-60"
-                            >
-                                {removingPlan ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                                Remove Plan
+                            <button type="button" onClick={() => void removePlan()} disabled={removingPlan} className="h-9 px-3 text-[10px] font-black uppercase tracking-widest text-fg-subtle hover:text-danger">
+                                {removingPlan ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Remove Plan"}
                             </button>
                         )}
                     </div>
+                    {planAssignmentPanel}
                 </div>
-                {planAssignmentPanel}
-            </div>
 
-            {/* Training overview */}
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            <div className="card w-fit max-w-full p-4 border-brand-500/20 bg-gradient-brand/5 shadow-glow-brand-sm">
-                <div className="flex items-center justify-between gap-4 mb-4 text-brand-400">
-                    <div className="flex items-center gap-2">
-                        <Zap className="w-4 h-4" />
-                        <h4 className="text-[10px] font-black uppercase tracking-widest italic">Training overview</h4>
+                <div id="goals-schedule" className={cn("card p-5 space-y-4 scroll-mt-24", client.checkInSchedule.day === null ? "border-warning/30 bg-warning/5" : "")}>
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-[11px] font-black uppercase tracking-widest text-fg">Goals & Schedule</h3>
+                        {canEdit && client.checkInSchedule.day !== null && (
+                            <button type="button" onClick={() => setIsEditingTargets((prev) => !prev)} className="text-brand-400 text-[10px] font-black uppercase tracking-wider inline-flex items-center gap-1">
+                                {isEditingTargets ? <><X className="w-3 h-3" /> Cancel</> : <><Edit3 className="w-3 h-3" /> Edit</>}
+                            </button>
+                        )}
                     </div>
-                </div>
-                <div className="flex flex-wrap items-end gap-x-6 gap-y-3 sm:gap-x-8">
-                    <div className="space-y-0.5">
-                        <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle whitespace-nowrap">Workouts done (30 days)</p>
-                        <p className="text-xl font-black text-fg leading-none italic">{client.adherencePercentage ?? 0}<span className="text-brand-400">%</span></p>
-                    </div>
-                    <div className="space-y-0.5">
-                        <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Workouts</p>
-                        <p className="text-xl font-black text-fg leading-none italic">{workoutHistory.length}</p>
-                    </div>
-                    <div className="space-y-0.5">
-                        <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle whitespace-nowrap">Avg Duration</p>
-                        <p className="text-xl font-black text-fg leading-none italic">
-                            {avgDuration}<span className="text-xs text-indigo-400 ml-0.5 font-sans not-italic">m</span>
-                        </p>
-                    </div>
-                    <div className="space-y-0.5">
-                        <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Vs last month</p>
-                        <p className={cn(
-                            "text-xl font-black leading-none italic font-mono",
-                            client.adherenceTrend === "UP" ? "text-success" : client.adherenceTrend === "DOWN" ? "text-danger" : "text-fg-muted"
-                        )}>
-                            {client.adherenceTrend === "UP" ? "↗" : client.adherenceTrend === "DOWN" ? "↘" : "→"}
-                        </p>
-                    </div>
-                </div>
-            </div>
-            <Link
-                href={`/coach/calendar?clientId=${client.id}`}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-brand-500/30 bg-brand-500/10 text-brand-400 shadow-glow-brand-sm transition-all hover:bg-brand-500/20 hover:border-brand-500/45 lg:mt-1 lg:shrink-0"
-                title="Open client calendar"
-                aria-label="Open client calendar"
-            >
-                <Calendar className="w-4 h-4" />
-            </Link>
-            </div>
-
-            {/* Trends Grid: Weight/Volume Chart (2/3 width) & Check-ins Sidebar (1/3 width) */}
-            <div className="grid lg:grid-cols-3 gap-8">
-                {/* Weight/Volume chart */}
-                <div className="card p-5 lg:col-span-2">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-surface-border/50">
-                        <div className="flex flex-wrap items-center gap-6">
-                            <div className="flex items-center gap-4">
-                                {!isWeightHidden && (
-                                    <button
-                                        onClick={() => setActiveChartTab("weight")}
-                                        className={cn(
-                                            "text-sm font-black uppercase tracking-wider pb-2 border-b-2 transition-all",
-                                            activeChartTab === "weight" 
-                                                ? "border-brand-500 text-fg" 
-                                                : "border-transparent text-fg-muted hover:text-fg"
-                                        )}
-                                    >
-                                        Bodyweight Trend
-                                    </button>
-                                )}
-                                <button
-                                    onClick={() => setActiveChartTab("volume")}
-                                    className={cn(
-                                        "text-sm font-black uppercase tracking-wider pb-2 border-b-2 transition-all",
-                                        activeChartTab === "volume" 
-                                            ? "border-brand-500 text-fg" 
-                                            : "border-transparent text-fg-muted hover:text-fg"
-                                    )}
-                                >
-                                    Training Volume
-                                </button>
+                    {!canEdit || (!isEditingTargets && client.checkInSchedule.day !== null) ? (
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="p-3 bg-surface-muted/30 rounded-xl border border-surface-border/50">
+                                <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Bodyweight target</p>
+                                <p className="text-sm font-black text-fg mt-1">{client.targetWeightKg != null ? `${client.targetWeightKg.toFixed(1)} kg` : "—"}</p>
+                                <p className="text-[10px] text-fg-muted font-bold uppercase tracking-widest mt-1">
+                                    {insights.weightDirection === "GAINING" ? "Gaining" : insights.weightDirection === "LOSING" ? "Losing" : insights.weightDirection === "MAINTAINING" ? "Maintaining" : "Direction unset"}
+                                </p>
                             </div>
-                            
-                            {activeChartTab === "weight" && (
-                                <div className="flex items-center gap-1 bg-surface-muted/50 p-1 rounded-xl border border-surface-border/60">
-                                    {(["week", "month", "year", "all"] as const).map((tf) => (
-                                        <button
-                                            key={tf}
-                                            onClick={() => setWeightTimeframe(tf)}
-                                            className={cn(
-                                                "px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all",
-                                                weightTimeframe === tf
-                                                    ? "bg-brand-500 text-white shadow-sm"
-                                                    : "text-fg-muted hover:text-fg"
-                                            )}
-                                        >
-                                            {tf}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                        {activeChartTab === "weight" ? (
-                            <div className="text-right space-y-1">
+                            <div className="p-3 bg-surface-muted/30 rounded-xl border border-surface-border/50">
+                                <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Calories</p>
+                                <p className="text-sm font-black text-fg mt-1">{client.targetCalories != null ? `${client.targetCalories.toLocaleString()} kcal` : "—"}</p>
+                            </div>
+                            <div className="p-3 bg-surface-muted/30 rounded-xl border border-surface-border/50">
+                                <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Steps</p>
+                                <p className="text-sm font-black text-fg mt-1">{client.targetSteps != null ? client.targetSteps.toLocaleString() : "—"}</p>
+                            </div>
+                            <div className="p-3 bg-surface-muted/30 rounded-xl border border-surface-border/50">
+                                <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Sleep</p>
+                                <p className="text-sm font-black text-fg mt-1">{client.targetSleepHours != null ? `${client.targetSleepHours.toFixed(1)} hrs` : "—"}</p>
+                            </div>
+                            <div className="p-3 border border-brand-500/10 bg-brand-500/5 rounded-xl col-span-2 flex items-center justify-between">
                                 <div>
-                                    <p className="text-xl font-black text-fg leading-none">{client.currentWeightKg ? `${client.currentWeightKg.toFixed(1)}kg` : "--"}</p>
-                                    <p className="text-[10px] text-fg-subtle font-bold uppercase tracking-widest mt-1">
-                                        Target {client.targetWeightKg != null ? `${client.targetWeightKg.toFixed(1)}kg` : "--"}
-                                    </p>
+                                    <p className="text-[8px] font-black uppercase tracking-widest text-fg-subtle">Check-in day</p>
+                                    <p className="text-xs font-black text-fg">{client.checkInSchedule.day != null ? CHECK_IN_DAYS[client.checkInSchedule.day] : "Not set"}</p>
                                 </div>
-                                <p className="text-[10px] text-fg-subtle font-bold uppercase tracking-widest mt-1">
-                                    Period: {bodyweightPeriodLabel}
-                                </p>
-                                {bodyweightPeriodChangePercent !== null && filteredBodyweightHistory.length > 1 && (
-                                    <p className={cn(
-                                        "text-[10px] font-black uppercase tracking-widest",
-                                        bodyweightPeriodChangePercent > 0
-                                            ? "text-success"
-                                            : bodyweightPeriodChangePercent < 0
-                                                ? "text-danger"
-                                                : "text-fg-muted"
-                                    )}>
-                                        {bodyweightPeriodChangePercent > 0 ? "+" : ""}{bodyweightPeriodChangePercent.toFixed(1)}% since start
-                                    </p>
-                                )}
+                                <div className="text-right">
+                                    <p className="text-[8px] font-black uppercase tracking-widest text-fg-subtle">Frequency</p>
+                                    <p className="text-xs font-black text-brand-400">{CHECK_IN_FREQUENCIES.find((item) => item.value === client.checkInSchedule.frequencyWeeks)?.label || "—"}</p>
+                                </div>
                             </div>
-                        ) : (
-                            <div className="text-right">
-                                <p className="text-xl font-black text-fg leading-none font-mono transition-all duration-300">
-                                    {latestVolumeForDisplay != null
-                                        ? `${latestVolumeForDisplay.toLocaleString()}kg`
-                                        : "--"}
-                                </p>
-                                <p className="text-[10px] text-fg-subtle font-bold uppercase tracking-widest mt-1">
-                                    {selectedVolumeName
-                                        ? `Latest ${selectedVolumeName} Volume`
-                                        : "Last Workout Volume"}
-                                </p>
-                            </div>
-                        )}
-                    </div>
-                    {activeChartTab === "volume" && selectedVolumeWorkoutId && selectedVolumeName && (
-                        <div className="flex items-center gap-2 mb-3 -mt-2">
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setSelectedVolumeWorkoutId(null);
-                                    setHoveredVolPoint(null);
-                                }}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/15 border border-indigo-500/30 text-[10px] font-black uppercase tracking-widest text-indigo-300 hover:bg-indigo-500/25 transition-colors"
-                                aria-label={`Clear ${selectedVolumeName} filter`}
-                            >
-                                {selectedVolumeName}
-                                <X className="w-3 h-3" />
-                            </button>
-                            <span className="text-[9px] text-fg-subtle font-bold uppercase tracking-widest">
-                                Showing progression · tap chip or point to clear
-                            </span>
+                            {client.trainingDaysPerWeek != null && (
+                                <p className="col-span-2 text-xs text-fg-muted">Training frequency: {client.trainingDaysPerWeek} days / week</p>
+                            )}
                         </div>
-                    )}
-                    {activeChartTab === "weight" ? (
-                        filteredBodyweightHistory.length > 0 ? (
-                            <div className="h-64 relative">
-                                <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="h-full w-full" role="img" aria-label="Bodyweight trend chart">
-                                    <defs>
-                                        <linearGradient id="clientBodyweightFill" x1="0" x2="0" y1="0" y2="1">
-                                            <stop offset="5%" stopColor="#38bdf8" stopOpacity="0.35" />
-                                            <stop offset="95%" stopColor="#38bdf8" stopOpacity="0" />
-                                        </linearGradient>
-                                    </defs>
-                                    {[0, 1, 2, 3].map((line) => {
-                                        const y = chartPadding.top + (line / 3) * plotHeight;
-                                        const value = chartMax - (line / 3) * chartRange;
-                                        return (
-                                            <g key={line}>
-                                                <line x1={chartPadding.left} x2={chartWidth - chartPadding.right} y1={y} y2={y} stroke="rgba(148,163,184,0.16)" strokeDasharray="4 4" />
-                                                <text x={10} y={y + 4} fill="#94a3b8" fontSize="11" fontWeight="700">{value.toFixed(0)}</text>
-                                            </g>
-                                        );
-                                    })}
-                                    {targetY !== null && (
-                                        <g>
-                                            <line x1={chartPadding.left} x2={chartWidth - chartPadding.right} y1={targetY} y2={targetY} stroke="#f87171" strokeDasharray="6 6" strokeWidth="2" />
-                                            <text x={chartWidth - chartPadding.right - 54} y={Math.max(14, targetY - 7)} fill="#f87171" fontSize="11" fontWeight="800">Target</text>
-                                        </g>
-                                    )}
-                                    <path d={areaPath} fill="url(#clientBodyweightFill)" />
-                                    <path d={linePath} fill="none" stroke="#38bdf8" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
-                                    {chartPoints.map((point) => (
-                                        <g key={`${point.date}-${point.weightKg}`}>
-                                            <circle 
-                                                cx={point.x} 
-                                                cy={point.y} 
-                                                r={hoveredPoint?.date === point.date ? "6" : "4"} 
-                                                fill={hoveredPoint?.date === point.date ? "#38bdf8" : "#0f172a"} 
-                                                stroke="#38bdf8" 
-                                                strokeWidth="3"
-                                                className="transition-all duration-150"
-                                            />
-                                            <circle
-                                                cx={point.x}
-                                                cy={point.y}
-                                                r="12"
-                                                fill="transparent"
-                                                className="cursor-pointer"
-                                                onMouseEnter={() => setHoveredPoint(point)}
-                                                onMouseLeave={() => setHoveredPoint(null)}
-                                            />
-                                        </g>
-                                    ))}
-                                    {chartPoints[0] && (
-                                        <text x={chartPoints[0].x} y={chartHeight - 10} textAnchor="middle" fill="#94a3b8" fontSize="11" fontWeight="700">{chartPoints[0].date}</text>
-                                    )}
-                                    {chartPoints.length > 1 && (
-                                        <text x={chartPoints[chartPoints.length - 1].x} y={chartHeight - 10} textAnchor="middle" fill="#94a3b8" fontSize="11" fontWeight="700">{chartPoints[chartPoints.length - 1].date}</text>
-                                    )}
-                                </svg>
-                                {hoveredPoint && (
-                                    <div 
-                                        className="absolute z-10 pointer-events-none bg-surface-elevated/95 backdrop-blur-md border border-brand-500/30 px-3 py-1.5 rounded-xl text-center shadow-glow-brand-sm -translate-x-1/2 -translate-y-full transition-all duration-150 animate-scale-in"
-                                        style={{
-                                            left: `${(hoveredPoint.x / chartWidth) * 100}%`,
-                                            top: `${(hoveredPoint.y / chartHeight) * 100 - 4}%`,
-                                        }}
-                                    >
-                                        <p className="text-[9px] font-black text-brand-400 uppercase tracking-widest leading-none mb-1">
-                                            {formatDate(hoveredPoint.date)}
-                                        </p>
-                                        <p className="text-xs font-black text-fg leading-none font-mono">
-                                            {hoveredPoint.weightKg.toFixed(1)}<span className="text-[9px] text-fg-muted ml-0.5">kg</span>
-                                        </p>
-                                    </div>
-                                )}
-                            </div>
-                        ) : (
-                            <div className="h-64 rounded-2xl border border-dashed border-surface-border flex items-center justify-center text-sm text-fg-muted">
-                                No bodyweight logs recorded for this timeframe.
-                            </div>
-                        )
                     ) : (
-                        volumeHistory.length > 0 ? (
-                            <div className="h-64 relative">
-                                <svg viewBox={`0 0 ${volChartWidth} ${volChartHeight}`} className="h-full w-full touch-manipulation" role="img" aria-label="Training volume progression chart">
-                                    <defs>
-                                        <linearGradient id="clientVolumeFill" x1="0" x2="0" y1="0" y2="1">
-                                            <stop offset="5%" stopColor="#818cf8" stopOpacity="0.35" />
-                                            <stop offset="95%" stopColor="#818cf8" stopOpacity="0" />
-                                        </linearGradient>
-                                        <linearGradient id="clientVolumeFillSelected" x1="0" x2="0" y1="0" y2="1">
-                                            <stop offset="5%" stopColor="#818cf8" stopOpacity="0.4" />
-                                            <stop offset="95%" stopColor="#818cf8" stopOpacity="0" />
-                                        </linearGradient>
-                                    </defs>
-                                    {[0, 1, 2, 3].map((line) => {
-                                        const y = volChartPadding.top + (line / 3) * volPlotHeight;
-                                        const value = volMax - (line / 3) * volRange;
-                                        return (
-                                            <g key={line}>
-                                                <line x1={volChartPadding.left} x2={volChartWidth - volChartPadding.right} y1={y} y2={y} stroke="rgba(148,163,184,0.16)" strokeDasharray="4 4" />
-                                                <text x={10} y={y + 4} fill="#94a3b8" fontSize="10" fontWeight="700">{value.toLocaleString()}</text>
-                                            </g>
-                                        );
-                                    })}
-
-                                    {/* Full series — faded when a workout type is selected */}
-                                    <g
-                                        style={{
-                                            opacity: selectedVolumeWorkoutId ? 0.22 : 1,
-                                            transition: "opacity 280ms ease",
-                                        }}
-                                        pointerEvents="none"
-                                    >
-                                        <path d={volAreaPath} fill="url(#clientVolumeFill)" />
-                                        <path d={volLinePath} fill="none" stroke="#818cf8" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
-                                    </g>
-
-                                    {/* Selected workout-type progression — same x positions, connected */}
-                                    {selectedVolumeWorkoutId && selectedVolumePoints.length > 0 && (
-                                        <g
-                                            style={{
-                                                opacity: 1,
-                                                transition: "opacity 280ms ease",
-                                            }}
-                                            pointerEvents="none"
-                                        >
-                                            {selectedVolumePoints.length > 1 && (
-                                                <>
-                                                    <path d={selectedVolAreaPath} fill="url(#clientVolumeFillSelected)" />
-                                                    <path
-                                                        d={selectedVolLinePath}
-                                                        fill="none"
-                                                        stroke="#a5b4fc"
-                                                        strokeWidth="3.5"
-                                                        strokeLinejoin="round"
-                                                        strokeLinecap="round"
-                                                    />
-                                                </>
-                                            )}
-                                        </g>
-                                    )}
-
-                                    {volChartPoints.map((point) => {
-                                        const isSelectedType = selectedVolumeWorkoutId === point.workoutId;
-                                        const isFiltered = Boolean(selectedVolumeWorkoutId);
-                                        const isActive = !isFiltered || isSelectedType;
-                                        const isHovered = hoveredVolPoint?.id === point.id;
-                                        return (
-                                            <g
-                                                key={`${point.id}-${point.volume}`}
-                                                style={{
-                                                    opacity: isActive ? 1 : 0.28,
-                                                    transition: "opacity 280ms ease",
-                                                }}
-                                            >
-                                                <circle
-                                                    cx={point.x}
-                                                    cy={point.y}
-                                                    r={isHovered || (isFiltered && isSelectedType) ? 6 : 4}
-                                                    fill={
-                                                        isFiltered && isSelectedType
-                                                            ? "#a5b4fc"
-                                                            : isHovered
-                                                              ? "#818cf8"
-                                                              : isActive
-                                                                ? "#0f172a"
-                                                                : "#1e293b"
-                                                    }
-                                                    stroke={
-                                                        isFiltered && isSelectedType
-                                                            ? "#c7d2fe"
-                                                            : isActive
-                                                              ? "#818cf8"
-                                                              : "#64748b"
-                                                    }
-                                                    strokeWidth={isFiltered && isSelectedType ? 3.5 : 3}
-                                                    className="transition-all duration-280"
-                                                    style={{ transition: "r 200ms ease, fill 200ms ease, stroke 200ms ease" }}
-                                                />
-                                                <circle
-                                                    cx={point.x}
-                                                    cy={point.y}
-                                                    r="16"
-                                                    fill="transparent"
-                                                    className="cursor-pointer"
-                                                    style={{ touchAction: "manipulation" }}
-                                                    onMouseEnter={() => {
-                                                        if (!selectedVolumeWorkoutId || selectedVolumeWorkoutId === point.workoutId) {
-                                                            setHoveredVolPoint(point);
-                                                        }
-                                                    }}
-                                                    onMouseLeave={() => setHoveredVolPoint(null)}
-                                                    onPointerUp={(e) => {
-                                                        // pointerup covers mouse + touch without double-firing
-                                                        if (e.pointerType === "mouse" && e.button !== 0) return;
-                                                        e.stopPropagation();
-                                                        const next =
-                                                            selectedVolumeWorkoutId === point.workoutId
-                                                                ? null
-                                                                : point.workoutId;
-                                                        setSelectedVolumeWorkoutId(next);
-                                                        setHoveredVolPoint(next ? point : null);
-                                                    }}
-                                                />
-                                            </g>
-                                        );
-                                    })}
-                                    {volChartPoints[0] && (
-                                        <text x={volChartPoints[0].x} y={volChartHeight - 10} textAnchor="middle" fill="#94a3b8" fontSize="11" fontWeight="700">{volChartPoints[0].formattedDate}</text>
-                                    )}
-                                    {volChartPoints.length > 1 && (
-                                        <text x={volChartPoints[volChartPoints.length - 1].x} y={volChartHeight - 10} textAnchor="middle" fill="#94a3b8" fontSize="11" fontWeight="700">{volChartPoints[volChartPoints.length - 1].formattedDate}</text>
-                                    )}
-                                </svg>
-                                {hoveredVolPoint &&
-                                    (!selectedVolumeWorkoutId || hoveredVolPoint.workoutId === selectedVolumeWorkoutId) && (
-                                    <div
-                                        className="absolute z-10 pointer-events-none bg-surface-elevated/95 backdrop-blur-md border border-indigo-500/30 px-3 py-1.5 rounded-xl text-center shadow-glow-brand-sm -translate-x-1/2 -translate-y-full transition-all duration-150 animate-scale-in"
-                                        style={{
-                                            left: `${(hoveredVolPoint.x / volChartWidth) * 100}%`,
-                                            top: `${(hoveredVolPoint.y / volChartHeight) * 100 - 4}%`,
-                                        }}
-                                    >
-                                        <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest leading-none mb-1">
-                                            {hoveredVolPoint.workoutName}
-                                        </p>
-                                        <p className="text-[9px] text-fg-subtle font-bold mb-1">
-                                            {new Date(hoveredVolPoint.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                                        </p>
-                                        <p className="text-xs font-black text-fg leading-none font-mono">
-                                            {hoveredVolPoint.volume.toLocaleString()}<span className="text-[9px] text-fg-muted ml-0.5">kg</span>
-                                        </p>
-                                    </div>
-                                )}
-                                {!selectedVolumeWorkoutId && (
-                                    <p className="text-[9px] text-fg-subtle font-bold uppercase tracking-widest mt-2 text-center">
-                                        Tap a workout point to see volume progression for that session type
-                                    </p>
-                                )}
+                        <div className="space-y-3">
+                            <div className="grid grid-cols-2 gap-3">
+                                <label className="space-y-1 block">
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Check-in day</span>
+                                    <select value={checkInDay} onChange={(e) => setCheckInDay(Number(e.target.value))} className="input h-10 text-xs font-bold">
+                                        {CHECK_IN_DAYS.map((day, idx) => <option key={day} value={idx}>{day}</option>)}
+                                    </select>
+                                </label>
+                                <label className="space-y-1 block">
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Frequency</span>
+                                    <select value={checkInFrequency} onChange={(e) => setCheckInFrequency(Number(e.target.value))} className="input h-10 text-xs font-bold">
+                                        {CHECK_IN_FREQUENCIES.map((freq) => <option key={freq.value} value={freq.value}>{freq.label}</option>)}
+                                    </select>
+                                </label>
+                                <label className="space-y-1 block">
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Calories</span>
+                                    <input type="number" value={targetCalories} onChange={(e) => setTargetCalories(e.target.value)} className="input h-10 text-xs font-bold" />
+                                </label>
+                                <label className="space-y-1 block">
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Steps</span>
+                                    <input type="number" value={targetSteps} onChange={(e) => setTargetSteps(e.target.value)} className="input h-10 text-xs font-bold" />
+                                </label>
+                                <label className="space-y-1 block">
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Sleep</span>
+                                    <input type="number" step="0.5" value={targetSleepHours} onChange={(e) => setTargetSleepHours(e.target.value)} className="input h-10 text-xs font-bold" />
+                                </label>
+                                <label className="space-y-1 block">
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Weight goal</span>
+                                    <input type="number" step="0.1" value={targetWeightKg} onChange={(e) => setTargetWeightKg(e.target.value)} className="input h-10 text-xs font-bold" />
+                                </label>
                             </div>
-                        ) : (
-                            <div className="h-64 rounded-2xl border border-dashed border-surface-border flex items-center justify-center text-sm text-fg-muted">
-                                No workout logs recorded for this client.
-                            </div>
-                        )
+                            <button type="button" onClick={async () => { await saveClientConfiguration(); setIsEditingTargets(false); }} disabled={savingSchedule} className="btn-primary w-full h-10 text-xs font-black uppercase tracking-widest">
+                                {savingSchedule ? "Saving..." : "Save Configuration"}
+                            </button>
+                        </div>
                     )}
                 </div>
-
-                {/* Sidebar: Goals/Schedule & Check-ins */}
-                <div className="space-y-6 lg:col-span-1">
-                    {/* Athlete Targets & Schedule Card */}
-                    <div className={cn(
-                        "card p-5 space-y-4 border transition-all",
-                        client.checkInSchedule.day === null 
-                            ? "border-warning/30 bg-warning/5 shadow-glow-warning-sm animate-pulse-slow" 
-                            : "border-brand-500/10 hover:border-brand-500/20 bg-surface-card"
-                    )}>
-                        {/* Header */}
-                        <div className="flex items-center justify-between pb-3 border-b border-surface-border/50">
-                            <div className="flex items-center gap-2">
-                                <Activity className="w-4 h-4 text-brand-400" />
-                                <h3 className="text-xs font-black uppercase tracking-widest text-fg">Goals & Schedule</h3>
-                            </div>
-                            {client.checkInSchedule.day === null ? (
-                                canEdit ? (
-                                <span className="px-2 py-0.5 rounded-lg bg-warning/10 border border-warning/25 text-warning text-[9px] font-black uppercase tracking-widest">
-                                    Setup Required
-                                </span>
-                                ) : (
-                                <span className="px-2 py-0.5 rounded-lg bg-surface-muted border border-surface-border text-fg-subtle text-[9px] font-black uppercase tracking-widest">
-                                    View Only
-                                </span>
-                                )
-                            ) : canEdit ? (
-                                <button
-                                    onClick={() => setIsEditingTargets(prev => !prev)}
-                                    className="text-brand-400 hover:text-brand-350 text-[10px] font-black uppercase tracking-wider flex items-center gap-1 transition-colors"
-                                >
-                                    {isEditingTargets ? (
-                                        <>
-                                            <X className="w-3 h-3" /> Cancel
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Edit3 className="w-3 h-3" /> Edit
-                                        </>
-                                    )}
-                                </button>
-                            ) : null}
-                        </div>
-
-                        {/* Content */}
-                        {!canEdit || (!isEditingTargets && client.checkInSchedule.day !== null) ? (
-                            // VIEW MODE
-                            <div className="space-y-4">
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="p-3 bg-surface-muted/30 rounded-xl border border-surface-border/50 space-y-1">
-                                        <div className="flex items-center gap-1.5 text-fg-subtle">
-                                            <Scale className="w-3.5 h-3.5" />
-                                            <span className="text-[9px] font-black uppercase tracking-widest">Weight Goal</span>
-                                        </div>
-                                        <p className="text-sm font-black text-fg">
-                                            {client.targetWeightKg != null ? `${client.targetWeightKg.toFixed(1)} kg` : "--"}
-                                        </p>
-                                    </div>
-                                    <div className="p-3 bg-surface-muted/30 rounded-xl border border-surface-border/50 space-y-1">
-                                        <div className="flex items-center gap-1.5 text-fg-subtle">
-                                            <Zap className="w-3.5 h-3.5" />
-                                            <span className="text-[9px] font-black uppercase tracking-widest">Calories</span>
-                                        </div>
-                                        <p className="text-sm font-black text-fg">
-                                            {client.targetCalories != null ? `${client.targetCalories.toLocaleString()} kcal` : "--"}
-                                        </p>
-                                    </div>
-                                    <div className="p-3 bg-surface-muted/30 rounded-xl border border-surface-border/50 space-y-1">
-                                        <div className="flex items-center gap-1.5 text-fg-subtle">
-                                            <Activity className="w-3.5 h-3.5" />
-                                            <span className="text-[9px] font-black uppercase tracking-widest">Steps</span>
-                                        </div>
-                                        <p className="text-sm font-black text-fg">
-                                            {client.targetSteps != null ? `${client.targetSteps.toLocaleString()} steps` : "--"}
-                                        </p>
-                                    </div>
-                                    <div className="p-3 bg-surface-muted/30 rounded-xl border border-surface-border/50 space-y-1">
-                                        <div className="flex items-center gap-1.5 text-fg-subtle">
-                                            <Clock className="w-3.5 h-3.5" />
-                                            <span className="text-[9px] font-black uppercase tracking-widest">Sleep</span>
-                                        </div>
-                                        <p className="text-sm font-black text-fg">
-                                            {client.targetSleepHours != null ? `${client.targetSleepHours.toFixed(1)} hrs` : "--"}
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div className="p-3 border border-brand-500/10 bg-brand-500/5 rounded-xl flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <Calendar className="w-4 h-4 text-brand-400" />
-                                        <div>
-                                            <p className="text-[8px] font-black uppercase tracking-widest text-fg-subtle">Check-in Day</p>
-                                            <p className="text-xs font-black text-fg">
-                                                {client.checkInSchedule.day != null
-                                                    ? CHECK_IN_DAYS[client.checkInSchedule.day]
-                                                    : "Not Set"}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="text-[8px] font-black uppercase tracking-widest text-fg-subtle">Frequency</p>
-                                        <p className="text-xs font-black text-brand-400">
-                                            {CHECK_IN_FREQUENCIES.find(f => f.value === client.checkInSchedule.frequencyWeeks)?.label || "Weekly"}
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        ) : (
-                            // EDIT MODE
-                            <div className="space-y-4">
-                                {client.checkInSchedule.day === null && (
-                                    <p className="text-[11px] text-warning font-semibold leading-relaxed">
-                                        Athlete targets and check-in schedule must be set to complete onboarding for this client.
-                                    </p>
-                                )}
-                                <div className="grid grid-cols-2 gap-3">
-                                    <label className="space-y-1 block">
-                                        <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Check-in Day</span>
-                                        <select
-                                            value={checkInDay}
-                                            onChange={(e) => setCheckInDay(Number(e.target.value))}
-                                            className="input h-10 text-xs font-bold bg-surface-muted/30"
-                                        >
-                                            {CHECK_IN_DAYS.map((day, idx) => (
-                                                <option key={day} value={idx}>{day}</option>
-                                            ))}
-                                        </select>
-                                    </label>
-                                    <label className="space-y-1 block">
-                                        <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Frequency</span>
-                                        <select
-                                            value={checkInFrequency}
-                                            onChange={(e) => setCheckInFrequency(Number(e.target.value))}
-                                            className="input h-10 text-xs font-bold bg-surface-muted/30"
-                                        >
-                                            {CHECK_IN_FREQUENCIES.map((freq) => (
-                                                <option key={freq.value} value={freq.value}>{freq.label}</option>
-                                            ))}
-                                        </select>
-                                    </label>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-3 pt-2">
-                                    <label className="space-y-1 block">
-                                        <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Calories (kcal)</span>
-                                        <input
-                                            type="number"
-                                            placeholder="e.g. 2500"
-                                            value={targetCalories}
-                                            onChange={(e) => setTargetCalories(e.target.value)}
-                                            className="input h-10 text-xs font-bold bg-surface-muted/30"
-                                        />
-                                    </label>
-                                    <label className="space-y-1 block">
-                                        <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Daily Steps</span>
-                                        <input
-                                            type="number"
-                                            placeholder="e.g. 10000"
-                                            value={targetSteps}
-                                            onChange={(e) => setTargetSteps(e.target.value)}
-                                            className="input h-10 text-xs font-bold bg-surface-muted/30"
-                                        />
-                                    </label>
-                                    <label className="space-y-1 block">
-                                        <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Sleep (hrs)</span>
-                                        <input
-                                            type="number"
-                                            step="0.5"
-                                            placeholder="e.g. 8.0"
-                                            value={targetSleepHours}
-                                            onChange={(e) => setTargetSleepHours(e.target.value)}
-                                            className="input h-10 text-xs font-bold bg-surface-muted/30"
-                                        />
-                                    </label>
-                                    <label className="space-y-1 block">
-                                        <span className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Weight Goal (kg)</span>
-                                        <input
-                                            type="number"
-                                            step="0.1"
-                                            placeholder="e.g. 75.0"
-                                            value={targetWeightKg}
-                                            onChange={(e) => setTargetWeightKg(e.target.value)}
-                                            className="input h-10 text-xs font-bold bg-surface-muted/30"
-                                        />
-                                    </label>
-                                </div>
-
-                                <button
-                                    onClick={async () => {
-                                        await saveClientConfiguration();
-                                        setIsEditingTargets(false);
-                                    }}
-                                    disabled={savingSchedule}
-                                    className="btn-primary w-full h-10 text-xs font-black uppercase tracking-widest shadow-glow-brand mt-2"
-                                >
-                                    {savingSchedule ? "Saving..." : "Save Configuration"}
-                                </button>
-                            </div>
-                        )}
-                    </div>
-
-                    <h3 className="hidden">
-                        <Calendar className="w-4 h-4" />
-                        Check-ins
-                    </h3>
-                    <div className="hidden">
-                        {checkInStatus && (
-                            <div className={cn(
-                                "card p-5 border space-y-3",
-                                checkInStatus.isOverdue
-                                    ? "border-warning/30 bg-warning/5"
-                                    : "border-brand-500/30 bg-brand-500/5"
-                            )}>
-                                <div className="flex items-start gap-3">
-                                    <div className={cn(
-                                        "w-11 h-11 rounded-2xl flex items-center justify-center border shrink-0",
-                                        checkInStatus.isOverdue
-                                            ? "bg-warning/10 border-warning/30 text-warning"
-                                            : "bg-brand-500/10 border-brand-500/30 text-brand-400"
-                                    )}>
-                                        {checkInStatus.isOverdue ? (
-                                            <AlertTriangle className="w-5 h-5" />
-                                        ) : (
-                                            <Scale className="w-5 h-5" />
-                                        )}
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                        <p className={cn(
-                                            "text-xs font-black uppercase tracking-widest",
-                                            checkInStatus.isOverdue ? "text-warning" : "text-brand-400"
-                                        )}>
-                                            {checkInStatus.label}
-                                        </p>
-                                        <p className="text-[10px] text-fg-muted font-bold uppercase tracking-[0.1em] mt-1">
-                                            {checkInStatus.periodLabel} · Waiting for client to submit
-                                        </p>
-                                    </div>
-                                </div>
-                                {canEdit && (
-                                    checkInRequestSent ? (
-                                        <div className="space-y-2">
-                                            <p className="text-xs font-semibold text-success flex items-center gap-1.5">
-                                                <CheckCircle2 className="w-4 h-4 shrink-0" />
-                                                Check-in request sent
-                                            </p>
-                                            <Link
-                                                href={`/chat?with=${client.id}`}
-                                                className="btn-secondary w-full h-10 text-xs font-black uppercase tracking-widest inline-flex items-center justify-center gap-2"
-                                            >
-                                                <MessageSquare className="w-4 h-4" />
-                                                Open chat
-                                            </Link>
-                                        </div>
-                                    ) : (
-                                        <div className="space-y-2">
-                                            <button
-                                                type="button"
-                                                onClick={() => void sendCheckInRequest()}
-                                                disabled={sendingCheckInRequest}
-                                                className={cn(
-                                                    "btn-primary w-full h-10 text-xs font-black uppercase tracking-widest inline-flex items-center justify-center gap-2",
-                                                    checkInStatus.isOverdue && "bg-warning hover:bg-warning/90 border-warning/30"
-                                                )}
-                                            >
-                                                {sendingCheckInRequest ? (
-                                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                                ) : (
-                                                    <ClipboardList className="w-4 h-4" />
-                                                )}
-                                                {sendingCheckInRequest ? "Sending..." : "Send check-in request"}
-                                            </button>
-                                            {checkInRequestError && (
-                                                <p className="text-[11px] text-red-400 font-semibold">{checkInRequestError}</p>
-                                            )}
-                                        </div>
-                                    )
-                                )}
-                            </div>
-                        )}
-                        {checkIns.length === 0 ? (
-                            !checkInStatus && (
-                            <div className="card p-12 text-center border-dashed opacity-50 flex flex-col items-center">
-                                <Calendar className="w-8 h-8 text-fg-subtle mb-3" />
-                                <p className="text-xs text-fg-muted font-black uppercase tracking-widest italic">No check-ins yet.</p>
-                            </div>
-                            )
-                        ) : (
-                            checkIns.map((ci) => (
-                                <Link 
-                                    href={`/checkins?highlight=${ci.id}`}
-                                    key={ci.id} 
-                                    className={cn(
-                                        "card-hover p-5 border transition-all flex items-center justify-between group",
-                                        ci.status === "Pending" ? "border-brand-500/40 bg-brand-500/5 shadow-glow-brand-sm" : "hover:bg-surface-subtle"
-                                    )}
-                                >
-                                    <div className="flex items-center gap-4">
-                                        <div className={cn(
-                                            "w-12 h-12 rounded-2xl flex items-center justify-center border transition-all",
-                                            ci.status === "Pending" ? "bg-brand-500/10 border-brand-500/30 text-brand-400" : "bg-surface-muted text-fg-subtle group-hover:border-brand-500/30"
-                                        )}>
-                                            <Scale className="w-6 h-6" />
-                                        </div>
-                                        <div>
-                                            <p className="text-xs font-black text-fg uppercase tracking-widest">{formatCheckInPeriodTitle(ci.week, ci.date)}</p>
-                                            <p className="text-[10px] text-fg-subtle font-bold uppercase tracking-[0.1em] mt-0.5">{formatDate(ci.date)}</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-3">
-                                        {ci.status === "Pending" ? (
-                                            <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-brand-500 text-white text-[9px] font-black uppercase tracking-widest shadow-glow-brand animate-pulse">Review</span>
-                                        ) : (
-                                            <span className="text-[9px] font-black uppercase tracking-widest text-success border border-success/30 px-3 py-1.5 rounded-xl">Reviewed</span>
-                                        )}
-                                        <ChevronRight className="w-4 h-4 text-fg-subtle group-hover:text-brand-400 group-hover:translate-x-1 transition-all" />
-                                    </div>
-                                </Link>
-                            ))
-                        )}
-                    </div>
-                </div>
             </div>
 
-            {/* Workouts Management & Notes Grid */}
-            <div className="grid lg:grid-cols-3 gap-8">
-                {/* Workouts Management Column */}
-                <div className="lg:col-span-2 space-y-6">
-                    {/* Recent Output */}
-                    <div className="space-y-4">
-                        <div className="flex items-center justify-between px-2">
-                            <h3 className="heading-3 flex items-center gap-2 uppercase tracking-widest text-[11px] font-black text-warning">
-                                <Activity className="w-4 h-4" />
-                                Recent Sessions
-                            </h3>
-                            {logs.length > 0 && (
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setSessionsInitialId(null);
-                                        setShowAllSessions(true);
-                                    }}
-                                    className="btn-ghost btn-sm text-brand-400 text-[10px] font-black uppercase tracking-widest"
-                                >
-                                    View all
-                                    <ChevronRight className="w-3 h-3" />
-                                </button>
-                            )}
-                        </div>
-                        <div className="space-y-2">
-                            {logs.length === 0 ? (
-                                <p className="text-sm text-fg-muted px-2 italic">No sessions logged yet.</p>
-                            ) : (
-                                logs.slice(0, PREVIEW_LIMIT).map((l) => (
-                                    <button
-                                        key={l.id}
-                                        type="button"
-                                        onClick={() => {
-                                            setSessionsInitialId(l.id);
-                                            setShowAllSessions(true);
-                                        }}
-                                        className="card p-4 flex items-center justify-between group hover:border-brand-500/40 transition-all cursor-pointer w-full text-left"
-                                    >
-                                        <div>
-                                            <h5 className="font-black text-fg text-sm tracking-tight group-hover:text-brand-400">{l.workoutName}</h5>
-                                            <p className="text-[10px] text-fg-muted font-bold uppercase tracking-widest">{l.setCount} sets verified</p>
-                                        </div>
-                                        <div className="text-right">
-                                            <p className="text-[10px] text-fg-subtle font-black uppercase tracking-widest">{formatDate(l.date)}</p>
-                                            <ChevronRight className="w-4 h-4 text-fg-subtle ml-auto mt-1 opacity-0 group-hover:opacity-100 transition-all transform group-hover:translate-x-1" />
-                                        </div>
-                                    </button>
-                                ))
-                            )}
-                        </div>
-                    </div>
-                </div>
+            <LifestyleProgressSection period={period} />
 
-                {/* Workout Notes Column */}
-                <div className="lg:col-span-1">
-                    <div className="card p-5 h-full flex flex-col justify-between">
-                        <div>
-                            <div className="flex items-center gap-2 mb-4">
-                                <MessageSquare className="w-4 h-4 text-warning" />
-                                <h3 className="heading-3">Workout Notes</h3>
-                            </div>
-                            <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1 no-scrollbar">
-                                {workoutNotes.length === 0 ? (
-                                    <p className="text-sm text-fg-muted italic">No notes recorded for this client.</p>
-                                ) : workoutNotes.map(note => (
-                                    <div key={note.id} className="w-full text-left rounded-xl border border-surface-border bg-surface-muted/30 p-3">
-                                        <p className="text-[10px] font-black text-brand-400 uppercase tracking-widest">{formatDate(note.createdAt)}</p>
-                                        <p className="text-sm font-bold text-fg mt-1">{note.workoutName}</p>
-                                        <p className="text-xs text-fg-muted mt-1 line-clamp-3">{note.text}</p>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                        {canEdit && (
-                        <div className="pt-4 border-t border-surface-border/50 text-center mt-4">
-                            <Link href={`/plans/create?clientId=${client.id}`} className="text-xs font-black text-brand-400 hover:text-brand-300 transition-colors uppercase tracking-widest flex items-center justify-center gap-1.5">
-                                <Dumbbell className="w-3.5 h-3.5" /> Modify Workouts
-                            </Link>
-                        </div>
-                        )}
-                    </div>
-                </div>
-            </div>
+            <ProgressTrendsCard
+                bodyweightHistory={bodyweightHistory}
+                workoutHistory={workoutHistory}
+                currentWeightKg={period.bodyweightCurrentKg ?? client.currentWeightKg ?? null}
+                targetWeightKg={client.targetWeightKg ?? null}
+                weightHidden={isWeightHidden}
+                weightDirection={insights.weightDirection}
+                periodChangeKg={period.bodyweightChangeKg}
+                periodLabel={period.label}
+            />
 
-            {/* Check-ins */}
-            <section id="client-check-ins" className="space-y-4 scroll-mt-24">
-                <div className="flex items-center justify-between px-2">
-                    <h3 className="heading-3 flex items-center gap-2 uppercase tracking-widest text-[11px] font-black text-success">
-                        <Calendar className="w-4 h-4" />
-                        Check-ins
-                    </h3>
-                    <Link href="/checkins" className="text-xs text-brand-400 hover:underline">See all</Link>
-                </div>
-                <div className="space-y-3 max-h-[520px] overflow-y-auto no-scrollbar pr-1">
-                        {checkInStatus && (
-                            <div className={cn(
-                                "card p-5 border space-y-3",
-                                checkInStatus.isOverdue
-                                    ? "border-warning/30 bg-warning/5"
-                                    : "border-brand-500/30 bg-brand-500/5"
-                            )}>
-                                <div className="flex items-start gap-3">
-                                    <div className={cn(
-                                        "w-11 h-11 rounded-2xl flex items-center justify-center border shrink-0",
-                                        checkInStatus.isOverdue
-                                            ? "bg-warning/10 border-warning/30 text-warning"
-                                            : "bg-brand-500/10 border-brand-500/30 text-brand-400"
-                                    )}>
-                                        {checkInStatus.isOverdue ? (
-                                            <AlertTriangle className="w-5 h-5" />
-                                        ) : (
-                                            <Scale className="w-5 h-5" />
-                                        )}
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                        <p className={cn(
-                                            "text-xs font-black uppercase tracking-widest",
-                                            checkInStatus.isOverdue ? "text-warning" : "text-brand-400"
-                                        )}>
-                                            {checkInStatus.label}
-                                        </p>
-                                        <p className="text-[10px] text-fg-muted font-bold uppercase tracking-[0.1em] mt-1">
-                                            {checkInStatus.periodLabel} - Waiting for client to submit
-                                        </p>
-                                    </div>
-                                </div>
-                                {canEdit && (
-                                    checkInRequestSent ? (
-                                        <div className="space-y-2">
-                                            <p className="text-xs font-semibold text-success flex items-center gap-1.5">
-                                                <CheckCircle2 className="w-4 h-4 shrink-0" />
-                                                Check-in request sent
-                                            </p>
-                                            <Link
-                                                href={`/chat?with=${client.id}`}
-                                                className="btn-secondary w-full h-10 text-xs font-black uppercase tracking-widest inline-flex items-center justify-center gap-2"
-                                            >
-                                                <MessageSquare className="w-4 h-4" />
-                                                Open chat
-                                            </Link>
-                                        </div>
-                                    ) : (
-                                        <div className="space-y-2">
-                                            <button
-                                                type="button"
-                                                onClick={() => void sendCheckInRequest()}
-                                                disabled={sendingCheckInRequest}
-                                                className={cn(
-                                                    "btn-primary w-full h-10 text-xs font-black uppercase tracking-widest inline-flex items-center justify-center gap-2",
-                                                    checkInStatus.isOverdue && "bg-warning hover:bg-warning/90 border-warning/30"
-                                                )}
-                                            >
-                                                {sendingCheckInRequest ? (
-                                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                                ) : (
-                                                    <ClipboardList className="w-4 h-4" />
-                                                )}
-                                                {sendingCheckInRequest ? "Sending..." : "Send check-in request"}
-                                            </button>
-                                            {checkInRequestError && (
-                                                <p className="text-[11px] text-red-400 font-semibold">{checkInRequestError}</p>
-                                            )}
-                                        </div>
-                                    )
-                                )}
-                            </div>
-                        )}
-                        {checkIns.length === 0 ? (
-                            !checkInStatus && (
-                                <div className="p-12 text-center border border-dashed border-surface-border rounded-2xl opacity-60 flex flex-col items-center">
-                                    <Calendar className="w-8 h-8 text-fg-subtle mb-3" />
-                                    <p className="text-xs text-fg-muted font-black uppercase tracking-widest italic">No check-ins yet.</p>
-                                </div>
-                            )
-                        ) : (
-                            checkIns.map((ci) => (
-                                <Link
-                                    href={`/checkins?highlight=${ci.id}`}
-                                    key={ci.id}
-                                    className={cn(
-                                        "card-hover p-5 border transition-all flex items-center justify-between group",
-                                        ci.status === "Pending" ? "border-brand-500/40 bg-brand-500/5 shadow-glow-brand-sm" : "hover:bg-surface-subtle"
-                                    )}
-                                >
-                                    <div className="flex items-center gap-4 min-w-0">
-                                        <div className={cn(
-                                            "w-12 h-12 rounded-2xl flex items-center justify-center border transition-all shrink-0",
-                                            ci.status === "Pending" ? "bg-brand-500/10 border-brand-500/30 text-brand-400" : "bg-surface-muted text-fg-subtle group-hover:border-brand-500/30"
-                                        )}>
-                                            <Scale className="w-6 h-6" />
-                                        </div>
-                                        <div className="min-w-0">
-                                            <p className="text-xs font-black text-fg uppercase tracking-widest truncate">{formatCheckInPeriodTitle(ci.week, ci.date)}</p>
-                                            <p className="text-[10px] text-fg-subtle font-bold uppercase tracking-[0.1em] mt-0.5">{formatDate(ci.date)}</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-3 shrink-0">
-                                        {ci.status === "Pending" ? (
-                                            <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-brand-500 text-white text-[9px] font-black uppercase tracking-widest shadow-glow-brand animate-pulse">Review</span>
-                                        ) : (
-                                            <span className="text-[9px] font-black uppercase tracking-widest text-success border border-success/30 px-3 py-1.5 rounded-xl">Reviewed</span>
-                                        )}
-                                        <ChevronRight className="w-4 h-4 text-fg-subtle group-hover:text-brand-400 group-hover:translate-x-1 transition-all" />
-                                    </div>
-                                </Link>
-                            ))
-                        )}
-                </div>
-            </section>
+            <LatestCheckInCard
+                checkIn={insights.latestCheckIn}
+                overdue={checkInRequest.isOverdue}
+                canEdit={canEdit}
+                canViewPhotos={insights.canViewCheckInPhotos}
+                sendingCheckInRequest={sendingCheckInRequest}
+                checkInRequestSent={checkInRequestSent}
+                onRequestCheckIn={sendCheckInRequest}
+            />
 
-            {/* Exercise progression history */}
-            <section className="space-y-4 border-t border-surface-border pt-12 mt-12">
-                <div className="flex items-center gap-2 mb-2">
-                    <Activity className="w-4 h-4 text-brand-400" />
-                    <h3 className="heading-3 uppercase tracking-widest text-[11px] font-black text-brand-400">Exercise Progression History</h3>
-                </div>
+            <RecentSessionsCard
+                sessions={insights.recentSessions}
+                onOpen={(id) => {
+                    setSessionsInitialId(id);
+                    setShowAllSessions(true);
+                }}
+            />
+
+            <section className="space-y-4 border-t border-surface-border pt-8">
+                <h3 className="text-[11px] font-black uppercase tracking-widest text-brand-400 flex items-center gap-2">
+                    <Activity className="w-4 h-4" />
+                    Exercise Progression
+                </h3>
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                    {/* Chart */}
                     <div className="lg:col-span-8 card overflow-hidden">
                         <div className="p-5 border-b border-surface-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                            <div className="flex-1 min-w-0">
-                                <h4 className="text-base font-black text-fg tracking-tight">{selectedExercise || "Select an exercise"}</h4>
-                                <p className="text-[10px] text-fg-muted font-bold uppercase tracking-wide mt-0.5">Performance curve over time</p>
+                            <div>
+                                <h4 className="text-base font-black text-fg">{selectedExercise || "Select an exercise"}</h4>
+                                <p className="text-[10px] text-fg-muted font-bold uppercase tracking-wide mt-0.5">Canonical exercise history</p>
                             </div>
-                            <div className="flex items-center gap-3 shrink-0 flex-wrap">
-                            {selectedExercise && (
-                                <button
-                                    type="button"
-                                    onClick={() => openHistory(selectedExercise)}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest text-brand-400 bg-brand-500/10 border border-brand-500/20 hover:bg-brand-500/15 transition-colors"
-                                >
-                                    <Activity className="w-3 h-3" />
-                                    View full history
-                                </button>
-                            )}
-                            {selectedExerciseStats && (
-                                <div className="flex items-center gap-3 shrink-0">
-                                    <div className="text-center px-3 py-1.5 rounded-xl bg-warning/10 border border-warning/20">
-                                        <p className="text-[9px] font-black text-warning/70 uppercase tracking-widest">Est. Max</p>
-                                        <p className="text-sm font-black text-warning">{selectedExerciseStats.estimatedMax}<span className="text-[9px] ml-0.5 font-bold">kg</span></p>
-                                    </div>
-                                    <div className="text-center px-3 py-1.5 rounded-xl bg-brand-500/10 border border-brand-500/20">
-                                        <p className="text-[9px] font-black text-brand-400/70 uppercase tracking-widest">Current Max</p>
-                                        <p className="text-sm font-black text-brand-400">{selectedExerciseStats.currentMax}<span className="text-[9px] ml-0.5 font-bold">kg</span></p>
-                                    </div>
-                                </div>
-                            )}
+                            <div className="flex items-center gap-3 flex-wrap">
+                                {selectedExercise && (
+                                    <button type="button" onClick={() => openHistory(selectedExercise)} className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest text-brand-400 bg-brand-500/10 border border-brand-500/20">
+                                        View full history
+                                    </button>
+                                )}
+                                {selectedExerciseStats && (
+                                    <>
+                                        {selectedExerciseStats.estimatedMax != null && (
+                                            <div className="text-center px-3 py-1.5 rounded-xl bg-warning/10 border border-warning/20">
+                                                <p className="text-[9px] font-black text-warning/70 uppercase tracking-widest">Est. Max</p>
+                                                <p className="text-sm font-black text-warning">{selectedExerciseStats.estimatedMax}<span className="text-[9px] ml-0.5">kg</span></p>
+                                            </div>
+                                        )}
+                                        <div className="text-center px-3 py-1.5 rounded-xl bg-brand-500/10 border border-brand-500/20">
+                                            <p className="text-[9px] font-black text-brand-400/70 uppercase tracking-widest">Current best</p>
+                                            <p className="text-sm font-black text-brand-400">{selectedExerciseStats.currentMax}<span className="text-[9px] ml-0.5">kg</span></p>
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         </div>
-                        <div className="p-5 sm:p-6 bg-surface/10">
+                        <div className="p-5">
                             {selectedExercise ? (
                                 <div className="h-[300px] w-full">
                                     <ResponsiveContainer width="100%" height="100%">
@@ -1898,228 +715,146 @@ export function ClientDetailView({ client, currentUserId, availablePlans, logs, 
                                             </defs>
                                             <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" vertical={false} />
                                             <XAxis dataKey="date" stroke="#4B5563" fontSize={10} tickLine={false} axisLine={false} />
-                                            <YAxis stroke="#4B5563" fontSize={10} tickLine={false} axisLine={false} domain={['auto', 'auto']} />
-                                            <Tooltip
-                                                content={({ active, payload, label }) => {
-                                                    if (active && payload && payload.length) {
-                                                        return (
-                                                            <ExerciseHistoryTooltipContent
-                                                                label={label}
-                                                                data={payload[0].payload}
-                                                            />
-                                                        );
-                                                    }
-                                                    return null;
-                                                }}
-                                             />
-                                             <Area
-                                                 type="monotone" dataKey="weight" stroke="#818cf8" strokeWidth={3}
-                                                 fill="url(#exGrad)"
-                                                 dot={{ r: 4, fill: "#818cf8", stroke: "#0F172A", strokeWidth: 2 }}
-                                                 activeDot={{ r: 6, fill: "#a5b4fc", strokeWidth: 0 }}
-                                                 animationDuration={800}
-                                             />
-                                             <Line
-                                                 type="monotone"
-                                                 dataKey="oneRM"
-                                                 stroke="#FACC15"
-                                                 strokeWidth={2}
-                                                 strokeDasharray="5 5"
-                                                 dot={false}
-                                                 activeDot={false}
-                                             />
-                                         </AreaChart>
-                                     </ResponsiveContainer>
-                                 </div>
-                             ) : (
-                                 <div className="h-[300px] flex items-center justify-center text-sm text-fg-muted">
-                                     No exercise history recorded for this client.
-                                 </div>
-                             )}
-                         </div>
-                     </div>
+                                            <YAxis stroke="#4B5563" fontSize={10} tickLine={false} axisLine={false} domain={["auto", "auto"]} />
+                                            <Tooltip content={({ active, payload, label }) => (
+                                                active && payload?.[0] ? <ExerciseHistoryTooltipContent label={label} data={payload[0].payload} /> : null
+                                            )} />
+                                            <Area type="monotone" dataKey="weight" stroke="#818cf8" strokeWidth={3} fill="url(#exGrad)" />
+                                            {selectedIsStrength && (
+                                                <Line type="monotone" dataKey="oneRM" stroke="#FACC15" strokeWidth={2} strokeDasharray="5 5" dot={false} />
+                                            )}
+                                        </AreaChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            ) : (
+                                <div className="h-[240px] flex items-center justify-center text-sm text-fg-muted">No exercise history recorded for this client.</div>
+                            )}
+                        </div>
+                    </div>
+                    <div className="lg:col-span-4 card flex flex-col h-[412px] overflow-hidden">
+                        <div className="p-4 border-b border-surface-border">
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-fg-subtle" />
+                                <input className="pl-9 pr-4 py-2.5 w-full bg-surface-elevated border border-surface-border rounded-xl text-xs font-bold outline-none text-fg" placeholder="Search exercises..." value={exerciseSearchQuery} onChange={(e) => setExerciseSearchQuery(e.target.value)} />
+                            </div>
+                        </div>
+                        <div className="flex-1 overflow-y-auto no-scrollbar p-2 space-y-1">
+                            {exerciseListFiltered.map((ex) => {
+                                const hist = exerciseHistory[ex] || [];
+                                const latest = hist[hist.length - 1];
+                                const isActive = selectedExercise === ex;
+                                const isPinned = pinnedExercises.includes(ex);
+                                return (
+                                    <div
+                                        key={ex}
+                                        role="button"
+                                        tabIndex={0}
+                                        onClick={() => setSelectedExercise(ex)}
+                                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setSelectedExercise(ex); }}
+                                        className={cn("w-full flex items-center justify-between p-3 rounded-xl cursor-pointer", isActive ? "bg-brand-500/10 border border-brand-500/20" : "hover:bg-surface-elevated border border-transparent")}
+                                    >
+                                        <div className="min-w-0">
+                                            <p className={cn("text-xs font-black truncate", isActive ? "text-brand-400" : "text-fg")}>{ex}</p>
+                                            <p className="text-[10px] text-fg-muted truncate">Best: {latest?.weight ?? "—"}kg · {hist.length} sessions</p>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            {!readOnly && (
+                                                <button type="button" onClick={(e) => void togglePinExercise(ex, e)} className={cn("p-1.5 rounded-lg", isPinned ? "text-brand-400" : "text-fg-subtle")}>
+                                                    <Pin className={cn("w-3.5 h-3.5", isPinned && "fill-brand-400")} />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+            </section>
 
-                     {/* Exercise Library */}
-                     <div className="lg:col-span-4 card flex flex-col h-[412px] overflow-hidden">
-                         <div className="p-4 border-b border-surface-border">
-                             <div className="relative">
-                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-fg-subtle" />
-                                 <input
-                                     type="text"
-                                     className="pl-9 pr-4 py-2.5 w-full bg-surface-elevated border border-surface-border rounded-xl text-xs font-bold outline-none focus:border-brand-500/50 transition-all text-fg"
-                                     placeholder="Search exercises..."
-                                     value={exerciseSearchQuery}
-                                     onChange={(e) => setExerciseSearchQuery(e.target.value)}
-                                 />
-                             </div>
-                         </div>
-                         <div className="flex-1 overflow-y-auto no-scrollbar p-2 space-y-1">
-                             {exerciseListFiltered.length === 0 ? (
-                                 <p className="text-xs text-fg-muted italic p-4 text-center">No exercises found.</p>
-                             ) : (
-                                 exerciseListFiltered.map(ex => {
-                                     const hist = exerciseHistory[ex] || [];
-                                     const latest = hist[hist.length - 1];
-                                     const isActive = selectedExercise === ex;
-                                     const isPinned = pinnedExercises.includes(ex);
-                                     return (
-                                         <div
-                                             key={ex}
-                                             role="button"
-                                             tabIndex={0}
-                                             onClick={() => setSelectedExercise(ex)}
-                                             onKeyDown={(e) => {
-                                                 if (e.key === "Enter" || e.key === " ") setSelectedExercise(ex);
-                                             }}
-                                             className={cn(
-                                                 "w-full flex items-center justify-between p-3 rounded-xl transition-all text-left cursor-pointer group",
-                                                 isActive ? "bg-brand-500/10 border border-brand-500/20" : "hover:bg-surface-elevated border border-transparent"
-                                             )}
-                                         >
-                                             <div className="flex items-center gap-3 min-w-0">
-                                                 <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", isActive ? "bg-brand-500 text-white" : "bg-surface-muted text-fg-subtle")}>
-                                                     <Dumbbell className="w-3.5 h-3.5" />
-                                                 </div>
-                                                 <div className="min-w-0">
-                                                     <p className={cn("text-xs font-black truncate", isActive ? "text-brand-400" : "text-fg")}>{ex}</p>
-                                                     <p className="text-[10px] text-fg-muted truncate">Best: {latest?.weight}kg · {hist.length} sessions</p>
-                                                 </div>
-                                             </div>
-                                             <div className="flex items-center gap-1 shrink-0">
-                                                 <button
-                                                     type="button"
-                                                     onClick={(e) => {
-                                                         e.stopPropagation();
-                                                         setSelectedExercise(ex);
-                                                         openHistory(ex);
-                                                     }}
-                                                     className="p-1.5 rounded-lg text-fg-subtle opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-surface-muted/80 hover:text-brand-400 transition-all"
-                                                     title={`View full ${ex} history`}
-                                                 >
-                                                     <Activity className="w-3.5 h-3.5" />
-                                                 </button>
-                                                 {!readOnly && (
-                                                     <button
-                                                         type="button"
-                                                         onClick={(e) => togglePinExercise(ex, e)}
-                                                         className={cn(
-                                                             "p-1.5 rounded-lg transition-all hover:bg-surface-muted/80",
-                                                             isPinned ? "text-brand-400 opacity-100" : "text-fg-subtle opacity-0 group-hover:opacity-100 focus:opacity-100"
-                                                         )}
-                                                         title={isPinned ? "Unpin exercise" : "Pin exercise"}
-                                                     >
-                                                         <Pin className={cn("w-3.5 h-3.5", isPinned && "fill-brand-400")} />
-                                                     </button>
-                                                 )}
-                                                 {isPinned && readOnly && (
-                                                     <Pin className="w-3.5 h-3.5 text-brand-400 fill-brand-400 shrink-0" />
-                                                 )}
-                                                 <ChevronRight className={cn("w-4 h-4 shrink-0 transition-opacity", isActive ? "text-brand-400 opacity-100" : "opacity-0")} />
-                                             </div>
-                                         </div>
-                                     );
-                                 })
-                             )}
-                         </div>
-                     </div>
-                 </div>
-             </section>
+            <CoachNotesCard
+                notes={notes}
+                canEdit={canEdit}
+                currentUserId={currentUserId}
+                onCreate={async (text) => {
+                    const res = await fetch("/api/coach/clients/notes", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ clientId: client.id, text }),
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok) throw new Error(data.error ?? "Could not add note");
+                    setNotes((prev) => [data.note, ...prev]);
+                }}
+                onUpdate={async (id, text) => {
+                    const res = await fetch("/api/coach/clients/notes", {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ id, text }),
+                    });
+                    if (!res.ok) {
+                        const data = await res.json().catch(() => ({}));
+                        throw new Error(data.error ?? "Could not update note");
+                    }
+                    setNotes((prev) => prev.map((note) => note.id === id ? { ...note, text, updatedAt: new Date().toISOString() } : note));
+                }}
+                onDelete={async (id) => {
+                    if (!confirm("Delete this private note?")) return;
+                    const res = await fetch("/api/coach/clients/notes", {
+                        method: "DELETE",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ id }),
+                    });
+                    if (!res.ok) {
+                        const data = await res.json().catch(() => ({}));
+                        alert(data.error ?? "Could not delete note");
+                        return;
+                    }
+                    setNotes((prev) => prev.filter((note) => note.id !== id));
+                }}
+            />
 
-             {/* Coach-only pause — silences alerts without affecting the client's account */}
-             {canEdit && (
-             <div className="border-t border-surface-border pt-10 mt-10">
-                <div className="card p-6 border-surface-border bg-surface-muted/20">
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
-                        <div className="space-y-1">
-                            <h4 className="text-sm font-black text-fg uppercase tracking-widest">
-                                {isCoachPaused ? "Client Paused" : "Pause Client"}
-                            </h4>
+            {canEdit && (
+                <div className="border-t border-surface-border pt-8 space-y-4">
+                    <div className="card p-5 border-surface-border bg-surface-muted/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                        <div>
+                            <h4 className="text-sm font-black text-fg uppercase tracking-widest">{isCoachPaused ? "Client Paused" : "Pause Client"}</h4>
                             <p className="text-xs text-fg-muted max-w-md mt-2">
                                 {isCoachPaused
-                                    ? "Missed workout and check-in alerts are silenced for you. Their account still works normally — they will not see this status. Resume anytime, or they auto-resume when they return to the app."
-                                    : "Temporarily silence missed workout and check-in alerts for an inactive client. Their account, plan, chat and history stay intact, and they will not see this status."}
+                                    ? "Missed workout and check-in alerts are silenced for you. Their account still works normally."
+                                    : "Temporarily silence missed workout and check-in alerts. Their account, plan, chat and history stay intact."}
                             </p>
                         </div>
-                        <button
-                            type="button"
-                            onClick={() => void handleTogglePauseClient()}
-                            disabled={pausingClient || updating}
-                            className={cn(
-                                "btn-secondary text-[10px] font-black uppercase tracking-widest h-10 px-6 inline-flex items-center gap-2 disabled:opacity-60",
-                                isCoachPaused
-                                    ? "border-success/30 text-success hover:bg-success/10"
-                                    : "border-surface-border text-fg-muted hover:text-fg"
-                            )}
-                        >
+                        <button type="button" onClick={() => void handleTogglePauseClient()} disabled={pausingClient} className={cn("btn-secondary text-[10px] font-black uppercase tracking-widest h-10 px-6", isCoachPaused && "border-success/30 text-success")}>
                             {pausingClient ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
                             {isCoachPaused ? "Resume Client" : "Pause Client"}
                         </button>
                     </div>
-                </div>
-            </div>
-            )}
-
-             {/* Danger Zone */}
-             {canEdit && (
-             <div className="border-t border-surface-border pt-12 mt-12">
-                <div className="card p-6 border-danger-500/20 bg-danger-500/5">
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
-                        <div className="space-y-1">
-                            <h4 className="text-sm font-black text-danger uppercase tracking-widest flex items-center gap-2">
-                                <AlertTriangle className="w-4 h-4" />
-                                Danger Zone
-                            </h4>
-                            <p className="text-xs text-fg-muted max-w-md mt-2">
-                                Revoking this athlete&apos;s Coached Premium access will remove them from your stable and reset their status to Free. They will no longer see your assigned plans.
-                            </p>
-                        </div>
-
-                        {!removing ? (
-                            <button 
-                                onClick={() => setRemoving(true)}
-                                className="btn-secondary border-danger-500/30 text-danger hover:bg-danger-500 hover:text-white transition-all text-[10px] font-black uppercase tracking-widest h-10 px-6"
-                            >
-                                Remove Client
-                            </button>
-                        ) : (
-                            <div className="w-full sm:w-auto space-y-3 animate-fade-in">
-                                <div className="space-y-1.5">
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-fg-subtle">Confirm Athlete Email To Proceed</label>
-                                    <input 
-                                        type="email"
-                                        placeholder={client.email}
-                                        className="input input-sm border-danger-500/30 font-mono text-xs"
-                                        value={confirmEmail}
-                                        onChange={(e) => setConfirmEmail(e.target.value)}
-                                    />
-                                </div>
-                                <div className="flex gap-2">
-                                    <button 
-                                        onClick={handleRemoveClient}
-                                        disabled={updating || !confirmEmail}
-                                        className="btn-primary bg-danger border-danger hover:bg-danger-600 shadow-glow-danger-sm flex-1 text-[10px] font-black uppercase tracking-widest h-10"
-                                    >
-                                        Authorize Removal
-                                    </button>
-                                    <button 
-                                        onClick={() => { setRemoving(false); setConfirmEmail(""); }}
-                                        className="btn-secondary flex-1 text-[10px] font-black uppercase tracking-widest h-10"
-                                    >
-                                        Cancel
-                                    </button>
-                                </div>
+                    <div className="card p-5 border-danger-500/20 bg-danger-500/5">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                            <div>
+                                <h4 className="text-sm font-black text-danger uppercase tracking-widest flex items-center gap-2">
+                                    <AlertTriangle className="w-4 h-4" /> Danger Zone
+                                </h4>
+                                <p className="text-xs text-fg-muted max-w-md mt-2">Remove this client from your coaching list. History is kept; they will no longer see your assigned plans.</p>
                             </div>
-                        )}
+                            {!removing ? (
+                                <button type="button" onClick={() => setRemoving(true)} className="btn-secondary border-danger-500/30 text-danger text-[10px] font-black uppercase tracking-widest h-10 px-6">Remove Client</button>
+                            ) : (
+                                <div className="w-full sm:w-auto space-y-3">
+                                    <input type="email" placeholder={client.email} className="input input-sm border-danger-500/30 font-mono text-xs" value={confirmEmail} onChange={(e) => setConfirmEmail(e.target.value)} />
+                                    <div className="flex gap-2">
+                                        <button type="button" onClick={() => void handleRemoveClient()} disabled={updating || !confirmEmail} className="btn-primary bg-danger border-danger flex-1 text-[10px] font-black uppercase tracking-widest h-10">Authorize Removal</button>
+                                        <button type="button" onClick={() => { setRemoving(false); setConfirmEmail(""); }} className="btn-secondary flex-1 text-[10px] font-black uppercase tracking-widest h-10">Cancel</button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
-            </div>
             )}
 
-            <ExerciseHistoryModal
-                exerciseName={historyExercise}
-                clientId={client.id}
-                onClose={closeHistory}
-            />
+            <ExerciseHistoryModal exerciseName={historyExercise} clientId={client.id} onClose={closeHistory} />
         </div>
     );
 }

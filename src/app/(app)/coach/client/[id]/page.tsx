@@ -4,9 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { ClientDetailView } from "./ClientDetailView";
 import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
-import { getEffectiveCheckInDueStateForUser } from "@/lib/coachAttentionActions";
-import { formatCheckInDueDate, formatCheckInWeekLabel, getIsoWeekYear } from "@/lib/checkInLabels";
-import { getDayName, getWeekNumber, isSameCalendarDay, parseLogDate, toDateKey } from "@/lib/utils";
+import { getClientAttentionActions, getEffectiveCheckInDueStateForUser, getExcusedMissedWorkoutKeys } from "@/lib/coachAttentionActions";
+import { toDateKey } from "@/lib/utils";
 import { getClientGoalTargets } from "@/lib/clientGoalTargets";
 import { format } from "date-fns";
 import { createExerciseSessionEntry, mergeSetIntoExerciseSession, normalizeExerciseHistory } from "@/lib/exerciseHistory";
@@ -15,11 +14,13 @@ import { SafeFallback, rethrowNextInternalErrors } from "@/components/shared/Saf
 import { formatErrorDetails } from "@/lib/ensureAppSchema";
 import { dedupeCoachPlansByName } from "@/lib/coachPlans";
 import { getUserPinnedExercises } from "@/lib/pinnedExercises";
-import { getActiveSessionsForClients } from "@/lib/coachChat";
 import { resolveLogSetExerciseName } from "@/lib/logSetExerciseName";
 import { getNickname, pickDisplayName } from "@/lib/userNicknames";
-import { activeWorkoutWhere, getPlannedWorkoutForDate } from "@/lib/planSchedule";
+import { activeWorkoutWhere } from "@/lib/planSchedule";
 import { loadPlanScheduleRevisions } from "@/lib/planScheduleHistory";
+import { computeWorkoutAdherence } from "@/lib/workoutAdherenceStreak";
+import { loadHistoricalMissedSessions } from "@/lib/planMissedSessionHistory";
+import { loadCoachClientProfileInsights } from "@/lib/coachClientProfileData";
 
 export const metadata = { title: "Client Details" };
 
@@ -41,7 +42,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                     orderBy: { loggedAt: "desc" },
                     take: 40,
                 },
-                checkIns: { orderBy: { createdAt: "desc" }, take: 5 },
+                checkIns: { orderBy: { createdAt: "desc" }, select: { createdAt: true } },
                 plans: {
                     where: { isActive: true },
                     include: {
@@ -53,6 +54,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                                         workouts: {
                                             where: activeWorkoutWhere(),
                                             orderBy: { dayNumber: "asc" },
+                                            include: { exercises: { select: { id: true } } },
                                         },
                                     },
                                 },
@@ -81,14 +83,9 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
 
         const checkInSchedule = await getUserCheckInSchedule(target.id);
         const checkInDueState = await getEffectiveCheckInDueStateForUser(target.id, checkInSchedule, new Date());
-        const periodWeek = checkInDueState.outstandingWeekNumber ?? getWeekNumber(new Date());
-        const hasCheckInForPeriod = await prisma.checkIn.findFirst({
-            where: { userId: target.id, weekNumber: periodWeek },
-            select: { id: true },
-        }).then((row) => row != null);
 
         const activeUserPlan = target.plans[0] ?? null;
-        const [activePlan, availablePlans, bodyweightRows, workoutNotesRows, completedLogs, clientMetricTargets, pinnedExercises] = await Promise.all([
+        const [activePlan, availablePlans, bodyweightRows, completedLogs, clientMetricTargets, pinnedExercises, clientActions, historicalMissedSessions] = await Promise.all([
             Promise.resolve(target.plans[0]?.plan ?? null),
             prisma.plan.findMany({
                 where: { creatorId: actor.id },
@@ -100,19 +97,6 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                 FROM "bodyweight_logs"
                 WHERE "userId" = ${target.id}
                 ORDER BY "loggedDate" ASC
-            `,
-            prisma.$queryRaw<Array<{ id: string; workoutLogId: string; text: string; createdAt: Date; workoutName: string }>>`
-                SELECT
-                    wn."id",
-                    wn."workoutLogId",
-                    wn."text",
-                    wn."createdAt",
-                    w."name" AS "workoutName"
-                FROM "workout_notes" wn
-                JOIN "workout_logs" wl ON wl."id" = wn."workoutLogId"
-                JOIN "workouts" w ON w."id" = wl."workoutId"
-                WHERE wl."userId" = ${target.id}
-                ORDER BY wn."createdAt" DESC
             `,
             prisma.workoutLog.findMany({
                 where: { userId: target.id, status: "COMPLETED" },
@@ -129,6 +113,8 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             }),
             getClientGoalTargets(target.id),
             getUserPinnedExercises(target.id),
+            getClientAttentionActions(target.id),
+            loadHistoricalMissedSessions(target.id, { planId: target.plans[0]?.plan.id }),
         ]);
 
         const exerciseHistory: Record<string, any[]> = {};
@@ -160,96 +146,76 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         });
 
         const normalizedExerciseHistory = normalizeExerciseHistory(exerciseHistory);
-
-        // Dynamic Adherence and Trend Calculation
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        const fifteenDaysAgo = new Date();
-        fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
-
-        const completedLast30Days = (completedLogs ?? []).filter(log => log.loggedAt && log.loggedAt >= thirtyDaysAgo).length;
-        const expectedLast30Days = Math.round(((target.trainingDaysPerWeek ?? 3) * 30) / 7);
-        const adherencePercentage = expectedLast30Days > 0 
-            ? Math.min(100, Math.round((completedLast30Days / expectedLast30Days) * 100))
-            : 100;
-
-        const w1 = (completedLogs ?? []).filter(log => log.loggedAt && log.loggedAt >= fifteenDaysAgo).length;
-        const w2 = (completedLogs ?? []).filter(log => log.loggedAt && log.loggedAt >= thirtyDaysAgo && log.loggedAt < fifteenDaysAgo).length;
-        const adherenceTrend = w1 > w2 ? "UP" : w1 < w2 ? "DOWN" : "STABLE";
-
-        const activeSessions = isInactiveClient
-            ? {}
-            : await getActiveSessionsForClients([target.id]);
-        const activeSession = activeSessions[target.id] ?? null;
-        const todayDateKey = toDateKey(new Date());
-        const today = parseLogDate(todayDateKey);
         const scheduleRevisions = activePlan ? await loadPlanScheduleRevisions(activePlan.id) : [];
-        const scheduledTodayWorkout = activeUserPlan && activePlan
-            ? getPlannedWorkoutForDate(
-                {
-                    startedAt: activeUserPlan.startedAt,
-                    plan: {
-                        weeks: activePlan.weeks.map((week) => ({
-                            weekNumber: week.weekNumber,
-                            workouts: week.workouts.map((workout) => ({
-                                id: workout.id,
-                                name: workout.name,
-                                dayNumber: workout.dayNumber,
-                                dayOfWeek: workout.dayOfWeek,
-                            })),
+        const planLike = activeUserPlan && activePlan
+            ? {
+                startedAt: activeUserPlan.startedAt,
+                plan: {
+                    id: activePlan.id,
+                    weeks: activePlan.weeks.map((week) => ({
+                        weekNumber: week.weekNumber,
+                        workouts: week.workouts.map((workout) => ({
+                            id: workout.id,
+                            name: workout.name,
+                            dayNumber: workout.dayNumber,
+                            dayOfWeek: workout.dayOfWeek,
+                            exercises: workout.exercises,
                         })),
-                    },
-                    scheduleRevisions,
+                    })),
                 },
-                today,
-                { today, dateKey: todayDateKey }
-            )
-            : null;
-        const completedTodayLog = scheduledTodayWorkout
-            ? (completedLogs ?? []).find((log) =>
-                log.workoutId === scheduledTodayWorkout.id
-                && log.status === "COMPLETED"
-                && isSameCalendarDay(log.loggedAt, todayDateKey)
-            ) ?? null
-            : null;
-        const currentWorkout = activeSession
-            ? {
-                id: activeSession.workoutId,
-                name: activeSession.workoutName,
-                status: "IN_PROGRESS" as const,
-                scheduledDay: getDayName(today),
-                href: `/plans/log/view/${activeSession.logId}`,
+                scheduleRevisions,
             }
-            : scheduledTodayWorkout
-                ? {
-                    id: scheduledTodayWorkout.id,
-                    name: scheduledTodayWorkout.name,
-                    status: completedTodayLog ? "COMPLETED" as const : "NOT_STARTED" as const,
-                    scheduledDay: getDayName(today),
-                    href: completedTodayLog
-                        ? `/plans/log/view/${completedTodayLog.id}`
-                        : `/plans/log/${scheduledTodayWorkout.id}?clientId=${target.id}&date=${todayDateKey}`,
-                }
-                : null;
+            : null;
+        const excusedMissedWorkoutKeys = getExcusedMissedWorkoutKeys(clientActions);
+        const adherence = computeWorkoutAdherence({
+            activeUserPlan: planLike,
+            completedLogs: (completedLogs ?? []).map((log) => ({
+                workoutId: log.workoutId,
+                dateKey: toDateKey(log.loggedAt),
+            })),
+            excusedMissedWorkoutKeys: [...excusedMissedWorkoutKeys],
+            historicalMissedSessions,
+        });
 
-        const awaitingCheckIn =
-            checkInDueState.isConfigured &&
-            !hasCheckInForPeriod &&
-            (checkInDueState.isOverdue || checkInDueState.isDueToday);
-        const checkInStatus = awaitingCheckIn
-            ? {
-                label: checkInDueState.isOverdue
-                    ? (checkInDueState.daysOverdue != null && checkInDueState.daysOverdue > 1
-                        ? `Check-in overdue · ${checkInDueState.daysOverdue} days`
-                        : "Check-in overdue")
-                    : "Check-in due today",
-                isOverdue: checkInDueState.isOverdue,
-                weekNumber: periodWeek,
-                periodLabel:
-                    formatCheckInDueDate(checkInDueState.currentPeriodDueDate)
-                    ?? formatCheckInWeekLabel(periodWeek, getIsoWeekYear(new Date())),
-            }
-            : null;
+        const insights = await loadCoachClientProfileInsights({
+            actor: { id: actor.id, role: actor.role },
+            client: {
+                id: target.id,
+                coachId: target.coachId,
+                createdAt: target.createdAt,
+                isCoachPaused: Boolean(target.isCoachPaused),
+                coachResumedAt: target.coachResumedAt,
+                targetWeightKg: target.targetWeightKg,
+                targetCalories: clientMetricTargets.targetCalories,
+                targetSteps: clientMetricTargets.targetSteps,
+                targetSleepHours: clientMetricTargets.targetSleepHours,
+                checkInFrequencyWeeks: checkInSchedule.frequencyWeeks,
+            },
+            canEdit: !isInactiveClient,
+            checkInDueState,
+            currentStreak: adherence.currentStreak,
+            activeUserPlan: planLike,
+            planName: activePlan?.name ?? null,
+            planId: activePlan?.id ?? null,
+            excusedMissedWorkoutKeys,
+            completedLogs: (completedLogs ?? []).map((log) => ({
+                id: log.id,
+                workoutId: log.workoutId,
+                workoutName: log.workout.name,
+                loggedAt: log.loggedAt,
+                duration: log.duration,
+                sets: (log.sets ?? []).map((set) => ({
+                    isCompleted: set.isCompleted,
+                    isWarmup: set.isWarmup,
+                    isPR: set.isPR,
+                    reps: set.reps,
+                    weightKg: set.weightKg,
+                    exerciseId: set.exerciseId,
+                })),
+            })),
+            bodyweightHistory: bodyweightRows || [],
+            checkInSubmittedAt: (target.checkIns ?? []).map((checkIn) => checkIn.createdAt.toISOString()),
+        });
 
         return (
             <>
@@ -258,7 +224,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                     subtitle={isInactiveClient ? "This account is deleted or deactivated — view only." : target.email}
                     hideSearch={true}
                 />
-                <div className="p-6 max-w-5xl mx-auto">
+                <div className="p-4 sm:p-6 max-w-7xl mx-auto">
                     <ClientDetailView
                         readOnly={isInactiveClient}
                         client={{
@@ -271,16 +237,11 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                             activePlan: activePlan ? { id: activePlan.id, name: activePlan.name } : null,
                             experience: target.experienceLevel,
                             goal: target.goal,
-                            trainingLocation: target.trainingLocation,
                             trainingDaysPerWeek: target.trainingDaysPerWeek,
                             checkInSchedule,
                             targetWeightKg: target.targetWeightKg,
-                            currentWeightKg: target.weightKg,
-                            adherencePercentage,
-                            adherenceTrend,
+                            currentWeightKg: insights.periods["30d"].bodyweightCurrentKg ?? target.weightKg,
                             lastActiveAt: target.lastActiveAt?.toISOString() || null,
-                            activeSession,
-                            currentWorkout,
                             hiddenGoals: target.hiddenGoals ?? [],
                             targetCalories: clientMetricTargets.targetCalories,
                             targetSteps: clientMetricTargets.targetSteps,
@@ -289,41 +250,24 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                         }}
                         currentUserId={actor.id}
                         availablePlans={availablePlans}
-                        logs={(completedLogs ?? [])
-                            .slice()
-                            .sort((a, b) => (b.loggedAt?.getTime() ?? 0) - (a.loggedAt?.getTime() ?? 0))
-                            .map((l) => ({
-                                id: l.id,
-                                workoutName: l.workout.name,
-                                date: l.loggedAt ? l.loggedAt.toISOString() : new Date().toISOString(),
-                                setCount: (l.sets ?? []).filter((s) => s.isCompleted).length,
-                            }))}
-                        checkInStatus={checkInStatus}
-                        checkIns={(target.checkIns ?? []).map((ci) => ({
-                            id: ci.id,
-                            week: ci.weekNumber,
-                            date: ci.createdAt ? ci.createdAt.toISOString() : new Date().toISOString(),
-                            status: ci.coachResponse ? "Responded" : "Pending",
-                        }))}
                         bodyweightHistory={bodyweightRows || []}
-                        workoutNotes={(workoutNotesRows || []).map(n => ({
-                            id: n.id,
-                            workoutLogId: n.workoutLogId,
-                            text: n.text,
-                            createdAt: n.createdAt ? n.createdAt.toISOString() : new Date().toISOString(),
-                            workoutName: n.workoutName,
-                        }))}
-                        workoutHistory={(target.workoutLogs ?? []).map((l) => ({
-                            id: l.id,
-                            workoutId: l.workoutId,
-                            workoutName: l.workout.name,
-                            date: l.loggedAt ? l.loggedAt.toISOString() : new Date().toISOString(),
-                            duration: l.duration || 0,
-                            volume: (l.sets ?? []).reduce((sum: number, s: any) => sum + (s.reps || 0) * (s.weightKg || 0), 0),
+                        workoutHistory={(completedLogs ?? []).map((log) => ({
+                            id: log.id,
+                            workoutId: log.workoutId,
+                            workoutName: log.workout.name,
+                            date: log.loggedAt ? log.loggedAt.toISOString() : new Date().toISOString(),
+                            duration: log.duration || 0,
+                            volume: (log.sets ?? []).reduce((sum, set) => sum + (set.reps || 0) * (set.weightKg || 0), 0),
                         }))}
                         exerciseHistory={normalizedExerciseHistory}
                         exerciseLastDone={exerciseLastDone}
                         initialPinnedExercises={pinnedExercises}
+                        insights={insights}
+                        checkInRequest={{
+                            weekNumber: checkInDueState.outstandingWeekNumber,
+                            periodDueDateKey: checkInDueState.currentPeriodDueDate,
+                            isOverdue: Boolean(checkInDueState.isOverdue || checkInDueState.isDueToday),
+                        }}
                     />
                 </div>
             </>

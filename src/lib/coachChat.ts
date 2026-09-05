@@ -176,13 +176,16 @@ export async function sendCheckInRequestViaChat(
 
     if (options?.weekNumber != null) {
         const { upsertCheckInRequest } = await import("@/lib/checkInRequests");
-        await upsertCheckInRequest({
+        const request = await upsertCheckInRequest({
             coachId: coach.id,
             clientId,
             weekNumber: options.weekNumber,
             periodDueDateKey: options.periodDueDateKey ?? null,
             enforceCooldown: true,
         });
+        if (request.throttled) {
+            return null;
+        }
     }
 
     await notifyClientOfCheckInRequest({
