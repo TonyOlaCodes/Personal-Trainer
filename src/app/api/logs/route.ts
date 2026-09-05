@@ -5,7 +5,9 @@ import { requireActiveUser, resolveWorkoutLogReadUserId, resolveWorkoutLogSubjec
 import { ensureWorkoutLogConcurrencySchema } from "@/lib/workoutLogRevision";
 import {
     acceptWorkoutRevision,
+    incomingSetIsMeaningful,
     nextWorkoutRevision,
+    shouldApplyInProgressSetReplacement,
     shouldEmitCompletionSideEffects,
     staleRevisionPayload,
 } from "@/lib/workoutSavePolicy";
@@ -163,6 +165,9 @@ export async function POST(req: Request) {
             loggedAt: { gte: startOfDay, lte: endOfDay },
         },
         orderBy: { updatedAt: "desc" },
+        include: {
+            sets: { select: { exerciseId: true } },
+        },
     });
 
     if (status === "COMPLETED" && subjectUserId !== user.id && !existingInProgress) {
@@ -504,15 +509,14 @@ export async function POST(req: Request) {
     if (existingInProgress) {
         // Idempotent Start Workout: resume the existing session instead of wiping sets
         // when the client posts an empty placeholder payload again.
-        const hasMeaningfulSets = setsWithRealIds.some(
-            (s) =>
-                Boolean(s.isCompleted) ||
-                (typeof s.reps === "number" && s.reps > 0) ||
-                (typeof s.weightKg === "number" && s.weightKg > 0) ||
-                (typeof s.rpe === "number" && s.rpe > 0) ||
-                Boolean(s.videoUrl)
-        );
-        if (status === "IN_PROGRESS" && !hasMeaningfulSets) {
+        const hasMeaningfulSets = setsWithRealIds.some((s) => incomingSetIsMeaningful(s));
+        const applySetReplacement = shouldApplyInProgressSetReplacement({
+            incomingHasMeaningfulSets: hasMeaningfulSets,
+            expectedRevision,
+            incomingExerciseIds: setsWithRealIds.map((s) => s.exerciseId),
+            existingExerciseIds: existingInProgress.sets.map((s) => s.exerciseId),
+        });
+        if (status === "IN_PROGRESS" && !applySetReplacement) {
             const existing = await prisma.workoutLog.findUnique({
                 where: { id: existingInProgress.id },
                 include: {

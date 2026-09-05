@@ -29,6 +29,45 @@ export function shouldCreateInProgressLog(existingInProgressId: string | null | 
     return !existingInProgressId;
 }
 
+export function incomingSetIsMeaningful(set: {
+    isCompleted?: boolean | null;
+    reps?: number | null;
+    weightKg?: number | null;
+    rpe?: number | null;
+    videoUrl?: string | null;
+}): boolean {
+    return (
+        Boolean(set.isCompleted) ||
+        (typeof set.reps === "number" && set.reps > 0) ||
+        (typeof set.weightKg === "number" && set.weightKg > 0) ||
+        (typeof set.rpe === "number" && set.rpe > 0) ||
+        Boolean(set.videoUrl)
+    );
+}
+
+/**
+ * Start Workout may re-post empty plan placeholders. Ignore those so they cannot
+ * wipe an open session. After the first accepted revision, the payload IS the
+ * session: delete/add/swap must apply even when remaining sets are empty.
+ */
+export function shouldApplyInProgressSetReplacement(input: {
+    incomingHasMeaningfulSets: boolean;
+    expectedRevision: number | null | undefined;
+    incomingExerciseIds: readonly string[];
+    existingExerciseIds: readonly string[];
+}): boolean {
+    if (input.incomingHasMeaningfulSets) return true;
+    if (input.expectedRevision != null && input.expectedRevision > 0) return true;
+
+    const incoming = new Set(input.incomingExerciseIds);
+    const existing = new Set(input.existingExerciseIds);
+    if (incoming.size !== existing.size) return true;
+    for (const id of existing) {
+        if (!incoming.has(id)) return true;
+    }
+    return false;
+}
+
 export type WorkoutSaveConflict = "STALE_REVISION" | "ACTIVE_SESSION_EXISTS";
 
 export function staleRevisionPayload(currentRevision: number) {

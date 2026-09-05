@@ -17,10 +17,13 @@ import {
 } from "../src/lib/rateLimit";
 import {
     acceptWorkoutRevision,
+    incomingSetIsMeaningful,
     nextWorkoutRevision,
+    shouldApplyInProgressSetReplacement,
     shouldCreateInProgressLog,
     shouldEmitCompletionSideEffects,
 } from "../src/lib/workoutSavePolicy";
+import { restoreExercisesFromPersistedSets, uniquePersistedExerciseIds } from "../src/lib/activeWorkoutRestore";
 import {
     acknowledgeSave,
     enqueueSave,
@@ -204,6 +207,85 @@ await check("second completion does not emit duplicate side effects", () => {
 await check("two starts for the same user/session reuse the active draft", () => {
     assert.equal(shouldCreateInProgressLog(null), true);
     assert.equal(shouldCreateInProgressLog("log-already-open"), false);
+});
+
+console.log("\nActive workout structure persistence\n");
+
+const planExercises = [
+    { id: "ex-a", name: "Bench", order: 0 },
+    { id: "ex-b", name: "Squat", order: 1 },
+    { id: "ex-c", name: "Row", order: 2 },
+];
+
+await check("empty Start payload does not overwrite an existing session", () => {
+    assert.equal(
+        shouldApplyInProgressSetReplacement({
+            incomingHasMeaningfulSets: false,
+            expectedRevision: 0,
+            incomingExerciseIds: ["ex-a", "ex-b", "ex-c"],
+            existingExerciseIds: ["ex-a", "ex-b", "ex-c"],
+        }),
+        false
+    );
+});
+
+await check("delete exercise applies even when remaining sets are empty placeholders", () => {
+    assert.equal(incomingSetIsMeaningful({ reps: 0, weightKg: 0, isCompleted: false }), false);
+    assert.equal(
+        shouldApplyInProgressSetReplacement({
+            incomingHasMeaningfulSets: false,
+            expectedRevision: 1,
+            incomingExerciseIds: ["ex-a", "ex-c"],
+            existingExerciseIds: ["ex-a", "ex-b", "ex-c"],
+        }),
+        true
+    );
+});
+
+await check("stale revision 1 cannot overwrite a newer session after delete", () => {
+    assert.equal(acceptWorkoutRevision(1, 2), false);
+    assert.equal(acceptWorkoutRevision(2, 2), true);
+});
+
+await check("resume keeps only persisted exercise instances", () => {
+    const persisted = uniquePersistedExerciseIds([
+        { exerciseId: "ex-a" },
+        { exerciseId: "ex-a" },
+        { exerciseId: "ex-c" },
+    ]);
+    assert.deepEqual(persisted, ["ex-a", "ex-c"]);
+    const restored = restoreExercisesFromPersistedSets(
+        [
+            { id: "ex-a", name: "Bench", order: 0 },
+            { id: "ex-c", name: "Row", order: 2 },
+        ],
+        planExercises
+    );
+    assert.deepEqual(restored.map((ex) => ex.id), ["ex-a", "ex-c"]);
+    assert.equal(restored.some((ex) => ex.id === "ex-b"), false);
+});
+
+await check("deleting one of two same-name instances keeps the other", () => {
+    const restored = restoreExercisesFromPersistedSets(
+        [{ id: "row-2", name: "Curl", order: 1 }],
+        [
+            { id: "row-1", name: "Curl", order: 0 },
+            { id: "row-2", name: "Curl", order: 1 },
+        ]
+    );
+    assert.deepEqual(restored.map((ex) => ex.id), ["row-2"]);
+});
+
+await check("added and swapped exercises resume from persisted IDs, not the plan", () => {
+    const restored = restoreExercisesFromPersistedSets(
+        [
+            { id: "new-lat", name: "Lat Pulldown", order: 0 },
+            { id: "ex-a:sub:9k", name: "Incline Press", order: 1 },
+        ],
+        planExercises
+    );
+    assert.deepEqual(restored.map((ex) => ex.id), ["new-lat", "ex-a:sub:9k"]);
+    assert.equal(restored.some((ex) => ex.id === "ex-a"), false);
 });
 
 if (failed > 0) {

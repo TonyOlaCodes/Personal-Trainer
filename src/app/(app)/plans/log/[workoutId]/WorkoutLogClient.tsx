@@ -59,6 +59,8 @@ import {
     parseActiveSessionConflict,
     type ConflictingActiveSession,
 } from "@/components/shared/ActiveSessionConflictModal";
+import { restoreExercisesFromPersistedSets } from "@/lib/activeWorkoutRestore";
+import { acknowledgeSave, enqueueSave, rejectStaleSave, type SaveQueueState } from "@/lib/workoutSaveQueue";
 interface Exercise {
     id: string;
     name: string;
@@ -286,7 +288,10 @@ function restoreSessionState(
     const reconstructedExercises: Exercise[] = [];
 
     active.sets.forEach((s) => {
-        const ex = s.exercise;
+        const ex =
+            s.exercise ??
+            fallbackExercises.find((row) => row.id === s.exerciseId) ??
+            null;
         if (ex && !reconstructedExercises.some((e) => e.id === ex.id)) {
             reconstructedExercises.push({
                 id: ex.id,
@@ -301,6 +306,13 @@ function restoreSessionState(
                 order: ex.order ?? 0,
                 muscleGroup: ex.muscleGroup ?? null,
             });
+        } else if (!ex && s.exerciseId && !reconstructedExercises.some((e) => e.id === s.exerciseId)) {
+            reconstructedExercises.push({
+                id: s.exerciseId,
+                name: "Exercise",
+                sets: 1,
+                reps: "10",
+            });
         }
 
         if (!restored[s.exerciseId]) restored[s.exerciseId] = [];
@@ -309,30 +321,15 @@ function restoreSessionState(
 
     reconstructedExercises.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
-    const restoredById = new Map(reconstructedExercises.map((ex) => [ex.id, ex]));
-    const mergedExercises: Exercise[] = [];
-    const seenExerciseIds = new Set<string>();
-
-    for (const ex of fallbackExercises) {
-        const restored = restoredById.get(ex.id);
-        if (restored) {
-            mergedExercises.push({ ...ex, ...restored, order: ex.order ?? restored.order });
-            seenExerciseIds.add(ex.id);
-        }
-    }
-    for (const ex of reconstructedExercises) {
-        if (!seenExerciseIds.has(ex.id)) {
-            mergedExercises.push(ex);
-        }
-    }
-
     const startTime = resolveWorkoutStartTime(localStorageKey, {
         durationMinutes: active.duration,
     });
 
     return {
-        logs: Object.keys(restored).length > 0 ? restored : buildInitialLogs(fallbackExercises),
-        exercises: sortWorkoutExercises(mergedExercises.length > 0 ? mergedExercises : fallbackExercises),
+        logs: restored,
+        exercises: sortWorkoutExercises(
+            restoreExercisesFromPersistedSets(reconstructedExercises, fallbackExercises)
+        ),
         startTime,
         activeLogId: active.id,
     };
@@ -598,6 +595,11 @@ export function WorkoutLogClient({
     const isSavingRef = useRef(false);
     const progressSaveInFlightRef = useRef(false);
     const pendingProgressSaveRef = useRef<PendingProgressSave | null>(null);
+    const saveQueueRef = useRef<SaveQueueState>({
+        inFlight: false,
+        pending: false,
+        ackedRevision: initialActiveLog?.revision ?? 0,
+    });
     const isCompletingRef = useRef(false);
 
     const modalOpen = Boolean(previewExercise) || isSubstituting !== null || isAddingExercise || showFinishModal || Boolean(conflictSession);
@@ -1044,7 +1046,13 @@ export function WorkoutLogClient({
             }
 
             const saved = await createRes.json();
-            if (typeof saved.revision === "number") revisionRef.current = saved.revision;
+            if (typeof saved.revision === "number") {
+                revisionRef.current = saved.revision;
+                saveQueueRef.current = {
+                    ...saveQueueRef.current,
+                    ackedRevision: saved.revision,
+                };
+            }
             if (saved.id) {
                 const hasLoggedWork = Array.isArray(saved.sets) && saved.sets.some(
                     (s: { reps?: number | null; weightKg?: number | null; rpe?: number | null; isCompleted?: boolean | null }) =>
@@ -1178,17 +1186,30 @@ export function WorkoutLogClient({
             if (res.ok) {
                 const saved = await res.json();
                 if (saved.id) setActiveLogId(saved.id);
-                if (typeof saved.revision === "number") revisionRef.current = saved.revision;
+                if (typeof saved.revision === "number") {
+                    revisionRef.current = saved.revision;
+                    const ack = acknowledgeSave(saveQueueRef.current, saved.revision);
+                    saveQueueRef.current = ack.next;
+                }
                 if (saved.updatedAt) {
                     lastRemoteUpdatedAtRef.current = remoteUpdatedAtMs(saved.updatedAt);
                 }
             } else if (res.status === 409) {
                 const payload = await res.json().catch(() => null);
-                if (typeof payload?.currentRevision === "number") {
-                    revisionRef.current = payload.currentRevision;
-                } else if (typeof payload?.log?.revision === "number") {
-                    revisionRef.current = payload.log.revision;
-                }
+                const serverRevision =
+                    typeof payload?.currentRevision === "number"
+                        ? payload.currentRevision
+                        : typeof payload?.log?.revision === "number"
+                            ? payload.log.revision
+                            : revisionRef.current;
+                revisionRef.current = serverRevision;
+                const rejected = rejectStaleSave(saveQueueRef.current, serverRevision);
+                saveQueueRef.current = rejected.next;
+            } else {
+                saveQueueRef.current = {
+                    ...saveQueueRef.current,
+                    inFlight: false,
+                };
             }
         } catch (e) {
             console.error("Auto-save failed:", e);
@@ -1225,8 +1246,27 @@ export function WorkoutLogClient({
             exercises: currentExercises,
             startTimeOverride,
         };
-        void flushProgressSaves();
+        const queued = enqueueSave(saveQueueRef.current);
+        saveQueueRef.current = queued.next;
+        if (queued.sendNow || pendingProgressSaveRef.current) {
+            void flushProgressSaves();
+        }
     };
+
+    useEffect(() => {
+        const flushOnLeave = () => {
+            if (pendingProgressSaveRef.current) void flushProgressSaves();
+        };
+        const onVisibility = () => {
+            if (document.visibilityState === "hidden") flushOnLeave();
+        };
+        window.addEventListener("pagehide", flushOnLeave);
+        document.addEventListener("visibilitychange", onVisibility);
+        return () => {
+            window.removeEventListener("pagehide", flushOnLeave);
+            document.removeEventListener("visibilitychange", onVisibility);
+        };
+    }, [activeLogId]);
 
     const muscleBreakdown = useMemo(
         () =>
