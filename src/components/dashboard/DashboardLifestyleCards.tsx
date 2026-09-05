@@ -3,13 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, Flame, Footprints, Moon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { type LifestyleMetricKey } from "@/lib/lifestylePeriodMetrics";
 import {
-    isCaloriesOnTarget,
-    isSleepOnTarget,
-    isStepsOnTarget,
-    type LifestyleMetricKey,
-} from "@/lib/lifestylePeriodMetrics";
-import { lifestyleDashboardGridClass, lifestyleMetricInputPlaceholder } from "@/lib/lifestyleDashboardVisibility";
+    lifestyleDashboardGridClass,
+    lifestyleGoalDistanceText,
+    lifestyleMetricInputPlaceholder,
+} from "@/lib/lifestyleDashboardVisibility";
 
 export interface DashboardLifestyleValues {
     calories: number | null;
@@ -32,7 +31,6 @@ const METRICS: Array<{
     step: string;
     icon: typeof Flame;
     format: (value: number) => string;
-    onTarget: (value: number, target: number) => boolean;
 }> = [
     {
         key: "calories",
@@ -42,8 +40,7 @@ const METRICS: Array<{
         unit: "kcal",
         step: "1",
         icon: Flame,
-        format: (value) => Math.round(value).toLocaleString(),
-        onTarget: isCaloriesOnTarget,
+        format: (value) => Math.round(value).toLocaleString("en-GB"),
     },
     {
         key: "steps",
@@ -53,8 +50,7 @@ const METRICS: Array<{
         unit: "steps",
         step: "1",
         icon: Footprints,
-        format: (value) => Math.round(value).toLocaleString(),
-        onTarget: isStepsOnTarget,
+        format: (value) => Math.round(value).toLocaleString("en-GB"),
     },
     {
         key: "sleep",
@@ -65,26 +61,11 @@ const METRICS: Array<{
         step: "0.1",
         icon: Moon,
         format: (value) => value.toFixed(1),
-        onTarget: isSleepOnTarget,
     },
 ];
 
-function formatGoal(metric: (typeof METRICS)[number], target: number): string {
-    return `Goal ${metric.format(target)} ${metric.unit}`;
-}
-
-function statusText(
-    logged: boolean,
-    value: number | null,
-    target: number | null,
-    metric: (typeof METRICS)[number]
-): string {
-    if (!logged || value == null) {
-        return target != null ? formatGoal(metric, target) : "Tap to log today";
-    }
-    if (target == null) return "Logged today";
-    const status = metric.onTarget(value, target) ? "On target" : "Off target";
-    return `${status} · ${formatGoal(metric, target)}`;
+function unloggedHint(metric: (typeof METRICS)[number], target: number | null): string {
+    return target != null ? `Goal ${metric.format(target)} ${metric.unit}` : "Tap to log today";
 }
 
 export function DashboardLifestyleCards({
@@ -182,8 +163,11 @@ export function DashboardLifestyleCards({
                     const loggedValue = values[metric.field];
                     const logged = loggedValue != null;
                     const target = targets[metric.targetField];
-                    const onTarget = logged && target != null && metric.onTarget(loggedValue, target);
                     const placeholder = lifestyleMetricInputPlaceholder(metric.key, target);
+                    const goalDistance = lifestyleGoalDistanceText(metric.key, loggedValue, target);
+                    const statusLine = logged
+                        ? (goalDistance ?? "Logged today")
+                        : unloggedHint(metric, target);
 
                     return (
                         <div
@@ -191,10 +175,8 @@ export function DashboardLifestyleCards({
                             className={cn(
                                 "card px-2 py-2 sm:px-2.5 sm:py-2 flex flex-col justify-center gap-0.5 transition-all relative overflow-hidden min-w-0 min-h-[58px]",
                                 logged
-                                    ? onTarget
-                                        ? "bg-success/10 border-success/30 shadow-glow-success-sm"
-                                        : "bg-surface-muted/10 border-brand-500/20"
-                                    : "bg-surface-muted/10 border-brand-500/10"
+                                    ? "bg-success/10 border-success/30 shadow-glow-success-sm"
+                                    : "bg-surface-muted/10 border-brand-500/10 hover:border-brand-500/30"
                             )}
                         >
                             <div className="flex items-center gap-1 min-w-0">
@@ -230,11 +212,9 @@ export function DashboardLifestyleCards({
                             </div>
                             <p className={cn(
                                 "text-[9px] font-bold truncate",
-                                logged
-                                    ? onTarget ? "text-success" : "text-fg-muted"
-                                    : "text-fg-subtle"
+                                logged ? "text-success" : "text-fg-subtle"
                             )}>
-                                {statusText(logged, loggedValue, target, metric)}
+                                {statusLine}
                             </p>
                             {savingKey === metric.key && (
                                 <div className="absolute top-1.5 right-1.5">

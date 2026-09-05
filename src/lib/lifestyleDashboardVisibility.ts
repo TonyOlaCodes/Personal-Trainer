@@ -48,6 +48,39 @@ export function lifestyleMetricInputPlaceholder(
     return `${formatLifestyleGoalValue(key, target)} ${unit}`;
 }
 
+function lifestyleUnit(key: LifestyleMetricKey): string {
+    if (key === "calories") return "kcal";
+    if (key === "steps") return "steps";
+    return "hrs";
+}
+
+/** Distance from a real logged value to the goal. Null when unlogged or no goal. */
+export function lifestyleGoalDistanceText(
+    key: LifestyleMetricKey,
+    loggedValue: number | null | undefined,
+    target: number | null | undefined
+): string | null {
+    if (loggedValue == null || !Number.isFinite(loggedValue)) return null;
+    if (target == null || !Number.isFinite(target)) return null;
+
+    if (key === "sleep") {
+        const value = Math.round(loggedValue * 10) / 10;
+        const goal = Math.round(target * 10) / 10;
+        const delta = Math.round((goal - value) * 10) / 10;
+        if (delta === 0) return "Goal reached";
+        const amount = Number.isInteger(Math.abs(delta)) ? String(Math.abs(delta)) : Math.abs(delta).toFixed(1);
+        return delta > 0 ? `${amount} hrs to goal` : `${amount} hrs over goal`;
+    }
+
+    const value = Math.round(loggedValue);
+    const goal = Math.round(target);
+    const delta = goal - value;
+    if (delta === 0) return "Goal reached";
+    const amount = Math.abs(delta).toLocaleString("en-GB");
+    const unit = lifestyleUnit(key);
+    return delta > 0 ? `${amount} ${unit} to goal` : `${amount} ${unit} over goal`;
+}
+
 export function setLifestyleDashboardHidden(
     hiddenGoals: string[],
     key: LifestyleMetricKey,
