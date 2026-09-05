@@ -608,32 +608,36 @@ export function CalendarClient({
             <div className="lg:col-span-8 space-y-6">
                 <div className="flex min-w-0 flex-col gap-3 px-2 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0 space-y-1">
-                        <p className="text-[10px] font-black tracking-[0.2em] text-brand-400 uppercase">Interactive Calendar</p>
+                        {!isCoachView && (
+                            <p className="text-[10px] font-black tracking-[0.2em] text-brand-400 uppercase">Interactive Calendar</p>
+                        )}
                         <h2 className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1 text-2xl font-black text-fg sm:text-3xl">
                             {MONTHS[view.month]}
                             <span className="text-brand-400/30 font-light">{view.year}</span>
                         </h2>
                         {activePlan && planStartedAt && (
-                            <p className="text-[10px] font-bold text-fg-muted uppercase tracking-widest">
-                                {planScheduleMode === "repeat" ? (
-                                    <>Repeating weekly · same schedule every week</>
-                                ) : (
-                                    <>
-                                        {planWeekCount}-week program
-                                        {currentProgramWeek && !isPlanComplete && (
-                                            <> · Week {currentProgramWeek} of {planWeekCount}</>
-                                        )}
-                                        {planEndDateKey && (
-                                            <>
-                                                {" · "}
-                                                {isPlanComplete
-                                                    ? "Program complete"
-                                                    : `Ends ${formatDate(planEndDateKey)}`}
-                                            </>
-                                        )}
-                                    </>
-                                )}
-                            </p>
+                            planScheduleMode === "repeat" ? (
+                                !isCoachView ? (
+                                    <p className="text-[10px] font-bold text-fg-muted uppercase tracking-widest">
+                                        Repeating weekly · same schedule every week
+                                    </p>
+                                ) : null
+                            ) : (
+                                <p className="text-[10px] font-bold text-fg-muted uppercase tracking-widest">
+                                    {planWeekCount}-week program
+                                    {currentProgramWeek && !isPlanComplete && (
+                                        <> · Week {currentProgramWeek} of {planWeekCount}</>
+                                    )}
+                                    {planEndDateKey && (
+                                        <>
+                                            {" · "}
+                                            {isPlanComplete
+                                                ? "Program complete"
+                                                : `Ends ${formatDate(planEndDateKey)}`}
+                                        </>
+                                    )}
+                                </p>
+                            )
                         )}
                     </div>
                     <div className="grid grid-cols-[2rem_minmax(4.5rem,1fr)_2rem] items-center gap-1.5 rounded-2xl border border-surface-border bg-surface-muted/50 p-1.5 sm:flex sm:shrink-0">

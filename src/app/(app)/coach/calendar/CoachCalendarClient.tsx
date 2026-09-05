@@ -4,7 +4,8 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, UserCircle } from "lucide-react";
 import { CalendarClient, type CalendarView } from "@/app/(app)/calendar/CalendarClient";
-import { toDateKey } from "@/lib/utils";
+import { cn, getInitials, toDateKey } from "@/lib/utils";
+import { resolveUploadUrl } from "@/lib/uploadUrls";
 import { useCurrentDate } from "@/hooks/useCurrentDate";
 import type { ClientCalendarPayload } from "@/lib/clientCalendarData";
 import Link from "next/link";
@@ -14,6 +15,7 @@ const LAST_COACH_CALENDAR_CLIENT_KEY = "coach_calendar_last_client_id";
 interface ClientOption {
     id: string;
     name: string;
+    avatarUrl?: string | null;
     hasActivePlan: boolean;
 }
 
@@ -79,6 +81,8 @@ export function CoachCalendarClient({ clients, selectedClientId, selectedClientN
         }
     }, [clients, router]);
 
+    const selectedClient = clients.find((c) => c.id === selectedClientId) ?? null;
+
     if (clients.length === 0) {
         return (
             <div className="card p-10 text-center space-y-4">
@@ -98,46 +102,43 @@ export function CoachCalendarClient({ clients, selectedClientId, selectedClientN
         <div className="space-y-6 animate-fade-in">
             <div className="space-y-2">
                 <p className="text-[10px] font-black tracking-[0.2em] text-brand-400 uppercase">Client Schedule</p>
-                <div className="flex items-center gap-3 w-full max-w-md">
-                    {selectedClientId ? (
+                <div className="relative w-full max-w-md">
+                    <label htmlFor="coach-calendar-client" className="sr-only">Select client</label>
+                    {selectedClient && (
                         <Link
-                            href={`/coach/client/${selectedClientId}`}
-                            className="shrink-0 w-11 h-11 rounded-xl bg-surface-card border border-surface-border flex items-center justify-center text-brand-400 hover:border-brand-500/40 hover:bg-brand-500/10 transition-colors"
+                            href={`/coach/client/${selectedClient.id}`}
+                            className="absolute left-2.5 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-lg bg-gradient-brand flex items-center justify-center text-[11px] font-bold text-white overflow-hidden hover:opacity-85 transition-opacity"
                             title={`View ${selectedClientName}`}
                             aria-label={`View ${selectedClientName} profile`}
                         >
-                            <UserCircle className="w-6 h-6" />
+                            {selectedClient.avatarUrl ? (
+                                <img
+                                    src={resolveUploadUrl(selectedClient.avatarUrl)}
+                                    alt=""
+                                    className="w-full h-full object-cover"
+                                />
+                            ) : (
+                                getInitials(selectedClientName)
+                            )}
                         </Link>
-                    ) : (
-                        <div className="shrink-0 w-11 h-11 rounded-xl bg-surface-card border border-surface-border flex items-center justify-center text-fg-subtle">
-                            <UserCircle className="w-6 h-6" />
-                        </div>
                     )}
-                    <div className="relative flex-1 min-w-0">
-                        <label htmlFor="coach-calendar-client" className="sr-only">Select client</label>
-                        <select
-                            id="coach-calendar-client"
-                            value={selectedClientId ?? ""}
-                            onChange={(e) => onClientChange(e.target.value)}
-                            className="w-full appearance-none pl-4 pr-11 py-3.5 rounded-xl bg-surface-card border border-surface-border text-xl sm:text-2xl font-black text-fg tracking-tight focus:outline-none focus:ring-2 focus:ring-brand-400/40"
-                        >
-                            {clients.map((c) => (
-                                <option key={c.id} value={c.id}>
-                                    {c.name}{!c.hasActivePlan ? " (no plan)" : ""}
-                                </option>
-                            ))}
-                        </select>
-                        <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-fg-subtle pointer-events-none" />
-                    </div>
-                </div>
-                {selectedClientId && (
-                    <Link
-                        href={`/coach/client/${selectedClientId}`}
-                        className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-fg-muted hover:text-brand-400 transition-colors"
+                    <select
+                        id="coach-calendar-client"
+                        value={selectedClientId ?? ""}
+                        onChange={(e) => onClientChange(e.target.value)}
+                        className={cn(
+                            "w-full appearance-none pr-11 py-2.5 rounded-xl bg-surface-card border border-surface-border text-lg sm:text-xl font-black text-fg tracking-tight focus:outline-none focus:ring-2 focus:ring-brand-400/40",
+                            selectedClient ? "pl-[3.25rem]" : "pl-4"
+                        )}
                     >
-                        View {selectedClientName} profile
-                    </Link>
-                )}
+                        {clients.map((c) => (
+                            <option key={c.id} value={c.id}>
+                                {c.name}{!c.hasActivePlan ? " (no plan)" : ""}
+                            </option>
+                        ))}
+                    </select>
+                    <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-fg-subtle pointer-events-none" />
+                </div>
             </div>
 
             {!calendar?.activePlan ? (

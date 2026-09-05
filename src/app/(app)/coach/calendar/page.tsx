@@ -30,6 +30,7 @@ export default async function CoachCalendarPage({
                 select: {
                     id: true,
                     name: true,
+                    avatarUrl: true,
                     plans: {
                         where: { isActive: true },
                         select: { id: true },
@@ -51,6 +52,7 @@ export default async function CoachCalendarPage({
     const clientOptions = coach.clients.map((c) => ({
         id: c.id,
         name: pickDisplayName(c.name, null, clientNicknameMap.get(c.id), c.name || "Unnamed Client"),
+        avatarUrl: c.avatarUrl,
         hasActivePlan: c.plans.length > 0,
     }));
 
