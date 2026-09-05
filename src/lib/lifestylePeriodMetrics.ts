@@ -18,11 +18,25 @@ export interface LifestyleMetricSummary {
     key: LifestyleMetricKey;
     average: number | null;
     target: number | null;
+    /** On-target share of legitimately logged days only. Missing days are excluded. */
     adherencePercent: number | null;
     loggedDays: number;
     expectedDays: number;
+    /** loggedDays / expectedDays. Missing days lower this; they never become zeros. */
+    loggingRatePercent: number;
     onTargetDays: number | null;
     assessment: string | null;
+}
+
+/** Logging coverage for a period. 4/82 → 5%, 0/82 → 0%, 82/82 → 100%. */
+export function lifestyleLoggingRatePercent(loggedDays: number, expectedDays: number): number {
+    if (expectedDays <= 0) return 0;
+    return Math.round((loggedDays / expectedDays) * 100);
+}
+
+/** Compact logged-count line, e.g. `4/82 · 5%`. */
+export function formatLifestyleLoggedCount(loggedDays: number, expectedDays: number): string {
+    return `${loggedDays}/${expectedDays} · ${lifestyleLoggingRatePercent(loggedDays, expectedDays)}%`;
 }
 
 export interface LifestylePeriodSummaries {
@@ -117,6 +131,7 @@ function summarizeMetric(
         adherencePercent,
         loggedDays,
         expectedDays,
+        loggingRatePercent: lifestyleLoggingRatePercent(loggedDays, expectedDays),
         onTargetDays,
         assessment: assess(average, target, loggedDays, adherencePercent),
     };

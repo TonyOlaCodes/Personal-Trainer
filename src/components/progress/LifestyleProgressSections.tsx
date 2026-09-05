@@ -18,6 +18,7 @@ import {
     summarizeLifestylePeriod,
     percentDelta,
     numericDelta,
+    formatLifestyleLoggedCount,
     type LifestyleMetricKey,
 } from "@/lib/lifestylePeriodMetrics";
 import { periodWindow, previousPeriodWindow } from "@/lib/coachClientPeriodStats";
@@ -140,8 +141,10 @@ function LifestyleMetricSection({
                         <p className="text-[10px] font-black text-fg-subtle uppercase tracking-widest">{ui.title}</p>
                         <div className="flex items-end gap-2 flex-wrap">
                             <h3 className="text-3xl font-black text-fg tracking-tighter leading-none">
-                                {current.average != null ? ui.format(current.average) : "—"}
-                                <span className="text-sm font-bold text-fg-muted ml-1">{ui.unit}</span>
+                                {current.average != null ? ui.format(current.average) : "No data"}
+                                {current.average != null && (
+                                    <span className="text-sm font-bold text-fg-muted ml-1">{ui.unit}</span>
+                                )}
                             </h3>
                             {delta != null && delta !== 0 && (
                                 <span className={cn(
@@ -161,13 +164,11 @@ function LifestyleMetricSection({
                                 "No goal set"
                             )}
                             <span className="mx-1 text-fg-subtle">·</span>
-                            {current.loggedDays}/{current.expectedDays} days logged
-                            {current.adherencePercent != null && (
-                                <>
-                                    <span className="mx-1 text-fg-subtle">·</span>
-                                    {current.adherencePercent}% adherence
-                                </>
-                            )}
+                            {formatLifestyleLoggedCount(current.loggedDays, current.expectedDays)}
+                            <span className="mx-1 text-fg-subtle">·</span>
+                            {current.adherencePercent != null
+                                ? `${current.adherencePercent}% on target`
+                                : "No data"}
                             {current.assessment && (
                                 <>
                                     <span className="mx-1 text-fg-subtle">·</span>

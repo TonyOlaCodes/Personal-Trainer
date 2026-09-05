@@ -3,6 +3,8 @@
 import type { ReactNode } from "react";
 import { Activity, Edit3, Flame, Footprints, Moon, X } from "lucide-react";
 import type { CoachProfilePeriodSnapshot } from "@/lib/coachClientProfileData";
+import { formatLifestyleLoggedCount } from "@/lib/lifestylePeriodMetrics";
+import { cn } from "@/lib/utils";
 import { DeltaLine, PeriodToggle, formatKg, missingLabel } from "./profileUi";
 import type { CoachProfilePeriodKey } from "@/lib/coachClientPeriodStats";
 import { formatLastTrained } from "./ProfileTopSections";
@@ -134,11 +136,14 @@ function LifestyleCard({
     previousLabel: string;
     neutral?: boolean;
 }) {
+    const hasLogs = logged > 0;
     const formatValue = (value: number | null) => {
-        if (value == null) return "—";
+        if (value == null) return "No data";
         if (unit === "kcal" || unit === "steps") return Math.round(value).toLocaleString();
         return value.toFixed(1);
     };
+    const loggedLine = formatLifestyleLoggedCount(logged, expected);
+    const [loggedCount, loggingRate] = loggedLine.split(" · ");
 
     return (
         <div className="card p-4 space-y-3">
@@ -149,23 +154,34 @@ function LifestyleCard({
             <div className="grid grid-cols-2 gap-3">
                 <div>
                     <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Avg</p>
-                    <p className="text-lg font-black text-fg leading-none">{formatValue(average)}</p>
+                    <p className={cn(
+                        "text-lg font-black leading-none",
+                        hasLogs && average != null ? "text-fg" : "text-fg-muted"
+                    )}>
+                        {hasLogs ? formatValue(average) : "No data"}
+                    </p>
                 </div>
                 <div>
                     <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Goal</p>
                     <p className="text-lg font-black text-fg leading-none">
-                        {target == null ? "—" : `${formatValue(target)}`}
+                        {target == null ? "—" : formatValue(target)}
                     </p>
                 </div>
                 <div>
-                    <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Adherence</p>
-                    <p className="text-lg font-black text-fg leading-none">
-                        {adherence == null ? "—" : `${adherence}%`}
+                    <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">On Target</p>
+                    <p className={cn(
+                        "text-lg font-black leading-none",
+                        hasLogs && adherence != null ? "text-fg" : "text-fg-muted"
+                    )}>
+                        {hasLogs && adherence != null ? `${adherence}%` : "No data"}
                     </p>
                 </div>
                 <div>
                     <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Logged</p>
-                    <p className="text-lg font-black text-fg leading-none">{logged} / {expected}</p>
+                    <p className="text-lg font-black text-fg leading-none">
+                        {loggedCount}
+                        <span className="text-[10px] font-bold text-fg-subtle ml-1">· {loggingRate}</span>
+                    </p>
                 </div>
             </div>
             {assessment && <p className="text-xs text-fg-muted font-semibold">{assessment}</p>}

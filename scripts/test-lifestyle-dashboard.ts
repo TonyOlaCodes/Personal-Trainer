@@ -11,7 +11,11 @@ import {
     setLifestyleDashboardHidden,
     visibleLifestyleDashboardKeys,
 } from "../src/lib/lifestyleDashboardVisibility";
-import { summarizeLifestylePeriod } from "../src/lib/lifestylePeriodMetrics";
+import {
+    formatLifestyleLoggedCount,
+    lifestyleLoggingRatePercent,
+    summarizeLifestylePeriod,
+} from "../src/lib/lifestylePeriodMetrics";
 
 let passed = 0;
 function check(name: string, fn: () => void) {
@@ -88,6 +92,46 @@ check("missing days are not treated as zero", () => {
 
 check("sanitizeHiddenGoals keeps only known keys", () => {
     assert.deepEqual(sanitizeHiddenGoals(["calories", "nope", "weight", "calories"]), ["calories", "weight"]);
+});
+
+check("logging rate is logged/expected, not on-target days", () => {
+    assert.equal(lifestyleLoggingRatePercent(4, 82), 5);
+    assert.equal(lifestyleLoggingRatePercent(82, 82), 100);
+    assert.equal(lifestyleLoggingRatePercent(0, 82), 0);
+    assert.equal(formatLifestyleLoggedCount(4, 82), "4/82 · 5%");
+    assert.equal(formatLifestyleLoggedCount(0, 82), "0/82 · 0%");
+});
+
+check("on-target percent uses logged days only", () => {
+    const summary = summarizeLifestylePeriod(
+        [
+            { date: "2026-09-01", calories: 4000, steps: 10000, sleepHours: 8 },
+            { date: "2026-09-02", calories: 3961, steps: 12000, sleepHours: 7.8 },
+            { date: "2026-09-03", calories: 4100, steps: 11000, sleepHours: 8.2 },
+            { date: "2026-09-04", calories: 3900, steps: 10500, sleepHours: 8 },
+        ],
+        { targetCalories: 4000, targetSteps: 10000, targetSleepHours: 8 },
+        82
+    );
+    assert.equal(summary.calories.loggedDays, 4);
+    assert.equal(summary.calories.expectedDays, 82);
+    assert.equal(summary.calories.loggingRatePercent, 5);
+    assert.equal(summary.calories.adherencePercent, 100);
+    assert.equal(summary.steps.loggedDays, 4);
+    assert.equal(summary.sleep.average != null, true);
+});
+
+check("no logs leave average and on-target empty", () => {
+    const summary = summarizeLifestylePeriod(
+        [],
+        { targetCalories: 5000, targetSteps: 8000, targetSleepHours: 8 },
+        82
+    );
+    assert.equal(summary.calories.average, null);
+    assert.equal(summary.calories.adherencePercent, null);
+    assert.equal(summary.calories.loggedDays, 0);
+    assert.equal(summary.calories.loggingRatePercent, 0);
+    assert.equal(summary.calories.target, 5000);
 });
 
 console.log(`\n${passed} passed\n`);
