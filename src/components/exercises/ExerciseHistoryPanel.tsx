@@ -12,6 +12,13 @@ import { DEFAULT_STRENGTH_SCHEMA } from "@/lib/exerciseTracking/presets";
 import type { ExerciseTrackingSchema } from "@/lib/exerciseTracking/types";
 import type { UnitSystem } from "@/lib/units";
 
+interface HistorySubjectPayload {
+    kind: "user" | "unassigned";
+    userId?: string;
+    name?: string;
+    isOtherUser?: boolean;
+}
+
 export interface ExerciseHistoryPayload {
     key: string;
     name: string;
@@ -19,11 +26,13 @@ export interface ExerciseHistoryPayload {
     hasMore: boolean;
     trackingSchema: ExerciseTrackingSchema;
     unitSystem: UnitSystem;
+    subject?: HistorySubjectPayload;
 }
 
 interface BatchResponse {
     exercises: Array<Omit<ExerciseHistoryPayload, "unitSystem"> & { requested: string }>;
     unitSystem: UnitSystem;
+    subject?: HistorySubjectPayload;
 }
 
 /**
@@ -48,16 +57,20 @@ const pending = new Map<
 /** Matches MAX_NAMES on the route. */
 const MAX_BATCH = 40;
 
-function cacheKey(name: string, clientId?: string | null) {
-    return `${clientId ?? "self"}::${name.trim().toLowerCase()}`;
+function subjectKey(clientId?: string | null, planId?: string | null) {
+    return `${planId ?? ""}::${clientId ?? "self"}`;
+}
+
+function cacheKey(name: string, clientId?: string | null, planId?: string | null) {
+    return `${subjectKey(clientId, planId)}::${name.trim().toLowerCase()}`;
 }
 
 export function invalidateExerciseHistoryCache() {
     cache.clear();
 }
 
-async function flushBatch(clientId: string | null) {
-    const batchKey = clientId ?? "self";
+async function flushBatch(clientId: string | null, planId: string | null) {
+    const batchKey = subjectKey(clientId, planId);
     const queued = pending.get(batchKey) ?? [];
     pending.delete(batchKey);
     if (queued.length === 0) return;
@@ -67,6 +80,7 @@ async function flushBatch(clientId: string | null) {
         const params = new URLSearchParams();
         for (const item of chunk) params.append("name", item.name);
         if (clientId) params.set("clientId", clientId);
+        if (planId) params.set("planId", planId);
 
         try {
             const res = await fetch(`/api/exercises/session-history?${params.toString()}`);
@@ -82,16 +96,20 @@ async function flushBatch(clientId: string | null) {
             for (const item of chunk) {
                 const entry = byName.get(item.name);
                 if (!entry) {
-                    cache.delete(cacheKey(item.name, clientId));
+                    cache.delete(cacheKey(item.name, clientId, planId));
                     item.reject(new Error("Could not load exercise history"));
                     continue;
                 }
-                item.resolve({ ...entry, unitSystem: data.unitSystem });
+                item.resolve({
+                    ...entry,
+                    unitSystem: data.unitSystem,
+                    subject: data.subject,
+                });
             }
         } catch (err) {
             for (const item of chunk) {
                 // Never cache a failure — the next open should retry.
-                cache.delete(cacheKey(item.name, clientId));
+                cache.delete(cacheKey(item.name, clientId, planId));
                 item.reject(err);
             }
         }
@@ -100,14 +118,15 @@ async function flushBatch(clientId: string | null) {
 
 export function fetchExerciseSessionHistory(
     name: string,
-    clientId?: string | null
+    clientId?: string | null,
+    planId?: string | null
 ): Promise<ExerciseHistoryPayload> {
     const trimmed = name.trim();
-    const ck = cacheKey(trimmed, clientId);
+    const ck = cacheKey(trimmed, clientId, planId);
     const cached = cache.get(ck);
     if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.payload;
 
-    const batchKey = clientId ?? "self";
+    const batchKey = subjectKey(clientId, planId);
     const request = new Promise<ExerciseHistoryPayload>((resolve, reject) => {
         const queue = pending.get(batchKey);
         if (queue) {
@@ -116,7 +135,7 @@ export function fetchExerciseSessionHistory(
         }
         pending.set(batchKey, [{ name: trimmed, resolve, reject }]);
         // Collect everything requested during this render pass into one request.
-        setTimeout(() => void flushBatch(clientId ?? null), 0);
+        setTimeout(() => void flushBatch(clientId ?? null, planId ?? null), 0);
     });
 
     cache.set(ck, { at: Date.now(), payload: request });
@@ -166,26 +185,39 @@ function SessionGroup({
 export function ExerciseHistoryPanel({
     exerciseName,
     clientId,
+    planId,
+    unassigned = false,
+    subjectName,
+    showSubjectName = false,
     onClose,
     className,
 }: {
     exerciseName: string;
     clientId?: string | null;
+    planId?: string | null;
+    unassigned?: boolean;
+    subjectName?: string | null;
+    showSubjectName?: boolean;
     onClose: () => void;
     className?: string;
 }) {
     const [data, setData] = useState<ExerciseHistoryPayload | null>(null);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(!unassigned);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         let cancelled = false;
-        setLoading(true);
         setError(null);
-        // Drop the previous exercise's payload so the header can't show a stale name.
         setData(null);
 
-        fetchExerciseSessionHistory(exerciseName, clientId)
+        if (unassigned) {
+            setLoading(false);
+            return;
+        }
+
+        setLoading(true);
+
+        fetchExerciseSessionHistory(exerciseName, clientId, planId)
             .then((payload) => {
                 if (cancelled) return;
                 setData(payload);
@@ -201,10 +233,13 @@ export function ExerciseHistoryPanel({
         return () => {
             cancelled = true;
         };
-    }, [exerciseName, clientId]);
+    }, [exerciseName, clientId, planId, unassigned]);
 
     const schema = data?.trackingSchema ?? DEFAULT_STRENGTH_SCHEMA;
     const unitSystem = data?.unitSystem ?? "METRIC";
+    const resolvedSubjectName = subjectName || data?.subject?.name || null;
+    const identifyOtherUser = showSubjectName
+        || Boolean(data?.subject?.isOtherUser && data.subject.name);
 
     return (
         <div className={cn("flex flex-col min-h-0 bg-surface-card", className)}>
@@ -217,6 +252,11 @@ export function ExerciseHistoryPanel({
                     <h3 className="text-base font-black text-fg tracking-tight truncate mt-0.5">
                         {data?.name || exerciseName}
                     </h3>
+                    {identifyOtherUser && resolvedSubjectName && (
+                        <p className="text-[11px] font-bold text-fg-muted truncate mt-0.5">
+                            {resolvedSubjectName}
+                        </p>
+                    )}
                 </div>
                 <button
                     type="button"
@@ -239,7 +279,16 @@ export function ExerciseHistoryPanel({
                     <p className="text-xs font-semibold text-danger px-1 py-6 text-center">{error}</p>
                 )}
 
-                {!loading && !error && data && data.sessions.length === 0 && (
+                {!loading && !error && unassigned && (
+                    <div className="px-2 py-10 text-center">
+                        <p className="text-sm font-bold text-fg">No client assigned</p>
+                        <p className="text-xs text-fg-muted mt-1">
+                            Exercise history will be available when viewing this plan for a client.
+                        </p>
+                    </div>
+                )}
+
+                {!loading && !error && !unassigned && data && data.sessions.length === 0 && (
                     <div className="px-2 py-10 text-center">
                         <p className="text-sm font-bold text-fg">No completed sets yet</p>
                         <p className="text-xs text-fg-muted mt-1">

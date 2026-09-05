@@ -18,10 +18,14 @@ import {
 export function LastSessionPreview({
     exerciseName,
     clientId,
+    planId,
+    enabled = true,
     className,
 }: {
     exerciseName: string;
     clientId?: string | null;
+    planId?: string | null;
+    enabled?: boolean;
     className?: string;
 }) {
     const [data, setData] = useState<ExerciseHistoryPayload | null>(null);
@@ -30,13 +34,13 @@ export function LastSessionPreview({
     useEffect(() => {
         // Names are edited by typing in the plan editor — wait for a pause so a
         // partially typed name doesn't fire a lookup per keystroke.
-        if (trimmed.length < 3) {
+        if (!enabled || trimmed.length < 3) {
             setData(null);
             return;
         }
         let cancelled = false;
         const timer = setTimeout(() => {
-            fetchExerciseSessionHistory(trimmed, clientId)
+            fetchExerciseSessionHistory(trimmed, clientId, planId)
                 .then((payload) => {
                     if (!cancelled) setData(payload);
                 })
@@ -49,7 +53,7 @@ export function LastSessionPreview({
             cancelled = true;
             clearTimeout(timer);
         };
-    }, [trimmed, clientId]);
+    }, [trimmed, clientId, planId, enabled]);
 
     const session = data?.sessions[0];
     if (!session) return null;

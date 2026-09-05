@@ -9,6 +9,7 @@ import {
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
 import { DataSafetyError, deleteDuplicatePlansByName, deletePlanIfNoHistory } from "@/lib/dataSafety";
 import { canCopyUserPlan, canViewUserPlanFromProfile } from "@/lib/userProfile";
+import { resolvePlanHistorySubject, toPlanHistorySubjectPayload } from "@/lib/exerciseHistorySubject";
 
 interface PlanExercisePayload {
     name: string;
@@ -51,6 +52,7 @@ export async function GET(
     const user = authResult.user;
 
     const { planId } = await params;
+    const preferredClientId = new URL(req.url).searchParams.get("clientId");
 
     const plan = await prisma.plan.findUnique({
         where: { id: planId },
@@ -132,7 +134,11 @@ export async function GET(
         }
     }
 
-    return NextResponse.json({ ...plan, canCopy, canEdit });
+    const historySubject = toPlanHistorySubjectPayload(
+        await resolvePlanHistorySubject(user, planId, preferredClientId)
+    );
+
+    return NextResponse.json({ ...plan, canCopy, canEdit, historySubject });
 }
 
 export async function PATCH(

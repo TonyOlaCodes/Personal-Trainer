@@ -34,7 +34,7 @@ export default async function CreatePlanPage({
                     </div>
                 }
             >
-                <PlanCreateClient />
+                <PlanCreateClient viewerId={user.id} viewerRole={user.role} />
             </Suspense>
         </>
     );

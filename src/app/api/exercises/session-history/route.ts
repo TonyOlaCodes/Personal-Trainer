@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireActiveUser, resolveWorkoutLogReadUserId } from "@/lib/apiAuth";
+import { requireActiveUser } from "@/lib/apiAuth";
 import {
     DEFAULT_EXERCISE_HISTORY_SESSIONS,
     loadExerciseSessionHistoryBatch,
 } from "@/lib/exerciseSessionHistory";
+import { resolveExerciseHistorySubject } from "@/lib/exerciseHistorySubject";
 import {
     ensureExerciseTrackingSchema,
     resolveTrackingSchema,
@@ -44,25 +45,41 @@ export async function GET(req: Request) {
     }
 
     const clientId = url.searchParams.get("clientId");
+    const planId = url.searchParams.get("planId");
     const excludeLogId = url.searchParams.get("excludeLogId") || undefined;
     const requestedLimit = Number(url.searchParams.get("limit"));
     const limit = Number.isFinite(requestedLimit) && requestedLimit > 0
         ? Math.min(Math.trunc(requestedLimit), 100)
         : DEFAULT_EXERCISE_HISTORY_SESSIONS;
 
-    const readTarget = await resolveWorkoutLogReadUserId(actor, clientId);
-    if (readTarget.error) return readTarget.error;
+    const subject = await resolveExerciseHistorySubject(actor, { planId, clientId });
+    if (subject.status === "forbidden") return subject.error;
+
+    if (subject.status === "unassigned") {
+        return NextResponse.json({
+            exercises: names.map((name) => ({
+                requested: name,
+                key: "",
+                name,
+                sessions: [],
+                hasMore: false,
+                trackingSchema: strengthFallback(),
+            })),
+            unitSystem: "METRIC" as UnitSystem,
+            subject: { kind: "unassigned" as const },
+        });
+    }
 
     try {
         await ensureExerciseTrackingSchema();
 
         const [results, target] = await Promise.all([
-            loadExerciseSessionHistoryBatch(readTarget.targetUserId, names, {
+            loadExerciseSessionHistoryBatch(subject.userId, names, {
                 limit,
                 excludeLogId,
             }),
             prisma.user.findUnique({
-                where: { id: readTarget.targetUserId },
+                where: { id: subject.userId },
                 select: { unitSystem: true },
             }),
         ]);
@@ -86,6 +103,12 @@ export async function GET(req: Request) {
         return NextResponse.json({
             exercises,
             unitSystem: (target?.unitSystem ?? "METRIC") as UnitSystem,
+            subject: {
+                kind: "user" as const,
+                userId: subject.userId,
+                name: subject.name,
+                isOtherUser: subject.isOtherUser,
+            },
         });
     } catch (error) {
         console.error("[GET /api/exercises/session-history]", error);

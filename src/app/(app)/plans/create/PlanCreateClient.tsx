@@ -8,6 +8,7 @@ import {
     Trash2, ChevronRight, Copy, CopyPlus, ChevronDown, ChevronUp, GripVertical, Loader2, CalendarRange, ArrowRight, ArrowLeft
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { isCoachRole } from "@/lib/roles";
 import { PLAN_TEMPLATES } from "@/lib/templates";
 import { ExerciseAutocomplete } from "@/components/shared/ExerciseAutocomplete";
 import { formatPlanText, formatWorkoutText } from "@/lib/formatPlanText";
@@ -89,10 +90,19 @@ interface PlanPayload {
     creator?: { name: string } | null;
     canCopy?: boolean;
     canEdit?: boolean;
+    historySubject?:
+        | { kind: "assigned"; userId: string; name: string; isOtherUser: boolean }
+        | { kind: "unassigned" };
     error?: string;
 }
 
-export function PlanCreateClient() {
+export function PlanCreateClient({
+    viewerId,
+    viewerRole,
+}: {
+    viewerId: string;
+    viewerRole: string;
+}) {
     const router = useRouter();
     const searchParams = useSearchParams();
     const templateId = searchParams.get("template");
@@ -122,6 +132,7 @@ export function PlanCreateClient() {
     const [canCopyPlan, setCanCopyPlan] = useState(false);
     const [canEditPlan, setCanEditPlan] = useState(false);
     const [cloningPlan, setCloningPlan] = useState(false);
+    const [planHistorySubject, setPlanHistorySubject] = useState<PlanPayload["historySubject"] | null>(null);
 
     // Exercise History Inspector — one panel at a time, switches exercise on reopen.
     const { exerciseName: historyExercise, openHistory, closeHistory } = useExerciseHistoryInspector();
@@ -194,13 +205,15 @@ export function PlanCreateClient() {
                 setLoading(true);
                 setError(null);
                 try {
-                    const res = await fetch(`/api/plans/${editId}`);
+                    const planQuery = clientId ? `?clientId=${encodeURIComponent(clientId)}` : "";
+                    const res = await fetch(`/api/plans/${editId}${planQuery}`);
                     const data = await res.json() as PlanPayload;
                     if (res.ok) {
                         setName(data.name);
                         setDesc(data.description || "");
                         setCanCopyPlan(Boolean(data.canCopy));
                         setCanEditPlan(Boolean(data.canEdit));
+                        setPlanHistorySubject(data.historySubject ?? { kind: "unassigned" });
                         if (data.creator?.name) {
                             setCreatorName(data.creator.name);
                         }
@@ -229,6 +242,7 @@ export function PlanCreateClient() {
                         setWeeks([]);
                         setCanCopyPlan(false);
                         setCanEditPlan(false);
+                        setPlanHistorySubject(null);
                         setError(data.error || "Failed to load plan details.");
                     }
                 } catch (e) {
@@ -239,6 +253,7 @@ export function PlanCreateClient() {
                 }
             } else if (templateId && PLAN_TEMPLATES[templateId]) {
                 setError(null);
+                setPlanHistorySubject(null);
                 const t = PLAN_TEMPLATES[templateId];
                 setName(t.name);
                 setDesc(t.description);
@@ -255,6 +270,7 @@ export function PlanCreateClient() {
                 setActiveWorkoutIdx(0);
             } else {
                 setError(null);
+                setPlanHistorySubject(null);
                 setWeeks([{
                     weekNumber: 1,
                     workouts: [{ name: "Full Body A", dayNumber: 1, dayOfWeek: 0, exercises: [] }]
@@ -264,7 +280,7 @@ export function PlanCreateClient() {
             }
         };
         load();
-    }, [templateId, editId]);
+    }, [templateId, editId, clientId]);
 
     useEffect(() => {
         if (weeks.length === 0) return;
@@ -292,6 +308,20 @@ export function PlanCreateClient() {
 
     const currentWeek = weeks[activeWeekIdx];
     const workouts = currentWeek?.workouts || [];
+
+    const assignedHistoryUserId = planHistorySubject?.kind === "assigned"
+        ? planHistorySubject.userId
+        : null;
+    const historyClientId = assignedHistoryUserId ?? clientId;
+    const historyUnassigned = editId
+        ? planHistorySubject?.kind === "unassigned" && !clientId
+        : isCoachRole(viewerRole) && !clientId;
+    const historySubjectName = planHistorySubject?.kind === "assigned"
+        ? planHistorySubject.name
+        : null;
+    const showHistorySubjectName = planHistorySubject?.kind === "assigned"
+        ? planHistorySubject.isOtherUser
+        : Boolean(historyClientId && historyClientId !== viewerId);
 
     const copyText = async (text: string, message: string) => {
         try {
@@ -692,7 +722,11 @@ export function PlanCreateClient() {
         >
         <ExerciseHistorySplit
             exerciseName={historyExercise}
-            clientId={clientId}
+            clientId={historyClientId}
+            planId={editId}
+            unassigned={historyUnassigned}
+            subjectName={historySubjectName}
+            showSubjectName={showHistorySubjectName}
             onClose={closeHistory}
         >
         <div className="space-y-6">
@@ -1390,7 +1424,9 @@ export function PlanCreateClient() {
                                                         {ex.name.trim() && (
                                                             <LastSessionPreview
                                                                 exerciseName={ex.name}
-                                                                clientId={clientId}
+                                                                clientId={historyClientId}
+                                                                planId={editId}
+                                                                enabled={!historyUnassigned}
                                                                 className="mt-2.5"
                                                             />
                                                         )}

@@ -77,10 +77,18 @@ export function ExerciseHistoryButton({
 export function ExerciseHistoryModal({
     exerciseName,
     clientId,
+    planId,
+    unassigned,
+    subjectName,
+    showSubjectName,
     onClose,
 }: {
     exerciseName: string | null;
     clientId?: string | null;
+    planId?: string | null;
+    unassigned?: boolean;
+    subjectName?: string | null;
+    showSubjectName?: boolean;
     onClose: () => void;
 }) {
     if (!exerciseName) return null;
@@ -94,6 +102,10 @@ export function ExerciseHistoryModal({
                 <ExerciseHistoryPanel
                     exerciseName={exerciseName}
                     clientId={clientId}
+                    planId={planId}
+                    unassigned={unassigned}
+                    subjectName={subjectName}
+                    showSubjectName={showSubjectName}
                     onClose={onClose}
                     className="flex-1 min-h-0"
                 />
@@ -110,11 +122,19 @@ export function ExerciseHistoryModal({
 export function ExerciseHistorySplit({
     exerciseName,
     clientId,
+    planId,
+    unassigned,
+    subjectName,
+    showSubjectName,
     onClose,
     children,
 }: {
     exerciseName: string | null;
     clientId?: string | null;
+    planId?: string | null;
+    unassigned?: boolean;
+    subjectName?: string | null;
+    showSubjectName?: boolean;
     onClose: () => void;
     children: ReactNode;
 }) {
@@ -131,6 +151,10 @@ export function ExerciseHistorySplit({
                         <ExerciseHistoryPanel
                             exerciseName={exerciseName!}
                             clientId={clientId}
+                            planId={planId}
+                            unassigned={unassigned}
+                            subjectName={subjectName}
+                            showSubjectName={showSubjectName}
                             onClose={onClose}
                             className="flex-1 min-h-0"
                         />
@@ -147,6 +171,10 @@ export function ExerciseHistorySplit({
                         <ExerciseHistoryPanel
                             exerciseName={exerciseName!}
                             clientId={clientId}
+                            planId={planId}
+                            unassigned={unassigned}
+                            subjectName={subjectName}
+                            showSubjectName={showSubjectName}
                             onClose={onClose}
                             className="flex-1 min-h-0"
                         />
