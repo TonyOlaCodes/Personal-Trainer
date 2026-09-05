@@ -21,6 +21,7 @@ import { cleanupStaleInProgressSessions } from "@/lib/workoutSessionCleanup";
 import { isCoachRole, canAccessCheckIns } from "@/lib/roles";
 import { getWorkoutStreak } from "@/lib/workoutAdherenceStreak";
 import { getClientGoalTargets } from "@/lib/clientGoalTargets";
+import { getDailyMetricsSummary } from "@/lib/dailyMetrics";
 
 export const metadata = { title: "Dashboard" };
 
@@ -220,10 +221,11 @@ export default async function DashboardPage() {
             }
         }
 
-        const [bodyweight, bodyweightHistory, goalTargets] = await Promise.all([
+        const [bodyweight, bodyweightHistory, goalTargets, dailyLifestyle] = await Promise.all([
             getBodyweightSummary(user.id, todayDate),
             getBodyweightHistory(user.id, 14),
             getClientGoalTargets(user.id),
+            getDailyMetricsSummary(user.id, todayDate),
         ]);
 
         const checkInPanel = canAccessCheckIns(user.role, user.coachId)
@@ -315,6 +317,12 @@ export default async function DashboardPage() {
                                 latestPreviousWeightKg: bodyweight?.latestPrevious?.weightKg ?? null,
                                 latestDate: bodyweight?.latest?.date ?? null,
                                 history: bodyweightHistory,
+                            }}
+                            dailyLifestyle={{
+                                calories: dailyLifestyle.selected?.calories ?? null,
+                                steps: dailyLifestyle.selected?.steps ?? null,
+                                sleepHours: dailyLifestyle.selected?.sleepHours ?? null,
+                                targets: dailyLifestyle.targets,
                             }}
                         />
                 </div>

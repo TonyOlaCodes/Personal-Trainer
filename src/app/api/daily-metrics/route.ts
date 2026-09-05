@@ -45,9 +45,9 @@ export async function POST(req: Request) {
         const parsed = saveSchema.parse(await req.json());
         const date = normalizeDailyMetricDate(parsed.date);
         const summary = await saveDailyMetricsEntry(user.id, date, {
-            calories: normalizeCalories(parsed.calories),
-            steps: normalizeSteps(parsed.steps),
-            sleepHours: normalizeSleepHours(parsed.sleepHours),
+            ...(parsed.calories !== undefined ? { calories: normalizeCalories(parsed.calories) } : {}),
+            ...(parsed.steps !== undefined ? { steps: normalizeSteps(parsed.steps) } : {}),
+            ...(parsed.sleepHours !== undefined ? { sleepHours: normalizeSleepHours(parsed.sleepHours) } : {}),
         });
 
         triggerAchievementSync(user.id);

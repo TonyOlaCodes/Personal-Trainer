@@ -30,7 +30,9 @@
     "test:achievements": "npx tsx scripts/test-achievements-progressive.ts",
     "test:presence": "npx tsx scripts/test-presence-workout.ts",
     "test:reliability": "npx tsx scripts/test-reliability-security.ts",
-    "test:coach-profile": "npx tsx scripts/test-coach-client-profile.ts"
+    "test:coach-profile": "npx tsx scripts/test-coach-client-profile.ts",
+    "test:chat-filters": "npx tsx scripts/test-chat-filters.ts",
+    "test:lifestyle-dashboard": "npx tsx scripts/test-lifestyle-dashboard.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.0.5",

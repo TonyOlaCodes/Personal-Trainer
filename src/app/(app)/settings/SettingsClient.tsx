@@ -19,6 +19,12 @@ import {
 import { getPublicProfileHref } from "@/lib/profileNavigation";
 import { siteConfig } from "@/lib/site";
 import { httpErrorMessage } from "@/lib/httpErrorMessage";
+import {
+    isLifestyleShownOnDashboard,
+    sanitizeHiddenGoals,
+    setLifestyleDashboardHidden,
+} from "@/lib/lifestyleDashboardVisibility";
+import type { LifestyleMetricKey } from "@/lib/lifestylePeriodMetrics";
 
 interface Props {
     user: {
@@ -104,7 +110,7 @@ export function SettingsClient({ user }: Props) {
     const [targetCalories, setTargetCalories] = useState(user.targetCalories != null ? String(user.targetCalories) : "");
     const [targetSteps, setTargetSteps] = useState(user.targetSteps != null ? String(user.targetSteps) : "");
     const [targetSleepHours, setTargetSleepHours] = useState(user.targetSleepHours != null ? user.targetSleepHours.toString() : "");
-    const [hiddenGoals, setHiddenGoals] = useState<string[]>(user.hiddenGoals || []);
+    const [hiddenGoals, setHiddenGoals] = useState<string[]>(sanitizeHiddenGoals(user.hiddenGoals || []));
     const [goalSaving, setGoalSaving] = useState(false);
     const [goalSaved, setGoalSaved] = useState(false);
     const goalReadyRef = useRef(false);
@@ -347,7 +353,7 @@ export function SettingsClient({ user }: Props) {
         targetCalories: targetCalories !== "" ? Math.round(Number(targetCalories)) : null,
         targetSteps: targetSteps !== "" ? Math.round(Number(targetSteps)) : null,
         targetSleepHours: targetSleepHours !== "" ? Math.round(Number(targetSleepHours) * 10) / 10 : null,
-        hiddenGoals,
+        hiddenGoals: sanitizeHiddenGoals(hiddenGoals),
     }), [
         goal,
         trainingDays,
@@ -827,11 +833,80 @@ export function SettingsClient({ user }: Props) {
                                 />
                             </div>
 
+                            <div className="col-span-full border-t border-surface-border/50 pt-6 space-y-4">
+                                <div>
+                                    <h4 className="text-xs font-black text-fg uppercase tracking-widest">Lifestyle targets</h4>
+                                    <p className="text-[11px] text-fg-muted mt-0.5">
+                                        Goals stay saved even when hidden. Turning a metric off only hides it from your Dashboard and Progress — it does not delete logs.
+                                    </p>
+                                </div>
+                                <div className="grid sm:grid-cols-3 gap-4">
+                                    {([
+                                        { key: "calories" as const, label: "Calories", unit: "kcal", value: targetCalories, setValue: setTargetCalories, step: "1", placeholder: "e.g. 2500" },
+                                        { key: "steps" as const, label: "Steps", unit: "steps", value: targetSteps, setValue: setTargetSteps, step: "1", placeholder: "e.g. 10000" },
+                                        { key: "sleep" as const, label: "Sleep", unit: "hours", value: targetSleepHours, setValue: setTargetSleepHours, step: "0.1", placeholder: "e.g. 8.0" },
+                                    ] satisfies Array<{
+                                        key: LifestyleMetricKey;
+                                        label: string;
+                                        unit: string;
+                                        value: string;
+                                        setValue: (next: string) => void;
+                                        step: string;
+                                        placeholder: string;
+                                    }>).map((metric) => {
+                                        const shown = isLifestyleShownOnDashboard(hiddenGoals, metric.key);
+                                        return (
+                                            <div key={metric.key} className="rounded-2xl border border-surface-border bg-surface-muted/20 p-4 space-y-3">
+                                                <p className="text-xs font-black uppercase tracking-wider text-fg">{metric.label}</p>
+                                                <div className="space-y-1.5">
+                                                    <label className="text-[10px] font-black text-fg-subtle uppercase tracking-widest">Goal</label>
+                                                    <div className="flex items-center gap-2">
+                                                        <input
+                                                            type="number"
+                                                            min={0}
+                                                            step={metric.step}
+                                                            className="input h-11 text-sm font-bold"
+                                                            placeholder={metric.placeholder}
+                                                            value={metric.value}
+                                                            onChange={(e) => metric.setValue(e.target.value)}
+                                                        />
+                                                        <span className="text-[10px] font-bold text-fg-muted uppercase shrink-0">{metric.unit}</span>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setHiddenGoals(setLifestyleDashboardHidden(hiddenGoals, metric.key, !shown))}
+                                                    className={cn(
+                                                        "w-full flex items-center justify-between gap-3 p-3 rounded-xl border text-left transition-all",
+                                                        shown
+                                                            ? "bg-brand-500/5 border-brand-500/30"
+                                                            : "bg-surface-muted/30 border-surface-border"
+                                                    )}
+                                                >
+                                                    <span className={cn("text-[10px] font-black uppercase tracking-wider", shown ? "text-brand-400" : "text-fg-subtle")}>
+                                                        Show on Dashboard
+                                                    </span>
+                                                    <div className={cn(
+                                                        "w-10 h-6 p-0.5 rounded-full transition-colors relative shrink-0",
+                                                        shown ? "bg-brand-500" : "bg-surface-muted border border-surface-border"
+                                                    )}>
+                                                        <div className={cn(
+                                                            "w-4 h-4 rounded-full bg-white transition-all shadow-sm absolute top-0.5",
+                                                            shown ? "right-0.5" : "left-0.5"
+                                                        )} />
+                                                    </div>
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
                             {/* Goal Visibility settings */}
                             <div className="col-span-full border-t border-surface-border/50 pt-6 space-y-4">
                                 <div>
-                                    <h4 className="text-xs font-black text-fg uppercase tracking-widest">Dashboard & Progress Visibility</h4>
-                                    <p className="text-[11px] text-fg-muted mt-0.5">Toggle which targets are visible on your dashboard and progress analytics. Hiding a target also hides it from your coach.</p>
+                                    <h4 className="text-xs font-black text-fg uppercase tracking-widest">Bodyweight visibility</h4>
+                                    <p className="text-[11px] text-fg-muted mt-0.5">Hiding bodyweight hides it from your dashboard, progress, and your coach.</p>
                                 </div>
                                 
                                 <div className="grid sm:grid-cols-2 gap-4">

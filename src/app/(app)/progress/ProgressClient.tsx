@@ -24,6 +24,8 @@ import { deriveOneRMFromBestSet } from "@/lib/oneRepMax";
 import { MAX_PINNED_EXERCISES, normalizePinnedExercises, orderExerciseNames } from "@/lib/pinnedExercises";
 import { useWorkoutStatsRefresh } from "@/hooks/useWorkoutStatsRefresh";
 import { format, startOfWeek } from "date-fns";
+import { LifestyleProgressSections } from "@/components/progress/LifestyleProgressSections";
+import { visibleLifestyleDashboardKeys } from "@/lib/lifestyleDashboardVisibility";
 
 interface Props {
     userRole: string;
@@ -665,7 +667,20 @@ export function ProgressClient({ userRole, hiddenGoals, todayWorkoutHref = null,
                 </LockedProgressPreview>
             ) : null}
 
-
+            {visibleLifestyleDashboardKeys(hiddenGoals).length > 0 && data?.dailyMetrics && (
+                <LockedProgressPreview
+                    locked={showFreeAccessLock}
+                    title="Unlock Lifestyle Trends"
+                    description="Your calories, steps, and sleep history is underneath. Unlock access to view the charts clearly."
+                >
+                    <LifestyleProgressSections
+                        visibleKeys={visibleLifestyleDashboardKeys(hiddenGoals)}
+                        calories={data.dailyMetrics.calories}
+                        steps={data.dailyMetrics.steps}
+                        sleep={data.dailyMetrics.sleep}
+                    />
+                </LockedProgressPreview>
+            )}
 
             {/* ── TRAINING VOLUME ── */}
                         {/* ── EXERCISE HISTORY ── */}

@@ -148,9 +148,35 @@ export async function getDailyMetricsSummary(userId: string, date: string) {
     });
 }
 
-export async function saveDailyMetricsEntry(userId: string, date: string, entry: Omit<DailyMetricsEntry, "date">) {
+export type DailyMetricsPatch = {
+    calories?: number | null;
+    steps?: number | null;
+    sleepHours?: number | null;
+};
+
+/** Merge a partial save onto an existing day so omitted fields are not wiped. */
+export function mergeDailyMetricsPatch(
+    existing: Omit<DailyMetricsEntry, "date"> | null | undefined,
+    patch: DailyMetricsPatch
+): Omit<DailyMetricsEntry, "date"> {
+    return {
+        calories: patch.calories !== undefined ? patch.calories : existing?.calories ?? null,
+        steps: patch.steps !== undefined ? patch.steps : existing?.steps ?? null,
+        sleepHours: patch.sleepHours !== undefined ? patch.sleepHours : existing?.sleepHours ?? null,
+    };
+}
+
+export async function saveDailyMetricsEntry(userId: string, date: string, patch: DailyMetricsPatch) {
     return runWithRetry(async () => {
         await ensureDailyMetricsTable();
+
+        const existing = await prisma.$queryRaw<DailyMetricsEntry[]>`
+            SELECT "loggedDate"::text AS "date", "calories", "steps", "sleepHours"
+            FROM "daily_metric_logs"
+            WHERE "userId" = ${userId} AND "loggedDate" = ${date}::date
+            LIMIT 1
+        `;
+        const entry = mergeDailyMetricsPatch(existing[0] ?? null, patch);
 
         await prisma.$executeRaw`
             INSERT INTO "daily_metric_logs" ("id", "userId", "loggedDate", "calories", "steps", "sleepHours", "updatedAt")

@@ -39,7 +39,7 @@ const profileSchema = z.object({
     targetCalories: z.number().nullable().optional(),
     targetSteps: z.number().nullable().optional(),
     targetSleepHours: z.number().nullable().optional(),
-    hiddenGoals: z.array(z.string()).optional(),
+    hiddenGoals: z.array(z.enum(["weight", "calories", "steps", "sleep"])).optional(),
     bio: z.string().max(280).nullable().optional(),
     isPrivateProfile: z.boolean().optional(),
     bannerUrl: z.union([storedUploadUrlSchema, z.literal("")]).optional(),

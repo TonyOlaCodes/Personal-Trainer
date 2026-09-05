@@ -23,6 +23,8 @@ import {
     type ConflictingActiveSession,
 } from "@/components/shared/ActiveSessionConflictModal";
 import { httpErrorMessage } from "@/lib/httpErrorMessage";
+import { DashboardLifestyleCards } from "@/components/dashboard/DashboardLifestyleCards";
+import { visibleLifestyleDashboardKeys } from "@/lib/lifestyleDashboardVisibility";
 
 interface Exercise {
     id: string;
@@ -126,6 +128,16 @@ interface Props {
         latestDate: string | null;
         history: Array<{ date: string; weightKg: number }>;
     };
+    dailyLifestyle: {
+        calories: number | null;
+        steps: number | null;
+        sleepHours: number | null;
+        targets: {
+            targetCalories: number | null;
+            targetSteps: number | null;
+            targetSleepHours: number | null;
+        };
+    };
 }
 
 const TODAY_EXERCISE_PREVIEW = 3;
@@ -164,7 +176,7 @@ function buildBodyweightSparkline(
     };
 }
 
-export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDay, todayCompleted, activeSession, recentLogs, avgDurationMin, currentCheckin, checkInDueState, checkInPanel, bodyweight }: Props) {
+export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDay, todayCompleted, activeSession, recentLogs, avgDurationMin, currentCheckin, checkInDueState, checkInPanel, bodyweight, dailyLifestyle }: Props) {
     const router = useRouter();
     const currentPath = useCurrentPath();
     const now = useCurrentDate();
@@ -521,6 +533,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
         && (checkInDueState.isDueToday || checkInDueState.isOverdue)
     );
     const isBodyweightEnabled = !user.hiddenGoals?.includes("weight");
+    const visibleLifestyleKeys = visibleLifestyleDashboardKeys(user.hiddenGoals);
     const isPremium = PREMIUM_ROLES.has(user.role);
     const metricsBeforeWorkout = Boolean(todayCompleted || !todayWorkout);
     const checkInDueLabelState = {
@@ -530,7 +543,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
     };
 
     const renderDailyMetrics = () => {
-        if (!isBodyweightEnabled) return null;
+        if (!isBodyweightEnabled && visibleLifestyleKeys.length === 0) return null;
 
         const bodyweightSparkline = buildBodyweightSparkline(bodyweightHistory, user.targetWeightKg);
         const canOpenBodyweightProgress = isPremium && isBodyweightEnabled;
@@ -595,11 +608,14 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
 
         return (
         <>
+            {isBodyweightEnabled && (
             <div className="flex items-center gap-2 pt-1">
                 <Activity className="w-4 h-4 text-brand-400" />
                 <h3 className="text-sm font-black uppercase tracking-widest text-fg">Bodyweight</h3>
             </div>
+            )}
 
+            {isBodyweightEnabled && (
             <div id="weekly-metrics" className="grid grid-cols-[minmax(0,1fr)_auto] items-stretch gap-2">
                 <div className="flex items-center gap-2">
                 {!user.hiddenGoals?.includes("weight") && (
@@ -680,6 +696,7 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                     </label>
                 </div>
             </div>
+            )}
             {bodyweightChart && (
                 canOpenBodyweightProgress ? (
                     <Link href="/progress#bodyweight" className="block">
@@ -688,6 +705,18 @@ export function DashboardClient({ user, activePlan, todayWorkout, nextTrainingDa
                 ) : (
                     bodyweightChart
                 )
+            )}
+            {visibleLifestyleKeys.length > 0 && (
+                <DashboardLifestyleCards
+                    date={todayDate}
+                    visibleKeys={visibleLifestyleKeys}
+                    initialValues={{
+                        calories: dailyLifestyle.calories,
+                        steps: dailyLifestyle.steps,
+                        sleepHours: dailyLifestyle.sleepHours,
+                    }}
+                    targets={dailyLifestyle.targets}
+                />
             )}
         </>
         );
