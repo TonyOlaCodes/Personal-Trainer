@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatHistorySetLine, formatSessionContext } from "@/lib/exerciseHistoryFormat";
 import { DEFAULT_STRENGTH_SCHEMA } from "@/lib/exerciseTracking/presets";
@@ -19,12 +18,10 @@ import {
 export function LastSessionPreview({
     exerciseName,
     clientId,
-    onViewHistory,
     className,
 }: {
     exerciseName: string;
     clientId?: string | null;
-    onViewHistory?: (name: string) => void;
     className?: string;
 }) {
     const [data, setData] = useState<ExerciseHistoryPayload | null>(null);
@@ -67,21 +64,9 @@ export function LastSessionPreview({
                 className
             )}
         >
-            <div className="flex items-center justify-between gap-2">
-                <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle truncate">
-                    Last session · {formatSessionContext(session)} · {session.dateLabel}
-                </p>
-                {onViewHistory && (
-                    <button
-                        type="button"
-                        onClick={() => onViewHistory(trimmed)}
-                        className="shrink-0 inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-brand-400 hover:text-brand-300"
-                    >
-                        View history
-                        <ArrowRight className="w-2.5 h-2.5" />
-                    </button>
-                )}
-            </div>
+            <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle truncate">
+                Last session · {formatSessionContext(session)} · {session.dateLabel}
+            </p>
             <p className="text-[11px] font-semibold text-fg-muted mt-1 leading-relaxed">
                 {session.sets
                     .map((set) => formatHistorySetLine(set, schema, unitSystem))

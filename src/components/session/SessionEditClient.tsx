@@ -563,7 +563,6 @@ export function SessionEditClient({
                                         <LastSessionPreview
                                             exerciseName={ex.name}
                                             clientId={clientId}
-                                            onViewHistory={openHistory}
                                         />
                                     )}
 

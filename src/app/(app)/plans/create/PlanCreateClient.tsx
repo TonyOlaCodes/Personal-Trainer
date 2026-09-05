@@ -1391,7 +1391,6 @@ export function PlanCreateClient() {
                                                             <LastSessionPreview
                                                                 exerciseName={ex.name}
                                                                 clientId={clientId}
-                                                                onViewHistory={openHistory}
                                                                 className="mt-2.5"
                                                             />
                                                         )}
