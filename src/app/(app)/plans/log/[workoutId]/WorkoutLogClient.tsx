@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import Link from "next/link";
 import {
     Timer, Flame, Check, HelpCircle,
-    Trash2, Plus, InfoIcon, Award, Play, Zap, X, ChevronLeft, NotebookPen
+    Trash2, Plus, InfoIcon, Award, Play, Zap, X, ChevronLeft, NotebookPen, PencilLine, PlayCircle
 } from "lucide-react";
 import { cn, generateId, formatDate, isSameCalendarDay, parseLogDate, toDateKey, toLoggedAtIso, calculateOneRM } from "@/lib/utils";
 import { appendReturnTo, getReturnToFromSearchParams } from "@/lib/navigation";
@@ -523,6 +524,15 @@ export function WorkoutLogClient({
     /** Coaches observing from calendar must not start/finish; Correct Log uses mode=edit. */
     const coachObserver = isCoachForClient && searchParams.get("mode") !== "edit";
     const isPreviewMode = searchParams.get("mode") === "preview";
+    const coachEditSessionHref = isCoachForClient && clientId
+        ? `/coach/calendar/session?clientId=${encodeURIComponent(clientId)}&date=${encodeURIComponent(targetDateStr)}&workoutId=${encodeURIComponent(workout.id)}`
+        : null;
+    const coachStartSessionHref = isCoachForClient && clientId
+        ? appendReturnTo(
+            `/plans/log/${workout.id}?date=${encodeURIComponent(targetDateStr)}&clientId=${encodeURIComponent(clientId)}&mode=edit&autostart=1`,
+            returnTo
+        )
+        : null;
     const shouldAutostart =
         !coachObserver &&
         (searchParams.get("autostart") === "1" || searchParams.get("mode") === "start");
@@ -1702,6 +1712,14 @@ export function WorkoutLogClient({
                             Finish
                         </button>
                     )
+                ) : coachObserver && coachStartSessionHref ? (
+                    <Link
+                        href={coachStartSessionHref}
+                        className="btn-primary btn-sm px-3 sm:px-4 shadow-glow-brand shrink-0 text-[10px] sm:text-xs font-black uppercase tracking-wider flex items-center gap-1.5"
+                    >
+                        <Flame className="w-3.5 h-3.5" />
+                        Start
+                    </Link>
                 ) : coachObserver ? (
                     <span className="text-[10px] font-black uppercase tracking-wider text-brand-400 px-2">
                         Review
@@ -1751,12 +1769,34 @@ export function WorkoutLogClient({
                                 </p>
                                 <p className="text-sm text-fg-muted mt-1">
                                     {coachObserver
-                                        ? "Planned work for this date. Use Edit Session on the calendar to change programming for this day only."
+                                        ? "Planned work for this date. Edit the session for this day only, or start it to log the workout."
                                         : isPreviewMode
                                           ? "Preview only — press Start Workout when you are ready to begin logging."
                                           : "Review sets below, then start when you're ready."}
                                 </p>
                             </div>
+                            {coachObserver && (coachEditSessionHref || coachStartSessionHref) && (
+                                <div className="flex flex-col sm:flex-row gap-2">
+                                    {coachEditSessionHref && (
+                                        <Link
+                                            href={coachEditSessionHref}
+                                            className="btn-secondary flex-1 h-11 text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2"
+                                        >
+                                            <PencilLine className="w-4 h-4" />
+                                            Edit Session
+                                        </Link>
+                                    )}
+                                    {coachStartSessionHref && (
+                                        <Link
+                                            href={coachStartSessionHref}
+                                            className="btn-primary flex-1 h-11 text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 shadow-glow-brand"
+                                        >
+                                            <PlayCircle className="w-4 h-4" />
+                                            Start Session
+                                        </Link>
+                                    )}
+                                </div>
+                            )}
                             <MuscleMap breakdown={muscleBreakdown} />
                         </div>
                     )}
