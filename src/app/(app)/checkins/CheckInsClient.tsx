@@ -9,7 +9,7 @@ import {
     Dumbbell, Flame, Edit2, Clock, Trash2, Loader2, Plus, Utensils, HeartPulse
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { formatDate, getWeekNumber, cn, toDateKey } from "@/lib/utils";
+import { formatDate, getWeekNumber, cn, toDateKey, getInitials } from "@/lib/utils";
 import {
     formatCheckInDueSubtitle,
     formatCheckInPeriodTitle,
@@ -49,7 +49,14 @@ interface CheckIn {
     sideImageUrl?: string | null;
     videoUrl?: string | null;
     coachVideoUrl?: string | null;
-    user?: { name: string; email: string; targetWeightKg?: number | null; hiddenGoals?: any };
+    user?: {
+        id?: string;
+        name: string;
+        email: string;
+        avatarUrl?: string | null;
+        targetWeightKg?: number | null;
+        hiddenGoals?: any;
+    };
 }
 interface Props {
     checkIns: CheckIn[]; isCoach: boolean; userRole: string;
@@ -92,6 +99,35 @@ interface Props {
         requestedAt?: string | null;
         lastRequestedAt?: string | null;
     }>;
+}
+
+function loggedFiniteNumber(value: number | null | undefined): number | null {
+    if (typeof value !== "number" || !Number.isFinite(value)) return null;
+    return value;
+}
+
+function CheckInClientAvatar({
+    name,
+    avatarUrl,
+    size = "md",
+}: {
+    name: string;
+    avatarUrl?: string | null;
+    size?: "md" | "lg";
+}) {
+    const dim = size === "lg" ? "w-12 h-12 text-sm" : "w-11 h-11 text-xs";
+    return (
+        <span className={cn(
+            "rounded-full bg-gradient-brand flex items-center justify-center font-bold text-white overflow-hidden shrink-0",
+            dim
+        )}>
+            {avatarUrl ? (
+                <img src={resolveUploadUrl(avatarUrl)} alt={name} className="w-full h-full object-cover" />
+            ) : (
+                getInitials(name)
+            )}
+        </span>
+    );
 }
 
 type OverdueCheckInClient = NonNullable<Props["overdueClients"]>[number];
@@ -321,7 +357,7 @@ function PrevCheckInCard({ prev, setViewerMedia, isWeightHidden, isSleepHidden }
     );
 }
 
-function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highlighted, targetWeightKg, isWeightHidden, isSleepHidden }: {
+function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highlighted, targetWeightKg, isWeightHidden, isSleepHidden, hideClientIdentity = false }: {
     c: CheckIn; isCoach: boolean;
     onCoachRespond?: (id: string, resp: string) => Promise<void>;
     onEdit?: (c: CheckIn) => void;
@@ -330,6 +366,7 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highl
     targetWeightKg?: number | null;
     isWeightHidden?: boolean;
     isSleepHidden?: boolean;
+    hideClientIdentity?: boolean;
 }) {
     const [open, setOpen] = useState(Boolean(highlighted));
     const itemTargetWeight = isCoach ? (c.user as any)?.targetWeightKg : targetWeightKg;
@@ -380,11 +417,20 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highl
     const weekShortLabel = formatCheckInWeekShortFromCheckIn(c);
     const [weekDayLabel, ...weekMonthParts] = weekShortLabel.split(" ");
     const weekMonthLabel = weekMonthParts.join(" ");
+    const isReviewed = c.status === "REVIEWED";
+    const clientName = c.user?.name ?? "Client";
+    const clientProfileId = c.userId ?? c.user?.id ?? null;
+    const loggedWeightKg = isWeightHidden ? null : loggedFiniteNumber(c.bodyweightKg);
+    const goalWeightKg = isWeightHidden ? null : loggedFiniteNumber(itemTargetWeight);
+    const periodLabel = formatCheckInWeekFromCheckIn(c);
+    const showClientIdentity = isCoach && !hideClientIdentity;
 
     return (
         <div className={cn(
-            "rounded-2xl border overflow-hidden",
-            c.status === "REVIEWED" ? "border-success/25 bg-success/5" : "border-surface-border bg-surface-card/60",
+            "relative rounded-2xl border overflow-hidden bg-surface-card",
+            isReviewed
+                ? "border-surface-border before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-success/45"
+                : "border-brand-500/35 bg-brand-950/20",
             highlighted && "ring-2 ring-brand-400 shadow-glow-brand-sm"
         )}>
             <div 
@@ -397,12 +443,12 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highl
                         setOpen(o => !o);
                     }
                 }}
-                className="w-full flex items-center justify-between p-4 text-left gap-3 cursor-pointer select-none"
+                className="w-full flex items-center justify-between p-3 sm:p-4 text-left gap-2 sm:gap-3 cursor-pointer select-none"
             >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
                     <div className={cn(
                         "w-11 h-11 rounded-xl flex flex-col items-center justify-center shrink-0 text-center px-1",
-                        c.status === "REVIEWED" ? "bg-success/10 text-success" : "bg-brand-500/10 text-brand-400"
+                        isReviewed ? "bg-surface-muted text-fg" : "bg-brand-500/15 text-brand-300"
                     )}>
                         <span className="text-[9px] font-black uppercase leading-none tracking-tight">
                             {weekMonthLabel}
@@ -411,24 +457,53 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highl
                             {weekDayLabel}
                         </span>
                     </div>
+                    {showClientIdentity && (
+                        clientProfileId ? (
+                            <Link
+                                href={`/coach/client/${clientProfileId}`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="shrink-0 rounded-full hover:opacity-85 transition-opacity"
+                                aria-label={`${clientName} profile`}
+                            >
+                                <CheckInClientAvatar name={clientName} avatarUrl={c.user?.avatarUrl} />
+                            </Link>
+                        ) : (
+                            <CheckInClientAvatar name={clientName} avatarUrl={c.user?.avatarUrl} />
+                        )
+                    )}
                     <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                            <span className="text-sm font-bold text-fg truncate">
-                                {isCoach ? (c.user?.name ?? "Client") : formatCheckInWeekFromCheckIn(c)}
-                            </span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                            {showClientIdentity ? (
+                                clientProfileId ? (
+                                    <Link
+                                        href={`/coach/client/${clientProfileId}`}
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="text-sm font-bold text-fg truncate hover:text-brand-400 transition-colors"
+                                    >
+                                        {clientName}
+                                    </Link>
+                                ) : (
+                                    <span className="text-sm font-bold text-fg truncate">{clientName}</span>
+                                )
+                            ) : (
+                                <span className="text-sm font-bold text-fg truncate">{periodLabel}</span>
+                            )}
                             <span className={cn(
-                                "text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border",
-                                c.status === "REVIEWED"
+                                "text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border shrink-0",
+                                isReviewed
                                     ? "text-success bg-success/10 border-success/20"
-                                    : "text-brand-400 bg-brand-400/10 border-brand-400/20"
-                            )}>{c.status}</span>
+                                    : "text-brand-300 bg-brand-500/15 border-brand-400/30"
+                            )}>{isReviewed ? "Reviewed" : "Pending Review"}</span>
                         </div>
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5 text-[10px] text-fg-muted font-medium">
-                            <span>{formatDate(c.createdAt)}</span>
-                            {!isWeightHidden && c.bodyweightKg && <span className="font-black text-fg">{c.bodyweightKg.toFixed(2)}kg</span>}
-                            {!isWeightHidden && itemTargetWeight && c.bodyweightKg && (
-                                <span className="text-brand-400 font-bold uppercase tracking-wider">
-                                    • Goal: {itemTargetWeight}kg ({Math.abs(((c.bodyweightKg - itemTargetWeight) / itemTargetWeight) * 100).toFixed(1)}% away)
+                            {showClientIdentity && <span>{periodLabel}</span>}
+                            <span>{showClientIdentity ? `Submitted ${formatDate(c.createdAt)}` : formatDate(c.createdAt)}</span>
+                            {loggedWeightKg != null && (
+                                <span className="font-black text-fg">{loggedWeightKg.toFixed(1)}kg</span>
+                            )}
+                            {loggedWeightKg != null && goalWeightKg != null && goalWeightKg > 0 && (
+                                <span className="text-fg-muted font-bold uppercase tracking-wider">
+                                    · Goal {goalWeightKg}kg ({Math.abs(((loggedWeightKg - goalWeightKg) / goalWeightKg) * 100).toFixed(1)}% away)
                                 </span>
                             )}
                         </div>
@@ -461,7 +536,9 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highl
 
                     {/* Ratings */}
                     <div className="flex flex-wrap gap-2">
-                        {ratingChips(c, isSleepHidden).map(r => (
+                        {ratingChips(c, isSleepHidden)
+                            .filter((r) => typeof r.v === "number" && r.v > 0)
+                            .map(r => (
                             <div key={r.l} className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-muted rounded-xl border border-surface-border font-black text-fg">
                                 <span className="text-[10px] font-bold text-fg-subtle">{r.l}</span>
                                 <span className="text-[10px]">{r.v}/5</span>
@@ -510,7 +587,7 @@ function HistoryItem({ c, isCoach, onCoachRespond, onEdit, setViewerMedia, highl
                     {/* Coach area */}
                     <div className={cn(
                         "rounded-xl p-4 border space-y-3",
-                        c.status === "REVIEWED" ? "bg-success/5 border-success/20" : "bg-brand-950/20 border-brand-500/20"
+                        c.status === "REVIEWED" ? "bg-surface-muted/40 border-surface-border" : "bg-brand-950/20 border-brand-500/25"
                     )}>
                         <div className="flex items-center justify-between">
                             <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Coach Feedback</p>
@@ -714,6 +791,32 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
         });
         return items;
     }, [filteredCheckIns, isCoach, coachSortBy]);
+    const displayCheckInGroups = useMemo(() => {
+        if (!isCoach || coachSortBy !== "CLIENT") return null;
+        const groups: Array<{
+            key: string;
+            name: string;
+            userId: string | null;
+            avatarUrl?: string | null;
+            items: CheckIn[];
+        }> = [];
+        for (const item of displayCheckIns) {
+            const key = item.userId ?? item.user?.id ?? item.user?.email ?? "unknown";
+            const last = groups[groups.length - 1];
+            if (last && last.key === key) {
+                last.items.push(item);
+                continue;
+            }
+            groups.push({
+                key,
+                name: item.user?.name ?? "Client",
+                userId: item.userId ?? item.user?.id ?? null,
+                avatarUrl: item.user?.avatarUrl,
+                items: [item],
+            });
+        }
+        return groups;
+    }, [displayCheckIns, isCoach, coachSortBy]);
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
     const [periodSummary, setPeriodSummary] = useState<CheckInPeriodSummary | null>(null);
     const [loadingPeriodSummary, setLoadingPeriodSummary] = useState(false);
@@ -1330,23 +1433,80 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
                             {checkIns.length === 0 ? "No check-ins yet" : `No ${statusFilter.toLowerCase()} check-ins`}
                         </p>
                     </div>
-                ) : displayCheckIns.map(c => {
-                    const clientGoals = (c.user as any)?.hiddenGoals;
-                    const isWeightHidden = Array.isArray(clientGoals) && clientGoals.includes("weight");
-                    const isSleepHidden = Array.isArray(clientGoals) && clientGoals.includes("sleep");
-                    return (
-                        <HistoryItem 
-                            key={c.id} 
-                            c={c} 
-                            isCoach 
-                            onCoachRespond={handleCoachRespond} 
-                            setViewerMedia={setViewerMedia} 
-                            highlighted={highlightedCheckInId === c.id} 
-                            isWeightHidden={isWeightHidden}
-                            isSleepHidden={isSleepHidden}
-                        />
-                    );
-                })}
+                ) : displayCheckInGroups ? (
+                    <div className="space-y-5">
+                        {displayCheckInGroups.map((group) => (
+                            <section key={group.key} className="space-y-2">
+                                <div className="flex items-center gap-3 px-0.5">
+                                    {group.userId ? (
+                                        <Link
+                                            href={`/coach/client/${group.userId}`}
+                                            className="flex items-center gap-3 min-w-0 hover:opacity-85 transition-opacity"
+                                        >
+                                            <CheckInClientAvatar name={group.name} avatarUrl={group.avatarUrl} size="lg" />
+                                            <div className="min-w-0">
+                                                <p className="text-sm font-black text-fg truncate">{group.name}</p>
+                                                <p className="text-[10px] font-bold uppercase tracking-widest text-fg-subtle">
+                                                    {group.items.length} submission{group.items.length === 1 ? "" : "s"}
+                                                </p>
+                                            </div>
+                                        </Link>
+                                    ) : (
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <CheckInClientAvatar name={group.name} avatarUrl={group.avatarUrl} size="lg" />
+                                            <div className="min-w-0">
+                                                <p className="text-sm font-black text-fg truncate">{group.name}</p>
+                                                <p className="text-[10px] font-bold uppercase tracking-widest text-fg-subtle">
+                                                    {group.items.length} submission{group.items.length === 1 ? "" : "s"}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="space-y-2">
+                                    {group.items.map((c) => {
+                                        const clientGoals = (c.user as any)?.hiddenGoals;
+                                        const isWeightHidden = Array.isArray(clientGoals) && clientGoals.includes("weight");
+                                        const isSleepHidden = Array.isArray(clientGoals) && clientGoals.includes("sleep");
+                                        return (
+                                            <HistoryItem
+                                                key={c.id}
+                                                c={c}
+                                                isCoach
+                                                hideClientIdentity
+                                                onCoachRespond={handleCoachRespond}
+                                                setViewerMedia={setViewerMedia}
+                                                highlighted={highlightedCheckInId === c.id}
+                                                isWeightHidden={isWeightHidden}
+                                                isSleepHidden={isSleepHidden}
+                                            />
+                                        );
+                                    })}
+                                </div>
+                            </section>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="space-y-2">
+                        {displayCheckIns.map(c => {
+                            const clientGoals = (c.user as any)?.hiddenGoals;
+                            const isWeightHidden = Array.isArray(clientGoals) && clientGoals.includes("weight");
+                            const isSleepHidden = Array.isArray(clientGoals) && clientGoals.includes("sleep");
+                            return (
+                                <HistoryItem 
+                                    key={c.id} 
+                                    c={c} 
+                                    isCoach 
+                                    onCoachRespond={handleCoachRespond} 
+                                    setViewerMedia={setViewerMedia} 
+                                    highlighted={highlightedCheckInId === c.id} 
+                                    isWeightHidden={isWeightHidden}
+                                    isSleepHidden={isSleepHidden}
+                                />
+                            );
+                        })}
+                    </div>
+                )}
                 {viewerMedia && (
                     <MediaLightbox 
                         src={resolveUploadUrl(viewerMedia)} 

@@ -12,7 +12,7 @@ import { getWorkoutsTargetFromUserPlan } from "@/lib/planTrainingTarget";
 import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
 import { getEffectiveCheckInDueStateForUser } from "@/lib/coachAttentionActions";
 import { SafeFallback, rethrowNextInternalErrors } from "@/components/shared/SafeFallback";
-import { withResolvedCheckInMedia } from "@/lib/uploadUrls";
+import { withResolvedAvatar, withResolvedCheckInMedia } from "@/lib/uploadUrls";
 import { formatErrorDetails } from "@/lib/ensureAppSchema";
 import { canAccessCheckIns } from "@/lib/roles";
 import { getOverdueCheckInClientsForCoach } from "@/lib/coachOverdueCheckIns";
@@ -78,7 +78,7 @@ export default async function CheckInsPage() {
             checkIns = isCoach
                 ? await prisma.checkIn.findMany({
                     where: { user: { coachId: user.id } },
-                    include: { user: { select: { id: true, name: true, email: true, targetWeightKg: true, hiddenGoals: true } } },
+                    include: { user: { select: { id: true, name: true, email: true, avatarUrl: true, targetWeightKg: true, hiddenGoals: true } } },
                     orderBy: { createdAt: "desc" },
                 })
                 : await prisma.checkIn.findMany({
@@ -132,7 +132,7 @@ export default async function CheckInsPage() {
                     title={isCoach ? "Check-ins" : "Weekly Check-in"}
                     subtitle={isCoach ? "Client submissions" : "Log your weekly progress"}
                 />
-                <div className="p-4 sm:p-6 max-w-2xl mx-auto pb-20">
+                <div className={isCoach ? "p-4 sm:p-6 max-w-3xl mx-auto pb-20" : "p-4 sm:p-6 max-w-2xl mx-auto pb-20"}>
                     <Suspense fallback={<div className="min-h-[320px] animate-pulse rounded-2xl bg-surface-muted" />}>
                     <CheckInsClient
                         checkIns={checkIns.map((c: any) => withResolvedCheckInMedia({
@@ -156,14 +156,16 @@ export default async function CheckInsPage() {
                             sideImageUrl: c.sideImageUrl,
                             videoUrl: c.videoUrl,
                             coachVideoUrl: c.coachVideoUrl,
-                            user: c.user ? {
+                            user: c.user ? withResolvedAvatar({
+                                id: c.user.id,
                                 name: isCoach
                                     ? coachClientLabel(c.user, c.user.name || c.user.email || "Client")
                                     : c.user.name,
                                 email: c.user.email,
+                                avatarUrl: c.user.avatarUrl,
                                 targetWeightKg: c.user.targetWeightKg,
                                 hiddenGoals: c.user.hiddenGoals ?? [],
-                            } : undefined,
+                            }) : undefined,
                         }))}
                         isCoach={isCoach}
                         userRole={user.role}
