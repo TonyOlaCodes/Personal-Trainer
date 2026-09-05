@@ -167,7 +167,7 @@ function LifestyleMetricSection({
                             {formatLifestyleLoggedCount(current.loggedDays, current.expectedDays)}
                             <span className="mx-1 text-fg-subtle">·</span>
                             {current.adherencePercent != null
-                                ? `${current.adherencePercent}% on target`
+                                ? `${current.adherencePercent}% hit`
                                 : "No data"}
                             {current.assessment && (
                                 <>

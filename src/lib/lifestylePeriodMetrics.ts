@@ -87,15 +87,15 @@ function roundMetric(key: LifestyleMetricKey, value: number | null): number | nu
 
 function assessCalories(average: number | null, target: number | null, loggedDays: number): string | null {
     if (average == null || target == null || loggedDays === 0) return null;
-    if (isCaloriesOnTarget(average, target)) return "On target";
+    if (isCaloriesOnTarget(average, target)) return "At goal";
     return average < target ? "Below target" : "Above target";
 }
 
 function assessSteps(adherencePercent: number | null, loggedDays: number): string | null {
     if (adherencePercent == null || loggedDays === 0) return null;
-    if (adherencePercent >= 85) return "On track";
-    if (adherencePercent >= 70) return "Close to target";
-    return "Behind target";
+    if (adherencePercent >= 85) return "At goal";
+    if (adherencePercent >= 70) return "Close to goal";
+    return "Behind goal";
 }
 
 function assessSleep(average: number | null, target: number | null, loggedDays: number): string | null {
@@ -103,7 +103,7 @@ function assessSleep(average: number | null, target: number | null, loggedDays: 
     const upper = Math.min(SLEEP_USEFUL_CAP_HOURS, target + SLEEP_UPPER_SLACK_HOURS);
     if (average > upper) return "Longer than useful";
     if (average < target - SLEEP_LOWER_SLACK_HOURS) return "Below target";
-    return "On target";
+    return "At goal";
 }
 
 function summarizeMetric(

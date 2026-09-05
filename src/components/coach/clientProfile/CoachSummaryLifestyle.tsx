@@ -168,7 +168,7 @@ function LifestyleCard({
                     </p>
                 </div>
                 <div>
-                    <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">On Target</p>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-fg-subtle">Hit</p>
                     <p className={cn(
                         "text-lg font-black leading-none",
                         hasLogs && adherence != null ? "text-fg" : "text-fg-muted"
