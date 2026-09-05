@@ -8,6 +8,12 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { getInitials, formatRelative, cn, getRoleNameClass } from "@/lib/utils";
+import {
+    COACH_FILTER_OPTIONS,
+    coachConversationEmptyMessage,
+    conversationMatchesCoachFilters,
+    type CoachListFilter,
+} from "@/lib/chatConversationFilters";
 import { formatPresenceWithWorkout, getPresenceIndicator } from "@/lib/userPresence";
 import { PresenceAvatarBadge, PresenceWorkoutStatusLine } from "@/components/shared/PresenceAvatarBadge";
 import { sortConversationsByActivity } from "@/lib/chatActivity";
@@ -96,21 +102,6 @@ interface Props {
     canUseDirectChat?: boolean;
     initialUnread?: Record<string, number>;
 }
-
-type CoachListFilter =
-    | "unread"
-    | "online"
-    | "inWorkout"
-    | "missedWorkout"
-    | "checkInDue";
-
-const COACH_FILTER_OPTIONS: { id: CoachListFilter; label: string }[] = [
-    { id: "unread", label: "Unread" },
-    { id: "online", label: "Online" },
-    { id: "inWorkout", label: "In workout" },
-    { id: "missedWorkout", label: "Missed workout" },
-    { id: "checkInDue", label: "Check-in due" },
-];
 
 const SWIPE_REPLY_THRESHOLD = 55;
 const SWIPE_REPLY_MAX = 72;
@@ -883,36 +874,19 @@ export function ChatClient({
     const filteredConversations = useMemo(() => {
         if (!isCoachUser) return sortedConversations;
 
-        const query = coachSearch.trim().toLowerCase();
-        return sortedConversations.filter((conv) => {
-            if (query) {
-                const haystack = `${conv.name} ${conv.email ?? ""}`.toLowerCase();
-                if (!haystack.includes(query)) return false;
-            }
-
-            if (coachFilters.length === 0) return true;
-
-            return coachFilters.every((filter) => {
-                const presence = getPresenceIndicator(resolveLastActive(conv.userId));
-                const session = activeSessions[conv.userId];
-                const unread = unreadCounts[conv.userId] ?? 0;
-
-                switch (filter) {
-                    case "unread":
-                        return unread > 0;
-                    case "online":
-                        return presence.level === "online";
-                    case "inWorkout":
-                        return Boolean(session);
-                    case "missedWorkout":
-                        return Boolean(conv.missedWorkout);
-                    case "checkInDue":
-                        return Boolean(conv.checkInDue);
-                    default:
-                        return true;
-                }
-            });
-        });
+        return sortedConversations.filter((conv) =>
+            conversationMatchesCoachFilters({
+                name: conv.name,
+                email: conv.email,
+                search: coachSearch,
+                filters: coachFilters,
+                unreadCount: unreadCounts[conv.userId] ?? 0,
+                isOnline: getPresenceIndicator(resolveLastActive(conv.userId)).level === "online",
+                inWorkout: Boolean(activeSessions[conv.userId]),
+                missedWorkout: Boolean(conv.missedWorkout),
+                checkInDue: Boolean(conv.checkInDue),
+            })
+        );
     }, [sortedConversations, isCoachUser, coachSearch, coachFilters, activeSessions, unreadCounts, resolveLastActive]);
 
     const lastOutgoingMessageId = useMemo(() => {
@@ -1412,7 +1386,11 @@ export function ChatClient({
                         </div>
                     ) : filteredConversations.length === 0 ? (
                         <p className="text-xs text-fg-muted text-center p-6">
-                            {coachSearch || coachFilters.length > 0 ? "No conversations match your search or filters." : "No conversations yet"}
+                            {coachConversationEmptyMessage({
+                                hasSearch: Boolean(coachSearch.trim()),
+                                filterCount: coachFilters.length,
+                                hasAnyConversations: allConversations.length > 0,
+                            })}
                         </p>
                     ) : (
                         filteredConversations.map((conv) => {

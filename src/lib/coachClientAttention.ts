@@ -80,7 +80,7 @@ export function buildCoachClientAttentionItems(input: {
         items.push({
             id: "setup-checkin",
             kind: "setup_checkin",
-            title: "Check-in schedule not set",
+            title: "Check\u2011in schedule not set",
             detail: "Set a check-in day and frequency so progress reviews stay on track.",
             actionLabel: "Set schedule",
             action: "open_href",
@@ -93,7 +93,7 @@ export function buildCoachClientAttentionItems(input: {
         items.push({
             id: "checkin-due",
             kind: input.checkInDueState.isOverdue ? "checkin_overdue" : "checkin_due",
-            title: input.checkInDueState.isOverdue ? "Check-in overdue" : "Check-in due today",
+            title: input.checkInDueState.isOverdue ? "Check\u2011in overdue" : "Check\u2011in due today",
             detail: input.checkInDueState.isOverdue
                 ? (input.checkInDueState.daysOverdue != null && input.checkInDueState.daysOverdue > 1
                     ? `Due ${dueLabel} · ${input.checkInDueState.daysOverdue} days late`
@@ -109,7 +109,7 @@ export function buildCoachClientAttentionItems(input: {
         items.push({
             id: `checkin-review-${input.latestCheckIn.id}`,
             kind: "checkin_review",
-            title: "Check-in waiting for review",
+            title: "Check\u2011in waiting for review",
             detail: "The latest check-in has not been reviewed yet.",
             href: `/checkins?highlight=${input.latestCheckIn.id}`,
             actionLabel: "Review Check-in",

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ClipboardList, Megaphone, X } from "lucide-react";
 import { ModalOverlay } from "@/components/shared/ModalOverlay";
 import { cn } from "@/lib/utils";
+import { requestCoachCheckIn } from "@/lib/requestCoachCheckIn";
 
 interface ConversationOption {
     userId: string;
@@ -63,24 +64,17 @@ export function CoachChatTools({ conversations, selectedClientId, onComplete }: 
         if (!selectedClientId) return;
         setSubmitting(true);
         setError(null);
-        try {
-            const res = await fetch("/api/coach/chat/request-checkin", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    clientId: selectedClientId,
-                    note: note.trim() || undefined,
-                }),
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(data.error ?? "Failed to send check-in request");
+        const result = await requestCoachCheckIn({
+            clientId: selectedClientId,
+            note: note.trim() || undefined,
+        });
+        if (result.ok) {
             closeModal();
             onComplete?.();
-        } catch (err) {
-            setError(err instanceof Error ? err.message : "Failed to send check-in request");
-        } finally {
-            setSubmitting(false);
+        } else {
+            setError(result.message);
         }
+        setSubmitting(false);
     };
 
     const handleBroadcast = async () => {

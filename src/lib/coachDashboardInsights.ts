@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { APP_TIMEZONE } from "@/lib/appTimezone";
 import {
+    canonicalPeriodDueDateKey,
     getCheckInDueState,
     hasCheckInForOutstandingPeriod,
     type CheckInSchedule,
@@ -377,9 +378,7 @@ export async function loadCoachDashboardInsights(input: {
             !isPaused
             && isCoachClientCheckInAttentionNeeded(dueState, hasCheckInForPeriod)
         ) {
-            const periodDueKey = dueState.currentPeriodDueDate
-                ? toDateKey(new Date(dueState.currentPeriodDueDate))
-                : null;
+            const periodDueKey = canonicalPeriodDueDateKey(dueState.currentPeriodDueDate);
             // Avoid backlog for periods before the latest resume.
             const resumedAt = client.coachResumedAt;
             const resumedKey = resumedAt ? toDateKey(resumedAt) : null;

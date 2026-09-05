@@ -5,11 +5,12 @@ import { requireCoachCanEditClient, requireCoachUser } from "@/lib/apiAuth";
 import { enforceRateLimit } from "@/lib/rateLimit";
 import {
     CHECK_IN_REQUEST_COOLDOWN_MS,
+    CHECK_IN_REQUEST_FAILED_MESSAGE,
     upsertCheckInRequest,
 } from "@/lib/checkInRequests";
 import { notifyClientOfCheckInRequest } from "@/lib/notifications";
-import { toDateKey } from "@/lib/utils";
 import {
+    canonicalPeriodDueDateKey,
     getUserCheckInSchedule,
     hasCheckInForOutstandingPeriod,
 } from "@/lib/checkInSchedule";
@@ -78,9 +79,7 @@ export async function POST(req: Request) {
             );
         }
 
-        const periodDueDateKey = dueState.currentPeriodDueDate
-            ? toDateKey(new Date(dueState.currentPeriodDueDate))
-            : null;
+        const periodDueDateKey = canonicalPeriodDueDateKey(dueState.currentPeriodDueDate);
 
         const result = await upsertCheckInRequest({
             coachId: coach.id,
@@ -127,9 +126,10 @@ export async function POST(req: Request) {
         });
     } catch (err) {
         if (err instanceof z.ZodError) {
-            return NextResponse.json({ error: err.issues[0]?.message ?? "Invalid request" }, { status: 400 });
+            console.error("[POST /api/coach/check-in-requests] validation", err.issues);
+            return NextResponse.json({ error: CHECK_IN_REQUEST_FAILED_MESSAGE }, { status: 400 });
         }
         console.error("[POST /api/coach/check-in-requests]", err);
-        return NextResponse.json({ error: "Could not request check-in" }, { status: 500 });
+        return NextResponse.json({ error: CHECK_IN_REQUEST_FAILED_MESSAGE }, { status: 500 });
     }
 }

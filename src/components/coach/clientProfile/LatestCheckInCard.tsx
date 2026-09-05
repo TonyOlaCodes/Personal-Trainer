@@ -35,7 +35,7 @@ export function LatestCheckInCard({
                         <div className="mt-3">
                             {checkInRequestSent ? (
                                 <p className="text-xs font-semibold text-success inline-flex items-center gap-1.5">
-                                    <CheckCircle2 className="w-4 h-4" /> Check-in request sent
+                                    <CheckCircle2 className="w-4 h-4" /> Requested
                                 </p>
                             ) : (
                                 <button
@@ -116,18 +116,24 @@ export function LatestCheckInCard({
                         >
                             View All Check-ins
                         </Link>
-                        {overdue && canEdit && !checkInRequestSent && (
-                            <button
-                                type="button"
-                                onClick={() => void onRequestCheckIn()}
-                                disabled={sendingCheckInRequest}
-                                className="btn-secondary h-9 px-3 text-[10px] font-black uppercase tracking-widest inline-flex items-center gap-1.5"
-                            >
-                                {sendingCheckInRequest
-                                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                    : <ClipboardList className="w-3.5 h-3.5" />}
-                                Request Check-in
-                            </button>
+                        {overdue && canEdit && (
+                            checkInRequestSent ? (
+                                <span className="text-xs font-bold text-success inline-flex items-center gap-1.5">
+                                    <CheckCircle2 className="w-4 h-4" /> Requested
+                                </span>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={() => void onRequestCheckIn()}
+                                    disabled={sendingCheckInRequest}
+                                    className="btn-secondary h-9 px-3 text-[10px] font-black uppercase tracking-widest inline-flex items-center gap-1.5"
+                                >
+                                    {sendingCheckInRequest
+                                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                        : <ClipboardList className="w-3.5 h-3.5" />}
+                                    Request Check-in
+                                </button>
+                            )
                         )}
                     </div>
                 </div>

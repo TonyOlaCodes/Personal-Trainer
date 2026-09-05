@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { APP_TIMEZONE } from "@/lib/appTimezone";
-import { getUserCheckInSchedule, hasCheckInForOutstandingPeriod } from "@/lib/checkInSchedule";
 import { getLocalTimeParts, shiftDateKey } from "@/lib/coachNotificationSchedule";
 import { getUnreadCountsByPeer } from "@/lib/chatUnread";
 import {
@@ -10,25 +9,29 @@ import {
     buildSetupNeededAlertKey,
     buildUnreadMessageAlertKey,
     getCoachAttentionActions,
+    getEffectiveCheckInDueStatesForUsers,
+    getExcusedMissedWorkoutKeysForClient,
     isDismissedAlertCurrentlyHidden,
     type CoachAttentionActionRow,
     type CoachAttentionActionType,
     type CoachAttentionCategory,
 } from "@/lib/coachAttentionActions";
-import { getPlannedWorkoutForDate, type ActiveUserPlanLike } from "@/lib/planSchedule";
-import { isScheduledTrainingWorkout } from "@/lib/planTrainingTarget";
+import {
+    COACH_MISSED_WORKOUT_LOOKBACK_DAYS,
+    listLookbackScheduledWorkoutSlots,
+    logSlotKey,
+} from "@/lib/coachMissedScheduledWorkouts";
+import { type ActiveUserPlanLike } from "@/lib/planSchedule";
 import { loadPlanScheduleRevisionsByPlanIds } from "@/lib/planScheduleHistory";
 import { activeWorkoutWhere } from "@/lib/planWorkouts";
 import { isInactiveAccount } from "@/lib/userDeactivation";
 import {
     getCoachPauseStatusMap,
-    shouldSuppressCoachMissedAttention,
 } from "@/lib/coachClientPause";
 import { formatCheckInDueDate, formatCheckInWeekFromCheckIn } from "@/lib/checkInLabels";
 import {
     getCoachAppToday,
-    isCoachClientCheckInAttentionNeeded,
-    resolveCoachClientCheckInDueState,
+    isCoachClientCheckInDueForFilter,
 } from "@/lib/coachOverdueCheckIns";
 import { parseLogDate, toDateKey } from "@/lib/utils";
 import { loadNicknameMap } from "@/lib/userNicknames";
@@ -100,11 +103,9 @@ function isAlertDismissed(
     return isDismissedAlertCurrentlyHidden(actions.get(alertKey), clientLastActiveAt, now);
 }
 
-const MISSED_LOOKBACK_DAYS = 7;
-
 export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAttentionInboxItem[]> {
     const { today, todayKey, weekNumber } = getCoachAppToday();
-    const lookbackStart = shiftDateKey(todayKey, -MISSED_LOOKBACK_DAYS);
+    const lookbackStart = shiftDateKey(todayKey, -COACH_MISSED_WORKOUT_LOOKBACK_DAYS);
 
     const [clients, actions, pendingReviews] = await Promise.all([
         prisma.user.findMany({
@@ -152,14 +153,12 @@ export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAtt
                 },
                 workoutLogs: {
                     where: {
-                        status: "COMPLETED",
-                        loggedAt: { gte: parseLogDate(lookbackStart) },
+                        OR: [
+                            { status: "COMPLETED", loggedAt: { gte: parseLogDate(lookbackStart) } },
+                            { status: "IN_PROGRESS" },
+                        ],
                     },
-                    select: { workoutId: true, loggedAt: true },
-                },
-                checkIns: {
-                    where: { createdAt: { gte: parseLogDate(lookbackStart) } },
-                    select: { id: true, weekNumber: true },
+                    select: { workoutId: true, loggedAt: true, status: true },
                 },
             },
             orderBy: { name: "asc" },
@@ -176,11 +175,12 @@ export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAtt
     ]);
 
     const clientIds = clients.map((c) => c.id);
-    const [unreadCounts, pauseStatusByClient] = await Promise.all([
+    const [unreadCounts, pauseStatusByClient, dueStates] = await Promise.all([
         clientIds.length > 0
             ? getUnreadCountsByPeer(coachId, clientIds)
             : Promise.resolve({} as Record<string, number>),
         getCoachPauseStatusMap(clientIds),
+        getEffectiveCheckInDueStatesForUsers(clientIds, today),
     ]);
 
     const planIds = [
@@ -219,65 +219,56 @@ export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAtt
             };
         }
 
-        const completedLogKeys = new Set(
-            client.workoutLogs.map(
-                (log) =>
-                    `${getLocalTimeParts(log.loggedAt, APP_TIMEZONE).dateKey}:${log.workoutId}`
-            )
-        );
-
-        // Missed workouts suppressed while paused; no backlog for dates before resume.
-        if (!isPaused && activeUserPlan) {
-            for (let offset = 1; offset <= MISSED_LOOKBACK_DAYS; offset++) {
-                const dateKey = shiftDateKey(todayKey, -offset);
-                if (shouldSuppressCoachMissedAttention(pauseClient, dateKey)) continue;
-                const date = parseLogDate(dateKey);
-                const planned = getPlannedWorkoutForDate(activeUserPlan, date, { today });
-                if (!planned || !isScheduledTrainingWorkout(planned)) continue;
-                if (completedLogKeys.has(`${dateKey}:${planned.id}`)) continue;
-
-                const alertKey = buildMissedWorkoutAlertKey(client.id, dateKey, planned.id);
-                if (isAlertDismissed(actions, alertKey, clientLastActiveAt, now)) continue;
-
-                items.push({
-                    id: alertKey,
-                    category: "missed_workout",
-                    clientId: client.id,
-                    clientName,
-                    issueType: ISSUE_LABELS.missed_workout,
-                    dateKey,
-                    dateLabel: formatDateLabel(dateKey, todayKey),
-                    explanation: `${clientName} did not complete ${planned.name} on ${formatDateLabel(dateKey, todayKey).toLowerCase()}.`,
-                    status: getItemStatus(actions, alertKey, clientLastActiveAt, now),
-                    urgent: offset === 1,
-                    workoutId: planned.id,
-                    workoutName: planned.name,
-                    href: `/coach/client/${client.id}`,
-                    chatHref,
-                    calendarHref: `/coach/calendar?clientId=${client.id}&date=${dateKey}`,
-                });
-            }
+        const completedLogKeys = new Set<string>();
+        const inProgressLogKeys = new Set<string>();
+        for (const log of client.workoutLogs) {
+            const dateKey = getLocalTimeParts(log.loggedAt, APP_TIMEZONE).dateKey;
+            const key = logSlotKey(dateKey, log.workoutId);
+            if (log.status === "IN_PROGRESS") inProgressLogKeys.add(key);
+            else completedLogKeys.add(key);
         }
 
-        const schedule = await getUserCheckInSchedule(client.id);
-        const clientAttentionRows = [...actions.values()].filter((row) => row.clientId === client.id);
-        const dueState = resolveCoachClientCheckInDueState(
-            schedule,
-            clientAttentionRows,
-            client.id,
-            clientLastActiveAt
-        );
-        const submittedWeeks = client.checkIns.map((c) => c.weekNumber);
-        const hasCheckInForPeriod = hasCheckInForOutstandingPeriod(dueState, submittedWeeks);
-        const periodDueKey = dueState.currentPeriodDueDate
-            ? toDateKey(new Date(dueState.currentPeriodDueDate))
-            : null;
+        const lookbackSlots = listLookbackScheduledWorkoutSlots({
+            today,
+            todayKey,
+            activeUserPlan,
+            completedLogKeys,
+            inProgressLogKeys,
+            excusedKeys: new Set(getExcusedMissedWorkoutKeysForClient(actions, client.id)),
+            pauseClient,
+        });
 
-        if (
-            !isPaused
-            && isCoachClientCheckInAttentionNeeded(dueState, hasCheckInForPeriod)
-            && !shouldSuppressCoachMissedAttention(pauseClient, periodDueKey)
-        ) {
+        for (const slot of lookbackSlots) {
+            if (slot.status !== "missed" && slot.status !== "excused") continue;
+            const alertKey = buildMissedWorkoutAlertKey(client.id, slot.dateKey, slot.workoutId);
+            if (slot.status === "missed" && isAlertDismissed(actions, alertKey, clientLastActiveAt, now)) {
+                continue;
+            }
+
+            items.push({
+                id: alertKey,
+                category: "missed_workout",
+                clientId: client.id,
+                clientName,
+                issueType: ISSUE_LABELS.missed_workout,
+                dateKey: slot.dateKey,
+                dateLabel: formatDateLabel(slot.dateKey, todayKey),
+                explanation: `${clientName} did not complete ${slot.workoutName} on ${formatDateLabel(slot.dateKey, todayKey).toLowerCase()}.`,
+                status: slot.status === "excused"
+                    ? "excused"
+                    : getItemStatus(actions, alertKey, clientLastActiveAt, now),
+                urgent: slot.dateKey === shiftDateKey(todayKey, -1),
+                workoutId: slot.workoutId,
+                workoutName: slot.workoutName,
+                href: `/coach/client/${client.id}`,
+                chatHref,
+                calendarHref: `/coach/calendar?clientId=${client.id}&date=${slot.dateKey}`,
+            });
+        }
+
+        const dueState = dueStates.get(client.id);
+
+        if (dueState && isCoachClientCheckInDueForFilter(dueState, pauseClient)) {
             const periodWeek = dueState.outstandingWeekNumber ?? weekNumber;
             const alertKey = buildCheckInAlertKey(client.id, periodWeek);
             const category: CoachAttentionCategory = dueState.isOverdue
@@ -309,7 +300,7 @@ export async function loadCoachAttentionInbox(coachId: string): Promise<CoachAtt
             });
         }
 
-        if (!isPaused && !dueState.isConfigured) {
+        if (!isPaused && !dueState?.isConfigured) {
             const alertKey = buildSetupNeededAlertKey(client.id);
             if (!isAlertDismissed(actions, alertKey, clientLastActiveAt, now)) {
                 items.push({

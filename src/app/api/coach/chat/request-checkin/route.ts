@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireCoachUser } from "@/lib/apiAuth";
 import { enforceRateLimit } from "@/lib/rateLimit";
 import { sendCheckInRequestViaChat } from "@/lib/coachChat";
+import { CHECK_IN_REQUEST_FAILED_MESSAGE } from "@/lib/checkInRequests";
 import { withResolvedAvatar, withResolvedUpload } from "@/lib/uploadUrls";
 
 const schema = z.object({
@@ -39,8 +40,15 @@ export async function POST(req: Request) {
             }),
         }), { status: 201 });
     } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : "Failed to send check-in request";
-        const status = message === "Forbidden" ? 403 : 400;
-        return NextResponse.json({ error: message }, { status });
+        if (err instanceof z.ZodError) {
+            console.error("[POST /api/coach/chat/request-checkin] validation", err.issues);
+            return NextResponse.json({ error: CHECK_IN_REQUEST_FAILED_MESSAGE }, { status: 400 });
+        }
+        const raw = err instanceof Error ? err.message : "Failed to send check-in request";
+        if (raw === "Forbidden") {
+            return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        }
+        console.error("[POST /api/coach/chat/request-checkin]", err);
+        return NextResponse.json({ error: CHECK_IN_REQUEST_FAILED_MESSAGE }, { status: 400 });
     }
 }

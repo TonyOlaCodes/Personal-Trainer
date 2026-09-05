@@ -4,6 +4,9 @@ import { prisma } from "@/lib/prisma";
 /** Minimum gap between deliberate re-requests for the same period (spam guard). */
 export const CHECK_IN_REQUEST_COOLDOWN_MS = 60_000;
 
+/** Safe client-facing copy. Never surface Zod/API validation objects. */
+export const CHECK_IN_REQUEST_FAILED_MESSAGE = "Could not request check-in. Please try again.";
+
 export interface CheckInRequestRow {
     id: string;
     coachId: string;

@@ -14,6 +14,7 @@ import { MAX_PINNED_EXERCISES, normalizePinnedExercises, orderExerciseNames } fr
 import { RecentSessionsExplorer } from "@/components/shared/RecentSessionsExplorer";
 import { cn } from "@/lib/utils";
 import { httpErrorMessage } from "@/lib/httpErrorMessage";
+import { requestCoachCheckIn } from "@/lib/requestCoachCheckIn";
 import { guessTrackingPreset } from "@/lib/exerciseTracking/guess";
 import {
     ExerciseHistoryModal,
@@ -68,6 +69,8 @@ interface WorkoutHistoryEntry {
     date: string;
     duration: number;
     volume: number;
+    setCount?: number;
+    prCount?: number;
 }
 
 interface Props {
@@ -84,6 +87,7 @@ interface Props {
         weekNumber: number | null;
         periodDueDateKey: string | null;
         isOverdue: boolean;
+        alreadyRequested?: boolean;
     };
     readOnly?: boolean;
 }
@@ -117,7 +121,7 @@ export function ClientDetailView({
     const [checkInFrequency, setCheckInFrequency] = useState(client.checkInSchedule.frequencyWeeks ?? 1);
     const [savingSchedule, setSavingSchedule] = useState(false);
     const [sendingCheckInRequest, setSendingCheckInRequest] = useState(false);
-    const [checkInRequestSent, setCheckInRequestSent] = useState(false);
+    const [checkInRequestSent, setCheckInRequestSent] = useState(Boolean(checkInRequest.alreadyRequested));
     const [checkInRequestError, setCheckInRequestError] = useState<string | null>(null);
     const [targetWeightKg, setTargetWeightKg] = useState(client.targetWeightKg != null ? String(client.targetWeightKg) : "");
     const [targetCalories, setTargetCalories] = useState(client.targetCalories != null ? String(client.targetCalories) : "");
@@ -297,30 +301,25 @@ export function ClientDetailView({
         }
     };
 
+    useEffect(() => {
+        setCheckInRequestSent(Boolean(checkInRequest.alreadyRequested));
+    }, [checkInRequest.alreadyRequested]);
+
     const sendCheckInRequest = async () => {
-        if (!canEdit) return;
+        if (!canEdit || sendingCheckInRequest || checkInRequestSent) return;
         setSendingCheckInRequest(true);
         setCheckInRequestError(null);
-        try {
-            const res = await fetch("/api/coach/chat/request-checkin", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    clientId: client.id,
-                    ...(checkInRequest.weekNumber != null ? {
-                        weekNumber: checkInRequest.weekNumber,
-                        periodDueDateKey: checkInRequest.periodDueDateKey,
-                    } : {}),
-                }),
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(data.error ?? "Failed to send check-in request");
+        const result = await requestCoachCheckIn({
+            clientId: client.id,
+            weekNumber: checkInRequest.weekNumber,
+            periodDueDateKey: checkInRequest.periodDueDateKey,
+        });
+        if (result.ok) {
             setCheckInRequestSent(true);
-        } catch (err) {
-            setCheckInRequestError(err instanceof Error ? err.message : "Failed to send check-in request");
-        } finally {
-            setSendingCheckInRequest(false);
+        } else {
+            setCheckInRequestError(result.message);
         }
+        setSendingCheckInRequest(false);
     };
 
     const exerciseListOrdered = useMemo(() => {
@@ -648,6 +647,10 @@ export function ClientDetailView({
                 weightDirection={insights.weightDirection}
                 periodChangeKg={period.bodyweightChangeKg}
                 periodLabel={period.label}
+                onOpenSession={(id) => {
+                    setSessionsInitialId(id);
+                    setShowAllSessions(true);
+                }}
             />
 
             <LatestCheckInCard

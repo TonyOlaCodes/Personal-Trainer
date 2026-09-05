@@ -1,9 +1,11 @@
 import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import {
     getCheckInDueState,
     getFirstEligibleDueDate,
     getNextScheduledDueDateAfter,
+    getUserCheckInSchedules,
     toCheckInCalendarDate,
     type CheckInDueState,
     type CheckInSchedule,
@@ -103,13 +105,29 @@ export async function getCoachAttentionActions(coachId: string): Promise<Map<str
 }
 
 export async function getClientAttentionActions(clientId: string): Promise<CoachAttentionActionRow[]> {
-    await ensureCoachAttentionActionsTable();
+    const byUser = await getClientAttentionActionsForUsers([clientId]);
+    return byUser.get(clientId) ?? [];
+}
 
-    return prisma.$queryRaw<CoachAttentionActionRow[]>`
+export async function getClientAttentionActionsForUsers(
+    clientIds: string[]
+): Promise<Map<string, CoachAttentionActionRow[]>> {
+    await ensureCoachAttentionActionsTable();
+    const byUser = new Map<string, CoachAttentionActionRow[]>();
+    if (clientIds.length === 0) return byUser;
+
+    const rows = await prisma.$queryRaw<CoachAttentionActionRow[]>`
         SELECT "alertKey", "action", "clientId", "category", "weekNumber", "dateKey", "workoutId", "createdAt"
         FROM "coach_attention_actions"
-        WHERE "clientId" = ${clientId}
+        WHERE "clientId" IN (${Prisma.join(clientIds)})
     `;
+
+    for (const row of rows) {
+        const existing = byUser.get(row.clientId) ?? [];
+        existing.push(row);
+        byUser.set(row.clientId, existing);
+    }
+    return byUser;
 }
 
 export async function setCoachAttentionAction(input: {
@@ -273,13 +291,41 @@ export function applyCheckInAttentionOverrides(
     return clearOutstandingCheckInPeriod(dueState, today);
 }
 
+/** Apply dismiss overrides and clear the period when a covering check-in exists. */
+export function finalizeEffectiveCheckInDueState(
+    dueState: CheckInDueState,
+    clientActions: CoachAttentionActionRow[],
+    userId: string,
+    today: Date,
+    lastActiveAt: Date | null | undefined,
+    hasPeriodCheckIn: boolean
+): CheckInDueState {
+    const weekNumber = dueState.outstandingWeekNumber ?? getWeekNumber(today);
+    let effective = applyCheckInAttentionOverrides(
+        dueState,
+        clientActions,
+        userId,
+        weekNumber,
+        today,
+        lastActiveAt
+    );
+
+    if (
+        hasPeriodCheckIn
+        && (effective.isOverdue || effective.isDueToday || effective.isDueWeek)
+    ) {
+        effective = clearOutstandingCheckInPeriod(effective, today);
+    }
+
+    return effective;
+}
+
 export async function getEffectiveCheckInDueStateForUser(
     userId: string,
     schedule: CheckInSchedule,
     today = new Date()
 ): Promise<CheckInDueState> {
     const dueState = getCheckInDueState(schedule, today);
-    const weekNumber = dueState.outstandingWeekNumber ?? getWeekNumber(today);
     const [clientActions, user, periodCheckIn] = await Promise.all([
         getClientAttentionActions(userId),
         prisma.user.findUnique({
@@ -294,23 +340,77 @@ export async function getEffectiveCheckInDueStateForUser(
             : Promise.resolve(null),
     ]);
 
-    let effective = applyCheckInAttentionOverrides(
+    return finalizeEffectiveCheckInDueState(
         dueState,
         clientActions,
         userId,
-        weekNumber,
         today,
-        user?.lastActiveAt ?? null
+        user?.lastActiveAt ?? null,
+        Boolean(periodCheckIn)
+    );
+}
+
+/** Same as getEffectiveCheckInDueStateForUser, batched for coach lists. */
+export async function getEffectiveCheckInDueStatesForUsers(
+    userIds: string[],
+    today = new Date()
+): Promise<Map<string, CheckInDueState>> {
+    const result = new Map<string, CheckInDueState>();
+    if (userIds.length === 0) return result;
+
+    const [schedules, actionsByUser, users] = await Promise.all([
+        getUserCheckInSchedules(userIds),
+        getClientAttentionActionsForUsers(userIds),
+        prisma.user.findMany({
+            where: { id: { in: userIds } },
+            select: { id: true, lastActiveAt: true },
+        }),
+    ]);
+    const lastActiveByUser = new Map(users.map((user) => [user.id, user.lastActiveAt]));
+
+    const pending = userIds.map((userId) => {
+        const schedule = schedules.get(userId) ?? { day: null, frequencyWeeks: null, startDate: null };
+        return {
+            userId,
+            dueState: getCheckInDueState(schedule, today),
+            actions: actionsByUser.get(userId) ?? [],
+        };
+    });
+
+    const periodFilters = pending
+        .filter((row) => row.dueState.outstandingWeekNumber != null)
+        .map((row) => ({
+            userId: row.userId,
+            weekNumber: row.dueState.outstandingWeekNumber as number,
+        }));
+
+    const periodCheckIns = periodFilters.length > 0
+        ? await prisma.checkIn.findMany({
+            where: { OR: periodFilters },
+            select: { userId: true, weekNumber: true },
+        })
+        : [];
+    const coveredPeriods = new Set(
+        periodCheckIns.map((row) => `${row.userId}:${row.weekNumber}`)
     );
 
-    if (
-        periodCheckIn
-        && (effective.isOverdue || effective.isDueToday || effective.isDueWeek)
-    ) {
-        effective = clearOutstandingCheckInPeriod(effective, today);
+    for (const row of pending) {
+        const hasPeriodCheckIn = row.dueState.outstandingWeekNumber != null
+            && coveredPeriods.has(`${row.userId}:${row.dueState.outstandingWeekNumber}`);
+        result.set(
+            row.userId,
+            finalizeEffectiveCheckInDueState(
+                row.dueState,
+                row.actions,
+                row.userId,
+                today,
+                lastActiveByUser.get(row.userId) ?? null,
+                hasPeriodCheckIn
+            )
+        );
     }
 
-    return effective;
+    return result;
 }
 
 export function getExcusedMissedWorkoutKeys(clientActions: CoachAttentionActionRow[]): Set<string> {

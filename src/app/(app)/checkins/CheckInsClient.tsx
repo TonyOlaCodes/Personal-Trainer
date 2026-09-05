@@ -33,6 +33,7 @@ import { PremiumLockScreen } from "@/components/shared/PremiumLockScreen";
 import { MediaLightbox } from "@/components/shared/MediaLightbox";
 import { CheckInPeriodSummaryPanel } from "@/components/shared/CheckInPeriodSummaryPanel";
 import type { CheckInPeriodSummary } from "@/lib/checkInPeriodSummary";
+import { requestCoachCheckIn as postCoachCheckInRequest } from "@/lib/requestCoachCheckIn";
 
 /* ─────────────────────────── Types ─────────────────────────── */
 interface CheckIn {
@@ -1076,29 +1077,21 @@ export function CheckInsClient({ checkIns: initial, isCoach, userRole, targetWei
         setRequestingCheckInKey(alertKey);
         setCoachActionError(null);
 
-        try {
-            const res = await fetch("/api/coach/check-in-requests", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    clientId: client.id,
-                    weekNumber: client.weekNumber,
-                }),
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error ?? "Could not request check-in");
-
-            const requestedAt =
-                data.request?.lastRequestedAt
-                ?? data.request?.requestedAt
-                ?? new Date().toISOString();
-            setRequestedCheckIns((prev) => ({ ...prev, [alertKey]: requestedAt }));
-            setCoachActionToast(data.message ?? "Check-in requested");
-        } catch (err) {
-            setCoachActionError(err instanceof Error ? err.message : "Could not request check-in");
-        } finally {
-            setRequestingCheckInKey(null);
+        const result = await postCoachCheckInRequest({
+            clientId: client.id,
+            weekNumber: client.weekNumber,
+            via: "checkins",
+        });
+        if (result.ok) {
+            setRequestedCheckIns((prev) => ({
+                ...prev,
+                [alertKey]: result.requestedAt ?? new Date().toISOString(),
+            }));
+            setCoachActionToast(result.message ?? "Check-in requested");
+        } else {
+            setCoachActionError(result.message);
         }
+        setRequestingCheckInKey(null);
     };
 
     /* ── Coach view ── */

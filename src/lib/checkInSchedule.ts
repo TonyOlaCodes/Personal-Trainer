@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
     dateKeyToUtcNoon,
@@ -63,26 +64,39 @@ async function runWithRetry<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 export async function getUserCheckInSchedule(userId: string): Promise<CheckInSchedule> {
+    const schedules = await getUserCheckInSchedules([userId]);
+    return schedules.get(userId) ?? { day: null, frequencyWeeks: null, startDate: null };
+}
+
+export async function getUserCheckInSchedules(
+    userIds: string[]
+): Promise<Map<string, CheckInSchedule>> {
+    if (userIds.length === 0) return new Map();
+
     return runWithRetry(async () => {
         await ensureCheckInScheduleColumns();
 
         const rows = await prisma.$queryRaw<Array<{
+            id: string;
             checkInDay: number | null;
             checkInFrequencyWeeks: number | null;
             checkInStartDate: Date | null;
         }>>`
-            SELECT "checkInDay", "checkInFrequencyWeeks", "checkInStartDate"
+            SELECT "id", "checkInDay", "checkInFrequencyWeeks", "checkInStartDate"
             FROM "users"
-            WHERE "id" = ${userId}
-            LIMIT 1
+            WHERE "id" IN (${Prisma.join(userIds)})
         `;
 
-        const row = rows[0];
-        return {
-            day: row?.checkInDay ?? null,
-            frequencyWeeks: row?.checkInFrequencyWeeks ?? null,
-            startDate: row?.checkInStartDate ? row.checkInStartDate.toISOString() : null,
-        };
+        return new Map(
+            rows.map((row) => [
+                row.id,
+                {
+                    day: row.checkInDay ?? null,
+                    frequencyWeeks: row.checkInFrequencyWeeks ?? null,
+                    startDate: row.checkInStartDate ? row.checkInStartDate.toISOString() : null,
+                },
+            ])
+        );
     });
 }
 
@@ -112,6 +126,17 @@ function dateKeyFromInput(input: Date | string): string {
         return toDateKey(new Date(input));
     }
     return toDateKey(input);
+}
+
+/**
+ * Canonical check-in period key: YYYY-MM-DD in Europe/Dublin.
+ * Use this for API payloads and check_in_requests.periodDueDateKey — never a raw ISO timestamp.
+ */
+export function canonicalPeriodDueDateKey(
+    currentPeriodDueDate: string | Date | null | undefined
+): string | null {
+    if (currentPeriodDueDate == null || currentPeriodDueDate === "") return null;
+    return dateKeyFromInput(currentPeriodDueDate);
 }
 
 /** Normalize any Date/ISO to UTC noon of the app (Europe/Dublin) calendar day. */

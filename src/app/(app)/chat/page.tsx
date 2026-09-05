@@ -160,8 +160,13 @@ export default async function ChatPage() {
             lastMessageAt: activity[conversation.userId] ?? null,
         }));
 
-        if (user.role === "COACH") {
-            const filterFlags = await getCoachClientFilterFlags(peerIds, user.id);
+        if (isCoachRole(user.role)) {
+            const flagClientIds = user.role === "COACH"
+                ? peerIds
+                : conversations
+                    .filter((conversation) => conversation.isCoachClient)
+                    .map((conversation) => conversation.userId);
+            const filterFlags = await getCoachClientFilterFlags(flagClientIds, user.id);
             conversations = conversations.map((conversation) => ({
                 ...conversation,
                 checkInDue: filterFlags[conversation.userId]?.checkInDue ?? false,

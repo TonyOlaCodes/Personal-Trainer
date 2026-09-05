@@ -3,9 +3,10 @@ import { notifyClientOfCheckInRequest, notifyClientOfCoachBroadcast, notifyClien
 import { NOTIFICATION_TYPES, QUICK_REPLY_TEMPLATES } from "@/lib/notificationTypes";
 import { assignCoachPlanToClient } from "@/lib/coachPlanAssignment";
 import type { User } from "@prisma/client";
-import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
+import { canonicalPeriodDueDateKey, getUserCheckInSchedule } from "@/lib/checkInSchedule";
 import { getEffectiveCheckInDueStateForUser } from "@/lib/coachAttentionActions";
 import { formatCheckInDueDate } from "@/lib/checkInLabels";
+import { upsertCheckInRequest } from "@/lib/checkInRequests";
 
 export type ChatActionType = "PLAN_ASSIGNED" | "CHECKIN_REQUEST" | "MISSED_WORKOUT" | "BROADCAST" | "ACCESS_REQUEST";
 
@@ -170,17 +171,46 @@ export async function sendCheckInRequestViaChat(
     options?: { weekNumber?: number; periodDueDateKey?: string | null; skipChat?: boolean }
 ) {
     const client = await requireOwnActiveClient(coach, clientId);
+    const schedule = await getUserCheckInSchedule(clientId);
+    const dueState = await getEffectiveCheckInDueStateForUser(clientId, schedule, new Date());
+    const canonicalWeek = dueState.outstandingWeekNumber;
+    const canonicalKey = canonicalPeriodDueDateKey(dueState.currentPeriodDueDate);
+    const openPeriod = Boolean(
+        canonicalWeek != null && (dueState.isDueToday || dueState.isOverdue)
+    );
 
+    if (options?.weekNumber != null && !openPeriod) {
+        throw new Error("Client has already submitted this check-in");
+    }
+    if (
+        options?.weekNumber != null
+        && canonicalWeek != null
+        && options.weekNumber !== canonicalWeek
+    ) {
+        throw new Error("That check-in period is not currently overdue or due");
+    }
+
+    const weekNumber = openPeriod && canonicalWeek != null ? canonicalWeek : undefined;
+    const periodDueDateKey = openPeriod ? canonicalKey : null;
+    if (
+        options?.periodDueDateKey
+        && periodDueDateKey
+        && options.periodDueDateKey !== periodDueDateKey
+    ) {
+        console.warn("[sendCheckInRequestViaChat] using canonical periodDueDateKey", {
+            sent: options.periodDueDateKey,
+            canonical: periodDueDateKey,
+        });
+    }
     const content = note?.trim()
         || await buildGeneratedCheckInReminder(client);
 
-    if (options?.weekNumber != null) {
-        const { upsertCheckInRequest } = await import("@/lib/checkInRequests");
+    if (weekNumber != null) {
         const request = await upsertCheckInRequest({
             coachId: coach.id,
             clientId,
-            weekNumber: options.weekNumber,
-            periodDueDateKey: options.periodDueDateKey ?? null,
+            weekNumber,
+            periodDueDateKey,
             enforceCooldown: true,
         });
         if (request.throttled) {
@@ -192,9 +222,9 @@ export async function sendCheckInRequestViaChat(
         clientUserId: clientId,
         coachId: coach.id,
         coachName: coach.name,
-        weekNumber: options?.weekNumber,
+        weekNumber,
         message:
-            options?.weekNumber != null
+            weekNumber != null
                 ? `Check-in requested\n${coach.name?.trim() || "Your coach"} has asked you to complete your overdue check-in.`
                 : content,
     });

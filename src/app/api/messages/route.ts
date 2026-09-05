@@ -51,20 +51,25 @@ export async function GET(req: Request) {
 
     if (activityOnly) {
         let peerIds: string[] = [];
+        let filterClientIds: string[] = [];
         if (user.role === "PREMIUM" && user.coachId) {
             peerIds = [user.coachId];
         } else if (user.role === "COACH") {
             const clients = await prisma.user.findMany({
-                where: { coachId: user.id },
+                where: { coachId: user.id, isDeleted: false, isDeactivated: false },
                 select: { id: true },
             });
             peerIds = clients.map((client) => client.id);
+            filterClientIds = peerIds;
         } else if (user.role === "SUPER_ADMIN") {
             const users = await prisma.user.findMany({
-                where: { id: { not: user.id } },
-                select: { id: true },
+                where: { id: { not: user.id }, isDeleted: false, isDeactivated: false },
+                select: { id: true, coachId: true },
             });
             peerIds = users.map((peer) => peer.id);
+            filterClientIds = users
+                .filter((peer) => peer.coachId === user.id)
+                .map((peer) => peer.id);
         } else if (isClientRole(user.role)) {
             peerIds = await getDirectMessagePeerIds(user.id);
             if (user.role === "PREMIUM" && user.coachId && !peerIds.includes(user.coachId)) {
@@ -88,8 +93,8 @@ export async function GET(req: Request) {
             ? await getActiveSessionsForClients(peerIds)
             : undefined;
 
-        const filterFlags = includeFilterFlags && user.role === "COACH"
-            ? await getCoachClientFilterFlags(peerIds, user.id)
+        const filterFlags = includeFilterFlags && isCoachRole(user.role)
+            ? await getCoachClientFilterFlags(filterClientIds, user.id)
             : undefined;
 
         return NextResponse.json({

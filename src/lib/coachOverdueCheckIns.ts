@@ -1,19 +1,18 @@
 import { prisma } from "@/lib/prisma";
 import {
+    canonicalPeriodDueDateKey,
     getCheckInDueState,
-    getUserCheckInSchedule,
-    hasCheckInForOutstandingPeriod,
     type CheckInDueState,
     type CheckInSchedule,
 } from "@/lib/checkInSchedule";
 import {
     applyCheckInAttentionOverrides,
-    getClientAttentionActions,
+    getEffectiveCheckInDueStatesForUsers,
     type CoachAttentionActionRow,
 } from "@/lib/coachAttentionActions";
 import { getLocalTimeParts } from "@/lib/coachNotificationSchedule";
 import { formatCheckInDueDate, formatCheckInWeekLabel, getIsoWeekYear } from "@/lib/checkInLabels";
-import { APP_TIMEZONE, dateKeyToUtcNoon, shiftAppDateKey } from "@/lib/appTimezone";
+import { APP_TIMEZONE, dateKeyToUtcNoon } from "@/lib/appTimezone";
 import { getWeekNumber, toDateKey } from "@/lib/utils";
 import { isInactiveAccount } from "@/lib/userDeactivation";
 import {
@@ -80,10 +79,25 @@ export function isCoachClientCheckInAttentionNeeded(
         && (dueState.isOverdue || dueState.isDueToday);
 }
 
+/**
+ * Coach-facing due/overdue after getEffectiveCheckInDueState* has already
+ * applied dismissals and a covering submission. Paused / pre-resume periods stay hidden.
+ */
+export function isCoachClientCheckInDueForFilter(
+    dueState: CheckInDueState,
+    pauseClient: {
+        isCoachPaused?: boolean | null;
+        coachResumedAt?: Date | string | null;
+    }
+): boolean {
+    if (!isCoachClientCheckInAttentionNeeded(dueState, false)) return false;
+    const periodDueKey = canonicalPeriodDueDateKey(dueState.currentPeriodDueDate);
+    return !shouldSuppressCoachMissedAttention(pauseClient, periodDueKey);
+}
+
 /** Clients assigned to this coach who owe a check-in (due today or overdue) without a submission. */
 export async function getOverdueCheckInClientsForCoach(coachId: string): Promise<OverdueCheckInClient[]> {
-    const { today, todayKey } = getCoachAppToday();
-    const lookback = dateKeyToUtcNoon(shiftAppDateKey(todayKey, -90));
+    const { today, weekNumber } = getCoachAppToday();
 
     const clients = await prisma.user.findMany({
         where: {
@@ -99,16 +113,16 @@ export async function getOverdueCheckInClientsForCoach(coachId: string): Promise
             lastActiveAt: true,
             isDeleted: true,
             isDeactivated: true,
-            checkIns: {
-                where: { createdAt: { gte: lookback } },
-                select: { id: true, weekNumber: true },
-            },
         },
         orderBy: { name: "asc" },
     });
 
     const overdue: OverdueCheckInClient[] = [];
-    const pauseStatusByClient = await getCoachPauseStatusMap(clients.map((c) => c.id));
+    const clientIds = clients.map((c) => c.id);
+    const [pauseStatusByClient, dueStates] = await Promise.all([
+        getCoachPauseStatusMap(clientIds),
+        getEffectiveCheckInDueStatesForUsers(clientIds, today),
+    ]);
     const { getActiveCheckInRequestMapForCoach } = await import("@/lib/checkInRequests");
     const requestMap = await getActiveCheckInRequestMapForCoach(coachId);
 
@@ -116,37 +130,18 @@ export async function getOverdueCheckInClientsForCoach(coachId: string): Promise
         if (isInactiveAccount(client)) continue;
 
         const pauseStatus = pauseStatusByClient.get(client.id);
-        if (pauseStatus?.isCoachPaused) continue;
-
-        const schedule = await getUserCheckInSchedule(client.id);
-        const clientActions = await getClientAttentionActions(client.id);
-        const dueState = resolveCoachClientCheckInDueState(
-            schedule,
-            clientActions,
-            client.id,
-            client.lastActiveAt
-        );
-
-        const submittedWeeks = client.checkIns.map((c) => c.weekNumber);
-        const hasSubmission = hasCheckInForOutstandingPeriod(dueState, submittedWeeks);
-        if (!isCoachClientCheckInAttentionNeeded(dueState, hasSubmission)) continue;
-
-        const periodDateKey = dueState.currentPeriodDueDate
-            ? toDateKey(new Date(dueState.currentPeriodDueDate))
-            : null;
+        const dueState = dueStates.get(client.id);
+        if (!dueState) continue;
         if (
-            shouldSuppressCoachMissedAttention(
-                {
-                    isCoachPaused: false,
-                    coachResumedAt: pauseStatus?.coachResumedAt ?? null,
-                },
-                periodDateKey
-            )
+            !isCoachClientCheckInDueForFilter(dueState, {
+                isCoachPaused: pauseStatus?.isCoachPaused ?? false,
+                coachResumedAt: pauseStatus?.coachResumedAt ?? null,
+            })
         ) {
             continue;
         }
 
-        const periodWeek = dueState.outstandingWeekNumber ?? dueState.weekNumber;
+        const periodWeek = dueState.outstandingWeekNumber ?? weekNumber;
         const dueDateLabel = formatCheckInDueDate(dueState.currentPeriodDueDate);
         const daysOverdue = dueState.isOverdue ? (dueState.daysOverdue ?? null) : null;
         const activeRequest = requestMap.get(`${client.id}:${periodWeek}`);

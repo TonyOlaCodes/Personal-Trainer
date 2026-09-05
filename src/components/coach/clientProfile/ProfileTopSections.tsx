@@ -177,30 +177,33 @@ export function NeedsAttentionCard({
                     <div
                         key={item.id}
                         className={cn(
-                            "card px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3 justify-between",
+                            "card px-4 py-3 flex items-start sm:items-center gap-3 justify-between",
                             item.urgent ? "border-warning/30 bg-warning/5" : "border-surface-border"
                         )}
                     >
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                             <p className={cn(
-                                "text-sm font-black tracking-tight",
+                                "text-sm font-black tracking-tight [hyphens:none]",
                                 item.urgent ? "text-warning" : "text-fg"
                             )}>
                                 {item.title}
                             </p>
                             <p className="text-xs text-fg-muted mt-0.5">{item.detail}</p>
+                            {checkInRequestError && item.action === "request_checkin" && (
+                                <p className="text-[11px] text-danger font-semibold mt-1.5">{checkInRequestError}</p>
+                            )}
                         </div>
                         {canEdit && item.action === "request_checkin" && (
                             checkInRequestSent ? (
-                                <span className="text-xs font-bold text-success inline-flex items-center gap-1.5">
-                                    <CheckCircle2 className="w-4 h-4" /> Request sent
+                                <span className="text-xs font-bold text-success inline-flex items-center gap-1.5 shrink-0">
+                                    <CheckCircle2 className="w-4 h-4" /> Requested
                                 </span>
                             ) : (
                                 <button
                                     type="button"
                                     onClick={() => void onRequestCheckIn()}
                                     disabled={sendingCheckInRequest}
-                                    className="btn-primary h-9 px-3 text-[10px] font-black uppercase tracking-widest inline-flex items-center gap-1.5"
+                                    className="btn-primary h-9 px-3 text-[10px] font-black uppercase tracking-widest inline-flex items-center gap-1.5 shrink-0"
                                 >
                                     {sendingCheckInRequest
                                         ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -217,9 +220,6 @@ export function NeedsAttentionCard({
                                 {item.actionLabel}
                                 <ChevronRight className="w-3.5 h-3.5" />
                             </Link>
-                        )}
-                        {checkInRequestError && item.action === "request_checkin" && (
-                            <p className="text-[11px] text-danger font-semibold">{checkInRequestError}</p>
                         )}
                     </div>
                 ))}

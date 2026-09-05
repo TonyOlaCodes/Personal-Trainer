@@ -3,7 +3,8 @@ import { redirect, notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/layout/TopBar";
 import { ClientDetailView } from "./ClientDetailView";
-import { getUserCheckInSchedule } from "@/lib/checkInSchedule";
+import { canonicalPeriodDueDateKey, getUserCheckInSchedule } from "@/lib/checkInSchedule";
+import { getPriorityActiveCheckInRequestForClient } from "@/lib/checkInRequests";
 import { getClientAttentionActions, getEffectiveCheckInDueStateForUser, getExcusedMissedWorkoutKeys } from "@/lib/coachAttentionActions";
 import { toDateKey } from "@/lib/utils";
 import { getClientGoalTargets } from "@/lib/clientGoalTargets";
@@ -85,7 +86,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         const checkInDueState = await getEffectiveCheckInDueStateForUser(target.id, checkInSchedule, new Date());
 
         const activeUserPlan = target.plans[0] ?? null;
-        const [activePlan, availablePlans, bodyweightRows, completedLogs, clientMetricTargets, pinnedExercises, clientActions, historicalMissedSessions] = await Promise.all([
+        const [activePlan, availablePlans, bodyweightRows, completedLogs, clientMetricTargets, pinnedExercises, clientActions, historicalMissedSessions, activeCheckInRequest] = await Promise.all([
             Promise.resolve(target.plans[0]?.plan ?? null),
             prisma.plan.findMany({
                 where: { creatorId: actor.id },
@@ -115,6 +116,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             getUserPinnedExercises(target.id),
             getClientAttentionActions(target.id),
             loadHistoricalMissedSessions(target.id, { planId: target.plans[0]?.plan.id }),
+            getPriorityActiveCheckInRequestForClient(target.id),
         ]);
 
         const exerciseHistory: Record<string, any[]> = {};
@@ -251,22 +253,32 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                         currentUserId={actor.id}
                         availablePlans={availablePlans}
                         bodyweightHistory={bodyweightRows || []}
-                        workoutHistory={(completedLogs ?? []).map((log) => ({
-                            id: log.id,
-                            workoutId: log.workoutId,
-                            workoutName: log.workout.name,
-                            date: log.loggedAt ? log.loggedAt.toISOString() : new Date().toISOString(),
-                            duration: log.duration || 0,
-                            volume: (log.sets ?? []).reduce((sum, set) => sum + (set.reps || 0) * (set.weightKg || 0), 0),
-                        }))}
+                        workoutHistory={(completedLogs ?? []).map((log) => {
+                            const workingSets = (log.sets ?? []).filter((set) => set.isCompleted && !set.isWarmup);
+                            return {
+                                id: log.id,
+                                workoutId: log.workoutId,
+                                workoutName: log.workout.name,
+                                date: log.loggedAt ? log.loggedAt.toISOString() : new Date().toISOString(),
+                                duration: log.duration || 0,
+                                volume: (log.sets ?? []).reduce((sum, set) => sum + (set.reps || 0) * (set.weightKg || 0), 0),
+                                setCount: workingSets.length,
+                                prCount: workingSets.filter((set) => set.isPR).length,
+                            };
+                        })}
                         exerciseHistory={normalizedExerciseHistory}
                         exerciseLastDone={exerciseLastDone}
                         initialPinnedExercises={pinnedExercises}
                         insights={insights}
                         checkInRequest={{
                             weekNumber: checkInDueState.outstandingWeekNumber,
-                            periodDueDateKey: checkInDueState.currentPeriodDueDate,
+                            periodDueDateKey: canonicalPeriodDueDateKey(checkInDueState.currentPeriodDueDate),
                             isOverdue: Boolean(checkInDueState.isOverdue || checkInDueState.isDueToday),
+                            alreadyRequested: Boolean(
+                                activeCheckInRequest
+                                && checkInDueState.outstandingWeekNumber != null
+                                && activeCheckInRequest.weekNumber === checkInDueState.outstandingWeekNumber
+                            ),
                         }}
                     />
                 </div>

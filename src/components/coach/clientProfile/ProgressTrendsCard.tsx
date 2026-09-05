@@ -13,6 +13,16 @@ interface WorkoutHistoryEntry {
     date: string;
     duration: number;
     volume: number;
+    setCount?: number;
+    prCount?: number;
+}
+
+function formatVolumeKg(volume: number) {
+    return `${volume.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kg`;
+}
+
+function isValidVolume(volume: number | null | undefined): volume is number {
+    return typeof volume === "number" && Number.isFinite(volume);
 }
 
 export function ProgressTrendsCard({
@@ -24,6 +34,7 @@ export function ProgressTrendsCard({
     weightDirection,
     periodChangeKg,
     periodLabel,
+    onOpenSession,
 }: {
     bodyweightHistory: { date: string; weightKg: number }[];
     workoutHistory: WorkoutHistoryEntry[];
@@ -33,6 +44,7 @@ export function ProgressTrendsCard({
     weightDirection: WeightDirection | null;
     periodChangeKg: number | null;
     periodLabel: string;
+    onOpenSession?: (workoutLogId: string) => void;
 }) {
     const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; date: string; weightKg: number } | null>(null);
     const [hoveredVolPoint, setHoveredVolPoint] = useState<{
@@ -42,6 +54,9 @@ export function ProgressTrendsCard({
         date: string;
         formattedDate: string;
         volume: number;
+        duration: number;
+        setCount?: number;
+        prCount?: number;
         x: number;
         y: number;
     } | null>(null);
@@ -92,7 +107,7 @@ export function ProgressTrendsCard({
     const volRange = Math.max(volMax - volMin, 1);
     const volChartWidth = 640;
     const volChartHeight = 240;
-    const volChartPadding = { top: 20, right: 24, bottom: 34, left: 48 };
+    const volChartPadding = { top: 22, right: 28, bottom: 34, left: 48 };
     const volPlotWidth = volChartWidth - volChartPadding.left - volChartPadding.right;
     const volPlotHeight = volChartHeight - volChartPadding.top - volChartPadding.bottom;
     const toVolX = (index: number) => volChartPadding.left + (volumeHistory.length === 1 ? volPlotWidth / 2 : (index / (volumeHistory.length - 1)) * volPlotWidth);
@@ -100,7 +115,7 @@ export function ProgressTrendsCard({
     const volChartPoints = useMemo(
         () => volumeHistory.map((row, index) => ({
             ...row,
-            formattedDate: new Date(row.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+            formattedDate: new Date(row.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
             x: toVolX(index),
             y: toVolY(row.volume),
         })),
@@ -122,9 +137,18 @@ export function ProgressTrendsCard({
     const selectedVolAreaPath = selectedVolumePoints.length > 0
         ? `${selectedVolLinePath} L ${selectedVolumePoints[selectedVolumePoints.length - 1].x.toFixed(1)} ${(volChartPadding.top + volPlotHeight).toFixed(1)} L ${selectedVolumePoints[0].x.toFixed(1)} ${(volChartPadding.top + volPlotHeight).toFixed(1)} Z`
         : "";
-    const latestVolumeForDisplay = selectedVolumeWorkoutId
-        ? (selectedVolumePoints[selectedVolumePoints.length - 1]?.volume ?? null)
-        : volumeHistory.length > 0 ? volumeHistory[volumeHistory.length - 1].volume : null;
+    const displayedVolumePoints = selectedVolumeWorkoutId ? selectedVolumePoints : volChartPoints;
+    const validDisplayedVolumes = displayedVolumePoints.filter((point) => isValidVolume(point.volume));
+    const latestVolumeForDisplay = validDisplayedVolumes.length > 0
+        ? validDisplayedVolumes[validDisplayedVolumes.length - 1].volume
+        : null;
+    const latestDisplayedSessionId = validDisplayedVolumes.length > 0
+        ? validDisplayedVolumes[validDisplayedVolumes.length - 1].id
+        : null;
+    const averageVolume = validDisplayedVolumes.length > 0
+        ? validDisplayedVolumes.reduce((sum, point) => sum + point.volume, 0) / validDisplayedVolumes.length
+        : null;
+    const averageVolumeY = averageVolume != null ? toVolY(averageVolume) : null;
 
     useEffect(() => {
         if (selectedVolumeWorkoutId && !volumeHistory.some((row) => row.workoutId === selectedVolumeWorkoutId)) {
@@ -200,13 +224,31 @@ export function ProgressTrendsCard({
                         )}
                     </div>
                 ) : (
-                    <div className="text-right">
-                        <p className="text-xl font-black text-fg leading-none font-mono">
-                            {latestVolumeForDisplay != null ? `${latestVolumeForDisplay.toLocaleString()}kg` : "—"}
-                        </p>
-                        <p className="text-[10px] text-fg-subtle font-bold uppercase tracking-widest mt-1">
-                            {selectedVolumeName ? `Latest ${selectedVolumeName}` : "Last workout volume"}
-                        </p>
+                    <div className="flex items-start justify-end gap-6">
+                        <button
+                            type="button"
+                            disabled={!latestDisplayedSessionId}
+                            onClick={() => latestDisplayedSessionId && onOpenSession?.(latestDisplayedSessionId)}
+                            className={cn("text-right", latestDisplayedSessionId && onOpenSession && "hover:opacity-80")}
+                        >
+                            <p className="text-[10px] text-fg-subtle font-bold uppercase tracking-widest">Latest</p>
+                            <p className="text-xl font-black text-fg leading-none font-mono mt-1">
+                                {latestVolumeForDisplay != null ? formatVolumeKg(latestVolumeForDisplay) : "—"}
+                            </p>
+                            {selectedVolumeName && (
+                                <p className="text-[10px] text-fg-subtle font-bold uppercase tracking-widest mt-1">
+                                    {selectedVolumeName}
+                                </p>
+                            )}
+                        </button>
+                        {averageVolume != null && (
+                            <div className="text-right">
+                                <p className="text-[10px] text-fg-subtle font-bold uppercase tracking-widest">Average</p>
+                                <p className="text-xl font-black text-fg leading-none font-mono mt-1">
+                                    {formatVolumeKg(averageVolume)}
+                                </p>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
@@ -293,6 +335,29 @@ export function ProgressTrendsCard({
                         {selectedVolumeWorkoutId && selectedVolumePoints.length > 1 && (
                             <path d={selectedVolLinePath} fill="none" stroke="#a5b4fc" strokeWidth="3.5" />
                         )}
+                        {averageVolume != null && averageVolumeY != null && (
+                            <g pointerEvents="none">
+                                <line
+                                    x1={volChartPadding.left}
+                                    x2={volChartWidth - volChartPadding.right}
+                                    y1={averageVolumeY}
+                                    y2={averageVolumeY}
+                                    stroke="rgba(148,163,184,0.55)"
+                                    strokeDasharray="5 5"
+                                    strokeWidth="1.5"
+                                />
+                                <text
+                                    x={volChartWidth - volChartPadding.right}
+                                    y={Math.max(14, averageVolumeY - 6)}
+                                    textAnchor="end"
+                                    fill="#94a3b8"
+                                    fontSize="10"
+                                    fontWeight="700"
+                                >
+                                    {`AVG ${formatVolumeKg(averageVolume)}`}
+                                </text>
+                            </g>
+                        )}
                         {volChartPoints.map((point) => {
                             const isSelectedType = selectedVolumeWorkoutId === point.workoutId;
                             const isFiltered = Boolean(selectedVolumeWorkoutId);
@@ -329,9 +394,32 @@ export function ProgressTrendsCard({
                         })}
                     </svg>
                     {hoveredVolPoint && (!selectedVolumeWorkoutId || hoveredVolPoint.workoutId === selectedVolumeWorkoutId) && (
-                        <div className="absolute z-10 pointer-events-none bg-surface-elevated/95 border border-indigo-500/30 px-3 py-1.5 rounded-xl -translate-x-1/2 -translate-y-full" style={{ left: `${(hoveredVolPoint.x / volChartWidth) * 100}%`, top: `${(hoveredVolPoint.y / volChartHeight) * 100 - 4}%` }}>
+                        <div
+                            className="absolute z-10 bg-surface-elevated/95 border border-indigo-500/30 px-3 py-1.5 rounded-xl -translate-x-1/2 -translate-y-full"
+                            style={{ left: `${(hoveredVolPoint.x / volChartWidth) * 100}%`, top: `${(hoveredVolPoint.y / volChartHeight) * 100 - 4}%` }}
+                        >
                             <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">{hoveredVolPoint.workoutName}</p>
-                            <p className="text-xs font-black text-fg">{hoveredVolPoint.volume.toLocaleString()} kg</p>
+                            <p className="text-xs font-black text-fg">{formatVolumeKg(hoveredVolPoint.volume)}</p>
+                            <p className="text-[10px] font-bold text-fg-muted">{hoveredVolPoint.formattedDate}</p>
+                            <p className="text-[10px] font-bold text-fg-subtle">
+                                {hoveredVolPoint.setCount != null ? `${hoveredVolPoint.setCount} sets` : null}
+                                {hoveredVolPoint.setCount != null && hoveredVolPoint.duration > 0 ? " · " : null}
+                                {hoveredVolPoint.duration > 0 ? `${hoveredVolPoint.duration} min` : null}
+                            </p>
+                            {hoveredVolPoint.prCount != null && hoveredVolPoint.prCount > 0 && (
+                                <p className="text-[10px] font-black text-brand-400">
+                                    {hoveredVolPoint.prCount} PR{hoveredVolPoint.prCount === 1 ? "" : "s"}
+                                </p>
+                            )}
+                            {onOpenSession && (
+                                <button
+                                    type="button"
+                                    onClick={() => onOpenSession(hoveredVolPoint.id)}
+                                    className="mt-1 text-[10px] font-black uppercase tracking-widest text-indigo-300 hover:text-indigo-200"
+                                >
+                                    Review session
+                                </button>
+                            )}
                         </div>
                     )}
                     {!selectedVolumeWorkoutId && (
